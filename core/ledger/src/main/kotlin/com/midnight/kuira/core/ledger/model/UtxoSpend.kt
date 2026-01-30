@@ -13,17 +13,16 @@ import java.math.BigInteger
  * **File:** `midnight-ledger/ledger/src/structure.rs`
  *
  * **Purpose:**
- * - References an existing UTXO by transactionHash and outputNo
+ * - References an existing UTXO by intentHash and outputNo
  * - Specifies the owner address (for signature verification)
  * - Includes value and token type for balancing
  *
- * **CRITICAL:** Uses transactionHash (not intentHash) because that's how the
- * blockchain identifies UTXOs. intentHash is a different value from transactionHash!
+ * **CRITICAL:** The blockchain identifies UTXOs by intentHash + outputNo.
  *
  * **Usage in Transaction:**
  * ```kotlin
  * val input = UtxoSpend(
- *     transactionHash = "87eb8bd03bfb2cd7...",  // Hash of creating transaction
+ *     intentHash = "87eb8bd03bfb2cd7...",  // Intent hash from indexer
  *     outputNo = 0,
  *     value = BigInteger("1000000"),  // 1.0 NIGHT
  *     owner = "mn_addr_undeployed1...",
@@ -31,7 +30,7 @@ import java.math.BigInteger
  * )
  * ```
  *
- * @property transactionHash Hash of the transaction that created this UTXO (hex string)
+ * @property intentHash Intent hash that identifies this UTXO on chain (hex string, 64 chars)
  * @property outputNo Output index in the creating transaction (0-based)
  * @property value Amount being spent (in smallest units)
  * @property owner Owner's unshielded address (Bech32m format, for display)
@@ -39,7 +38,7 @@ import java.math.BigInteger
  * @property tokenType Token type identifier (hex string, 64 chars)
  */
 data class UtxoSpend(
-    val transactionHash: String,
+    val intentHash: String,
     val outputNo: Int,
     val value: BigInteger,
     val owner: String,
@@ -47,7 +46,7 @@ data class UtxoSpend(
     val tokenType: String
 ) {
     init {
-        require(transactionHash.isNotBlank()) { "Transaction hash cannot be blank" }
+        require(intentHash.isNotBlank()) { "Intent hash cannot be blank" }
         require(outputNo >= 0) { "Output number must be non-negative, got: $outputNo" }
         require(value >= BigInteger.ZERO) { "Value must be non-negative, got: $value" }
         require(owner.isNotBlank()) { "Owner address cannot be blank" }
@@ -60,11 +59,11 @@ data class UtxoSpend(
     /**
      * Unique identifier for this UTXO.
      *
-     * **Format:** `transactionHash:outputNo`
+     * **Format:** `intentHash:outputNo`
      *
      * Used for database lookups and UTXO tracking.
      */
-    fun identifier(): String = "$transactionHash:$outputNo"
+    fun identifier(): String = "$intentHash:$outputNo"
 
     companion object {
         /**

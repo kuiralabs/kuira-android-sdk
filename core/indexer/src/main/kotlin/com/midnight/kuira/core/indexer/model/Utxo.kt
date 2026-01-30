@@ -30,7 +30,7 @@ data class Utxo(
     val ctime: Long, // Unix timestamp in seconds
     val registeredForDustGeneration: Boolean,
     // Transaction hash is set during sync from update.transaction.hash
-    // This is the REAL identifier used by the blockchain, not intentHash!
+    // Used for LOCAL storage identifier. Note: blockchain uses intentHash for UTXO identification!
     @kotlinx.serialization.Transient
     val transactionHash: String = ""
 ) {
@@ -56,11 +56,11 @@ data class Utxo(
     fun valueBigInt(): BigInteger = BigInteger(value)
 
     /**
-     * Unique identifier for this UTXO.
+     * Unique identifier for LOCAL database storage.
      * Format: "transactionHash:outputIndex"
      *
-     * CRITICAL: Uses transactionHash (not intentHash) because that's how
-     * the blockchain identifies UTXOs. intentHash is different from transactionHash!
+     * Note: This is for LOCAL storage only. The blockchain identifies UTXOs
+     * by intentHash + outputNo (not transactionHash).
      */
     fun identifier(): String = "$transactionHash:$outputIndex"
 

@@ -178,7 +178,7 @@ class FfiTransactionSerializer : TransactionSerializer {
      *   "value": "1000000",
      *   "owner": "hex-encoded-verifying-key",
      *   "type": "hex-encoded-token-type",
-     *   "intent_hash": "hex-encoded-transaction-hash",  // NOTE: Field name is "intent_hash" for Rust compatibility, but value is transactionHash!
+     *   "intent_hash": "hex-encoded-intent-hash",  // Blockchain identifies UTXOs by intentHash + outputNo
      *   "output_no": 0
      * }]
      * ```
@@ -190,10 +190,8 @@ class FfiTransactionSerializer : TransactionSerializer {
                 put("value", input.value.toString())
                 put("owner", input.ownerPublicKey)  // Hex-encoded public key (32 bytes BIP-340 x-only)
                 put("type", input.tokenType)  // Already hex string (64 chars)
-                // CRITICAL: The Rust code expects "intent_hash" field name, but the VALUE
-                // must be the transactionHash (not intentHash) because that's how the
-                // blockchain identifies UTXOs!
-                put("intent_hash", input.transactionHash)
+                // CRITICAL: The blockchain identifies UTXOs by intentHash + outputNo.
+                put("intent_hash", input.intentHash)
                 put("output_no", input.outputNo)
             }
             jsonArray.put(jsonObject)

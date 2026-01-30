@@ -14,8 +14,8 @@ import com.midnight.kuira.core.indexer.model.Utxo
  * Primary key is composite of transactionHash + outputIndex (unique identifier).
  * Indexed on owner (address) for fast balance queries.
  *
- * CRITICAL: Uses transactionHash (not intentHash) because that's how the blockchain
- * identifies UTXOs. intentHash is a different value from transactionHash!
+ * Note: Uses transactionHash for LOCAL primary key. However, the blockchain
+ * identifies UTXOs by intentHash + outputNo (used when building transactions).
  */
 @Entity(
     tableName = "unshielded_utxos",
@@ -35,14 +35,14 @@ data class UnshieldedUtxoEntity(
 
     /**
      * Transaction hash that created this UTXO.
-     * This is the REAL identifier used by the blockchain.
+     * Used for local storage identifier (primary key).
      */
     @ColumnInfo(name = "transaction_hash")
     val transactionHash: String,
 
     /**
-     * Intent hash (kept for reference but NOT used for identification).
-     * Different from transactionHash - a transaction can have multiple intents.
+     * Intent hash - used by the BLOCKCHAIN to identify UTXOs.
+     * When building transactions for submission, use this (not transactionHash).
      */
     @ColumnInfo(name = "intent_hash")
     val intentHash: String,

@@ -66,7 +66,7 @@ class UtxoManager(
         val status = update.status()
         val txHash = update.transaction.hash
 
-        // CRITICAL: Set transactionHash on CREATED UTXOs - this is the REAL identifier!
+        // Set transactionHash on CREATED UTXOs for local storage primary key.
         // For created UTXOs, txHash is THIS transaction's hash.
         val createdUtxosWithTxHash = update.createdUtxos.map { it.withTransactionHash(txHash) }
 

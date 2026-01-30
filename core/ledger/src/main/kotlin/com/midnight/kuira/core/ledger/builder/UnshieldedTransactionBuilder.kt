@@ -239,7 +239,7 @@ class UnshieldedTransactionBuilder(
  */
 private fun UnshieldedUtxoEntity.toUtxoSpend(ownerPublicKey: String): UtxoSpend {
     return UtxoSpend(
-        transactionHash = this.transactionHash,  // CRITICAL: Use transactionHash, not intentHash!
+        intentHash = this.intentHash,  // Blockchain identifies UTXOs by intentHash + outputNo
         outputNo = this.outputIndex,
         value = BigInteger(this.value),
         owner = this.owner,
