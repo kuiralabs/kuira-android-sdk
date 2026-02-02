@@ -184,8 +184,11 @@ class FfiTransactionSerializer : TransactionSerializer {
      * ```
      */
     private fun serializeInputsToJson(inputs: List<UtxoSpend>): String {
+        println("[FfiSerializer] Serializing ${inputs.size} inputs to JSON:")
         val jsonArray = JSONArray()
-        for (input in inputs) {
+        for ((index, input) in inputs.withIndex()) {
+            println("[FfiSerializer]   Input $index: intentHash=${input.intentHash}, outputNo=${input.outputNo}, value=${input.value}")
+            println("[FfiSerializer]            intentHash.length=${input.intentHash.length} chars")
             val jsonObject = JSONObject().apply {
                 put("value", input.value.toString())
                 put("owner", input.ownerPublicKey)  // Hex-encoded public key (32 bytes BIP-340 x-only)

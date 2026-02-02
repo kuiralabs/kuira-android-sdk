@@ -223,12 +223,12 @@ class GraphQLWebSocketClient(
             is GraphQLWebSocketMessage.Pong -> json.encodeToString(message)
             else -> throw IllegalArgumentException("Cannot send message type: ${message.type}")
         }
-        android.util.Log.d("GraphQLWebSocket", "⬆️ Sending: ${json.take(200)}")
+        // Verbose logging removed - enable for debugging: Log.d("GraphQLWebSocket", "⬆️ Sending: ${json.take(200)}")
         session?.send(Frame.Text(json))
     }
 
     private fun parseMessage(text: String): GraphQLWebSocketMessage {
-        android.util.Log.d("GraphQLWebSocket", "⬇️ Received: ${text.take(200)}")
+        // Verbose logging removed - enable for debugging: Log.d("GraphQLWebSocket", "⬇️ Received: ${text.take(200)}")
 
         // Parse type field first
         val jsonElement = json.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject
@@ -268,7 +268,6 @@ class GraphQLWebSocketClient(
             is GraphQLWebSocketMessage.Next -> {
                 val channel = activeSubscriptions[message.id]
                 if (channel != null) {
-                    android.util.Log.d("GraphQLWebSocket", "Sending payload to channel for ${message.id}")
                     channel.send(message.payload)
                 } else {
                     android.util.Log.w("GraphQLWebSocket", "No active subscription found for ${message.id}")

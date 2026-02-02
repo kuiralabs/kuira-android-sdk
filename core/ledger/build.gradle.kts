@@ -33,6 +33,12 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    testOptions {
+        unitTests {
+            // Allow android.util.Log calls in unit tests (returns default values)
+            isReturnDefaultValues = true
+        }
+    }
     packaging {
         resources {
             excludes += listOf(

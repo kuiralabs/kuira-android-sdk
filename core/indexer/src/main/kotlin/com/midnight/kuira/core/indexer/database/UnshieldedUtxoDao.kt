@@ -160,6 +160,23 @@ interface UnshieldedUtxoDao {
     @Query("SELECT COUNT(*) FROM unshielded_utxos WHERE owner = :address AND state = 'AVAILABLE'")
     suspend fun countUnspent(address: String): Int
 
+    /**
+     * Count ALL UTXOs for an address (any state).
+     *
+     * Used to check if database has any data for this address.
+     * Includes AVAILABLE, PENDING, and SPENT UTXOs.
+     */
+    @Query("SELECT COUNT(*) FROM unshielded_utxos WHERE owner = :address")
+    suspend fun countAllForAddress(address: String): Int
+
+    /**
+     * Get ALL UTXOs for an address (any state).
+     *
+     * Used for debugging to see full database state.
+     */
+    @Query("SELECT * FROM unshielded_utxos WHERE owner = :address ORDER BY state, id")
+    suspend fun getAllUtxosForAddress(address: String): List<UnshieldedUtxoEntity>
+
     // ========== Phase 2B: Coin Selection Methods ==========
 
     /**

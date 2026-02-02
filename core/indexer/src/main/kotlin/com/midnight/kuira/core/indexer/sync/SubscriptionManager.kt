@@ -100,12 +100,29 @@ class SubscriptionManager(
         // Case 2: Sync state exists but database is empty (data cleared without callback)
         // This catches cases where user clears app data, adb clear, etc.
         val lastProcessedId = syncStateManager.getLastProcessedTransactionId(address)
+        val hasUtxos = utxoManager.hasAnyUtxos(address)
+        val hasAvailableUtxos = utxoManager.hasAvailableUtxos(address)
+        Log.d(TAG, "checkAndHandleResyncNeeded: lastProcessedId=$lastProcessedId, hasAnyUtxos=$hasUtxos, hasAvailableUtxos=$hasAvailableUtxos")
+
+        // Debug: Dump current database state
+        utxoManager.debugDumpAllUtxos(address, "SYNC_START")
+
         if (lastProcessedId != null && lastProcessedId > 0) {
-            val utxoCount = utxoManager.getUnspentUtxos(address).size
-            if (utxoCount == 0) {
+            if (!hasUtxos) {
                 Log.w(TAG, "Database is empty but sync state shows tx ID $lastProcessedId - clearing sync state")
                 syncStateManager.clearSyncState(address)
                 Log.i(TAG, "Sync state cleared - will replay all history to repopulate UTXOs")
+            } else if (!hasAvailableUtxos) {
+                // Case 3: Have UTXOs but ALL are SPENT - suspicious state!
+                // This can happen if we prematurely marked UTXOs as SPENT but the sync
+                // was already at the latest TX, so no correction occurred.
+                // Force full resync to replay all history and restore correct state.
+                Log.w(TAG, "⚠️ ALL UTXOs are SPENT (balance=0) - suspicious state, forcing full resync")
+                syncStateManager.clearSyncState(address)
+                utxoManager.clearUtxos(address)
+                Log.i(TAG, "Sync state and UTXOs cleared - will replay all history to restore correct balance")
+            } else {
+                Log.d(TAG, "Database has available UTXOs, no resync needed")
             }
         }
     }
@@ -189,16 +206,11 @@ class SubscriptionManager(
                 transactionId = lastId
             )
                 .onCompletion { error ->
-                    if (error == null) {
-                        Log.d(TAG, "Subscription completed normally (processed $processedCount transactions)")
-                    } else {
-                        Log.e(TAG, "Subscription completed with error", error)
-                    }
-                    syncTimeoutJob?.cancel() // Clean up timeout job
+                    if (error != null) Log.e(TAG, "Subscription error", error)
+                    syncTimeoutJob?.cancel()
                 }
                 .catch { error ->
-                    Log.e(TAG, "Error in subscription", error)
-                    syncTimeoutJob?.cancel() // Clean up timeout job
+                    syncTimeoutJob?.cancel()
                     throw error // Re-throw for retryWhen to handle
                 }
                 .collect { update ->
@@ -209,8 +221,6 @@ class SubscriptionManager(
                     is UtxoManager.ProcessingResult.TransactionProcessed -> {
                         processedCount++
                         latestTransactionId = result.transactionId
-                        Log.d(TAG, "Processed tx ${result.transactionHash}: " +
-                                "+${result.createdCount} -${result.spentCount} (${result.status})")
 
                         // Emit syncing state
                         send(SyncState.Syncing(processedCount, result.transactionId))
@@ -222,7 +232,6 @@ class SubscriptionManager(
                         // assume we're synced (don't wait for server's slow Progress updates)
                         syncTimeoutJob = launch {
                             delay(SYNC_TIMEOUT_MS)
-                            Log.d(TAG, "No new transactions for ${SYNC_TIMEOUT_MS}ms, marking as synced")
                             send(SyncState.Synced(result.transactionId))
                         }
                     }
@@ -238,14 +247,21 @@ class SubscriptionManager(
                         if (shouldSave) {
                             syncStateManager.saveLastProcessedTransactionId(address, result.highestTransactionId)
                             lastSaveTimestamps[address] = now
-                            Log.d(TAG, "Progress saved: highest transaction ID = ${result.highestTransactionId}")
-                        } else {
-                            Log.d(TAG, "Progress: highest transaction ID = ${result.highestTransactionId} (not saved - throttled)")
                         }
 
-                        // Emit Synced state when Progress update received
-                        // (This is backup in case timeout didn't fire)
-                        send(SyncState.Synced(result.highestTransactionId))
+                        // Only emit Synced if we've processed at least one transaction
+                        // This prevents a race condition where Progress arrives before
+                        // transaction data, causing the collector to stop prematurely
+                        if (processedCount > 0) {
+                            send(SyncState.Synced(result.highestTransactionId))
+                        } else {
+                            // No transactions processed yet - wait for actual data or timeout
+                            syncTimeoutJob?.cancel()
+                            syncTimeoutJob = launch {
+                                delay(SYNC_TIMEOUT_MS)
+                                send(SyncState.Synced(result.highestTransactionId))
+                            }
+                        }
                     }
                 }
             }
@@ -256,8 +272,7 @@ class SubscriptionManager(
             // Save final progress on completion/cancellation (if we have any)
             latestTransactionId?.let { txId ->
                 syncStateManager.saveLastProcessedTransactionId(address, txId)
-                lastSaveTimestamps.remove(address) // Clean up
-                Log.d(TAG, "Final progress saved on completion: $txId")
+                lastSaveTimestamps.remove(address)
             }
         }
     }

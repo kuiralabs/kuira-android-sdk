@@ -109,8 +109,6 @@ class DustActionsBuilder @Inject constructor(
         seed: ByteArray,
         feeBlocksMargin: Int = 5
     ): DustActions? {
-        android.util.Log.d(TAG, "Building dust actions for transaction")
-
         // Step 1: Calculate transaction fee
         val fee = feeCalculator.calculateFee(
             transactionHex = transactionHex,
@@ -123,45 +121,29 @@ class DustActionsBuilder @Inject constructor(
             return null
         }
 
-        android.util.Log.d(TAG, "Transaction fee: $fee Specks")
-
         // Step 2: Load DustLocalState
-        val state = dustRepository.loadState(address)
-        if (state == null) {
-            android.util.Log.e(TAG, "Failed to load dust state for $address")
+        val state = dustRepository.loadState(address) ?: run {
+            android.util.Log.e(TAG, "Failed to load dust state")
             return null
         }
 
         try {
-            // Get state pointer for FFI calls
             val statePtr = state.getStatePointer()
-
-            // Get UTXO count from state
             val utxoCount = state.getUtxoCount()
 
             if (utxoCount == 0) {
-                android.util.Log.e(TAG, "No dust UTXOs in state")
+                android.util.Log.e(TAG, "No dust UTXOs available")
                 return null
             }
 
-            android.util.Log.d(TAG, "Found $utxoCount dust UTXOs")
-
-            // Step 3: Select UTXOs for fee payment (use all for MVP)
+            // Step 3: Select UTXOs for fee payment
             val selectedIndices = (0 until utxoCount).toList()
-            val currentTime = System.currentTimeMillis()
-
-            // Check total dust balance at current time
-            val totalBalance = state.getBalance(currentTime)
-            android.util.Log.d(TAG, "Total dust balance: $totalBalance Specks (at $currentTime ms)")
-            android.util.Log.d(TAG, "Required fee: $fee Specks")
+            val totalBalance = state.getBalance(System.currentTimeMillis())
 
             if (totalBalance < fee) {
-                android.util.Log.e(TAG, "Insufficient dust: have $totalBalance, need $fee")
-                android.util.Log.e(TAG, "Dust UTXOs need time to accumulate value. Wait a few minutes and try again.")
+                android.util.Log.e(TAG, "Insufficient dust: $totalBalance < $fee Specks")
                 return null
             }
-
-            android.util.Log.d(TAG, "Selected ${selectedIndices.size} UTXO(s) for fee payment")
 
             // NOTE: Do NOT call createDustSpend here!
             // The Rust FFI will call state.spend() when serializing the transaction.
@@ -201,7 +183,6 @@ class DustActionsBuilder @Inject constructor(
      */
     suspend fun rollbackDustActions(actions: DustActions) {
         // No-op: DustLocalState rollback happens by not saving state
-        android.util.Log.d(TAG, "Rollback dust actions (state not saved, UTXOs remain available)")
     }
 
     /**
@@ -221,7 +202,6 @@ class DustActionsBuilder @Inject constructor(
      */
     suspend fun confirmDustActions(actions: DustActions) {
         // No-op: DustLocalState already saved in buildDustActions()
-        android.util.Log.d(TAG, "Confirm dust actions (state already saved)")
     }
 
     /**
@@ -235,19 +215,8 @@ class DustActionsBuilder @Inject constructor(
      * @return true if valid, false otherwise
      */
     fun validateDustActions(actions: DustActions): Boolean {
-        // Check UTXOs selected
-        if (!actions.isSuccess()) {
-            android.util.Log.e(TAG, "Validation failed: no UTXOs selected")
-            return false
-        }
-
-        // Check total fee
-        if (actions.totalFee <= BigInteger.ZERO) {
-            android.util.Log.e(TAG, "Validation failed: invalid fee")
-            return false
-        }
-
-        android.util.Log.d(TAG, "Dust actions validated successfully (${actions.utxoIndices.size} UTXOs)")
+        if (!actions.isSuccess()) return false
+        if (actions.totalFee <= BigInteger.ZERO) return false
         return true
     }
 }

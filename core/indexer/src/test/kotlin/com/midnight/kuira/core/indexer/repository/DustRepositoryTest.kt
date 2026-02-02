@@ -41,6 +41,7 @@ class DustRepositoryTest {
     private lateinit var dustDao: DustDao
     private lateinit var dustStateDataStore: DataStore<Preferences>
     private lateinit var balanceCalculator: DustBalanceCalculator
+    private lateinit var indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient
     private lateinit var repository: DustRepository
 
     private val testAddress = "mn_addr_testnet1test123"
@@ -52,7 +53,8 @@ class DustRepositoryTest {
         dustDao = mock()
         dustStateDataStore = mock()
         balanceCalculator = mock()
-        repository = DustRepository(dustDao, dustStateDataStore, balanceCalculator)
+        indexerClient = mock()
+        repository = DustRepository(dustDao, dustStateDataStore, balanceCalculator, indexerClient)
     }
 
     // ==================== Balance Calculation Tests ====================

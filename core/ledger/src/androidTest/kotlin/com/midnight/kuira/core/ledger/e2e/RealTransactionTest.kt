@@ -210,9 +210,11 @@ class RealTransactionTest {
         // It belongs to Android-derived address (index 3), created seconds ago!
         println("📝 Inserting FRESH on-chain UTXO...")
         val realIntentHash = "00e28d3099efda8b36d6277c61f4ce062d52102898b1314c16bd28c9d905b59c"  // 32 bytes (64 hex chars)
+        val realTransactionHash = "00e28d3099efda8b36d6277c61f4ce062d52102898b1314c16bd28c9d905b59c"  // Same as intent hash for test
 
         val realUtxo = com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity(
-            id = "$realIntentHash:0",
+            id = "$realTransactionHash:0",  // Database ID uses transactionHash
+            transactionHash = realTransactionHash,
             intentHash = realIntentHash,
             outputIndex = 0,
             owner = FUNDED_ADDRESS,

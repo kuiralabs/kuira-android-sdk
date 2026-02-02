@@ -95,7 +95,6 @@ class DustRepository @Inject constructor(
         // Check if state already exists
         val existing = getSerializedState(address)
         if (existing != null) {
-            android.util.Log.d(TAG, "Dust state already exists for $address")
             return false
         }
 
@@ -109,7 +108,6 @@ class DustRepository @Inject constructor(
                 ?: error("Failed to serialize initial dust state")
 
             saveSerializedState(address, serialized)
-            android.util.Log.d(TAG, "Initialized dust state for $address")
 
             return true
         } finally {
@@ -141,10 +139,7 @@ class DustRepository @Inject constructor(
      */
     suspend fun getCurrentBalance(address: String): BigInteger {
         // Try to get balance from DustLocalState (source of truth)
-        val serialized = getSerializedState(address) ?: run {
-            android.util.Log.d(TAG, "No dust state found for $address, returning zero")
-            return BigInteger.ZERO
-        }
+        val serialized = getSerializedState(address) ?: return BigInteger.ZERO
 
         // Deserialize state (TODO: implement deserialization in DustLocalState)
         // For now, calculate from cached database tokens
@@ -518,19 +513,8 @@ class DustRepository @Inject constructor(
      * @return DustLocalState instance, or null if not found
      */
     suspend fun loadState(address: String): DustLocalState? {
-        val serialized = getSerializedState(address) ?: run {
-            android.util.Log.d(TAG, "No dust state found for $address")
-            return null
-        }
-
-        val state = DustLocalState.deserialize(serialized)
-        if (state == null) {
-            android.util.Log.e(TAG, "Failed to deserialize dust state for $address")
-            return null
-        }
-
-        android.util.Log.d(TAG, "Loaded dust state for $address")
-        return state
+        val serialized = getSerializedState(address) ?: return null
+        return DustLocalState.deserialize(serialized)
     }
 
     /**
@@ -543,13 +527,8 @@ class DustRepository @Inject constructor(
      * @param state DustLocalState instance
      */
     suspend fun saveState(address: String, state: DustLocalState) {
-        val serialized = state.serialize() ?: run {
-            android.util.Log.e(TAG, "Failed to serialize dust state for $address")
-            return
-        }
-
+        val serialized = state.serialize() ?: return
         saveSerializedState(address, serialized)
-        android.util.Log.d(TAG, "Saved updated dust state for $address")
     }
 
     /**
@@ -594,7 +573,6 @@ class DustRepository @Inject constructor(
         dustStateDataStore.edit { prefs ->
             prefs[key] = hexString
         }
-        android.util.Log.d(TAG, "Saved dust state for $address (${serialized.size} bytes)")
     }
 
     /**

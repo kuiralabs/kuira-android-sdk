@@ -58,6 +58,11 @@ class SubscriptionManagerTest {
         coEvery { syncStateManager.saveLastProcessedTransactionId(any(), any()) } just Runs
         coEvery { syncStateManager.clearSyncState(any()) } just Runs
         coEvery { utxoManager.clearUtxos(any()) } just Runs
+
+        // Mock for checkAndHandleResyncNeeded
+        coEvery { utxoManager.hasAnyUtxos(any()) } returns true
+        coEvery { utxoManager.hasAvailableUtxos(any()) } returns true
+        coEvery { utxoManager.debugDumpAllUtxos(any(), any()) } just Runs
     }
 
     @After
@@ -101,22 +106,34 @@ class SubscriptionManagerTest {
     }
 
     @Test
-    fun `startSubscription emits Synced on Progress update`() = runTest {
-        // Given: Flow with Progress
+    fun `startSubscription emits Synced on Progress update after transaction`() = runTest {
+        // Given: Flow with a transaction followed by Progress
+        // Note: Synced is only emitted immediately if at least one transaction was processed.
+        // This prevents the UI from showing "Synced" before any actual data is received.
+        val mockTransaction = mockk<UnshieldedTransactionUpdate.Transaction>(relaxed = true)
         val mockProgress = UnshieldedTransactionUpdate.Progress(
             type = "UnshieldedTransactionsProgress",
             highestTransactionId = 27
         )
-        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns flowOf(mockProgress)
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns flowOf(mockTransaction, mockProgress)
+        coEvery { utxoManager.processUpdate(mockTransaction) } returns UtxoManager.ProcessingResult.TransactionProcessed(
+            transactionId = 10,
+            transactionHash = "tx_123",
+            createdCount = 1,
+            spentCount = 0,
+            status = TransactionStatus.SUCCESS
+        )
         coEvery { utxoManager.processUpdate(mockProgress) } returns UtxoManager.ProcessingResult.ProgressUpdate(27)
 
         // When: Start subscription
-        val states = subscriptionManager.startSubscription(testAddress).take(2).toList()
+        val states = subscriptionManager.startSubscription(testAddress).take(3).toList()
 
-        // Then: Second state is Synced
-        assertEquals(2, states.size)
-        assertTrue("Second state should be Synced", states[1] is SyncState.Synced)
-        assertEquals(27, (states[1] as SyncState.Synced).highestTransactionId)
+        // Then: States are Connecting, Syncing, then Synced
+        assertEquals(3, states.size)
+        assertTrue("First state should be Connecting", states[0] is SyncState.Connecting)
+        assertTrue("Second state should be Syncing", states[1] is SyncState.Syncing)
+        assertTrue("Third state should be Synced", states[2] is SyncState.Synced)
+        assertEquals(27, (states[2] as SyncState.Synced).highestTransactionId)
     }
 
     @Test
@@ -140,6 +157,11 @@ class SubscriptionManagerTest {
     fun `startSubscription uses last processed ID for resumption`() = runTest {
         // Given: Last ID exists (override default mock)
         coEvery { syncStateManager.getLastProcessedTransactionId(testAddress) } returns 100
+
+        // IMPORTANT: Must have UTXOs in database, otherwise SubscriptionManager clears sync state
+        // when lastProcessedId exists but database is empty (assumes corrupted state)
+        coEvery { utxoManager.getUnspentUtxos(testAddress) } returns listOf(mockk(relaxed = true))
+
         every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns emptyFlow()
 
         // When: Start subscription (collect all states - emptyFlow completes immediately after Connecting)

@@ -24,6 +24,35 @@ class UtxoManagerTest {
         utxoManager = UtxoManager(mockDao)
     }
 
+    // Helper to create test UTXO entity with named parameters
+    private fun createUtxoEntity(
+        id: String,
+        intentHash: String,
+        outputIndex: Int = 0,
+        owner: String,
+        ownerPublicKey: String? = null,
+        tokenType: String,
+        value: String,
+        ctime: Long = 1,
+        registeredForDustGeneration: Boolean = false,
+        state: UtxoState = UtxoState.AVAILABLE,
+        transactionHash: String = "tx_$intentHash"  // Default to derived from intentHash for tests
+    ): UnshieldedUtxoEntity {
+        return UnshieldedUtxoEntity(
+            id = id,
+            transactionHash = transactionHash,
+            intentHash = intentHash,
+            outputIndex = outputIndex,
+            owner = owner,
+            ownerPublicKey = ownerPublicKey,
+            tokenType = tokenType,
+            value = value,
+            ctime = ctime,
+            registeredForDustGeneration = registeredForDustGeneration,
+            state = state
+        )
+    }
+
     @Test
     fun `given transaction update when processUpdate then inserts created and marks spent`() = runBlocking {
         // Given
@@ -64,17 +93,29 @@ class UtxoManagerTest {
             spentUtxos = listOf(spentUtxo)
         )
 
+        // Mock: getUtxoByIntentHash returns existing entity for spent UTXO lookup
+        val existingSpentEntity = createUtxoEntity(
+            id = "tx_0x456:0",
+            intentHash = "0x456",
+            outputIndex = 0,
+            owner = "mn_addr_testnet1abc",
+            tokenType = "DUST",
+            value = "500",
+            transactionHash = "tx_0x456"
+        )
+        whenever(mockDao.getUtxoByIntentHash("0x456", 0)).thenReturn(existingSpentEntity)
+
         // When
         val result = utxoManager.processUpdate(update)
 
         // Then
         verify(mockDao).insertUtxos(argThat { list ->
             list.size == 1 &&
-            list[0].id == "0x123:0" &&
+            list[0].intentHash == "0x123" &&  // Check intentHash, not id
             list[0].value == "1000" &&
             list[0].state == UtxoState.AVAILABLE
         })
-        verify(mockDao).markAsSpent(listOf("0x456:0"))
+        verify(mockDao).markAsSpent(listOf("tx_0x456:0"))  // Uses database ID (transactionHash:outputIndex)
 
         assertTrue(result is UtxoManager.ProcessingResult.TransactionProcessed)
         val txResult = result as UtxoManager.ProcessingResult.TransactionProcessed
@@ -143,12 +184,24 @@ class UtxoManagerTest {
             spentUtxos = listOf(spentUtxo)
         )
 
+        // Mock: getUtxoByIntentHash returns existing entity for spent UTXO lookup
+        val existingSpentEntity = createUtxoEntity(
+            id = "tx_0x123:0",
+            intentHash = "0x123",
+            outputIndex = 0,
+            owner = "addr",
+            tokenType = "DUST",
+            value = "1000",
+            transactionHash = "tx_0x123"
+        )
+        whenever(mockDao.getUtxoByIntentHash("0x123", 0)).thenReturn(existingSpentEntity)
+
         // When
         utxoManager.processUpdate(update)
 
         // Then
         verify(mockDao, never()).insertUtxos(any())
-        verify(mockDao).markAsSpent(listOf("0x123:0"))
+        verify(mockDao).markAsSpent(listOf("tx_0x123:0"))  // Uses database ID
     }
 
     @Test
@@ -199,9 +252,9 @@ class UtxoManagerTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, null, "OTHER", "5000", 3, false, UtxoState.AVAILABLE)
+            createUtxoEntity(id = "0x1:0", intentHash = "0x1", outputIndex = 0, owner = address, tokenType = "DUST", value = "1000", ctime = 1),
+            createUtxoEntity(id = "0x2:0", intentHash = "0x2", outputIndex = 0, owner = address, tokenType = "DUST", value = "2000", ctime = 2),
+            createUtxoEntity(id = "0x3:0", intentHash = "0x3", outputIndex = 0, owner = address, tokenType = "OTHER", value = "5000", ctime = 3)
         )
         whenever(mockDao.getUnspentUtxos(address)).thenReturn(utxos)
 
@@ -232,7 +285,7 @@ class UtxoManagerTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+            createUtxoEntity(id = "0x1:0", intentHash = "0x1", outputIndex = 0, owner = address, tokenType = "DUST", value = "1000")
         )
         whenever(mockDao.observeUnspentUtxos(address)).thenReturn(flowOf(utxos))
 
@@ -249,7 +302,7 @@ class UtxoManagerTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val expected = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+            createUtxoEntity(id = "0x1:0", intentHash = "0x1", outputIndex = 0, owner = address, tokenType = "DUST", value = "1000")
         )
         whenever(mockDao.getUnspentUtxos(address)).thenReturn(expected)
 
@@ -277,10 +330,10 @@ class UtxoManagerTest {
         // Given
         val address = "mn_addr"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, null, "DUST", "100", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, null, "DUST", "200", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, null, "DUST", "300", 3, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x4:0", "0x4", 0, address, null, "DUST", "400", 4, false, UtxoState.AVAILABLE)
+            createUtxoEntity(id = "0x1:0", intentHash = "0x1", outputIndex = 0, owner = address, tokenType = "DUST", value = "100", ctime = 1),
+            createUtxoEntity(id = "0x2:0", intentHash = "0x2", outputIndex = 0, owner = address, tokenType = "DUST", value = "200", ctime = 2),
+            createUtxoEntity(id = "0x3:0", intentHash = "0x3", outputIndex = 0, owner = address, tokenType = "DUST", value = "300", ctime = 3),
+            createUtxoEntity(id = "0x4:0", intentHash = "0x4", outputIndex = 0, owner = address, tokenType = "DUST", value = "400", ctime = 4)
         )
         whenever(mockDao.getUnspentUtxos(address)).thenReturn(utxos)
 
@@ -297,8 +350,8 @@ class UtxoManagerTest {
         val address = "mn_addr"
         val largeValue = "999999999999999999999999999999"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, null, "DUST", largeValue, 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, null, "DUST", largeValue, 2, false, UtxoState.AVAILABLE)
+            createUtxoEntity(id = "0x1:0", intentHash = "0x1", outputIndex = 0, owner = address, tokenType = "DUST", value = largeValue, ctime = 1),
+            createUtxoEntity(id = "0x2:0", intentHash = "0x2", outputIndex = 0, owner = address, tokenType = "DUST", value = largeValue, ctime = 2)
         )
         whenever(mockDao.getUnspentUtxos(address)).thenReturn(utxos)
 
@@ -375,12 +428,34 @@ class UtxoManagerTest {
             spentUtxos = listOf(spentUtxo1, spentUtxo2)
         )
 
+        // Mock: getUtxoByIntentHash returns existing entities for spent UTXO lookup
+        val existingEntity1 = createUtxoEntity(
+            id = "tx_0x123:0",
+            intentHash = "0x123",
+            outputIndex = 0,
+            owner = "addr",
+            tokenType = "DUST",
+            value = "1000",
+            transactionHash = "tx_0x123"
+        )
+        val existingEntity2 = createUtxoEntity(
+            id = "tx_0x456:0",
+            intentHash = "0x456",
+            outputIndex = 0,
+            owner = "addr",
+            tokenType = "DUST",
+            value = "2000",
+            transactionHash = "tx_0x456"
+        )
+        whenever(mockDao.getUtxoByIntentHash("0x123", 0)).thenReturn(existingEntity1)
+        whenever(mockDao.getUtxoByIntentHash("0x456", 0)).thenReturn(existingEntity2)
+
         // When
         val result = utxoManager.processUpdate(update)
 
         // Then
         // Should mark as AVAILABLE (unlock) instead of marking as SPENT
-        verify(mockDao).markAsAvailable(listOf("0x123:0", "0x456:0"))
+        verify(mockDao).markAsAvailable(listOf("tx_0x123:0", "tx_0x456:0"))  // Uses database IDs
         verify(mockDao, never()).markAsSpent(any<List<String>>())
         verify(mockDao, never()).insertUtxos(any())
 
@@ -475,6 +550,18 @@ class UtxoManagerTest {
             spentUtxos = listOf(spentUtxo)
         )
 
+        // Mock: getUtxoByIntentHash returns existing entity for spent UTXO lookup
+        val existingSpentEntity = createUtxoEntity(
+            id = "tx_0x456:0",
+            intentHash = "0x456",
+            outputIndex = 0,
+            owner = "addr",
+            tokenType = "DUST",
+            value = "500",
+            transactionHash = "tx_0x456"
+        )
+        whenever(mockDao.getUtxoByIntentHash("0x456", 0)).thenReturn(existingSpentEntity)
+
         // When
         val result = utxoManager.processUpdate(update)
 
@@ -482,10 +569,10 @@ class UtxoManagerTest {
         // PARTIAL_SUCCESS should behave like SUCCESS: insert created, mark spent
         verify(mockDao).insertUtxos(argThat { list ->
             list.size == 1 &&
-            list[0].id == "0x123:0" &&
+            list[0].intentHash == "0x123" &&  // Check intentHash, not id
             list[0].state == UtxoState.AVAILABLE
         })
-        verify(mockDao).markAsSpent(listOf("0x456:0"))
+        verify(mockDao).markAsSpent(listOf("tx_0x456:0"))  // Uses database ID
 
         assertTrue(result is UtxoManager.ProcessingResult.TransactionProcessed)
         val txResult = result as UtxoManager.ProcessingResult.TransactionProcessed

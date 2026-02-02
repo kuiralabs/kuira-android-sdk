@@ -24,6 +24,7 @@ class UtxoSelectorTest {
     private fun createUtxo(value: Long, tokenType: String = "NIGHT"): UnshieldedUtxoEntity {
         return UnshieldedUtxoEntity(
             id = "tx${value}:0",
+            transactionHash = "txhash_$value",  // Database ID uses transactionHash
             intentHash = "tx$value",
             outputIndex = 0,
             owner = "mn_addr_test",

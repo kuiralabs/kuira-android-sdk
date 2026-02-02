@@ -15,6 +15,7 @@ import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
+import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
@@ -81,7 +82,8 @@ class SendViewModel @Inject constructor(
     private val serializer: TransactionSerializer,
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
-    private val subscriptionManagerFactory: SubscriptionManagerFactory
+    private val subscriptionManagerFactory: SubscriptionManagerFactory,
+    private val syncStateManager: SyncStateManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<SendUiState>(SendUiState.Idle())
@@ -190,8 +192,14 @@ class SendViewModel @Inject constructor(
             var dustKey: DerivedKey? = null
 
             try {
-                // Step 1: Validate inputs
+                // Step 0: Quick sync to ensure UTXOs are fresh (prevents error 115)
                 _state.value = SendUiState.Building
+                val syncedOk = quickSyncBeforeSend(fromAddress)
+                if (!syncedOk) {
+                    Log.w(TAG, "Quick sync failed, proceeding anyway")
+                }
+
+                // Step 1: Validate inputs
 
                 // Validate amount
                 if (amount <= BigInteger.ZERO) {
@@ -358,16 +366,26 @@ class SendViewModel @Inject constructor(
                         )
                     }
                     is TransactionSubmitter.SubmissionResult.StaleUtxo -> {
-                        Log.w(TAG, "⚠️ Stale UTXO detected - syncing fresh UTXOs")
-                        Log.w(TAG, "   Failed UTXO IDs: ${result.failedUtxoIds}")
+                        Log.w(TAG, "⚠️ Stale UTXO detected - UTXO was already spent on blockchain")
+                        Log.w(TAG, "   Failed UTXO IDs (intentHash:outputNo): ${result.failedUtxoIds}")
 
-                        // Mark stale UTXOs as SPENT
-                        Log.d(TAG, "Marking ${result.failedUtxoIds.size} stale UTXOs as SPENT")
-                        utxoManager.markUtxosAsSpent(result.failedUtxoIds)
+                        // Parse intentHash:outputNo format and mark UTXOs as SPENT
+                        // failedUtxoIds are in "intentHash:outputNo" format (blockchain format)
+                        val utxoIntentPairs = result.failedUtxoIds.mapNotNull { id ->
+                            val parts = id.split(":")
+                            if (parts.size == 2) {
+                                val intentHash = parts[0]
+                                val outputNo = parts[1].toIntOrNull()
+                                if (outputNo != null) intentHash to outputNo else null
+                            } else null
+                        }
+                        Log.d(TAG, "Marking ${utxoIntentPairs.size} stale UTXOs as SPENT by intentHash")
+                        utxoManager.markUtxosAsSpentByIntent(utxoIntentPairs)
 
-                        // Start a quick sync to get latest UTXOs
-                        // The subscription will sync any missing UTXOs (like change outputs)
-                        Log.d(TAG, "Starting quick sync to get latest UTXOs...")
+                        // Quick incremental sync to check for any new transactions
+                        // If the indexer has new UTXOs (like change outputs), we'll get them
+                        // If not, the balance will reflect reality (possibly 0)
+                        Log.d(TAG, "Quick sync to check for new transactions...")
                         syncAndRetry(fromAddress)
                     }
                 }
@@ -517,6 +535,38 @@ class SendViewModel @Inject constructor(
     }
 
     /**
+     * Quick sync before sending to ensure UTXOs are fresh.
+     *
+     * This prevents error 115 (stale UTXO) by syncing before building the transaction.
+     * Timeout: 10 seconds (should be fast for incremental sync).
+     *
+     * @param address Address to sync UTXOs for
+     * @return true if sync completed, false if timed out or failed
+     */
+    private suspend fun quickSyncBeforeSend(address: String): Boolean {
+        return try {
+            val subscriptionManager = subscriptionManagerFactory.create()
+
+            val result = withTimeoutOrNull(PRE_SEND_SYNC_TIMEOUT_MS) {
+                subscriptionManager.startSubscription(address)
+                    .first { state -> state is SyncState.Synced }
+                true
+            }
+
+            if (result == true) {
+                Log.d(TAG, "Pre-send sync complete")
+                true
+            } else {
+                Log.w(TAG, "Pre-send sync timed out")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Pre-send sync failed", e)
+            false
+        }
+    }
+
+    /**
      * Sync latest UTXOs and show error to allow retry.
      *
      * Called after error 115 (stale UTXO) to sync fresh data from blockchain.
@@ -584,6 +634,7 @@ class SendViewModel @Inject constructor(
 
     private companion object {
         private const val TAG = "SendViewModel"
-        private const val QUICK_SYNC_TIMEOUT_MS = 30_000L  // 30 seconds
+        private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
+        private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
     }
 }

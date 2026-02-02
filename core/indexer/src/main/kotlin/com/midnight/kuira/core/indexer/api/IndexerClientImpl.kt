@@ -206,7 +206,6 @@ class IndexerClientImpl(
                         UnshieldedTransactionUpdate.serializer(),
                         unshieldedTransactionsJson
                     )
-                    android.util.Log.d("IndexerClient", "Parsed update type: ${update::class.simpleName}")
                     emit(update)
                 }
         }

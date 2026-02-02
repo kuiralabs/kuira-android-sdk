@@ -100,12 +100,8 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "Transaction serialized (unproven): ${unprovenTxHex.length} hex chars")
-        Log.d(TAG, "Tag should contain: proof-preimage, pedersen[v1]")
-
-        // Step 2: Prove transaction via proof server (Phase 2 - NEW!)
+        // Step 2: Prove transaction via proof server
         val provenTxHex = try {
-            Log.d(TAG, "🔐 Proving transaction via proof server...")
             proofServerClient.proveTransaction(unprovenTxHex)
         } catch (e: ProofServerException) {
             Log.e(TAG, "❌ Proof server error", e)
@@ -115,12 +111,8 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "✅ Transaction proven: ${provenTxHex.length} hex chars")
-        Log.d(TAG, "Tag contains: proof, embedded-fr[v1] (not yet sealed)")
-
-        // Step 2.5: Seal the proven transaction (transform binding commitment)
+        // Step 2.5: Seal the proven transaction
         val finalizedTxHex = try {
-            Log.d(TAG, "🔐 Sealing proven transaction...")
             serializer.sealProvenTransaction(provenTxHex)
                 ?: throw IllegalStateException("Sealing returned null")
         } catch (e: Exception) {
@@ -131,20 +123,16 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "✅ Transaction finalized: ${finalizedTxHex.length} hex chars")
-        Log.d(TAG, "Tag should now contain: proof, pedersen-schnorr[v1]")
-
         // Step 2.6: Get the Midnight transaction hash (for confirmation tracking)
-        // This is different from the extrinsic hash returned by the node!
         val ffiSerializer = serializer as? FfiTransactionSerializer
         val midnightTxHash = ffiSerializer?.getTransactionHash(finalizedTxHex)
-        if (midnightTxHash != null) {
-            Log.d(TAG, "Midnight transaction hash: $midnightTxHash")
-        } else {
-            Log.w(TAG, "Could not get Midnight transaction hash - will use extrinsic hash for confirmation")
-        }
 
         // Track which UTXOs are being spent (for error recovery)
+        // Extract (intentHash, outputNo) pairs for database lookup
+        val spentUtxoIntents = signedIntent.guaranteedUnshieldedOffer?.inputs?.map {
+            it.intentHash to it.outputNo
+        } ?: emptyList()
+        // Also keep string IDs for error reporting
         val spentUtxoIds = signedIntent.guaranteedUnshieldedOffer?.inputs?.map { it.identifier() } ?: emptyList()
 
         // Step 3: Submit finalized transaction to node
@@ -171,15 +159,10 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "✅ Transaction submitted with extrinsic hash: $extrinsicHash")
+        Log.d(TAG, "Transaction submitted: $extrinsicHash")
 
-        // CRITICAL: Mark input UTXOs as SPENT immediately!
-        // The node accepted the transaction, so these UTXOs are gone.
-        // Don't wait for confirmation - if the user retries before confirmation,
-        // they'd try to spend the same UTXOs again (error 115).
-        Log.d(TAG, "Marking ${spentUtxoIds.size} input UTXOs as SPENT (node accepted transaction)")
-        utxoManager.markUtxosAsSpent(spentUtxoIds)
-        Log.d(TAG, "✅ Input UTXOs marked as SPENT")
+        // Mark input UTXOs as SPENT immediately (node accepted transaction)
+        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
 
         // Use Midnight tx hash for confirmation (indexer uses this hash, not extrinsic hash)
         val confirmationHash = midnightTxHash ?: extrinsicHash
@@ -220,7 +203,6 @@ class TransactionSubmitter(
         address: String,
         expectedTxHash: String
     ): SubmissionResult {
-        Log.d(TAG, "Waiting for confirmation of tx: $expectedTxHash")
 
         // Subscribe to transactions for this address
         val txFlow: Flow<UnshieldedTransactionUpdate> = indexerClient
@@ -231,26 +213,17 @@ class TransactionSubmitter(
             .filter { it is UnshieldedTransactionUpdate.Transaction }
             .map { it as UnshieldedTransactionUpdate.Transaction }
             .firstOrNull { tx ->
-                val matches = tx.transaction.hash.removePrefix("0x") == expectedTxHash
-                if (matches) {
-                    Log.d(TAG, "✅ Found matching transaction: ${tx.transaction.hash}")
-                }
-                matches
+                tx.transaction.hash.removePrefix("0x") == expectedTxHash
             }
 
         return if (update != null) {
-            // CRITICAL: Update local UTXO database!
-            // This ensures UTXOs are updated even if SubscriptionManager misses the transaction.
-            Log.d(TAG, "Processing confirmed transaction: created=${update.createdUtxos.size}, spent=${update.spentUtxos.size}")
             utxoManager.processUpdate(update)
-            Log.d(TAG, "✅ UTXOs updated in local database")
-
+            Log.d(TAG, "Transaction confirmed: $expectedTxHash")
             SubmissionResult.Success(
                 txHash = expectedTxHash,
-                blockHeight = update.transaction.id.toLong()  // Approximate block
+                blockHeight = update.transaction.id.toLong()
             )
         } else {
-            Log.w(TAG, "Transaction not found in indexer stream: $expectedTxHash")
             SubmissionResult.Failed(
                 txHash = expectedTxHash,
                 reason = "Transaction not found in indexer stream"
@@ -314,11 +287,7 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "Base transaction serialized: ${baseSerializedHex.length} hex chars")
-        Log.d(TAG, "Ledger params: ${ledgerParamsHex.length} hex chars")
-
         // Step 2: Prove and seal base transaction for fee calculation
-        Log.d(TAG, "Proving base transaction for fee calculation...")
         val baseProvenHex = try {
             proofServerClient.proveTransaction(baseSerializedHex)
         } catch (e: ProofServerException) {
@@ -329,17 +298,13 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "Sealing base transaction for fee calculation...")
         val ffiSerializer = serializer as? com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
             ?: throw IllegalStateException("FFI serializer required")
 
         val baseSealedHex = ffiSerializer.sealProvenTransaction(baseProvenHex)
             ?: throw IllegalStateException("Sealing failed")
 
-        Log.d(TAG, "Base transaction sealed: ${baseSealedHex.length} hex chars")
-
         // Step 3: Calculate fee on sealed transaction
-        Log.d(TAG, "Calculating transaction fee...")
         val dustActions = try {
             dustActionsBuilder.buildDustActions(
                 transactionHex = baseSealedHex,  // Use SEALED transaction
@@ -363,8 +328,6 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "Dust actions built: ${dustActions.utxoIndices.size} UTXOs, fee=${dustActions.totalFee} Specks")
-
         // Step 3: Load DustLocalState
         val dustState = dustRepository.loadState(fromAddress)
         if (dustState == null) {
@@ -378,7 +341,6 @@ class TransactionSubmitter(
         try {
             // Step 4: Build JSON for selected dust UTXOs
             val dustUtxosJson = buildDustUtxosJson(dustActions.utxoIndices, dustActions.totalFee)
-            Log.d(TAG, "Dust UTXOs JSON: $dustUtxosJson")
 
             // Step 5: Extract transaction components from signed intent
             val offer = signedIntent.guaranteedUnshieldedOffer!!
@@ -387,7 +349,6 @@ class TransactionSubmitter(
             val signatures = offer.signatures
 
             // Step 6: Serialize WITH dust (calls state.spend() internally in Rust FFI)
-            Log.d(TAG, "Serializing transaction with dust fees...")
             val ffiSerializer = serializer as? com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
                 ?: throw IllegalStateException("FFI serializer required for dust fee payment")
 
@@ -409,57 +370,58 @@ class TransactionSubmitter(
                 ttl = signedIntent.ttl
             )
 
-            Log.d(TAG, "Transaction with dust serialized (unproven): ${unprovenTxHex.length} hex chars")
+            // NOTE: Do NOT save dust state here!
+            // The FFI has modified dustState in memory, but we must NOT persist it
+            // until the node accepts the transaction. If we save now and the node
+            // rejects (e.g., error 115), the dust state would be corrupted.
+            // Save happens AFTER successful node submission (Step 10).
 
-            // Step 7: Save updated dust state
-            dustRepository.saveState(fromAddress, dustState)
-            Log.d(TAG, "Dust state saved")
-
-            // Step 8: Prove transaction
-            Log.d(TAG, "🔐 Proving transaction via proof server...")
+            // Step 7: Prove transaction
             val provenTxHex = try {
                 proofServerClient.proveTransaction(unprovenTxHex)
             } catch (e: ProofServerException) {
                 Log.e(TAG, "❌ Proof server error", e)
-                // Rollback dust actions on proving failure
-                dustActionsBuilder.rollbackDustActions(dustActions)
+                // Don't save dust state - it's still clean on disk
                 return SubmissionResult.Failed(
                     txHash = null,
                     reason = "Proof generation failed: ${e.message}"
                 )
             }
 
-            Log.d(TAG, "✅ Transaction proven: ${provenTxHex.length} hex chars")
-
-            // Step 9: Seal proven transaction
-            Log.d(TAG, "🔐 Sealing proven transaction...")
+            // Step 8: Seal proven transaction
             val sealedTxHex = ffiSerializer.sealProvenTransaction(provenTxHex)
                 ?: throw IllegalStateException("Sealing returned null")
 
-            Log.d(TAG, "✅ Transaction sealed: ${sealedTxHex.length} hex chars")
-
-            // Step 9.5: Get the Midnight transaction hash (for confirmation tracking)
-            // This is different from the extrinsic hash returned by the node!
+            // Step 9: Get the Midnight transaction hash
             val midnightTxHash = ffiSerializer.getTransactionHash(sealedTxHex)
-            if (midnightTxHash != null) {
-                Log.d(TAG, "Midnight transaction hash: $midnightTxHash")
-            } else {
-                Log.w(TAG, "Could not get Midnight transaction hash - will use extrinsic hash for confirmation")
-            }
 
             // Track which UTXOs are being spent (for error recovery)
+            // Extract (intentHash, outputNo) pairs for database lookup
+            val spentUtxoIntents = inputs.map { it.intentHash to it.outputNo }
+            // Also keep string IDs for error reporting
             val spentUtxoIds = inputs.map { it.identifier() }
 
             // Step 10: Submit to node
             val extrinsicHash = try {
                 nodeRpcClient.submitTransaction(sealedTxHex)
             } catch (e: TransactionRejected) {
-                // Rollback dust actions on node rejection
-                dustActionsBuilder.rollbackDustActions(dustActions)
+                // Don't save dust state - it's still clean on disk
+                // Next attempt will load fresh state
 
                 // Check if this is a stale UTXO error (error 115)
                 if (e.isStaleUtxo) {
                     Log.w(TAG, "⚠️ Stale UTXO detected (error 115) - UTXOs were already spent")
+
+                    // Error 115 could be caused by stale UNSHIELDED UTXOs or stale DUST UTXOs
+                    // Clear dust state to force re-sync on next attempt
+                    // This ensures dust doesn't stay stale forever
+                    try {
+                        dustRepository.deleteState(fromAddress)
+                        Log.d(TAG, "Cleared dust state - will re-sync on next transaction")
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Failed to clear dust state", ex)
+                    }
+
                     return SubmissionResult.StaleUtxo(
                         failedUtxoIds = spentUtxoIds,
                         reason = "Some UTXOs were already spent. Wallet is syncing to get latest balance."
@@ -471,28 +433,27 @@ class TransactionSubmitter(
                     reason = "Transaction rejected by node: ${e.reason}"
                 )
             } catch (e: NodeRpcException) {
-                // Rollback dust actions on RPC error
-                dustActionsBuilder.rollbackDustActions(dustActions)
+                // Don't save dust state - it's still clean on disk
                 return SubmissionResult.Failed(
                     txHash = null,
                     reason = "Node RPC error: ${e.message}"
                 )
             }
 
-            Log.d(TAG, "✅ Transaction submitted with extrinsic hash: $extrinsicHash")
+            Log.d(TAG, "✅ Transaction accepted by node: $extrinsicHash")
 
-            // CRITICAL: Mark input UTXOs as SPENT immediately!
-            // The node accepted the transaction, so these UTXOs are gone.
-            // Don't wait for confirmation - if the user retries before confirmation,
-            // they'd try to spend the same UTXOs again (error 115).
-            Log.d(TAG, "Marking ${spentUtxoIds.size} input UTXOs as SPENT (node accepted transaction)")
-            utxoManager.markUtxosAsSpent(spentUtxoIds)
-            Log.d(TAG, "✅ Input UTXOs marked as SPENT")
+            // Step 11: NOW save dust state (node accepted the transaction)
+            // The dust UTXOs are now spent on-chain, so we must persist the updated state
+            dustRepository.saveState(fromAddress, dustState)
+            Log.d(TAG, "Dust state saved after successful submission")
+
+            // Step 12: Mark input UTXOs as SPENT immediately (node accepted transaction)
+            utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
 
             // Use Midnight tx hash for confirmation (indexer uses this hash, not extrinsic hash)
             val confirmationHash = midnightTxHash ?: extrinsicHash
 
-            // Step 11: Wait for confirmation
+            // Step 13: Wait for confirmation
             val result = try {
                 withTimeout(timeoutMs) {
                     waitForConfirmation(fromAddress, confirmationHash)
@@ -506,37 +467,8 @@ class TransactionSubmitter(
                 )
             }
 
-            // Step 12: Update dust coin state based on final result
-            when (result) {
-                is SubmissionResult.Success -> {
-                    // Transaction confirmed: mark coins as SPENT
-                    try {
-                        dustActionsBuilder.confirmDustActions(dustActions)
-                        Log.d(TAG, "✅ Dust coins marked as SPENT")
-                    } catch (e: Exception) {
-                        // Log but don't fail - transaction already succeeded
-                        Log.e(TAG, "Failed to confirm dust actions", e)
-                    }
-                }
-                is SubmissionResult.Failed -> {
-                    // Transaction failed: rollback coins to AVAILABLE
-                    try {
-                        dustActionsBuilder.rollbackDustActions(dustActions)
-                        Log.d(TAG, "⚠️  Dust coins rolled back to AVAILABLE")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to rollback dust actions", e)
-                    }
-                }
-                is SubmissionResult.Pending -> {
-                    // Timeout: leave coins as PENDING for manual resolution
-                    Log.w(TAG, "⏳ Transaction pending - dust coins left in PENDING state")
-                }
-                is SubmissionResult.StaleUtxo -> {
-                    // Stale UTXO: rollback dust coins (already done in catch block)
-                    // The caller will handle UTXO reconciliation
-                    Log.w(TAG, "⚠️ Stale UTXO - caller will reconcile UTXOs")
-                }
-            }
+            // Step 14: Dust state already saved in Step 11
+            // No need for confirmDustActions/rollbackDustActions since we only save on success
 
             return result
 

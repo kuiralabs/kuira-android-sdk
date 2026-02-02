@@ -165,9 +165,7 @@ class NodeRpcClientImpl(
                 params = listOf("0x$wrappedExtrinsic") // Submit the wrapped extrinsic
             )
 
-            // Send POST request
-            println("📤 Sending RPC request to $nodeUrl:")
-            println("   ${json.encodeToString(JsonRpcRequest.serializer(), request)}")
+            // Send POST request (logged at DEBUG level only)
 
             val response = httpClient.post(nodeUrl) {
                 contentType(ContentType.Application.Json)
@@ -175,9 +173,6 @@ class NodeRpcClientImpl(
             }
 
             val responseBody = response.bodyAsText()
-            println("📥 Node response:")
-            println("   Status: ${response.status}")
-            println("   Body: ${responseBody.take(500)}...")
 
             val jsonResponse = json.decodeFromString<JsonRpcResponse>(responseBody)
 
@@ -192,12 +187,23 @@ class NodeRpcClientImpl(
             if (jsonResponse.error != null) {
                 val error = jsonResponse.error
 
+                // Log full error details for debugging
+                println("[NodeRpc] Transaction rejected by node:")
+                println("[NodeRpc]   Error code: ${error.code}")
+                println("[NodeRpc]   Message: ${error.message}")
+                println("[NodeRpc]   Data: ${error.data}")
+
                 // Special handling for invalid transaction (code 1010)
                 if (error.code == 1010) {
                     // Parse custom error code from data field (e.g., "Custom error: 115")
                     val customErrorCode = error.data?.let { data ->
                         val match = Regex("Custom error: (\\d+)").find(data)
                         match?.groupValues?.get(1)?.toIntOrNull()
+                    }
+
+                    println("[NodeRpc]   Custom error code: $customErrorCode")
+                    if (customErrorCode == 115) {
+                        println("[NodeRpc]   ERROR 115 = UTXO not found or already spent on blockchain")
                     }
 
                     throw TransactionRejected(
@@ -313,10 +319,6 @@ class NodeRpcClientImpl(
         // Convert hex to bytes
         val midnightTxBytes = midnightTxHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
-        println("\n🔧 [NodeRpcClient] Wrapping midnight transaction in extrinsic:")
-        println("   Midnight TX: ${midnightTxBytes.size} bytes")
-        println("   First 50 bytes: ${midnightTxHex.take(100)}")
-
         // FOR NOW: Just match the empirical pattern from polkadot.js dump
         // We'll refine this once we understand the full structure
         val VERSION_BYTE: Byte = 0x04 // Empirically observed
@@ -338,16 +340,6 @@ class NodeRpcClientImpl(
         val extrinsicBytes = callLengthCompact + callData
 
         val extrinsicHex = extrinsicBytes.joinToString("") { "%02x".format(it) }
-
-        println("   Extrinsic: ${extrinsicBytes.size} bytes")
-        println("   Breakdown:")
-        println("     - Call length compact: ${callLengthCompact.joinToString("") { "%02x".format(it) }}")
-        println("     - Version: %02x".format(VERSION_BYTE))
-        println("     - Call variant: %02x".format(CALL_VARIANT))
-        println("     - Mystery byte: %02x".format(MYSTERY_BYTE))
-        println("     - TX length compact: ${txLengthCompact.joinToString("") { "%02x".format(it) }}")
-        println("   First 50 bytes: ${extrinsicHex.take(100)}")
-
         return extrinsicHex
     }
 

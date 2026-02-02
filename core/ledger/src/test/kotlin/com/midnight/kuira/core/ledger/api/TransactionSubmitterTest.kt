@@ -59,7 +59,14 @@ class TransactionSubmitterTest {
 
         // Given: Mock UTXO manager that processes updates
         val utxoManager = mockk<UtxoManager>()
-        coEvery { utxoManager.processUpdate(any()) } just Runs
+        coEvery { utxoManager.processUpdate(any()) } returns UtxoManager.ProcessingResult.TransactionProcessed(
+            transactionId = 12345,
+            transactionHash = expectedTxHash,
+            createdCount = 0,
+            spentCount = 1,
+            status = com.midnight.kuira.core.indexer.model.TransactionStatus.SUCCESS
+        )
+        coEvery { utxoManager.markUtxosAsSpentByIntent(any()) } returns 1
 
         // Given: Transaction submitter
         val submitter = TransactionSubmitter(

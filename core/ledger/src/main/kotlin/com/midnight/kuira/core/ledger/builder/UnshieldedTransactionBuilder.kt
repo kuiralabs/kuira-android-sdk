@@ -141,7 +141,10 @@ class UnshieldedTransactionBuilder(
 
         // Step 3: Convert selected UTXOs to UtxoSpend inputs
         // Note: We use the derived public key from HD wallet, not from database
+        android.util.Log.d("TxBuilder", "Converting ${success.selectedUtxos.size} UTXOs to UtxoSpend inputs:")
         val inputs = success.selectedUtxos.map { utxo ->
+            android.util.Log.d("TxBuilder", "  UTXO: intentHash=${utxo.intentHash}, outputIndex=${utxo.outputIndex}, value=${utxo.value}")
+            android.util.Log.d("TxBuilder", "        transactionHash=${utxo.transactionHash}, id=${utxo.id}")
             utxo.toUtxoSpend(senderPublicKey)
         }
 

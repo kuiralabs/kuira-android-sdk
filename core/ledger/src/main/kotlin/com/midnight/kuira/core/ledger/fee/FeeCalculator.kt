@@ -56,21 +56,11 @@ object FeeCalculator {
         require(ledgerParamsHex.isNotEmpty()) { "ledgerParamsHex cannot be empty" }
         require(feeBlocksMargin >= 0) { "feeBlocksMargin must be non-negative" }
 
-        Log.d(TAG, "calculateFee called:")
-        Log.d(TAG, "  transactionHex: ${transactionHex.length} chars, prefix: ${transactionHex.take(64)}")
-        Log.d(TAG, "  ledgerParamsHex: ${ledgerParamsHex.length} chars, prefix: ${ledgerParamsHex.take(64)}")
-        Log.d(TAG, "  feeBlocksMargin: $feeBlocksMargin")
-
         val feeString = nativeCalculateFee(transactionHex, ledgerParamsHex, feeBlocksMargin)
-
         if (feeString == null) {
-            Log.e(TAG, "nativeCalculateFee returned NULL!")
-            Log.e(TAG, "  This means the Rust FFI encountered an error")
-            Log.e(TAG, "  Check Rust logs for more details")
+            Log.e(TAG, "Fee calculation failed - check Rust logs")
             return null
         }
-
-        Log.d(TAG, "nativeCalculateFee returned: $feeString")
 
         return try {
             BigInteger(feeString)

@@ -27,6 +27,7 @@ class UnshieldedTransactionBuilderTest {
     private val senderAddress = "mn_addr_test_sender"
     private val recipientAddress = "mn_addr_test_recipient"
     private val tokenType = UtxoOutput.NATIVE_TOKEN_TYPE
+    private val senderPublicKey = UtxoSpend.TEST_PUBLIC_KEY  // 64 hex chars (32 bytes BIP-340 x-only)
 
     @Before
     fun setUp() {
@@ -38,10 +39,12 @@ class UnshieldedTransactionBuilderTest {
     private fun createUtxo(
         value: Long,
         intentHash: String = "tx_hash_123",
-        outputIndex: Int = 0
+        outputIndex: Int = 0,
+        transactionHash: String = "transaction_hash_abc"
     ): UnshieldedUtxoEntity {
         return UnshieldedUtxoEntity(
-            id = "$intentHash:$outputIndex",
+            id = "$transactionHash:$outputIndex",  // Database ID uses transactionHash
+            transactionHash = transactionHash,
             intentHash = intentHash,
             outputIndex = outputIndex,
             owner = senderAddress,
@@ -71,7 +74,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then
@@ -126,7 +130,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then
@@ -155,9 +160,9 @@ class UnshieldedTransactionBuilderTest {
     @Test
     fun `given multiple UTXOs when building transfer then includes all in inputs`() = runTest {
         // Given - Select 3 UTXOs (30 + 40 + 50 = 120), need 100 (change = 20)
-        val utxo1 = createUtxo(30, "tx1", 0)
-        val utxo2 = createUtxo(40, "tx2", 1)
-        val utxo3 = createUtxo(50, "tx3", 2)
+        val utxo1 = createUtxo(30, "tx1", 0, "txhash1")
+        val utxo2 = createUtxo(40, "tx2", 1, "txhash2")
+        val utxo3 = createUtxo(50, "tx3", 2, "txhash3")
 
         coEvery {
             utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"))
@@ -172,7 +177,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then
@@ -236,7 +242,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then
@@ -267,6 +274,7 @@ class UnshieldedTransactionBuilderTest {
             to = recipientAddress,
             amount = BigInteger("100"),
             tokenType = tokenType,
+            senderPublicKey = senderPublicKey,
             ttlMinutes = customTtlMinutes
         )
 
@@ -299,7 +307,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then
@@ -323,7 +332,8 @@ class UnshieldedTransactionBuilderTest {
                     from = senderAddress,
                     to = recipientAddress,
                     amount = BigInteger.ZERO,
-                    tokenType = tokenType
+                    tokenType = tokenType,
+                    senderPublicKey = senderPublicKey
                 )
             }
         }
@@ -344,7 +354,8 @@ class UnshieldedTransactionBuilderTest {
                     from = senderAddress,
                     to = recipientAddress,
                     amount = BigInteger("-100"),
-                    tokenType = tokenType
+                    tokenType = tokenType,
+                    senderPublicKey = senderPublicKey
                 )
             }
         }
@@ -365,7 +376,8 @@ class UnshieldedTransactionBuilderTest {
                     from = "",
                     to = recipientAddress,
                     amount = BigInteger("100"),
-                    tokenType = tokenType
+                    tokenType = tokenType,
+                    senderPublicKey = senderPublicKey
                 )
             }
         }
@@ -386,7 +398,8 @@ class UnshieldedTransactionBuilderTest {
                     from = senderAddress,
                     to = "",
                     amount = BigInteger("100"),
-                    tokenType = tokenType
+                    tokenType = tokenType,
+                    senderPublicKey = senderPublicKey
                 )
             }
         }
@@ -415,7 +428,8 @@ class UnshieldedTransactionBuilderTest {
             from = senderAddress,
             to = recipientAddress,
             amount = BigInteger("100"),
-            tokenType = tokenType
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey
         )
 
         // Then

@@ -59,8 +59,8 @@ class DustActionsBuilderTest {
     // ==================== Data Class Tests ====================
 
     @Test
-    fun `given DustActions with spends when isSuccess then returns true`() {
-        // Given: Actions with spends
+    fun `given DustActions with utxoIndices when isSuccess then returns true`() {
+        // Given: Actions with utxoIndices
         val mockSpend = DustSpendCreator.DustSpend(
             vFee = BigInteger.valueOf(100),
             oldNullifier = "null1",
@@ -72,25 +72,27 @@ class DustActionsBuilderTest {
             spends = listOf(mockSpend),
             selectedCoins = emptyList(),
             totalFee = BigInteger.valueOf(100),
-            change = BigInteger.ZERO
+            change = BigInteger.ZERO,
+            utxoIndices = listOf(0)  // Non-empty = success
         )
 
         // When/Then
-        assertTrue("Should be success with spends", actions.isSuccess())
+        assertTrue("Should be success with utxoIndices", actions.isSuccess())
     }
 
     @Test
-    fun `given DustActions without spends when isSuccess then returns false`() {
-        // Given: Actions without spends
+    fun `given DustActions without utxoIndices when isSuccess then returns false`() {
+        // Given: Actions without utxoIndices
         val actions = DustActionsBuilder.DustActions(
             spends = emptyList(),
             selectedCoins = emptyList(),
             totalFee = BigInteger.ZERO,
-            change = BigInteger.ZERO
+            change = BigInteger.ZERO,
+            utxoIndices = emptyList()  // Empty = not success
         )
 
         // When/Then
-        assertFalse("Should not be success without spends", actions.isSuccess())
+        assertFalse("Should not be success without utxoIndices", actions.isSuccess())
     }
 
     @Test
@@ -105,7 +107,8 @@ class DustActionsBuilderTest {
             spends = emptyList(),
             selectedCoins = coins,
             totalFee = BigInteger.ZERO,
-            change = BigInteger.ZERO
+            change = BigInteger.ZERO,
+            utxoIndices = listOf(0, 1)
         )
 
         // When

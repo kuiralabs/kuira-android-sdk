@@ -45,7 +45,9 @@ class UtxoTest {
     }
 
     @Test
-    fun `given utxo when identifier called then returns intentHash colon outputIndex`() {
+    fun `given utxo with transactionHash when identifier called then returns transactionHash colon outputIndex`() {
+        // Note: Utxo.identifier() uses transactionHash:outputIndex for LOCAL database storage.
+        // The blockchain identifies UTXOs by intentHash + outputNo, but that's handled separately.
         val utxo = Utxo(
             value = "1000",
             owner = "mn_addr_testnet1abc123",
@@ -53,12 +55,13 @@ class UtxoTest {
             intentHash = "0xabcdef123",
             outputIndex = 5,
             ctime = 0,
-            registeredForDustGeneration = false
+            registeredForDustGeneration = false,
+            transactionHash = "0xtxhash456"  // This is used for identifier()
         )
 
         val identifier = utxo.identifier()
 
-        assertEquals("0xabcdef123:5", identifier)
+        assertEquals("0xtxhash456:5", identifier)  // Uses transactionHash, not intentHash
     }
 
     @Test(expected = IllegalArgumentException::class)
