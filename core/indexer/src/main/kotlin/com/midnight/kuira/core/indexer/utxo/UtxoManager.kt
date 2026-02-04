@@ -77,15 +77,18 @@ class UtxoManager(
         when (status) {
             TransactionStatus.SUCCESS, TransactionStatus.PARTIAL_SUCCESS -> {
                 // STEP 1: Insert created UTXOs as AVAILABLE
-                // CRITICAL: The subscription is the SOURCE OF TRUTH from the indexer.
-                // If the indexer says a UTXO was created, we MUST insert it as AVAILABLE.
-                // DO NOT skip based on local state - local state may be incorrect (e.g., we
-                // prematurely marked UTXOs as SPENT on submission, but TX failed/timed out).
                 //
-                // The subscription delivers transactions in order, so:
+                // IMPORTANT: Do NOT restore SPENT UTXOs to AVAILABLE!
+                // If we locally marked a UTXO as SPENT (after node accepted our transaction),
+                // we should NOT restore it just because the indexer replayed the creating TX.
+                // The indexer may be behind the blockchain - it hasn't seen our spending TX yet.
+                //
+                // Trust local SPENT state over stale indexer data. This prevents error 115
+                // loops where we keep trying to spend already-spent UTXOs.
+                //
+                // The subscription delivers transactions in order, so for NEW UTXOs:
                 // - TX 52 creates UTXO A → INSERT as AVAILABLE
                 // - TX 53 spends A, creates B → We mark A as SPENT (step 2), INSERT B as AVAILABLE
-                // This ensures local state matches on-chain state after sync.
                 if (createdCount > 0) {
                     // Log RAW UTXO data from subscription for debugging
                     createdUtxosWithTxHash.forEach { utxo ->
@@ -95,28 +98,49 @@ class UtxoManager(
                         android.util.Log.d("UtxoManager", "       transactionHash=${utxo.transactionHash}")
                     }
 
-                    val allEntities = createdUtxosWithTxHash.map { utxo ->
-                        UnshieldedUtxoEntity.fromUtxo(utxo, state = UtxoState.AVAILABLE)
-                    }
-
-                    // Log what we're inserting for debugging
-                    allEntities.forEach { entity ->
+                    // UTXO state handling during sync:
+                    //
+                    // - SPENT = Already spent (by indexer OR by our local tx) → KEEP
+                    // - PENDING = Our transaction is in flight → KEEP
+                    // - AVAILABLE = Normal state → UPDATE with latest data
+                    // - Not in DB = New UTXO → INSERT as AVAILABLE
+                    //
+                    // We mark SPENT immediately when node accepts our transaction
+                    // (with spentByLocalTx=true). This prevents issues when indexer
+                    // lags behind the blockchain.
+                    val entitiesToInsert = createdUtxosWithTxHash.mapNotNull { utxo ->
+                        val entity = UnshieldedUtxoEntity.fromUtxo(utxo, state = UtxoState.AVAILABLE)
                         val existing = utxoDao.getUtxoById(entity.id)
+
                         when {
                             existing == null -> {
                                 android.util.Log.d("UtxoManager", "INSERT: New UTXO ${entity.id} value=${entity.value}")
+                                entity // Insert new UTXO
                             }
                             existing.state == UtxoState.SPENT -> {
-                                android.util.Log.d("UtxoManager", "INSERT: Restoring UTXO ${entity.id} from SPENT to AVAILABLE (sync correction)")
+                                // SPENT by indexer = confirmed spent by a later transaction
+                                // A later tx in the sync will mark this as spent, which is correct
+                                android.util.Log.d("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
+                                null // Keep SPENT - it was legitimately spent
+                            }
+                            existing.state == UtxoState.PENDING -> {
+                                // PENDING = our transaction is in flight
+                                // Don't overwrite - our tx might still confirm
+                                android.util.Log.d("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
+                                null // Keep PENDING - wait for our tx to confirm or fail
                             }
                             else -> {
-                                android.util.Log.d("UtxoManager", "INSERT: Updating UTXO ${entity.id} state=${existing.state}")
+                                // AVAILABLE - update with latest data from indexer
+                                android.util.Log.d("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
+                                entity
                             }
                         }
                     }
 
-                    // Insert ALL created UTXOs - trust the subscription data
-                    utxoDao.insertUtxos(allEntities)
+                    // Insert/update UTXOs
+                    if (entitiesToInsert.isNotEmpty()) {
+                        utxoDao.insertUtxos(entitiesToInsert)
+                    }
                 }
 
                 // STEP 2: Mark spent UTXOs as SPENT (permanent)
@@ -302,6 +326,27 @@ class UtxoManager(
         }
     }
 
+    /**
+     * Reset ALL SPENT UTXOs to AVAILABLE for self-healing.
+     *
+     * **Purpose:** Self-heal corrupted UTXO state during full resync.
+     *
+     * **Why reset ALL?** During a full resync, we replay ALL transactions
+     * from the beginning. The sync will correctly re-mark spent UTXOs
+     * as SPENT based on actual blockchain history. So it's safe to reset
+     * everything and let the sync rebuild the correct state.
+     *
+     * @param address Owner address
+     * @return Number of UTXOs reset from SPENT to AVAILABLE
+     */
+    suspend fun resetSpentUtxosForHealing(address: String): Int {
+        val resetCount = utxoDao.resetSpentToAvailable(address)
+        if (resetCount > 0) {
+            android.util.Log.i("UtxoManager", "🔄 HEALING: Reset ALL $resetCount SPENT UTXOs to AVAILABLE for full resync")
+        }
+        return resetCount
+    }
+
     // ========== Phase 2B: Coin Selection & Atomic Locking ==========
 
     /**
@@ -481,15 +526,24 @@ class UtxoManager(
      * but our database uses transactionHash:outputIndex as the primary key.
      * This method looks up UTXOs by intentHash and then marks them by their database ID.
      *
-     * This is the correct method to use when marking input UTXOs as spent after
-     * a transaction is accepted by the node.
+     * **spentByLocalTx flag:**
+     * - `true` (default): Our transaction SUCCEEDED and spent this UTXO.
+     *   Healing will NOT restore it (we trust our local state over indexer lag).
+     * - `false`: Something else spent it (e.g., error 115 = node says already spent).
+     *   Healing CAN restore it if indexer shows it's actually available.
      *
-     * **State Transition:** PENDING/AVAILABLE → SPENT
+     * **When to use each:**
+     * - Node accepts our transaction → `spentByLocalTx=true`
+     * - Error 115 (UTXO already spent) → `spentByLocalTx=false` (we didn't spend it!)
      *
      * @param utxoIntentIds List of (intentHash, outputNo) pairs identifying UTXOs
+     * @param spentByLocalTx Whether OUR transaction spent these UTXOs (default: true)
      * @return Number of UTXOs successfully marked as spent
      */
-    suspend fun markUtxosAsSpentByIntent(utxoIntentIds: List<Pair<String, Int>>): Int {
+    suspend fun markUtxosAsSpentByIntent(
+        utxoIntentIds: List<Pair<String, Int>>,
+        spentByLocalTx: Boolean = true
+    ): Int {
         if (utxoIntentIds.isEmpty()) return 0
 
         // Look up each UTXO by intentHash+outputNo to get its database ID
@@ -505,10 +559,17 @@ class UtxoManager(
         }
 
         if (databaseIds.isNotEmpty()) {
-            utxoDao.markAsSpent(databaseIds)
-            android.util.Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} stale UTXOs as SPENT: $databaseIds")
+            if (spentByLocalTx) {
+                // Our transaction spent these - don't let healing restore them
+                utxoDao.markAsSpentByLocalTx(databaseIds)
+                android.util.Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (local tx): $databaseIds")
+            } else {
+                // External spend (e.g., error 115) - healing CAN restore if available
+                utxoDao.markAsSpent(databaseIds)
+                android.util.Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (external): $databaseIds")
+            }
         } else {
-            android.util.Log.w("UtxoManager", "No UTXOs found for ${utxoIntentIds.size} stale intent IDs")
+            android.util.Log.w("UtxoManager", "No UTXOs found for ${utxoIntentIds.size} intent IDs")
         }
 
         return databaseIds.size

@@ -420,11 +420,9 @@ private fun BalanceSection(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (balances.isEmpty()) {
-                Text(
-                    text = "No balances found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                )
+                // Show 0 balance instead of confusing "No balances found"
+                // Regular users expect to see their balance, even if it's zero
+                ZeroBalanceCard()
             } else {
                 balances.forEach { balance ->
                     TokenBalanceCard(balance = balance)
@@ -460,6 +458,43 @@ private fun TokenBalanceCard(balance: TokenBalanceDisplay) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${balance.utxoCount} UTXO${if (balance.utxoCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Shows zero balance in a user-friendly way.
+ * Regular users expect to see "0.00 NIGHT" not "No balances found".
+ */
+@Composable
+private fun ZeroBalanceCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "0.00 NIGHT",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "0 UTXOs",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )

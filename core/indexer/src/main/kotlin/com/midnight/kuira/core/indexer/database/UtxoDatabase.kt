@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * Room database for UTXO storage.
@@ -16,7 +18,7 @@ import androidx.room.RoomDatabase
         UnshieldedUtxoEntity::class,
         DustTokenEntity::class
     ],
-    version = 6,  // Bumped to 6: Added index on intent_hash+output_index for spent UTXO lookup
+    version = 7,  // Bumped to 7: Added spent_by_local_tx column for self-healing state
     exportSchema = false
 )
 abstract class UtxoDatabase : RoomDatabase() {
@@ -37,6 +39,25 @@ abstract class UtxoDatabase : RoomDatabase() {
         private var INSTANCE: UtxoDatabase? = null
 
         /**
+         * Migration from version 6 to 7: Add spent_by_local_tx column.
+         *
+         * This column enables self-healing UTXO state:
+         * - If spent_by_local_tx=1: Our transaction spent it, don't restore during sync
+         * - If spent_by_local_tx=0: Can be restored if indexer shows it's available
+         *
+         * Default is 0 (false) for existing UTXOs, which means they CAN be healed
+         * during the next sync if their state was incorrect.
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE unshielded_utxos ADD COLUMN spent_by_local_tx INTEGER NOT NULL DEFAULT 0"
+                )
+                android.util.Log.i("UtxoDatabase", "Migration 6->7: Added spent_by_local_tx column for self-healing")
+            }
+        }
+
+        /**
          * Get database instance (singleton).
          *
          * Thread-safe lazy initialization.
@@ -53,7 +74,8 @@ abstract class UtxoDatabase : RoomDatabase() {
                 UtxoDatabase::class.java,
                 DATABASE_NAME
             )
-                .fallbackToDestructiveMigration() // TODO: Add proper migrations for production
+                .addMigrations(MIGRATION_6_7)  // Proper migration for self-healing column
+                .fallbackToDestructiveMigration() // Fallback for older versions
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onDestructiveMigration(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                         // CRITICAL: When database is wiped by destructive migration,

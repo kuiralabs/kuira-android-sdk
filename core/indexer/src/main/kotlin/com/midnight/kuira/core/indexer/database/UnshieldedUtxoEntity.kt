@@ -106,7 +106,21 @@ data class UnshieldedUtxoEntity(
      * - Transaction FAILURE → AVAILABLE (unlocked)
      */
     @ColumnInfo(name = "state")
-    val state: UtxoState = UtxoState.AVAILABLE
+    val state: UtxoState = UtxoState.AVAILABLE,
+
+    /**
+     * Whether this UTXO was marked SPENT by our local transaction.
+     *
+     * **Purpose:** Distinguish between:
+     * - SPENT by our local tx (trust it, even if indexer is behind)
+     * - SPENT by sync/incorrectly (can be restored if indexer says available)
+     *
+     * **Self-healing:** During sync, if spentByLocalTx=false and indexer shows
+     * the UTXO as available, we restore it to AVAILABLE (fixes incorrect state).
+     * If spentByLocalTx=true, we keep it SPENT (our tx might be ahead of indexer).
+     */
+    @ColumnInfo(name = "spent_by_local_tx", defaultValue = "0")
+    val spentByLocalTx: Boolean = false
 ) {
     companion object {
         /**

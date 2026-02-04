@@ -27,22 +27,41 @@ interface UnshieldedUtxoDao {
     suspend fun insertUtxos(utxos: List<UnshieldedUtxoEntity>)
 
     /**
-     * Mark UTXO as spent.
+     * Mark UTXO as spent (from sync - not local transaction).
      *
      * State transition: PENDING → SPENT (on transaction SUCCESS).
-     * Called when transaction is confirmed successful.
+     * Sets spentByLocalTx=false since this came from sync.
      */
-    @Query("UPDATE unshielded_utxos SET state = 'SPENT' WHERE id = :utxoId")
+    @Query("UPDATE unshielded_utxos SET state = 'SPENT', spent_by_local_tx = 0 WHERE id = :utxoId")
     suspend fun markAsSpent(utxoId: String)
 
     /**
-     * Mark multiple UTXOs as spent.
+     * Mark multiple UTXOs as spent (from sync - not local transaction).
      *
      * More efficient than calling markAsSpent multiple times.
      * State transition: PENDING → SPENT (on transaction SUCCESS).
+     * Sets spentByLocalTx=false since this came from sync.
      */
-    @Query("UPDATE unshielded_utxos SET state = 'SPENT' WHERE id IN (:utxoIds)")
+    @Query("UPDATE unshielded_utxos SET state = 'SPENT', spent_by_local_tx = 0 WHERE id IN (:utxoIds)")
     suspend fun markAsSpent(utxoIds: List<String>)
+
+    /**
+     * Mark UTXO as spent by LOCAL transaction.
+     *
+     * Sets spentByLocalTx=true to prevent restoration during sync.
+     * Used when OUR transaction is accepted by the node (might be ahead of indexer).
+     */
+    @Query("UPDATE unshielded_utxos SET state = 'SPENT', spent_by_local_tx = 1 WHERE id = :utxoId")
+    suspend fun markAsSpentByLocalTx(utxoId: String)
+
+    /**
+     * Mark multiple UTXOs as spent by LOCAL transaction.
+     *
+     * Sets spentByLocalTx=true to prevent restoration during sync.
+     * Used when OUR transaction is accepted by the node (might be ahead of indexer).
+     */
+    @Query("UPDATE unshielded_utxos SET state = 'SPENT', spent_by_local_tx = 1 WHERE id IN (:utxoIds)")
+    suspend fun markAsSpentByLocalTx(utxoIds: List<String>)
 
     /**
      * Mark UTXO as pending (locked for transaction).
@@ -203,4 +222,31 @@ interface UnshieldedUtxoDao {
         address: String,
         tokenType: String
     ): List<UnshieldedUtxoEntity>
+
+    // ========== Self-Healing Methods ==========
+
+    /**
+     * Reset ALL SPENT UTXOs to AVAILABLE for healing during full resync.
+     *
+     * **Purpose:** Self-healing corrupted UTXO state.
+     *
+     * **Why reset ALL (including spentByLocalTx=true)?**
+     * During a FULL resync, we replay ALL transactions from the beginning.
+     * The sync will correctly re-mark spent UTXOs as SPENT based on actual
+     * blockchain history. So it's safe to reset everything.
+     *
+     * This fixes issues where UTXOs were incorrectly marked with
+     * spentByLocalTx=true (e.g., old error 115 handling bug).
+     *
+     * **Flow:**
+     * 1. Reset ALL SPENT → AVAILABLE
+     * 2. Full sync replays all transactions
+     * 3. Spending transactions re-mark UTXOs as SPENT (correct)
+     * 4. Unspent UTXOs stay AVAILABLE (healed!)
+     *
+     * @param address Owner address
+     * @return Number of UTXOs reset
+     */
+    @Query("UPDATE unshielded_utxos SET state = 'AVAILABLE', spent_by_local_tx = 0 WHERE owner = :address AND state = 'SPENT'")
+    suspend fun resetSpentToAvailable(address: String): Int
 }

@@ -15,39 +15,27 @@ import kotlinx.coroutines.withTimeout
 /**
  * Orchestrates transaction submission and confirmation for Midnight blockchain.
  *
- * **Process:**
+ * **Process (WebSocket-based - the correct way):**
  * 1. Serialize signed transaction (SCALE codec)
- * 2. Submit to node via RPC (`author_submitExtrinsic`)
- * 3. Track confirmation via Indexer GraphQL subscription
- * 4. Return when finalized (6-12 seconds typically)
+ * 2. Prove transaction via proof server
+ * 3. Seal proven transaction
+ * 4. Submit via WebSocket and wait for finalization from NODE
+ * 5. Mark UTXOs as SPENT only after node confirms finalization
+ * 6. Return result
+ *
+ * **Why WebSocket instead of Indexer:**
+ * - Indexer can lag behind the node (causes race conditions)
+ * - WebSocket gives us real-time confirmation directly from the node
+ * - This matches the Midnight SDK's implementation exactly
  *
  * **Phase 2E - Dust Fee Payment:**
  * Use `submitWithFees()` to automatically build and pay dust fees.
  *
- * **Usage Example:**
- * ```kotlin
- * val submitter = TransactionSubmitter(nodeClient, indexerClient, serializer, dustActionsBuilder)
- *
- * // With fee payment (Phase 2E):
- * val result = submitter.submitWithFees(
- *     signedIntent = intent,
- *     ledgerParamsHex = paramsHex,
- *     fromAddress = "mn_addr_sender...",
- *     seed = userSeed
- * )
- *
- * // Without fee payment (existing):
- * val result = submitter.submitAndWait(
- *     signedIntent = intent,
- *     fromAddress = "mn_addr_sender..."
- * )
- * ```
- *
  * @property nodeRpcClient Client for submitting transactions to node
- * @property proofServerClient Client for proving transactions (Phase 2)
- * @property indexerClient Client for tracking transaction confirmation
+ * @property proofServerClient Client for proving transactions
+ * @property indexerClient Client for tracking transactions (used for UTXO updates after finalization)
  * @property serializer Serializes signed Intent to SCALE codec
- * @property dustActionsBuilder Builder for dust fee payment actions (optional, Phase 2E)
+ * @property dustActionsBuilder Builder for dust fee payment actions (optional)
  */
 class TransactionSubmitter(
     private val nodeRpcClient: NodeRpcClient,
@@ -64,26 +52,21 @@ class TransactionSubmitter(
      *
      * **Steps:**
      * 1. Serialize transaction to SCALE codec (unproven)
-     * 2. Prove transaction via proof server (Phase 2 - NEW)
+     * 2. Prove transaction via proof server
      * 3. Seal proven transaction (transform binding commitment)
-     * 4. Submit finalized transaction to node RPC
-     * 5. Subscribe to indexer for confirmation
-     * 6. Wait for transaction to appear (finalized)
-     * 7. Return result
+     * 4. Submit via WebSocket and wait for NODE's finalized status
+     * 5. Mark UTXOs as SPENT (after node confirms finalization)
+     * 6. Return result
      *
-     * **Timeout:**
-     * - Default: 60 seconds (does NOT include proof server time)
-     * - Proof server: ~2-10 seconds (handled separately with 5 min timeout)
-     * - Typical finalization: 6-12 seconds
-     * - If timeout occurs, transaction may still be pending
+     * **Why we wait for NODE finalization (not indexer):**
+     * - Node's "finalized" status means the transaction is PERMANENT
+     * - Indexer can lag behind the node, causing race conditions
+     * - This matches the Midnight SDK's implementation exactly
      *
      * @param signedIntent Signed Intent with all signatures
-     * @param fromAddress Sender's address (for tracking via indexer)
+     * @param fromAddress Sender's address (used for UTXO updates)
      * @param timeoutMs Maximum time to wait for finalization (default 60s)
      * @return SubmissionResult indicating success or failure
-     * @throws NodeRpcException if submission to node fails
-     * @throws ProofServerException if proving fails
-     * @throws kotlinx.coroutines.TimeoutCancellationException if confirmation times out
      */
     suspend fun submitAndWait(
         signedIntent: Intent,
@@ -111,7 +94,7 @@ class TransactionSubmitter(
             )
         }
 
-        // Step 2.5: Seal the proven transaction
+        // Step 3: Seal the proven transaction
         val finalizedTxHex = try {
             serializer.sealProvenTransaction(provenTxHex)
                 ?: throw IllegalStateException("Sealing returned null")
@@ -123,21 +106,19 @@ class TransactionSubmitter(
             )
         }
 
-        // Step 2.6: Get the Midnight transaction hash (for confirmation tracking)
-        val ffiSerializer = serializer as? FfiTransactionSerializer
-        val midnightTxHash = ffiSerializer?.getTransactionHash(finalizedTxHex)
-
-        // Track which UTXOs are being spent (for error recovery)
-        // Extract (intentHash, outputNo) pairs for database lookup
+        // Track which UTXOs are being spent (for UTXO state management)
         val spentUtxoIntents = signedIntent.guaranteedUnshieldedOffer?.inputs?.map {
             it.intentHash to it.outputNo
         } ?: emptyList()
-        // Also keep string IDs for error reporting
         val spentUtxoIds = signedIntent.guaranteedUnshieldedOffer?.inputs?.map { it.identifier() } ?: emptyList()
 
-        // Step 3: Submit finalized transaction to node
-        val extrinsicHash = try {
-            nodeRpcClient.submitTransaction(finalizedTxHex)
+        // Step 4: Submit via WebSocket and WAIT for NODE's finalized status
+        // This is the correct approach - we wait for the NODE to confirm finalization,
+        // not the indexer (which can lag behind).
+        Log.d(TAG, "Submitting transaction via WebSocket and waiting for finalization...")
+
+        val finalizationResult = try {
+            nodeRpcClient.submitAndWaitForFinalization(finalizedTxHex, timeoutMs)
         } catch (e: TransactionRejected) {
             // Check if this is a stale UTXO error (error 115)
             if (e.isStaleUtxo) {
@@ -159,30 +140,79 @@ class TransactionSubmitter(
             )
         }
 
-        Log.d(TAG, "Transaction submitted: $extrinsicHash")
+        // Step 5: Handle finalization result
+        return when (finalizationResult) {
+            is TransactionFinalizationResult.Finalized -> {
+                Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
+                Log.d(TAG, "   Block: ${finalizationResult.blockHash}")
 
-        // Mark input UTXOs as SPENT immediately (node accepted transaction)
-        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                // NOW mark UTXOs as SPENT - the node has confirmed the transaction
+                if (spentUtxoIntents.isNotEmpty()) {
+                    utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                    Log.d(TAG, "Marked ${spentUtxoIntents.size} UTXOs as SPENT (transaction finalized)")
+                }
 
-        // Use Midnight tx hash for confirmation (indexer uses this hash, not extrinsic hash)
-        val confirmationHash = midnightTxHash ?: extrinsicHash
-
-        // Step 4: Wait for confirmation via indexer subscription
-        return try {
-            withTimeout(timeoutMs) {
-                waitForConfirmation(fromAddress, confirmationHash)
+                SubmissionResult.Success(
+                    txHash = finalizationResult.txHash,
+                    blockHeight = finalizationResult.blockHeight ?: 0L
+                )
             }
-        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            // Timeout - transaction may still be pending
-            SubmissionResult.Pending(
-                txHash = confirmationHash,
-                reason = "Confirmation timeout after ${timeoutMs}ms (transaction may still be processing)"
-            )
+
+            is TransactionFinalizationResult.InBlock -> {
+                // Transaction is in a block but not finalized yet
+                // This shouldn't happen with our timeout, but handle gracefully
+                Log.w(TAG, "Transaction in block but not finalized: ${finalizationResult.txHash}")
+
+                // Still mark as spent - it's very likely to be finalized
+                if (spentUtxoIntents.isNotEmpty()) {
+                    utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                }
+
+                SubmissionResult.Pending(
+                    txHash = finalizationResult.txHash,
+                    reason = "Transaction in block, waiting for finalization"
+                )
+            }
+
+            is TransactionFinalizationResult.Timeout -> {
+                Log.w(TAG, "Transaction finalization timed out: ${finalizationResult.txHash}")
+                SubmissionResult.Pending(
+                    txHash = finalizationResult.txHash,
+                    reason = "Finalization timeout (transaction may still be processing)"
+                )
+            }
+
+            is TransactionFinalizationResult.Dropped -> {
+                Log.e(TAG, "Transaction dropped: ${finalizationResult.reason}")
+                SubmissionResult.Failed(
+                    txHash = finalizationResult.txHash,
+                    reason = "Transaction dropped from pool: ${finalizationResult.reason}"
+                )
+            }
+
+            is TransactionFinalizationResult.Invalid -> {
+                Log.e(TAG, "Transaction invalid: ${finalizationResult.reason}")
+                SubmissionResult.Failed(
+                    txHash = finalizationResult.txHash,
+                    reason = "Transaction invalid: ${finalizationResult.reason}"
+                )
+            }
+
+            is TransactionFinalizationResult.Usurped -> {
+                Log.e(TAG, "Transaction usurped (replaced)")
+                SubmissionResult.Failed(
+                    txHash = finalizationResult.txHash,
+                    reason = "Transaction replaced by another"
+                )
+            }
         }
     }
 
     /**
      * Wait for transaction confirmation via indexer subscription.
+     *
+     * NOTE: This is now only used as a backup/secondary confirmation.
+     * The primary confirmation comes from the WebSocket subscription to the node.
      *
      * **Strategy:**
      * - Subscribe to unshielded transactions for sender address
@@ -396,81 +426,93 @@ class TransactionSubmitter(
             val midnightTxHash = ffiSerializer.getTransactionHash(sealedTxHex)
 
             // Track which UTXOs are being spent (for error recovery)
-            // Extract (intentHash, outputNo) pairs for database lookup
             val spentUtxoIntents = inputs.map { it.intentHash to it.outputNo }
-            // Also keep string IDs for error reporting
             val spentUtxoIds = inputs.map { it.identifier() }
 
-            // Step 10: Submit to node
-            val extrinsicHash = try {
-                nodeRpcClient.submitTransaction(sealedTxHex)
+            // Step 10: Submit via WebSocket and WAIT for NODE's finalized status
+            Log.d(TAG, "Submitting transaction via WebSocket and waiting for finalization...")
+
+            val finalizationResult = try {
+                nodeRpcClient.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
             } catch (e: TransactionRejected) {
                 // Don't save dust state - it's still clean on disk
-                // Next attempt will load fresh state
-
-                // Check if this is a stale UTXO error (error 115)
                 if (e.isStaleUtxo) {
                     Log.w(TAG, "⚠️ Stale UTXO detected (error 115) - UTXOs were already spent")
-
-                    // Error 115 could be caused by stale UNSHIELDED UTXOs or stale DUST UTXOs
-                    // Clear dust state to force re-sync on next attempt
-                    // This ensures dust doesn't stay stale forever
-                    try {
-                        dustRepository.deleteState(fromAddress)
-                        Log.d(TAG, "Cleared dust state - will re-sync on next transaction")
-                    } catch (ex: Exception) {
-                        Log.e(TAG, "Failed to clear dust state", ex)
-                    }
-
                     return SubmissionResult.StaleUtxo(
                         failedUtxoIds = spentUtxoIds,
                         reason = "Some UTXOs were already spent. Wallet is syncing to get latest balance."
                     )
                 }
-
                 return SubmissionResult.Failed(
                     txHash = e.txHash,
                     reason = "Transaction rejected by node: ${e.reason}"
                 )
             } catch (e: NodeRpcException) {
-                // Don't save dust state - it's still clean on disk
                 return SubmissionResult.Failed(
                     txHash = null,
                     reason = "Node RPC error: ${e.message}"
                 )
             }
 
-            Log.d(TAG, "✅ Transaction accepted by node: $extrinsicHash")
+            // Step 11: Handle finalization result
+            return when (finalizationResult) {
+                is TransactionFinalizationResult.Finalized -> {
+                    Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
 
-            // Step 11: NOW save dust state (node accepted the transaction)
-            // The dust UTXOs are now spent on-chain, so we must persist the updated state
-            dustRepository.saveState(fromAddress, dustState)
-            Log.d(TAG, "Dust state saved after successful submission")
+                    // DELETE dust cache - the old UTXO is now pending (hidden from balance)
+                    // and the new UTXO (change) will come from blockchain events on next sync.
+                    // This forces a fresh dust sync before the next transaction.
+                    dustRepository.deleteState(fromAddress)
+                    Log.d(TAG, "Dust state cache cleared (will re-sync before next tx)")
 
-            // Step 12: Mark input UTXOs as SPENT immediately (node accepted transaction)
-            utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                    // Mark UTXOs as SPENT (transaction is confirmed)
+                    if (spentUtxoIntents.isNotEmpty()) {
+                        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                        Log.d(TAG, "Marked ${spentUtxoIntents.size} UTXOs as SPENT")
+                    }
 
-            // Use Midnight tx hash for confirmation (indexer uses this hash, not extrinsic hash)
-            val confirmationHash = midnightTxHash ?: extrinsicHash
-
-            // Step 13: Wait for confirmation
-            val result = try {
-                withTimeout(timeoutMs) {
-                    waitForConfirmation(fromAddress, confirmationHash)
+                    SubmissionResult.Success(
+                        txHash = finalizationResult.txHash,
+                        blockHeight = finalizationResult.blockHeight ?: 0L
+                    )
                 }
-            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                // Timeout - transaction may still be pending
-                // Don't rollback dust actions yet (might still confirm)
-                SubmissionResult.Pending(
-                    txHash = confirmationHash,
-                    reason = "Confirmation timeout after ${timeoutMs}ms (transaction may still be processing)"
-                )
+
+                is TransactionFinalizationResult.InBlock -> {
+                    Log.w(TAG, "Transaction in block but not finalized")
+                    // DELETE dust cache - forces re-sync before next tx
+                    dustRepository.deleteState(fromAddress)
+                    if (spentUtxoIntents.isNotEmpty()) {
+                        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                    }
+                    SubmissionResult.Pending(
+                        txHash = finalizationResult.txHash,
+                        reason = "Transaction in block, waiting for finalization"
+                    )
+                }
+
+                is TransactionFinalizationResult.Timeout -> {
+                    Log.w(TAG, "Transaction finalization timed out")
+                    // Don't save dust state - unclear if transaction will succeed
+                    SubmissionResult.Pending(
+                        txHash = finalizationResult.txHash,
+                        reason = "Finalization timeout (transaction may still be processing)"
+                    )
+                }
+
+                is TransactionFinalizationResult.Dropped,
+                is TransactionFinalizationResult.Invalid,
+                is TransactionFinalizationResult.Usurped -> {
+                    Log.e(TAG, "Transaction failed: $finalizationResult")
+                    // Don't save dust state - transaction failed
+                    val (txHash, reason) = when (finalizationResult) {
+                        is TransactionFinalizationResult.Dropped -> finalizationResult.txHash to finalizationResult.reason
+                        is TransactionFinalizationResult.Invalid -> finalizationResult.txHash to finalizationResult.reason
+                        is TransactionFinalizationResult.Usurped -> finalizationResult.txHash to "Transaction replaced"
+                        else -> "" to "Unknown error"
+                    }
+                    SubmissionResult.Failed(txHash = txHash, reason = reason)
+                }
             }
-
-            // Step 14: Dust state already saved in Step 11
-            // No need for confirmDustActions/rollbackDustActions since we only save on success
-
-            return result
 
         } finally {
             // Always close dust state

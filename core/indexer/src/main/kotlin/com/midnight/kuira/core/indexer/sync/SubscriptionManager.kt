@@ -76,55 +76,39 @@ class SubscriptionManager(
     private val lastSaveTimestamps = mutableMapOf<String, Long>()
 
     /**
-     * Check if a full resync is needed (e.g., after destructive database migration).
-     * If so, clears the sync state so the subscription replays all history.
+     * Prepare for sync by clearing unverified local cache.
      *
-     * **Edge Cases Handled:**
-     * 1. Explicit flag from destructive migration callback
-     * 2. Database is empty but sync state indicates we've processed transactions
-     *    (e.g., user cleared app data manually, or database was wiped without callback)
+     * **CRITICAL DESIGN DECISION:**
+     * The indexer/blockchain is the ONLY source of truth. Local database is just a cache.
+     * We ALWAYS clear and rebuild from indexer to prevent showing stale/incorrect data.
+     *
+     * **Why this is correct:**
+     * 1. Previous approach trusted local DB and showed stale data if sync failed
+     * 2. Users saw balances that didn't exist on blockchain
+     * 3. Now: Clear cache → Sync from indexer → Show only verified data
+     *
+     * **Trade-off:**
+     * - Requires re-sync on every app start
+     * - But guarantees we NEVER show incorrect balances
+     * - This matches industry standard wallet behavior
      */
     private suspend fun checkAndHandleResyncNeeded(address: String) {
         val prefs = context.getSharedPreferences("utxo_db_flags", android.content.Context.MODE_PRIVATE)
 
-        // Case 1: Explicit flag from destructive migration
-        if (prefs.getBoolean("needs_full_resync", false)) {
-            Log.w(TAG, "Full resync needed (database was recreated) - clearing sync state for $address")
-            syncStateManager.clearSyncState(address)
-            utxoManager.clearUtxos(address)
-            prefs.edit().putBoolean("needs_full_resync", false).apply()
-            Log.i(TAG, "Sync state and UTXOs cleared - will replay all history")
-            return
-        }
+        // Always clear local cache and sync fresh from indexer
+        // This is the ONLY way to guarantee we show correct balances
+        Log.i(TAG, "🔄 FRESH SYNC: Clearing local cache for $address - will rebuild from indexer")
 
-        // Case 2: Sync state exists but database is empty (data cleared without callback)
-        // This catches cases where user clears app data, adb clear, etc.
-        val lastProcessedId = syncStateManager.getLastProcessedTransactionId(address)
-        val hasUtxos = utxoManager.hasAnyUtxos(address)
-        val hasAvailableUtxos = utxoManager.hasAvailableUtxos(address)
-        Log.d(TAG, "checkAndHandleResyncNeeded: lastProcessedId=$lastProcessedId, hasAnyUtxos=$hasUtxos, hasAvailableUtxos=$hasAvailableUtxos")
+        // Clear sync state to replay all transactions
+        syncStateManager.clearSyncState(address)
 
-        // Debug: Dump current database state
-        utxoManager.debugDumpAllUtxos(address, "SYNC_START")
+        // Clear all UTXOs - they will be rebuilt from indexer
+        utxoManager.clearUtxos(address)
 
-        if (lastProcessedId != null && lastProcessedId > 0) {
-            if (!hasUtxos) {
-                Log.w(TAG, "Database is empty but sync state shows tx ID $lastProcessedId - clearing sync state")
-                syncStateManager.clearSyncState(address)
-                Log.i(TAG, "Sync state cleared - will replay all history to repopulate UTXOs")
-            } else if (!hasAvailableUtxos) {
-                // Case 3: Have UTXOs but ALL are SPENT - suspicious state!
-                // This can happen if we prematurely marked UTXOs as SPENT but the sync
-                // was already at the latest TX, so no correction occurred.
-                // Force full resync to replay all history and restore correct state.
-                Log.w(TAG, "⚠️ ALL UTXOs are SPENT (balance=0) - suspicious state, forcing full resync")
-                syncStateManager.clearSyncState(address)
-                utxoManager.clearUtxos(address)
-                Log.i(TAG, "Sync state and UTXOs cleared - will replay all history to restore correct balance")
-            } else {
-                Log.d(TAG, "Database has available UTXOs, no resync needed")
-            }
-        }
+        // Clear any migration flags
+        prefs.edit().putBoolean("needs_full_resync", false).apply()
+
+        Log.i(TAG, "✓ Cache cleared - balance will be 0 until sync rebuilds from indexer")
     }
 
     /**
@@ -148,10 +132,14 @@ class SubscriptionManager(
      * - Non-retryable errors: CancellationException (user cancelled)
      *
      * @param address Unshielded address to sync
+     * @param skipCacheClear If true, don't clear local UTXO cache before syncing.
+     *        Used during error 115 recovery to preserve UTXOs marked as SPENT by the node.
+     *        Default: false (fresh sync clears cache to prevent stale data).
      * @return Flow of sync states (Syncing, Synced, Error)
      */
-    fun startSubscription(address: String): Flow<SyncState> {
-        return createSubscriptionFlow(address)
+    fun startSubscription(address: String, skipCacheClear: Boolean = false): Flow<SyncState> {
+        // NOTE: retryWhen re-creates the flow on each retry, so skipCacheClear is preserved
+        return createSubscriptionFlow(address, skipCacheClear)
             .retryWhen { cause, attempt ->
                 // Retry all errors except cancellation (user-initiated stop)
                 when {
@@ -182,13 +170,18 @@ class SubscriptionManager(
             }
     }
 
-    private fun createSubscriptionFlow(address: String): Flow<SyncState> = channelFlow {
+    private fun createSubscriptionFlow(address: String, skipCacheClear: Boolean = false): Flow<SyncState> = channelFlow {
         var processedCount = 0
         var latestTransactionId: Int? = null // Track latest for final save
         var syncTimeoutJob: Job? = null // Job for auto-sync timeout
 
         // Check if full resync is needed (e.g., after destructive database migration)
-        checkAndHandleResyncNeeded(address)
+        // SKIP if skipCacheClear=true (used during error 115 recovery to preserve SPENT UTXOs)
+        if (!skipCacheClear) {
+            checkAndHandleResyncNeeded(address)
+        } else {
+            Log.i(TAG, "⚡ INCREMENTAL SYNC: Skipping cache clear for $address (preserving SPENT UTXOs)")
+        }
 
         // Get resume point before starting subscription
         val lastId = syncStateManager.getLastProcessedTransactionId(address)

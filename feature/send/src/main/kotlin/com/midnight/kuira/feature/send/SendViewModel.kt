@@ -92,6 +92,16 @@ class SendViewModel @Inject constructor(
     private var syncJob: Job? = null
     val state: StateFlow<SendUiState> = _state.asStateFlow()
 
+    // Cached transaction parameters for auto-retry after sync
+    private data class CachedTransactionParams(
+        val fromAddress: String,
+        val toAddress: String,
+        val amount: BigInteger,
+        val seedPhrase: String
+    )
+    private var cachedParams: CachedTransactionParams? = null
+    private var retryAttempt: Int = 0
+
     /**
      * Load available balance for sender address.
      *
@@ -169,6 +179,8 @@ class SendViewModel @Inject constructor(
      * @param toAddress Recipient's address
      * @param amount Amount to send (in smallest units - Stars)
      * @param seedPhrase User's 24-word mnemonic (for signing)
+     * @param isRetry If true, skip pre-send sync (we already synced in syncAndRetry).
+     *        This preserves UTXOs marked SPENT from error 115.
      *
      * **Security Warning:**
      * This MVP exposes seed phrase in parameters. Production implementation
@@ -182,7 +194,8 @@ class SendViewModel @Inject constructor(
         fromAddress: String,
         toAddress: String,
         amount: BigInteger,
-        seedPhrase: String
+        seedPhrase: String,
+        isRetry: Boolean = false
     ) {
         viewModelScope.launch {
             // CRITICAL SECURITY: Derive keys once and wipe in finally block
@@ -193,10 +206,16 @@ class SendViewModel @Inject constructor(
 
             try {
                 // Step 0: Quick sync to ensure UTXOs are fresh (prevents error 115)
+                // SKIP if this is a retry - we already synced in syncAndRetry() with skipCacheClear=true
+                // to preserve UTXOs marked SPENT from error 115
                 _state.value = SendUiState.Building
-                val syncedOk = quickSyncBeforeSend(fromAddress)
-                if (!syncedOk) {
-                    Log.w(TAG, "Quick sync failed, proceeding anyway")
+                if (!isRetry) {
+                    val syncedOk = quickSyncBeforeSend(fromAddress)
+                    if (!syncedOk) {
+                        Log.w(TAG, "Quick sync failed, proceeding anyway")
+                    }
+                } else {
+                    Log.d(TAG, "Skipping pre-send sync (retry flow - already synced)")
                 }
 
                 // Step 1: Validate inputs
@@ -347,6 +366,7 @@ class SendViewModel @Inject constructor(
                 when (result) {
                     is TransactionSubmitter.SubmissionResult.Success -> {
                         Log.d(TAG, "Transaction submitted successfully: txHash=${result.txHash}")
+                        clearRetryState()  // Clear retry state on success
                         _state.value = SendUiState.Success(
                             txHash = result.txHash,
                             recipientAddress = toAddress,
@@ -379,14 +399,21 @@ class SendViewModel @Inject constructor(
                                 if (outputNo != null) intentHash to outputNo else null
                             } else null
                         }
-                        Log.d(TAG, "Marking ${utxoIntentPairs.size} stale UTXOs as SPENT by intentHash")
-                        utxoManager.markUtxosAsSpentByIntent(utxoIntentPairs)
+                        // Mark as SPENT with spentByLocalTx=false because OUR transaction was REJECTED
+                        // (error 115 = node says UTXO already spent, but NOT by us!)
+                        // This allows healing to restore them if indexer shows they're actually available.
+                        Log.d(TAG, "Marking ${utxoIntentPairs.size} stale UTXOs as SPENT (external, not our tx)")
+                        utxoManager.markUtxosAsSpentByIntent(utxoIntentPairs, spentByLocalTx = false)
 
-                        // Quick incremental sync to check for any new transactions
-                        // If the indexer has new UTXOs (like change outputs), we'll get them
-                        // If not, the balance will reflect reality (possibly 0)
-                        Log.d(TAG, "Quick sync to check for new transactions...")
-                        syncAndRetry(fromAddress)
+                        // Quick sync and auto-retry (Option C UX)
+                        // This will sync fresh UTXOs and automatically retry the transaction
+                        Log.d(TAG, "Starting auto-recovery: sync + retry...")
+                        syncAndRetry(CachedTransactionParams(
+                            fromAddress = fromAddress,
+                            toAddress = toAddress,
+                            amount = amount,
+                            seedPhrase = seedPhrase
+                        ))
                     }
                 }
 
@@ -567,31 +594,60 @@ class SendViewModel @Inject constructor(
     }
 
     /**
-     * Sync latest UTXOs and show error to allow retry.
+     * Sync latest UTXOs and auto-retry the transaction.
      *
-     * Called after error 115 (stale UTXO) to sync fresh data from blockchain.
-     * Waits for sync to reach "Synced" state (max 30 seconds) before showing error.
+     * Called after error 115 (stale UTXO) to:
+     * 1. Quick sync fresh UTXOs from blockchain
+     * 2. Auto-retry the transaction with fresh data
+     * 3. If still fails, retry up to MAX_AUTO_RETRIES times
+     * 4. If max retries exceeded, show informative error
      *
-     * @param address Address to sync UTXOs for
+     * **Option C UX:** Seamless recovery for most cases, only show error if truly stuck.
+     *
+     * @param params Transaction parameters (fromAddress, toAddress, amount, seedPhrase)
      */
-    private fun syncAndRetry(address: String) {
+    private fun syncAndRetry(params: CachedTransactionParams) {
         // Cancel previous sync if running
         syncJob?.cancel()
 
-        // Show syncing state
-        _state.value = SendUiState.Building  // Reuse Building state for "syncing"
+        // Cache params for potential further retries
+        cachedParams = params
+
+        // Increment retry attempt
+        retryAttempt++
+
+        // Check if we've exceeded max retries
+        if (retryAttempt > SendUiState.SyncingAndRetrying.MAX_AUTO_RETRIES) {
+            Log.w(TAG, "Max auto-retries ($retryAttempt) exceeded - showing error to user")
+            retryAttempt = 0  // Reset for next manual attempt
+            cachedParams = null
+            _state.value = SendUiState.Error(
+                message = "Transaction failed after multiple attempts. Your wallet may need a full sync. " +
+                        "Please close and reopen the app, then try again."
+            )
+            return
+        }
+
+        // Show syncing state with retry info
+        _state.value = SendUiState.SyncingAndRetrying(
+            retryAttempt = retryAttempt,
+            maxRetries = SendUiState.SyncingAndRetrying.MAX_AUTO_RETRIES
+        )
 
         syncJob = viewModelScope.launch {
             try {
+                Log.d(TAG, "Auto-retry attempt $retryAttempt/${SendUiState.SyncingAndRetrying.MAX_AUTO_RETRIES}")
                 Log.d(TAG, "Quick sync: Creating subscription manager")
                 val subscriptionManager = subscriptionManagerFactory.create()
 
-                Log.d(TAG, "Quick sync: Starting subscription for $address (30s timeout)")
+                Log.d(TAG, "Quick sync: Starting subscription for ${params.fromAddress}")
 
                 // Use timeout to prevent getting stuck
-                // Use first{} to stop as soon as we're synced (not collect which waits forever)
+                // IMPORTANT: skipCacheClear=true preserves UTXOs marked as SPENT from error 115
+                // Without this, the sync would clear all UTXOs and rebuild from indexer,
+                // which would restore the stale UTXO that the node already rejected.
                 val synced = withTimeoutOrNull(QUICK_SYNC_TIMEOUT_MS) {
-                    subscriptionManager.startSubscription(address)
+                    subscriptionManager.startSubscription(params.fromAddress, skipCacheClear = true)
                         .first { state ->
                             Log.d(TAG, "Quick sync state: $state")
                             state is SyncState.Synced
@@ -601,30 +657,49 @@ class SendViewModel @Inject constructor(
                 }
 
                 if (synced != null) {
-                    Log.d(TAG, "Quick sync completed, loading fresh balance...")
+                    Log.d(TAG, "Quick sync completed, auto-retrying transaction...")
                 } else {
-                    Log.w(TAG, "Quick sync timed out after ${QUICK_SYNC_TIMEOUT_MS}ms")
+                    Log.w(TAG, "Quick sync timed out after ${QUICK_SYNC_TIMEOUT_MS}ms, retrying anyway...")
                 }
 
-                // Load fresh balance (even if timed out, there might be partial data)
-                loadBalance(address)
-
-                // Show error so user can retry
-                _state.value = SendUiState.Error(
-                    message = "Transaction failed - wallet was out of sync. Please try again."
+                // Auto-retry the transaction with fresh UTXOs
+                // Note: sendTransaction will handle further errors, including triggering
+                // another syncAndRetry if we get error 115 again
+                // IMPORTANT: isRetry=true skips pre-send sync to preserve SPENT UTXOs from error 115
+                Log.d(TAG, "Auto-retrying transaction (attempt $retryAttempt)")
+                sendTransaction(
+                    fromAddress = params.fromAddress,
+                    toAddress = params.toAddress,
+                    amount = params.amount,
+                    seedPhrase = params.seedPhrase,
+                    isRetry = true
                 )
+
+                // If we get here without error, the retry succeeded
+                // Clear cached params (sendTransaction will set success state)
 
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal cancellation, ignore
                 Log.d(TAG, "Quick sync cancelled")
             } catch (e: Exception) {
-                Log.e(TAG, "Quick sync failed", e)
-                // Show error anyway - user can try again
+                Log.e(TAG, "Quick sync or retry failed", e)
+                // Show error - user can manually retry
+                retryAttempt = 0
+                cachedParams = null
                 _state.value = SendUiState.Error(
-                    message = "Transaction failed - please go back and try again."
+                    message = "Transaction failed: ${e.message ?: "Unknown error"}. Please try again."
                 )
             }
         }
+    }
+
+    /**
+     * Reset retry state on successful transaction.
+     * Called when transaction succeeds to clear cached params and retry counter.
+     */
+    private fun clearRetryState() {
+        retryAttempt = 0
+        cachedParams = null
     }
 
     override fun onCleared() {

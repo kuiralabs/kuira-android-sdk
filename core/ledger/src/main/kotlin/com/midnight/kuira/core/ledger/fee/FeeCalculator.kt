@@ -14,13 +14,12 @@ import java.math.BigInteger
  * 1. Deserializes transaction from SCALE-encoded hex
  * 2. Deserializes ledger parameters from SCALE-encoded hex
  * 3. Calls `transaction.fees_with_margin(params, margin)`
- * 4. Adds safety overhead (0.3 Dust = 300 trillion Specks)
+ * 4. Adds 1% safety overhead
  * 5. Returns total fee in Specks
  *
  * **Safety Overhead:**
- * - Matches TypeScript SDK's `additionalFeeOverhead` parameter
- * - 0.3 Dust = 300,000,000,000,000 Specks
- * - Accounts for potential fee price fluctuations
+ * - 1% of base fee (conservative buffer)
+ * - `feesWithMargin()` already includes block-based margin
  *
  * **Fee Blocks Margin:**
  * - Default: 5 blocks (typical value)

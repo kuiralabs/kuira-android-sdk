@@ -1,19 +1,31 @@
 package com.midnight.kuira.core.ledger.api
 
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -51,6 +63,8 @@ class NodeRpcClientImpl(
     )
 
     companion object {
+        private const val TAG = "NodeRpcClient"
+
         private fun createDefaultHttpClient() = HttpClient(CIO) {
             install(ContentNegotiation) {
                 json(Json {
@@ -64,6 +78,9 @@ class NodeRpcClientImpl(
                 logger = Logger.DEFAULT
                 level = LogLevel.INFO
             }
+
+            // WebSocket support for transaction status subscription
+            install(WebSockets)
 
             // Timeout configuration
             install(HttpTimeout) {
@@ -266,6 +283,258 @@ class NodeRpcClientImpl(
                 message = "Unexpected error: ${e.message}",
                 cause = e
             )
+        }
+    }
+
+    /**
+     * Submit transaction and wait for finalization using WebSocket subscription.
+     *
+     * **This is the correct way to submit transactions.**
+     *
+     * Uses `author_submitAndWatchExtrinsic` which:
+     * 1. Submits the transaction
+     * 2. Subscribes to status updates via WebSocket
+     * 3. Streams status events: ready → broadcast → inBlock → finalized
+     *
+     * **Why WebSocket instead of HTTP + Indexer:**
+     * - HTTP `author_submitExtrinsic` is fire-and-forget (no confirmation)
+     * - Indexer lags behind the node (causes race conditions)
+     * - WebSocket gives us real-time confirmation from the node itself
+     *
+     * @param serializedTxHex Hex-encoded serialized transaction
+     * @param timeoutMs Maximum time to wait for finalization
+     * @return Finalization result
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    override suspend fun submitAndWaitForFinalization(
+        serializedTxHex: String,
+        timeoutMs: Long
+    ): TransactionFinalizationResult {
+        // Validate input
+        val cleanHex = serializedTxHex.removePrefix("0x").lowercase()
+        require(cleanHex.matches(Regex("^[0-9a-f]+$"))) {
+            "serializedTxHex must be valid hexadecimal"
+        }
+
+        // Wrap in extrinsic
+        val wrappedExtrinsic = wrapInExtrinsic(cleanHex)
+
+        // Convert HTTP URL to WebSocket URL
+        val wsUrl = nodeUrl
+            .replace("http://", "ws://")
+            .replace("https://", "wss://")
+
+        Log.d(TAG, "Connecting to node via WebSocket: $wsUrl")
+
+        val result = CompletableDeferred<TransactionFinalizationResult>()
+        var txHash: String? = null
+        var subscriptionId: String? = null
+
+        try {
+            withTimeout(timeoutMs) {
+                httpClient.webSocket(wsUrl) {
+                    // Step 1: Send subscribe request
+                    val requestId = requestIdCounter.incrementAndGet()
+                    val subscribeRequest = buildJsonRpcRequest(
+                        id = requestId,
+                        method = "author_submitAndWatchExtrinsic",
+                        params = listOf("0x$wrappedExtrinsic")
+                    )
+
+                    Log.d(TAG, "Sending author_submitAndWatchExtrinsic request...")
+                    send(Frame.Text(subscribeRequest))
+
+                    // Step 2: Process responses
+                    for (frame in incoming) {
+                        when (frame) {
+                            is Frame.Text -> {
+                                val text = frame.readText()
+                                Log.d(TAG, "WebSocket received: $text")
+
+                                val response = json.decodeFromString<JsonObject>(text)
+
+                                // Check for error
+                                val error = response["error"]?.jsonObject
+                                if (error != null) {
+                                    val errorCode = error["code"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                                    val errorMessage = error["message"]?.jsonPrimitive?.contentOrNull ?: "Unknown error"
+                                    val errorData = error["data"]?.jsonPrimitive?.contentOrNull
+
+                                    Log.e(TAG, "WebSocket error: code=$errorCode, message=$errorMessage, data=$errorData")
+
+                                    // Check for error 115 (stale UTXO)
+                                    if (errorCode == 1010) {
+                                        val customErrorCode = errorData?.let { data ->
+                                            Regex("Custom error: (\\d+)").find(data)?.groupValues?.get(1)?.toIntOrNull()
+                                        }
+
+                                        if (customErrorCode == 115) {
+                                            Log.e(TAG, "ERROR 115: UTXO already spent!")
+                                            throw TransactionRejected(
+                                                reason = errorMessage,
+                                                txHash = txHash,
+                                                customErrorCode = 115
+                                            )
+                                        }
+                                    }
+
+                                    throw NodeRpcError(
+                                        code = errorCode ?: -1,
+                                        message = errorMessage,
+                                        data = errorData
+                                    )
+                                }
+
+                                // Check if this is subscription result (gives us subscription ID)
+                                val subscriptionResult = response["result"]?.jsonPrimitive?.contentOrNull
+                                if (subscriptionResult != null && response["id"] != null) {
+                                    subscriptionId = subscriptionResult
+                                    Log.d(TAG, "Subscription created: $subscriptionId")
+                                    continue
+                                }
+
+                                // Check if this is a subscription notification
+                                val params = response["params"]?.jsonObject
+                                if (params != null) {
+                                    val statusResult = params["result"]
+                                    if (statusResult != null) {
+                                        val finalizationResult = parseTransactionStatus(statusResult, txHash ?: "")
+                                        Log.d(TAG, "Transaction status: $finalizationResult")
+
+                                        when (finalizationResult) {
+                                            is TransactionFinalizationResult.Finalized -> {
+                                                Log.i(TAG, "✅ Transaction FINALIZED in block ${finalizationResult.blockHash}")
+                                                result.complete(finalizationResult)
+                                                // Unsubscribe
+                                                subscriptionId?.let { subId ->
+                                                    val unsubRequest = buildJsonRpcRequest(
+                                                        id = requestIdCounter.incrementAndGet(),
+                                                        method = "author_unwatchExtrinsic",
+                                                        params = listOf(subId)
+                                                    )
+                                                    send(Frame.Text(unsubRequest))
+                                                }
+                                                return@webSocket
+                                            }
+                                            is TransactionFinalizationResult.InBlock -> {
+                                                // Still waiting for finalization
+                                                txHash = finalizationResult.txHash
+                                                Log.d(TAG, "Transaction in block, waiting for finalization...")
+                                            }
+                                            is TransactionFinalizationResult.Dropped,
+                                            is TransactionFinalizationResult.Invalid,
+                                            is TransactionFinalizationResult.Usurped -> {
+                                                Log.e(TAG, "Transaction failed: $finalizationResult")
+                                                result.complete(finalizationResult)
+                                                return@webSocket
+                                            }
+                                            else -> {
+                                                // Continue waiting (ready, broadcast, etc.)
+                                                Log.d(TAG, "Intermediate status, continuing...")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            is Frame.Close -> {
+                                Log.w(TAG, "WebSocket closed")
+                                if (!result.isCompleted) {
+                                    result.complete(TransactionFinalizationResult.Timeout(txHash ?: ""))
+                                }
+                                return@webSocket
+                            }
+                            else -> { /* Ignore other frame types */ }
+                        }
+                    }
+                }
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "Transaction finalization timed out after ${timeoutMs}ms")
+            return TransactionFinalizationResult.Timeout(txHash ?: "")
+        } catch (e: TransactionRejected) {
+            throw e // Re-throw for caller to handle
+        } catch (e: NodeRpcException) {
+            throw e // Re-throw for caller to handle
+        } catch (e: ClosedReceiveChannelException) {
+            Log.w(TAG, "WebSocket channel closed unexpectedly")
+            if (result.isCompleted) {
+                return result.getCompleted()
+            }
+            throw NodeNetworkException("WebSocket connection closed unexpectedly", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "WebSocket error", e)
+            throw NodeNetworkException("WebSocket error: ${e.message}", e)
+        }
+
+        return if (result.isCompleted) {
+            result.getCompleted()
+        } else {
+            TransactionFinalizationResult.Timeout(txHash ?: "")
+        }
+    }
+
+    /**
+     * Build a JSON-RPC 2.0 request string.
+     */
+    private fun buildJsonRpcRequest(id: Int, method: String, params: List<String>): String {
+        val paramsJson = params.joinToString(",") { "\"$it\"" }
+        return """{"jsonrpc":"2.0","id":$id,"method":"$method","params":[$paramsJson]}"""
+    }
+
+    /**
+     * Parse transaction status from Substrate node.
+     *
+     * Substrate TransactionStatus enum:
+     * - "future": Transaction is part of the future queue
+     * - "ready": Transaction is part of the ready queue
+     * - "broadcast": Transaction has been broadcast to peers
+     * - {"inBlock": "0x..."}: Transaction is in a block
+     * - {"finalized": "0x..."}: Transaction has been finalized
+     * - {"usurped": "0x..."}: Transaction was replaced
+     * - "dropped": Transaction was dropped from the pool
+     * - "invalid": Transaction is invalid
+     */
+    private fun parseTransactionStatus(status: JsonElement, txHash: String): TransactionFinalizationResult {
+        return when {
+            // String statuses
+            status is JsonPrimitive && status.isString -> {
+                when (status.content) {
+                    "future", "ready", "broadcast" -> {
+                        // Intermediate status - not a final result
+                        // Return InBlock with empty hash to signal "still waiting"
+                        TransactionFinalizationResult.InBlock(txHash, "")
+                    }
+                    "dropped" -> TransactionFinalizationResult.Dropped(txHash, "Transaction dropped from pool")
+                    "invalid" -> TransactionFinalizationResult.Invalid(txHash, "Transaction is invalid")
+                    else -> TransactionFinalizationResult.Invalid(txHash, "Unknown status: ${status.content}")
+                }
+            }
+
+            // Object statuses
+            status is JsonObject -> {
+                when {
+                    status.containsKey("inBlock") -> {
+                        val blockHash = status["inBlock"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x") ?: ""
+                        TransactionFinalizationResult.InBlock(txHash, blockHash)
+                    }
+                    status.containsKey("finalized") -> {
+                        val blockHash = status["finalized"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x") ?: ""
+                        TransactionFinalizationResult.Finalized(txHash, blockHash)
+                    }
+                    status.containsKey("usurped") -> {
+                        val replacedBy = status["usurped"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x")
+                        TransactionFinalizationResult.Usurped(txHash, replacedBy)
+                    }
+                    status.containsKey("retracted") -> {
+                        // Block was retracted (reorg) - transaction went back to pool
+                        // Treat as still waiting
+                        TransactionFinalizationResult.InBlock(txHash, "")
+                    }
+                    else -> TransactionFinalizationResult.Invalid(txHash, "Unknown status object: $status")
+                }
+            }
+
+            else -> TransactionFinalizationResult.Invalid(txHash, "Cannot parse status: $status")
         }
     }
 

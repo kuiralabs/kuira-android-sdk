@@ -188,6 +188,10 @@ fun SendScreen(
                 is SendUiState.Building -> LoadingCard("Building transaction...")
                 is SendUiState.Signing -> LoadingCard("Signing transaction...")
                 is SendUiState.Submitting -> LoadingCard("Submitting to blockchain...")
+                is SendUiState.SyncingAndRetrying -> SyncingAndRetryingCard(
+                    retryAttempt = currentState.retryAttempt,
+                    maxRetries = currentState.maxRetries
+                )
                 is SendUiState.Success -> SuccessCard(
                     txHash = currentState.txHash,
                     amount = currentState.amountSent,
@@ -419,6 +423,49 @@ private fun LoadingCard(message: String) {
                 text = message,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * Card shown during auto-recovery (sync + retry) after error 115.
+ *
+ * Shows clear feedback that wallet is syncing and will retry automatically.
+ */
+@Composable
+private fun SyncingAndRetryingCard(
+    retryAttempt: Int,
+    maxRetries: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(48.dp))
+            Text(
+                text = "Syncing wallet...",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Will retry automatically",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+            )
+            Text(
+                text = "Attempt $retryAttempt of $maxRetries",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
             )
         }
     }

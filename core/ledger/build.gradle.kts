@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.client.logging)
+    implementation(libs.ktor.client.websockets)
 
     // Kotlinx Serialization for JSON
     implementation(libs.kotlinx.serialization.json)

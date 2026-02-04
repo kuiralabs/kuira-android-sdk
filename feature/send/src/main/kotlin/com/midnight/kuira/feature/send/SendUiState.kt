@@ -64,6 +64,24 @@ sealed class SendUiState {
     data object Submitting : SendUiState()
 
     /**
+     * Syncing wallet after stale UTXO error, will auto-retry transaction.
+     *
+     * Shows "Syncing wallet... Will retry automatically" to user.
+     * This happens when error 115 occurs (UTXO already spent).
+     *
+     * @property retryAttempt Current retry attempt (1, 2, 3...)
+     * @property maxRetries Maximum retries before giving up
+     */
+    data class SyncingAndRetrying(
+        val retryAttempt: Int = 1,
+        val maxRetries: Int = MAX_AUTO_RETRIES
+    ) : SendUiState() {
+        companion object {
+            const val MAX_AUTO_RETRIES = 3
+        }
+    }
+
+    /**
      * Transaction submitted successfully.
      *
      * @property txHash Transaction hash (64 hex chars)
