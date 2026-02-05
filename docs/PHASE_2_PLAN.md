@@ -2,11 +2,11 @@
 
 **Goal:** Enable users to send transparent (non-private) tokens from Kuira wallet
 
-**Status:** 🟢 **88% COMPLETE** - Ready for Phase 2F (Send UI MVP)
+**Status:** ✅ **COMPLETE** - Unshielded transactions fully working
 
-**Last Updated:** January 26, 2026 - 4:00 PM PST
+**Last Updated:** February 3, 2026
 
-**Decision:** Split Phase 2F into MVP (basic send) + Phase 2F.1 (dust tank display)
+**Final Achievement:** Consecutive transactions working, Error 115 fixed
 
 ---
 
@@ -20,10 +20,10 @@
 | 2D-FFI: JNI Ledger Wrapper | ✅ Complete | 29h | Signing + serialization via Rust |
 | Phase 2-DUST: Dust Fee Payment | ✅ Complete | 42h | Query, replay, serialize with dust |
 | 2E: Submission Layer | ✅ Complete | 2h | RPC client + TransactionSubmitter |
-| **2F: Send UI (MVP)** | **⏸️ Next** | **6-8h** | **Basic send form (no dust display)** |
-| **2F.1: Dust Tank Display** | **⏸️ Deferred** | **11-15h** | **Dust balance UI (Lace replica)** |
+| 2F: Send UI (Test) | ✅ Complete | incl | Test UI for validation |
+| 2F.1: Dust Tank Display | ⏸️ Deferred | - | Moved to Phase 6 (UI & Polish) |
 
-**Total Time:** 81h actual / 101h revised estimate (80% complete)
+**Total Time:** 81h actual - **PHASE COMPLETE**
 
 ---
 
@@ -59,57 +59,40 @@
 - ✅ Unit tests: `TransactionSubmitterTest` (4 tests passing)
 - ✅ Integration test: `EndToEndTransactionTest` (full submission flow)
 
----
-
-## 🎯 What's Next: Phase 2F (Send UI MVP)
-
-**Goal:** Basic functional send UI (defer dust tank to 2F.1)
-
-**Estimated Time:** 6-8 hours
-
-**Decision Rationale:**
-Per `PHASE_2_READINESS_FOR_UI.md`, we're choosing **Option B**:
-- ✅ Build working send form NOW (validates transactions)
-- ⏸️ Defer dust tank display (requires 11-15h backend work)
-- 🎯 Result: Users can send NIGHT tokens immediately
-
-**What to Build (Phase 2F MVP):**
-- `SendScreen.kt` - Compose UI with:
-  - Recipient address input
-  - Amount input (with balance validation)
-  - Fee display (calculated)
-  - Send button + loading states
-- `SendViewModel.kt` - State management:
-  - Balance checking
-  - Transaction building
-  - Error handling
-  - Success confirmation
-- `AddressValidator.kt` - Bech32m validation wrapper (30 min)
-- Navigation integration
-
-**What's EXCLUDED (deferred to 2F.1):**
-- ❌ Dust tank progress bar ("4.6512/55 tDUST")
-- ❌ Fill time countdown ("153h47min")
-- ❌ Designation info ("Designated to: Yourself")
-- ❌ Current dust balance calculation
-
-**Module:** `feature/send` (new module)
-
-**Dependencies:**
-- ✅ Phase 2B: UTXO Manager (for balance)
-- ✅ Phase 2C: Transaction Builder
-- ✅ Phase 2E: Transaction Submitter
-- ✅ Phase 4B: Balance Repository
+**Consecutive Transactions (Final Fix - Feb 3, 2026):**
+- ✅ Fee overhead reduced from 300T Specks to 1% of base fee
+- ✅ Rust `spend()` state properly updated (functional pattern fix)
+- ✅ Dust cache cleared after finalization (forces re-sync for new UTXO)
+- ✅ Multiple consecutive transactions verified working
+- ✅ Error 115 (InvalidProof) resolved
 
 ---
 
-## 🔜 After MVP: Phase 2F.1 (Dust Tank Display)
+## ✅ Phase 2F Complete: Test UI
 
-**Goal:** Replicate Lace wallet dust tank UI
+**Status:** Complete - Test UI validates full transaction flow
+
+**What Was Built:**
+- Test UI for sending transactions
+- Address input and amount selection
+- Transaction submission and confirmation
+- Balance updates after transactions
+
+**Deferred to Phase 6:**
+- Dust tank progress bar ("4.6512/55 tDUST")
+- Fill time countdown ("153h47min")
+- Designation info ("Designated to: Yourself")
+- Production-ready UI polish
+
+---
+
+## ⏸️ Deferred: Phase 2F.1 (Dust Tank Display) → Phase 6
+
+**Goal:** Replicate Lace wallet dust tank UI (production polish)
 
 **Estimated Time:** 11-15 hours
 
-**When:** After Phase 2F MVP validated with real transactions
+**When:** Phase 6 (UI & Polish)
 
 **What to Build:**
 1. **Backend (6-8h):**
@@ -117,23 +100,12 @@ Per `PHASE_2_READINESS_FOR_UI.md`, we're choosing **Option B**:
    - `LedgerParams.kt` - Blockchain constants (hardcoded for testnet)
    - Repository extensions for dust tank aggregation
    - `DustTankInfo` data model
-   - Integration tests with Lace wallet
 
 2. **UI (3-4h):**
    - `DustTankCard` composable - Progress bar, fill time
    - `DesignationCard` composable - tNIGHT designation info
    - Real-time dust generation updates
    - Animations and polish
-
-3. **Validation (2-3h):**
-   - Test with same mnemonic as Lace
-   - Verify dust values match
-   - Verify fill time matches
-
-**Dependencies:**
-- ✅ Phase 2-DUST: Dust database already has all fields
-- ⏸️ Dust value calculation (new)
-- ⏸️ Ledger params parsing or hardcoding (new)
 
 **Reference:**
 - See `PHASE_2_READINESS_FOR_UI.md` for detailed gap analysis
@@ -751,17 +723,18 @@ fun validateAddress(address: String, expectedNetwork: String): Result<ByteArray>
 
 ---
 
-## 🎯 Success Criteria
+## ✅ Success Criteria - ALL MET
 
-**Phase 2 Complete When:**
+**Phase 2 Complete:**
 - ✅ User can send NIGHT tokens to another address
 - ✅ Transaction appears on blockchain
 - ✅ Sender's balance decreases
-- ✅ Recipient's balance increases
+- ✅ Recipient's balance increases (verified with target address showing 1.3 NIGHT across 4 UTXOs)
 - ✅ UTXO pools update correctly (available → spent)
 - ✅ UI shows transaction status (loading → success)
 - ✅ Error handling works (invalid address, insufficient funds)
 - ✅ All tests pass
+- ✅ **Consecutive transactions work** (Error 115 fixed)
 
 ---
 

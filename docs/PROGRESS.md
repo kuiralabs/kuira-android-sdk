@@ -1,9 +1,9 @@
 # Kuira Wallet - Progress Tracker
 
-**Last Updated:** January 26, 2026
-**Current Phase:** Phase 2 (Unshielded Transactions) - Phase 2F MVP (80%)
-**Hours Invested:** 126.5h / ~185h estimated (revised with Phase 2F.1)
-**Completion:** ~68% (revised estimate includes dust tank display deferred to 2F.1)
+**Last Updated:** February 3, 2026
+**Current Phase:** Phase 2 ✅ COMPLETE - Ready for Phase 3 (Shielded Transactions)
+**Hours Invested:** 173.5h / ~185h estimated
+**Completion:** ~94% core functionality (Phase 2 complete, remaining: shielded features + polish)
 
 ---
 
@@ -20,20 +20,39 @@
 | ↳ 4B-2: UTXO Database | ✅ Complete | ~10h | 2.5h | 100% |
 | ↳ 4B-3: Balance Repository | ✅ Complete | ~3h | 6h | 100% |
 | ↳ 4B-4: UI Integration | ✅ Complete | ~5-8h | 7h | 100% |
-| **Phase 2: Unshielded Transactions** | 🔄 **In Progress** | 89-109h | 81h | 80% |
+| **Phase 2: Unshielded Transactions** | ✅ **Complete** | 89-109h | 81h | 100% |
 | ↳ 2A: Transaction Models | ✅ Complete | 2-3h | 3h | 100% |
 | ↳ 2B: UTXO Manager | ✅ Complete | 2-3h | 3.5h | 100% |
 | ↳ 2C: Transaction Builder | ✅ Complete | 3-4h | 1.5h | 100% |
 | ↳ 2D-FFI: JNI Ledger Wrapper | ✅ Complete | 8-10h | 29h | 100% |
 | ↳ 2-DUST: Dust Fee Payment | ✅ Complete | 30-40h | 42h | 100% |
 | ↳ 2E: Submission Layer | ✅ Complete | 2-3h | 2h | 100% |
-| ↳ 2F: Send UI (MVP) | ⏸️ Next | 6-8h | 0h | 0% |
-| ↳ 2F.1: Dust Tank Display | ⏸️ Deferred | 11-15h | 0h | 0% |
+| ↳ 2F: Send UI (Test) | ✅ Complete | - | incl | 100% |
+| ↳ 2F.1: Dust Tank Display | ⏸️ Deferred | 11-15h | 0h | Moved to Phase 6 |
 | **Phase 3: Shielded Transactions** | ⏸️ Not Started | 20-25h | 0h | 0% |
 | **Phase 5: DApp Connector** | ⏸️ Not Started | 15-20h | 0h | 0% |
 | **Phase 6: UI & Polish** | ⏸️ Not Started | 15-20h | 0h | 0% |
 
-**Next Milestone:** Phase 2F MVP - Basic Send UI (6-8h estimated)
+**Next Milestone:** Phase 4B-Shielded (Shielded Balances) OR Phase 3 (Shielded Transactions)
+
+---
+
+## ✅ RESOLVED: Phase 2 Complete (February 3, 2026)
+
+**Status:** ✅ **COMPLETE** - Unshielded transactions fully working
+**Total Time:** 81 hours
+**Key Achievement:** Consecutive transactions working (Error 115 fixed)
+
+### Final Fixes (February 3, 2026)
+1. **Fee overhead reduced:** Changed from 300 trillion Specks to 1% of base fee
+2. **Rust state update:** Fixed functional `spend()` pattern - pointer now updated after serialization
+3. **Dust cache cleanup:** Delete cache after finalization, forcing re-sync to get new UTXO
+
+### Test Results
+- ✅ First transaction: Success
+- ✅ Second consecutive transaction: Success
+- ✅ Multiple consecutive transactions: Success
+- ✅ Balance updates correctly between transactions
 
 ---
 
@@ -1063,7 +1082,7 @@ Source: Midnight SDK `@midnight-ntwrk/ledger-v6` v6.1.0-alpha.6
 
 ---
 
-## Phase 2: Unshielded Transactions 🔄 IN PROGRESS (83% Complete)
+## Phase 2: Unshielded Transactions ✅ COMPLETE
 
 **Duration:** January 19-22, 2026
 **Goal:** Send transparent (non-private) tokens from Kuira wallet
