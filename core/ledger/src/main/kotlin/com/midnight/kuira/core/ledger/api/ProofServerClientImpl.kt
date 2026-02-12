@@ -2,7 +2,7 @@ package com.midnight.kuira.core.ledger.api
 
 import android.util.Log
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
@@ -56,7 +56,7 @@ class ProofServerClientImpl(
         private const val RETRY_BASE_DELAY_MS = 2000L  // 2 seconds
         private const val MAX_RETRY_ATTEMPTS = 3
 
-        private fun createDefaultHttpClient() = HttpClient(CIO) {
+        private fun createDefaultHttpClient() = HttpClient(OkHttp) {
             install(Logging) {
                 logger = Logger.DEFAULT
                 level = LogLevel.INFO

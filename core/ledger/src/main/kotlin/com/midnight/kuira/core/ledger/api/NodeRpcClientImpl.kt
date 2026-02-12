@@ -2,7 +2,7 @@ package com.midnight.kuira.core.ledger.api
 
 import android.util.Log
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -65,7 +65,7 @@ class NodeRpcClientImpl(
     companion object {
         private const val TAG = "NodeRpcClient"
 
-        private fun createDefaultHttpClient() = HttpClient(CIO) {
+        private fun createDefaultHttpClient() = HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true

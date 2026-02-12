@@ -6,7 +6,7 @@ import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.websocket.GraphQLWebSocketClient
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -69,7 +69,7 @@ class IndexerClientImpl(
     )
 
     companion object {
-        private fun createDefaultHttpClient() = HttpClient(CIO) {
+        private fun createDefaultHttpClient() = HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true
@@ -93,16 +93,8 @@ class IndexerClientImpl(
             // Response validation (catch non-2xx responses)
             expectSuccess = true
 
-            // TLS/SSL Configuration
-            // Note: Certificate pinning documented in TlsConfiguration.kt
-            // Phase 4B: Implement using OkHttp engine or custom TrustManager
-            engine {
-                https {
-                    // TLS configuration placeholder
-                    // Phase 4A: No certificate pinning (documented)
-                    // Phase 4B: Add certificate pinning implementation here
-                }
-            }
+            // TLS/SSL: OkHttp uses Android's native TLS stack automatically.
+            // Certificate pinning can be added via engine { config { certificatePinner(...) } }
         }
     }
 
