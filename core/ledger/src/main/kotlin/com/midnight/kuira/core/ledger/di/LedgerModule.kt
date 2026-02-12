@@ -11,6 +11,7 @@ import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 import com.midnight.kuira.core.ledger.fee.FeeCalculator
+import com.midnight.kuira.core.network.NetworkConfig
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,23 +42,18 @@ object LedgerModule {
      * **Singleton Scope:** HTTP client is expensive to create, shared across app.
      *
      * **Configuration:**
-     * - Development mode for local testing (allows HTTP to localhost)
-     * - Production: Use HTTPS (TODO: Phase 4C)
-     *
-     * **Node URLs:**
-     * - Android Emulator: `http://10.0.2.2:9944` (localhost:9944 on host machine)
-     * - Physical Device: Use actual IP address
+     * - Uses NetworkConfig for URL and development mode settings
+     * - URLs are read from persisted network selection at startup
+     * - Changing networks requires app restart
      */
     @Provides
     @Singleton
-    fun provideNodeRpcClient(): NodeRpcClient {
-        // TODO: Read from BuildConfig or Settings
-        val nodeUrl = "http://10.0.2.2:9944" // Android emulator → host localhost:9944
-        val developmentMode = true // Allow HTTP for local testing
-
+    fun provideNodeRpcClient(
+        networkConfig: NetworkConfig
+    ): NodeRpcClient {
         return NodeRpcClientImpl(
-            nodeUrl = nodeUrl,
-            developmentMode = developmentMode
+            nodeUrl = networkConfig.nodeRpcUrl,
+            developmentMode = networkConfig.developmentMode
         )
     }
 
@@ -67,26 +63,19 @@ object LedgerModule {
      * **Singleton Scope:** HTTP client is expensive to create, shared across app.
      *
      * **Configuration:**
-     * - Development mode for local testing (allows HTTP to localhost)
-     * - Production: Use HTTPS (TODO: Phase 4C)
-     *
-     * **Proof Server URLs:**
-     * - Android Emulator: `http://10.0.2.2:6300` (localhost:6300 on host machine)
-     * - Physical Device: Use actual IP address
-     * - TestNet/MainNet: TBD (Midnight will provide public proof servers)
-     *
-     * **Phase 2:** Required for transaction proving (convert unproven → proven)
+     * - Uses NetworkConfig for URL and development mode settings
+     * - Currently all networks use local proof server (localhost:6300)
+     * - URLs are read from persisted network selection at startup
+     * - Changing networks requires app restart
      */
     @Provides
     @Singleton
-    fun provideProofServerClient(): ProofServerClient {
-        // TODO: Read from BuildConfig or Settings
-        val proofServerUrl = "http://10.0.2.2:6300" // Android emulator → host localhost:6300
-        val developmentMode = true // Allow HTTP for local testing
-
+    fun provideProofServerClient(
+        networkConfig: NetworkConfig
+    ): ProofServerClient {
         return ProofServerClientImpl(
-            proofServerUrl = proofServerUrl,
-            developmentMode = developmentMode
+            proofServerUrl = networkConfig.proofServerUrl,
+            developmentMode = networkConfig.developmentMode
         )
     }
 

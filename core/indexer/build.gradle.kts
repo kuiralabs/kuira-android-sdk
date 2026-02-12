@@ -45,6 +45,7 @@ android {
 dependencies {
     // Core modules
     implementation(project(":core:crypto"))
+    implementation(project(":core:network"))
 
     // Core Android
     implementation(libs.androidx.core.ktx)

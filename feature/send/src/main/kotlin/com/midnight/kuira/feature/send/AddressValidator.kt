@@ -40,12 +40,16 @@ object AddressValidator {
      * Valid Midnight address prefixes.
      *
      * **Networks:**
+     * - `mn_addr_preprod` - Pre-production testnet
      * - `mn_addr_preview` - Preview testnet
-     * - `mn_addr_testnet` - Devnet
+     * - `mn_addr_undeployed` - Local development (undeployed)
+     * - `mn_addr_testnet` - Devnet (legacy)
      * - `mn_addr` - Mainnet (future)
      */
     private val VALID_PREFIXES = setOf(
+        "mn_addr_preprod",
         "mn_addr_preview",
+        "mn_addr_undeployed",
         "mn_addr_testnet",
         "mn_addr"
     )
@@ -77,7 +81,7 @@ object AddressValidator {
         val hasValidPrefix = VALID_PREFIXES.any { address.startsWith(it) }
         if (!hasValidPrefix) {
             return ValidationResult.Invalid(
-                "Invalid address format. Must start with 'mn_addr_preview' or 'mn_addr_testnet'"
+                "Invalid address format. Must start with a valid Midnight address prefix (e.g., 'mn_addr_preprod', 'mn_addr_preview')"
             )
         }
 

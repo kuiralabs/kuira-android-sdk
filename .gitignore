@@ -25,3 +25,4 @@ core/ledger/build/*
 feature/balance/build/*
 htmlReport/
 feature/send/build/
+core/network/build/

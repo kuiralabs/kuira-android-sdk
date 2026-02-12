@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":feature:balance"))
     implementation(project(":feature:send"))
     implementation(project(":core:indexer"))
+    implementation(project(":core:network"))
 
     // Hilt for dependency injection
     implementation(libs.hilt.android)

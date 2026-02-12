@@ -74,6 +74,9 @@ dependencies {
     // Crypto module (for TransactionSigner native library)
     implementation(project(":core:crypto"))
 
+    // Network module (for NetworkConfig)
+    implementation(project(":core:network"))
+
     // Indexer module (for UTXO management and selection)
     implementation(project(":core:indexer"))
 

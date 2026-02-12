@@ -4,12 +4,14 @@ import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
 import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
+import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,7 @@ class SendViewModelTest {
     private lateinit var indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient
     private lateinit var dustRepository: DustRepository
     private lateinit var subscriptionManagerFactory: SubscriptionManagerFactory
+    private lateinit var syncStateManager: SyncStateManager
     private lateinit var viewModel: SendViewModel
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -59,6 +62,7 @@ class SendViewModelTest {
         indexerClient = mock()
         dustRepository = mock()
         subscriptionManagerFactory = mock()
+        syncStateManager = mock()
 
         viewModel = SendViewModel(
             balanceRepository = balanceRepository,
@@ -67,7 +71,8 @@ class SendViewModelTest {
             serializer = serializer,
             indexerClient = indexerClient,
             dustRepository = dustRepository,
-            subscriptionManagerFactory = subscriptionManagerFactory
+            subscriptionManagerFactory = subscriptionManagerFactory,
+            syncStateManager = syncStateManager
         )
     }
 
@@ -91,7 +96,7 @@ class SendViewModelTest {
             flowOf(
                 listOf(
                     TokenBalance(
-                        tokenType = UtxoOutput.NATIVE_TOKEN_TYPE,
+                        tokenType = TokenTypeMapper.NIGHT_SYMBOL,
                         balance = balance,
                         utxoCount = 1
                     )

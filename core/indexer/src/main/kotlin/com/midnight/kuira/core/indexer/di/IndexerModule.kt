@@ -12,6 +12,7 @@ import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
+import com.midnight.kuira.core.network.NetworkConfig
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -58,19 +59,18 @@ object IndexerModule {
      * **Singleton Scope:** Expensive to create (WebSocket connection), shared across app.
      *
      * **Configuration:**
-     * - Development mode for local testing (allows HTTP to localhost)
-     * - Production: Use HTTPS with certificate pinning (TODO: Phase 4C)
+     * - Uses NetworkConfig for URL and development mode settings
+     * - URLs are read from persisted network selection at startup
+     * - Changing networks requires app restart
      */
     @Provides
     @Singleton
-    fun provideIndexerClient(): IndexerClient {
-        // TODO: Read from BuildConfig or Settings
-        val baseUrl = "http://10.0.2.2:8088/api/v3" // Android emulator localhost
-        val developmentMode = true // Allow HTTP for local testing
-
+    fun provideIndexerClient(
+        networkConfig: NetworkConfig
+    ): IndexerClient {
         return IndexerClientImpl(
-            baseUrl = baseUrl,
-            developmentMode = developmentMode
+            baseUrl = networkConfig.indexerBaseUrl,
+            developmentMode = networkConfig.developmentMode
         )
     }
 
