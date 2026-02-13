@@ -34,9 +34,11 @@ class UnshieldedUtxoDaoTest {
         // Given
         val utxo = UnshieldedUtxoEntity(
             id = "0x123:0",
+            transactionHash = "0x123",
             intentHash = "0x123",
             outputIndex = 0,
             owner = "mn_addr_testnet1abc",
+            ownerPublicKey = null,
             tokenType = "DUST",
             value = "1000",
             ctime = 1704067200,
@@ -63,9 +65,11 @@ class UnshieldedUtxoDaoTest {
         val utxos = listOf(
             UnshieldedUtxoEntity(
                 id = "0x123:0",
+                transactionHash = "0x123",
                 intentHash = "0x123",
                 outputIndex = 0,
                 owner = address,
+                ownerPublicKey = null,
                 tokenType = "DUST",
                 value = "1000",
                 ctime = 1,
@@ -74,9 +78,11 @@ class UnshieldedUtxoDaoTest {
             ),
             UnshieldedUtxoEntity(
                 id = "0x123:1",
+                transactionHash = "0x123",
                 intentHash = "0x123",
                 outputIndex = 1,
                 owner = address,
+                ownerPublicKey = null,
                 tokenType = "DUST",
                 value = "2000",
                 ctime = 2,
@@ -85,9 +91,11 @@ class UnshieldedUtxoDaoTest {
             ),
             UnshieldedUtxoEntity(
                 id = "0x456:0",
+                transactionHash = "0x456",
                 intentHash = "0x456",
                 outputIndex = 0,
                 owner = address,
+                ownerPublicKey = null,
                 tokenType = "OTHER",
                 value = "5000",
                 ctime = 3,
@@ -109,9 +117,11 @@ class UnshieldedUtxoDaoTest {
         // Given
         val utxo = UnshieldedUtxoEntity(
             id = "0x123:0",
+            transactionHash = "0x123",
             intentHash = "0x123",
             outputIndex = 0,
             owner = "mn_addr_testnet1abc",
+            ownerPublicKey = null,
             tokenType = "DUST",
             value = "1000",
             ctime = 1,
@@ -136,9 +146,11 @@ class UnshieldedUtxoDaoTest {
         val utxos = listOf(
             UnshieldedUtxoEntity(
                 id = "0x123:0",
+                transactionHash = "0x123",
                 intentHash = "0x123",
                 outputIndex = 0,
                 owner = address,
+                ownerPublicKey = null,
                 tokenType = "DUST",
                 value = "1000",
                 ctime = 1,
@@ -147,9 +159,11 @@ class UnshieldedUtxoDaoTest {
             ),
             UnshieldedUtxoEntity(
                 id = "0x123:1",
+                transactionHash = "0x123",
                 intentHash = "0x123",
                 outputIndex = 1,
                 owner = address,
+                ownerPublicKey = null,
                 tokenType = "DUST",
                 value = "2000",
                 ctime = 2,
@@ -173,9 +187,9 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x3:0", "0x3", "0x3", 0, address, null, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -193,9 +207,9 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "OTHER", "2000", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "OTHER", "2000", 2, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x3:0", "0x3", "0x3", 0, address, null, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -211,7 +225,7 @@ class UnshieldedUtxoDaoTest {
     fun observeUnspentUtxos_emitsUpdates() = runBlocking {
         // Given
         val address = "mn_addr_testnet1abc"
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
 
         // When
         dao.insertUtxos(listOf(utxo))
@@ -228,8 +242,8 @@ class UnshieldedUtxoDaoTest {
         val address1 = "mn_addr1"
         val address2 = "mn_addr2"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address1, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address2, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address1, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address2, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -247,8 +261,8 @@ class UnshieldedUtxoDaoTest {
     fun deleteAll_removesAllUtxos() = runBlocking {
         // Given
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, "addr1", "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, "addr2", "DUST", "2000", 2, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, "addr1", null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, "addr2", null, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -265,9 +279,9 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "mn_addr_testnet1abc"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x3:0", "0x3", "0x3", 0, address, null, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
         dao.markAsSpent("0x1:0")
@@ -282,8 +296,8 @@ class UnshieldedUtxoDaoTest {
     @Test
     fun insertDuplicateUtxo_replacesExisting() = runBlocking {
         // Given
-        val utxo1 = UnshieldedUtxoEntity("0x1:0", "0x1", 0, "addr", "DUST", "1000", 1, false, UtxoState.AVAILABLE)
-        val utxo2 = UnshieldedUtxoEntity("0x1:0", "0x1", 0, "addr", "DUST", "2000", 2, false, UtxoState.AVAILABLE)
+        val utxo1 = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, "addr", null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+        val utxo2 = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, "addr", null, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
 
         // When
         dao.insertUtxos(listOf(utxo1))
@@ -299,7 +313,7 @@ class UnshieldedUtxoDaoTest {
     @Test
     fun markAsPending_changesStateFromAvailableToPending() = runBlocking {
         // Given
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, "addr", "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, "addr", null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
         dao.insertUtxos(listOf(utxo))
 
         // When
@@ -316,8 +330,8 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "addr"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -334,7 +348,7 @@ class UnshieldedUtxoDaoTest {
     @Test
     fun markAsAvailable_changesStateFromPendingToAvailable() = runBlocking {
         // Given
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, "addr", "DUST", "1000", 1, false, UtxoState.PENDING)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, "addr", null, "DUST", "1000", 1, false, UtxoState.PENDING)
         dao.insertUtxos(listOf(utxo))
 
         // When
@@ -350,7 +364,7 @@ class UnshieldedUtxoDaoTest {
     fun markAsAvailable_includesInUnspentQuery() = runBlocking {
         // Given
         val address = "addr"
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.PENDING)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.PENDING)
         dao.insertUtxos(listOf(utxo))
 
         // Before: PENDING utxos excluded
@@ -371,9 +385,9 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "addr"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
-            UnshieldedUtxoEntity("0x3:0", "0x3", 0, address, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.AVAILABLE),
+            UnshieldedUtxoEntity("0x3:0", "0x3", "0x3", 0, address, null, "DUST", "3000", 3, false, UtxoState.AVAILABLE)
         )
         dao.insertUtxos(utxos)
 
@@ -391,8 +405,8 @@ class UnshieldedUtxoDaoTest {
         // Given
         val address = "addr"
         val utxos = listOf(
-            UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.PENDING),
-            UnshieldedUtxoEntity("0x2:0", "0x2", 0, address, "DUST", "2000", 2, false, UtxoState.PENDING)
+            UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.PENDING),
+            UnshieldedUtxoEntity("0x2:0", "0x2", "0x2", 0, address, null, "DUST", "2000", 2, false, UtxoState.PENDING)
         )
         dao.insertUtxos(utxos)
 
@@ -408,15 +422,15 @@ class UnshieldedUtxoDaoTest {
     fun stateTransitions_fullCycle() = runBlocking {
         // Given
         val address = "addr"
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
         dao.insertUtxos(listOf(utxo))
 
-        // AVAILABLE → PENDING
+        // AVAILABLE -> PENDING
         dao.markAsPending("0x1:0")
         assertEquals(UtxoState.PENDING, dao.getUtxoById("0x1:0")?.state)
         assertEquals(0, dao.getUnspentUtxos(address).size)
 
-        // PENDING → SPENT (success)
+        // PENDING -> SPENT (success)
         dao.markAsSpent("0x1:0")
         assertEquals(UtxoState.SPENT, dao.getUtxoById("0x1:0")?.state)
         assertEquals(0, dao.getUnspentUtxos(address).size)
@@ -426,14 +440,14 @@ class UnshieldedUtxoDaoTest {
     fun stateTransitions_failureUnlocks() = runBlocking {
         // Given
         val address = "addr"
-        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", 0, address, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
+        val utxo = UnshieldedUtxoEntity("0x1:0", "0x1", "0x1", 0, address, null, "DUST", "1000", 1, false, UtxoState.AVAILABLE)
         dao.insertUtxos(listOf(utxo))
 
-        // AVAILABLE → PENDING
+        // AVAILABLE -> PENDING
         dao.markAsPending("0x1:0")
         assertEquals(UtxoState.PENDING, dao.getUtxoById("0x1:0")?.state)
 
-        // PENDING → AVAILABLE (failure)
+        // PENDING -> AVAILABLE (failure)
         dao.markAsAvailable("0x1:0")
         assertEquals(UtxoState.AVAILABLE, dao.getUtxoById("0x1:0")?.state)
         assertEquals(1, dao.getUnspentUtxos(address).size)

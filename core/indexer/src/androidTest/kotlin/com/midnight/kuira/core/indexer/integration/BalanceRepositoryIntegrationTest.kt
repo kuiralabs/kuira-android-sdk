@@ -97,13 +97,14 @@ class BalanceRepositoryIntegrationTest {
 
         // Initialize production components
         utxoManager = UtxoManager(database.unshieldedUtxoDao())
-        repository = BalanceRepository(utxoManager)
 
         // Initialize indexer client (development mode for HTTP)
         indexerClient = IndexerClientImpl(
             baseUrl = INDEXER_BASE_URL,
             developmentMode = true // Allow HTTP for local testing
         )
+
+        repository = BalanceRepository(utxoManager, indexerClient)
 
         // Initialize sync state manager and clear any previous state
         syncStateManager = SyncStateManager(context)
@@ -277,9 +278,11 @@ class BalanceRepositoryIntegrationTest {
 
         val largeUtxo = com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity(
             id = "test_large_amount:0",
+            transactionHash = "test_large_amount",
             intentHash = "test_large_amount",
             outputIndex = 0,
             owner = TEST_UNSHIELDED_ADDRESS,
+            ownerPublicKey = null,
             value = largeAmount.toString(),
             tokenType = "TNIGHT",
             state = com.midnight.kuira.core.indexer.database.UtxoState.AVAILABLE,
@@ -346,9 +349,11 @@ class BalanceRepositoryIntegrationTest {
         val intentHash = "test_${tokenType}_$index"
         return com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity(
             id = "${intentHash}:$index",
+            transactionHash = intentHash,
             intentHash = intentHash,
             outputIndex = index,
             owner = TEST_UNSHIELDED_ADDRESS,
+            ownerPublicKey = null,
             value = amount.toString(),
             tokenType = tokenType,
             state = com.midnight.kuira.core.indexer.database.UtxoState.AVAILABLE,

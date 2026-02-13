@@ -1,21 +1,15 @@
 package com.midnight.kuira.core.ledger.api
 
 import com.midnight.kuira.core.indexer.api.IndexerClient
-import com.midnight.kuira.core.indexer.model.TransactionType
-import com.midnight.kuira.core.indexer.model.UnshieldedTransaction
-import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.model.UtxoSpend
-import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -26,46 +20,30 @@ class TransactionSubmitterTest {
 
     @Test
     fun `submitAndWait returns Success when transaction is confirmed`() = runTest {
-        // Given: Mock node client that returns transaction hash
+        // Given: Mock node client that returns finalized result via WebSocket
         val nodeClient = mockk<NodeRpcClient>()
         val expectedTxHash = "a".repeat(64)  // 64 hex chars
-        coEvery { nodeClient.submitTransaction(any()) } returns expectedTxHash
+        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } returns
+            TransactionFinalizationResult.Finalized(
+                txHash = expectedTxHash,
+                blockHash = "b".repeat(64),
+                blockHeight = 12345L
+            )
 
         // Given: Mock proof server client that returns proven tx
         val proofServerClient = mockk<ProofServerClient>()
         coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
 
-        // Given: Mock indexer client that confirms transaction
-        val indexerClient = mockk<IndexerClient>()
-        val confirmedTx = UnshieldedTransactionUpdate.Transaction(
-            transaction = UnshieldedTransaction(
-                id = 12345,
-                hash = expectedTxHash,
-                type = TransactionType.RegularTransaction,
-                protocolVersion = 1,
-                block = UnshieldedTransaction.BlockInfo(
-                    timestamp = 1704067200000
-                )
-            ),
-            createdUtxos = emptyList(),
-            spentUtxos = emptyList()
-        )
-        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns flowOf(confirmedTx)
+        // Given: Mock indexer client (not called in WebSocket-based flow)
+        val indexerClient = mockk<IndexerClient>(relaxed = true)
 
         // Given: Transaction serializer that returns sealed tx
         val serializer = mockk<TransactionSerializer>()
         every { serializer.serialize(any()) } returns "unproven_tx_hex"
         every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
 
-        // Given: Mock UTXO manager that processes updates
+        // Given: Mock UTXO manager for marking UTXOs as spent after finalization
         val utxoManager = mockk<UtxoManager>()
-        coEvery { utxoManager.processUpdate(any()) } returns UtxoManager.ProcessingResult.TransactionProcessed(
-            transactionId = 12345,
-            transactionHash = expectedTxHash,
-            createdCount = 0,
-            spentCount = 1,
-            status = com.midnight.kuira.core.indexer.model.TransactionStatus.SUCCESS
-        )
         coEvery { utxoManager.markUtxosAsSpentByIntent(any()) } returns 1
 
         // Given: Transaction submitter
@@ -92,15 +70,15 @@ class TransactionSubmitterTest {
         assertEquals(expectedTxHash, success.txHash)
         assertEquals(12345L, success.blockHeight)
 
-        // Verify: Node client was called
-        coVerify { nodeClient.submitTransaction(any()) }
+        // Verify: Node client was called with WebSocket-based finalization
+        coVerify { nodeClient.submitAndWaitForFinalization(any(), any()) }
     }
 
     @Test
     fun `submitAndWait returns Failed when node rejects transaction`() = runTest {
-        // Given: Mock node client that rejects transaction
+        // Given: Mock node client that rejects transaction via WebSocket
         val nodeClient = mockk<NodeRpcClient>()
-        coEvery { nodeClient.submitTransaction(any()) } throws TransactionRejected(
+        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } throws TransactionRejected(
             reason = "Invalid signature",
             txHash = null
         )

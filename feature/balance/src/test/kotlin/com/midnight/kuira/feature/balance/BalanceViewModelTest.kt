@@ -66,7 +66,7 @@ class BalanceViewModelTest {
         whenever(subscriptionManagerFactory.create()).thenReturn(subscriptionManager)
 
         // Default: subscription returns empty flow (no sync states)
-        whenever(subscriptionManager.startSubscription(any())).thenReturn(emptyFlow())
+        whenever(subscriptionManager.startSubscription(any(), any())).thenReturn(emptyFlow())
 
         formatter = BalanceFormatter()
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
@@ -339,8 +339,8 @@ class BalanceViewModelTest {
         val tnight = state.balances.find { it.tokenType == "TNIGHT" }
         val dust = state.balances.find { it.tokenType == "DUST" }
 
-        assertEquals("5.000000 TNIGHT", tnight?.balanceFormatted)
-        assertEquals("3.000000 DUST", dust?.balanceFormatted)
+        assertEquals("5 TNIGHT", tnight?.balanceFormatted)
+        assertEquals("3 DUST", dust?.balanceFormatted)
     }
 
     // ==================== Total Balance Calculation ====================
@@ -581,24 +581,26 @@ class BalanceViewModelTest {
 
     @Test
     fun `loadBalances rejects blank address`() = runTest {
-        // When/Then: Blank address throws
-        try {
-            viewModel.loadBalances("")
-            assertTrue("Should have thrown IllegalArgumentException", false)
-        } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("blank"))
-        }
+        // When: Blank address
+        viewModel.loadBalances("")
+        advanceUntilIdle()
+
+        // Then: Error state with blank message
+        val state = viewModel.balanceState.value
+        assertTrue(state is BalanceUiState.Error)
+        assertTrue((state as BalanceUiState.Error).message.contains("blank"))
     }
 
     @Test
     fun `loadBalances rejects invalid address format`() = runTest {
-        // When/Then: Address not starting with mn_ throws
-        try {
-            viewModel.loadBalances("invalid_address_123")
-            assertTrue("Should have thrown IllegalArgumentException", false)
-        } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("mn_"))
-        }
+        // When: Invalid address format
+        viewModel.loadBalances("invalid_address_123")
+        advanceUntilIdle()
+
+        // Then: Error state with mn_ message
+        val state = viewModel.balanceState.value
+        assertTrue(state is BalanceUiState.Error)
+        assertTrue((state as BalanceUiState.Error).message.contains("mn_"))
     }
 
     @Test
@@ -653,8 +655,8 @@ class BalanceViewModelTest {
         val dust = state2.balances.find { it.tokenType == "DUST" }
         val tnight = state2.balances.find { it.tokenType == "TNIGHT" }
 
-        assertEquals("1.000000 DUST", dust?.balanceFormatted)
-        assertEquals("0.500000 TNIGHT", tnight?.balanceFormatted)
+        assertEquals("1 DUST", dust?.balanceFormatted)
+        assertEquals("0.5 TNIGHT", tnight?.balanceFormatted)
     }
 
     @Test
@@ -776,7 +778,7 @@ class BalanceViewModelTest {
 
         // Then: Formatted correctly
         val state = viewModel.balanceState.value as BalanceUiState.Success
-        assertEquals("0.000000 DUST", state.balances[0].balanceFormatted)
+        assertEquals("0 DUST", state.balances[0].balanceFormatted)
         assertEquals(BigInteger.ZERO, state.totalBalance)
     }
 
@@ -794,7 +796,7 @@ class BalanceViewModelTest {
             SyncState.Syncing(1, 100),
             SyncState.Synced(100)
         )
-        whenever(subscriptionManager.startSubscription(testAddress)).thenReturn(syncStates)
+        whenever(subscriptionManager.startSubscription(any(), any())).thenReturn(syncStates)
 
         // When: Load balances
         viewModel.loadBalances(testAddress)
@@ -840,7 +842,7 @@ class BalanceViewModelTest {
             SyncState.Connecting,
             SyncState.Error("Connection failed")
         )
-        whenever(subscriptionManager.startSubscription(testAddress)).thenReturn(syncStates)
+        whenever(subscriptionManager.startSubscription(any(), any())).thenReturn(syncStates)
 
         // When: Load balances
         viewModel.loadBalances(testAddress)
