@@ -9,6 +9,7 @@ import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.network.NetworkConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -64,8 +65,16 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     private val repository: BalanceRepository,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val formatter: BalanceFormatter,
+    private val networkConfig: NetworkConfig,
     private val clock: Clock = Clock.systemDefaultZone()  // Injected for testability
 ) : ViewModel() {
+
+    /**
+     * Default test address for the currently selected network (MVP only).
+     * Maps network to a known test wallet address for faster testing.
+     */
+    val defaultTestAddress: String = DEFAULT_TEST_ADDRESSES[networkConfig.network.addressPrefix]
+        ?: ""
 
     private val _balanceState = MutableStateFlow<BalanceUiState>(BalanceUiState.Loading())
     val balanceState: StateFlow<BalanceUiState> = _balanceState.asStateFlow()
@@ -319,5 +328,12 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
         // Date formatting patterns
         const val TIME_PATTERN = "h:mm a"
         const val DATE_TIME_PATTERN = "MMM d 'at' h:mm a"
+
+        // MVP test addresses per network — Bob is the sender (from kuira-verification-test wallet files)
+        val DEFAULT_TEST_ADDRESSES = mapOf(
+            "mn_addr_preprod" to "mn_addr_preprod14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqjj0mtk", // Bob
+            "mn_addr_undeployed" to "mn_addr_undeployed14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqgf4968", // Bob
+            "mn_addr_preview" to "" // No test wallet yet
+        )
     }
 }

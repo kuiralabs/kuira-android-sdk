@@ -8,6 +8,8 @@ import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
@@ -72,7 +74,8 @@ class SendViewModelTest {
             indexerClient = indexerClient,
             dustRepository = dustRepository,
             subscriptionManagerFactory = subscriptionManagerFactory,
-            syncStateManager = syncStateManager
+            syncStateManager = syncStateManager,
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
         )
     }
 

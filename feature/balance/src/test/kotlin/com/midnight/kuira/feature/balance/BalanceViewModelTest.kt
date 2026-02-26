@@ -6,6 +6,8 @@ import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -70,7 +72,8 @@ class BalanceViewModelTest {
 
         formatter = BalanceFormatter()
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
-        viewModel = BalanceViewModel(repository, subscriptionManagerFactory, formatter, fakeClock)
+        val testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
+        viewModel = BalanceViewModel(repository, subscriptionManagerFactory, formatter, testNetworkConfig, fakeClock)
     }
 
     /**

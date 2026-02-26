@@ -47,6 +47,7 @@ android {
 dependencies {
     // Core modules
     implementation(project(":core:indexer"))
+    implementation(project(":core:network"))
 
     // Android Core
     implementation(libs.androidx.core.ktx)

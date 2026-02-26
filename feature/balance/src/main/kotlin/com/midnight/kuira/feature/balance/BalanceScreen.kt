@@ -72,11 +72,8 @@ fun BalanceScreen(
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
 
-    // Address input state - pre-filled with preprod test address for MVP testing
-    // Note: This is a preprod address matching the default network selection
-    var address by remember {
-        mutableStateOf("mn_addr_preprod14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqjj0mtk")
-    }
+    // Address input state - pre-filled with test address matching the selected network
+    var address by remember { mutableStateOf(viewModel.defaultTestAddress) }
 
     // Auto-load balance on launch for faster testing (MVP ONLY)
     LaunchedEffect(Unit) {

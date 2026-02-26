@@ -102,14 +102,10 @@ fun SendScreen(
     }
 
     // User inputs with test placeholders (MVP ONLY - for faster testing)
-    // MVP test defaults: Bob (sender/BalanceScreen) → Alice (recipient)
-    var recipientAddress by remember {
-        mutableStateOf("mn_addr_preprod10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvsydj6y4")
-    }
+    // MVP test defaults: auto-filled based on selected network
+    var recipientAddress by remember { mutableStateOf(viewModel.defaultTestRecipient) }
     var amountInput by remember { mutableStateOf("1") }
-    var seedPhrase by remember {
-        mutableStateOf("slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist")
-    }
+    var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
 
     Scaffold(
         topBar = {

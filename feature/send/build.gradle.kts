@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":core:indexer"))     // For BalanceRepository
     implementation(project(":core:ledger"))      // For transaction building/signing/submission
     implementation(project(":core:crypto"))      // For address validation (Bech32m)
+    implementation(project(":core:network"))     // For NetworkConfig (default test addresses)
 
     // Android Core
     implementation(libs.androidx.core.ktx)

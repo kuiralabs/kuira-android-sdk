@@ -187,10 +187,15 @@ class IndexerClientImpl(
                 .buffer(Channel.UNLIMITED)
                 .collect { jsonElement ->
                     // GraphQL response format: {data: {unshieldedTransactions: {...}}}
-                    // Extract the unshieldedTransactions field from data
-                    val unshieldedTransactionsJson = jsonElement
-                        .jsonObject["data"]
-                        ?.jsonObject?.get("unshieldedTransactions")
+                    // The indexer may send messages with "data": null (e.g. keepalives,
+                    // completion signals, or errors). Skip these gracefully.
+                    val dataElement = jsonElement.jsonObject["data"]
+                    if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+                        return@collect // Skip null data messages
+                    }
+
+                    val unshieldedTransactionsJson = dataElement
+                        .jsonObject["unshieldedTransactions"]
                         ?: throw InvalidResponseException("Missing unshieldedTransactions in response")
 
                     // Parse to UnshieldedTransactionUpdate

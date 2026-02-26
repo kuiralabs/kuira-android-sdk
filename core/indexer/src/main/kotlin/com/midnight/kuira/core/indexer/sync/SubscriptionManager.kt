@@ -192,6 +192,13 @@ class SubscriptionManager(
         }
         send(SyncState.Connecting)
 
+        // Start initial sync timeout: if no transactions arrive at all
+        // (e.g. 0-balance address with no history), emit Synced after timeout
+        syncTimeoutJob = launch {
+            delay(SYNC_TIMEOUT_MS)
+            send(SyncState.Synced(lastId ?: 0))
+        }
+
         try {
             // Collect from subscription and map to sync states
             indexerClient.subscribeToUnshieldedTransactions(

@@ -11,6 +11,8 @@ import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -83,8 +85,21 @@ class SendViewModel @Inject constructor(
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
-    private val syncStateManager: SyncStateManager
+    private val syncStateManager: SyncStateManager,
+    private val networkConfig: NetworkConfig
 ) : ViewModel() {
+
+    /**
+     * Default test recipient address for the currently selected network (MVP only).
+     * Uses Alice's address for preprod, falls back to empty for unknown networks.
+     */
+    val defaultTestRecipient: String = DEFAULT_TEST_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
+
+    /**
+     * Default test seed phrase for the currently selected network (MVP only).
+     * Uses Bob's mnemonic (Bob = sender on BalanceScreen, same mnemonic for all networks).
+     */
+    val defaultTestSeedPhrase: String = DEFAULT_TEST_SEED_PHRASES[networkConfig.network] ?: ""
 
     private val _state = MutableStateFlow<SendUiState>(SendUiState.Idle())
 
@@ -711,5 +726,17 @@ class SendViewModel @Inject constructor(
         private const val TAG = "SendViewModel"
         private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
         private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
+
+        // MVP test recipients per network — Alice is the recipient (from kuira-verification-test wallet files)
+        val DEFAULT_TEST_RECIPIENTS = mapOf(
+            "mn_addr_preprod" to "mn_addr_preprod10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvsydj6y4", // Alice
+            "mn_addr_undeployed" to "mn_addr_undeployed10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvs7kgy4y", // Alice
+            "mn_addr_preview" to ""
+        )
+        // MVP test seed phrases per network — Bob is the sender (from kuira-verification-test wallet files)
+        val DEFAULT_TEST_SEED_PHRASES = mapOf(
+            MidnightNetwork.PREPROD to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist", // Bob
+            MidnightNetwork.UNDEPLOYED to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist" // Bob (same mnemonic, different network)
+        )
     }
 }
