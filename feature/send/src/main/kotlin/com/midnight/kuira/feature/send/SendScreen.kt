@@ -102,12 +102,13 @@ fun SendScreen(
     }
 
     // User inputs with test placeholders (MVP ONLY - for faster testing)
+    // MVP test defaults: Bob (sender/BalanceScreen) → Alice (recipient)
     var recipientAddress by remember {
-        mutableStateOf("mn_addr_undeployed1jnpthhx7e8wrjgjc7f6c7y92ppqqk0rqmf7f8sc8pkjdv6penazq2c4sgg")
+        mutableStateOf("mn_addr_preprod10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvsydj6y4")
     }
     var amountInput by remember { mutableStateOf("1") }
     var seedPhrase by remember {
-        mutableStateOf("woman math elevator detect frost reject lucky powder omit asset mail patrol scare illness image feed athlete original magic able crew piano fluid swift")
+        mutableStateOf("slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist")
     }
 
     Scaffold(

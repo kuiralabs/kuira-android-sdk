@@ -25,12 +25,12 @@ import javax.annotation.concurrent.ThreadSafe
  * **Native Library:**
  * This class loads `libkuira_crypto_ffi.so` (Android) which is compiled from:
  * - Location: `rust/kuira-crypto-ffi/`
- * - Dependencies: `midnight-zswap v6.1.0-alpha.5`, `midnight-serialize`
+ * - Dependencies: `midnight-zswap` (currently v7.0.0), `midnight-serialize`
  *
  * **Version Compatibility:**
- * CRITICAL: The Rust library MUST be compiled against Midnight Ledger v6.1.0-alpha.5
- * (or compatible). Using different versions produces completely different keys,
- * making wallets incompatible with Lace wallet.
+ * Key derivation algorithm is identical across v6/v7 (same domain separators, same KDF).
+ * The Rust FFI is the version abstraction boundary — Kotlin depends on stable function
+ * signatures, not Midnight version internals.
  *
  * **Thread Safety:**
  * This object is thread-safe. The underlying Rust functions are pure and stateless.
@@ -145,7 +145,7 @@ object ShieldedKeyDeriver {
      * - Total: < 2ms per derivation
      *
      * **Compatibility:**
-     * The output matches Midnight SDK (`@midnight-ntwrk/ledger-v6` v6.1.0-alpha.6):
+     * The output matches Midnight SDK (key derivation identical across v6/v7):
      * ```javascript
      * const zswapKeys = ZswapSecretKeys.fromSeed(seed);
      * const coinPk = zswapKeys.coinPublicKey;  // Matches our coinPublicKey

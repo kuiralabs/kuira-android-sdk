@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
  * **Test Vector:**
  * Mnemonic: "abandon abandon ... art" (24 words)
  * Path: m/44'/2400'/0'/3/0
- * Expected output matches Midnight SDK v6.1.0-alpha.6
+ * Expected output matches Midnight SDK (key derivation identical across v6/v7)
  */
 @RunWith(AndroidJUnit4::class)
 class HDWalletShieldedIntegrationTest {

@@ -27,7 +27,7 @@ import javax.annotation.concurrent.ThreadSafe
  * **Native Library:**
  * This class loads `libkuira_crypto_ffi.so` (Android) which is compiled from:
  * - Location: `rust/kuira-crypto-ffi/`
- * - Dependencies: `midnight-ledger v6.1.0-alpha.5`
+ * - Dependencies: `midnight-ledger` (currently v7.0.0, version-abstract FFI)
  *
  * **Thread Safety:**
  * This object is thread-safe. The underlying Rust functions are pure and stateless.

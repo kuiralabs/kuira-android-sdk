@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
  * **Requirements:**
  * - Native library `libkuira_crypto_ffi.so` must be bundled in APK
  * - Library must be built for the target device architecture (arm64-v8a, armeabi-v7a, x86, x86_64)
- * - Rust FFI compiled against Midnight Ledger v6.1.0-alpha.5
+ * - Rust FFI compiled against midnight-zswap (currently v7.0.0, version-abstract)
  *
  * **Test Vectors:**
  * These use the standard BIP-39 test mnemonic:
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  *
  * Derived at path: `m/44'/2400'/0'/3/0` (Zswap role, index 0)
  *
- * Expected outputs match Midnight SDK (`@midnight-ntwrk/ledger-v6` v6.1.0-alpha.6)
+ * Expected outputs match Midnight SDK (key derivation is identical across v6/v7)
  */
 @RunWith(AndroidJUnit4::class)
 class ShieldedKeyDeriverIntegrationTest {
@@ -62,7 +62,7 @@ class ShieldedKeyDeriverIntegrationTest {
         assertNotNull("Keys should be derived successfully", keys)
         keys!!
 
-        // Expected values from Midnight SDK v6.1.0-alpha.6
+        // Expected values from Midnight SDK (identical across v6/v7)
         assertEquals(
             "Coin public key should match Midnight SDK output",
             "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",

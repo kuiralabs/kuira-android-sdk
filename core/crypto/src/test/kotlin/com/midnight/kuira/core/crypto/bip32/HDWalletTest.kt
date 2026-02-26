@@ -18,8 +18,8 @@ import org.junit.Test
  * using the official Midnight SDK (@midnight-ntwrk/wallet-sdk-hd).
  *
  * **Mnemonic:**
- * "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon
- *  abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+ * "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+ *
  *
  * **Expected Results (from Node.js with Lace compatibility):**
  * - Seed (32 bytes, Lace compatible): 408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70

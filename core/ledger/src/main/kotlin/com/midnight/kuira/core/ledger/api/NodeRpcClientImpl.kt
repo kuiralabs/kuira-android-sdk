@@ -107,21 +107,27 @@ class NodeRpcClientImpl(
     private val requestIdCounter = AtomicInteger(0)
 
     init {
-        // Validate configuration
-        if (!developmentMode && !nodeUrl.startsWith("https://")) {
+        val isSecure = nodeUrl.startsWith("https://") || nodeUrl.startsWith("wss://")
+        val isLocalhost = nodeUrl.startsWith("http://localhost") ||
+            nodeUrl.startsWith("http://127.0.0.1") ||
+            nodeUrl.startsWith("http://10.0.2.2") ||  // Android emulator special IP
+            nodeUrl.startsWith("ws://localhost") ||
+            nodeUrl.startsWith("ws://127.0.0.1") ||
+            nodeUrl.startsWith("ws://10.0.2.2")
+
+        // Production mode requires secure connections
+        if (!developmentMode && !isSecure) {
             throw IllegalArgumentException(
-                "Production mode requires HTTPS. Got: $nodeUrl\n" +
+                "Production mode requires HTTPS/WSS. Got: $nodeUrl\n" +
                 "Use developmentMode=true for HTTP testing (INSECURE)"
             )
         }
 
-        if (developmentMode &&
-            !nodeUrl.startsWith("http://localhost") &&
-            !nodeUrl.startsWith("http://127.0.0.1") &&
-            !nodeUrl.startsWith("http://10.0.2.2")) {  // Android emulator special IP
+        // Development mode allows secure URLs (any host) or insecure URLs (localhost only)
+        if (developmentMode && !isSecure && !isLocalhost) {
             throw IllegalArgumentException(
-                "Development mode only allows localhost. Got: $nodeUrl\n" +
-                "Use HTTPS for remote nodes"
+                "Development mode only allows localhost for insecure connections. Got: $nodeUrl\n" +
+                "Use HTTPS/WSS for remote nodes"
             )
         }
     }
