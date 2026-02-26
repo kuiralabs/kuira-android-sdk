@@ -465,29 +465,20 @@ feature/balance/src/test/kotlin/.../
 
 ---
 
-## ⚠️ Missing: Shielded Balance Tracking (Phase 4B-Shielded)
+## ⚠️ Phase 4B-Shielded: Shielded Balance Tracking
 
-**Status:** ⏸️ **DEFERRED** - Not implemented in Phase 4B
+**Status:** ⏸️ **NOT STARTED** — Blocked by Dust Registration (Phase 2F.1)
 **Estimate:** 8-12 hours
-**Priority:** HIGH - Required before Phase 3 (Shielded Transactions)
+**Priority:** HIGH — Required before Phase 3 (Shielded Transactions)
 
 ### What Was Built (Phase 4B)
 ✅ **Unshielded balances ONLY:**
-- `subscribeToUnshieldedTransactions(address)` - WebSocket subscription
-- `UnshieldedUtxoEntity` - Room database entity
-- `UnshieldedUtxoDao` - Database operations
-- `UnshieldedBalanceManager` - UTXO tracking
-- `BalanceViewModel` - UI state management
+- `subscribeToUnshieldedTransactions(address)` — WebSocket subscription
+- `UnshieldedUtxoEntity` — Room database entity
+- `UnshieldedUtxoDao` — Database operations
+- `UnshieldedBalanceManager` — UTXO tracking
+- `BalanceViewModel` — UI state management
 - Balance display UI (Compose)
-
-### What's Missing (Shielded Balances)
-❌ **Shielded balance tracking NOT implemented:**
-- `subscribeToShieldedTransactions(sessionId)` - WebSocket subscription
-- `ShieldedUtxoEntity` - Room database entity (mentioned but not created)
-- `ShieldedUtxoDao` - Database operations (mentioned but not created)
-- `ShieldedBalanceManager` - UTXO tracking for shielded pool
-- Shielded balance calculation (requires decryption with shielded keys)
-- Shielded balance display in UI
 
 ### Why This Matters
 **Cannot implement Phase 3 (Shielded Transactions) without this:**
@@ -495,55 +486,239 @@ feature/balance/src/test/kotlin/.../
 - Need to decrypt shielded notes with encryption keys from Phase 1B
 - Need to display shielded balances to test transactions
 
-### Implementation Requirements (When Ready)
+### Dependency Order
+
+```
+Step 1 (Rust FFI) → Step 2 (JNI Bridge) → Step 3 (Kotlin Wrapper)
+                                                      ↓
+Step 4 (Event Models) ──────────────────────→ Step 6 (ShieldedSyncManager)
+Step 5 (Database Layer) ────────────────────→        ↓
+                                              Step 7 (ShieldedBalanceRepository)
+                                                      ↓
+                                              Step 8 (UI Integration)
+```
+
+Steps 1→2→3 are sequential (each depends on previous).
+Steps 4 and 5 can be done in parallel with Steps 1-3.
+Step 6 requires Steps 3, 4, and 5.
+Steps 7→8 are sequential after Step 6.
+
+---
+
+### Step 1: Rust FFI — Version-Abstract ZswapLocalState
+
+**Goal:** Expose Midnight's `zswap::local::State` through a stable, version-abstract C FFI layer. The FFI contract is the abstraction boundary — when v8 comes, only the Rust implementation changes, not the function signatures or return formats.
+
+**What to build:**
+- New file `rust/kuira-crypto-ffi/src/zswap_ffi.rs`
+- Stable FFI contract (these signatures won't change across versions):
+  - `create` — empty state
+  - `free` — cleanup
+  - `serialize` / `deserialize` — persistence (opaque blob, format is Rust's concern)
+  - `replay_events` — process blockchain events (takes seed + hex events, returns new state)
+  - `get_balances` — query balance (returns JSON, format is the contract)
+  - `get_coin_count` / `get_coin_at` — iterate coins
+  - `get_state_changes` — returns what changed in last replay (received/spent coins) as JSON
+- A test-only helper: `create_test_zswap_output_event(seed, token_type_hex, value)` — generates a valid encrypted output event so Kotlin tests work without a live indexer
+- Register module in `lib.rs`
+
+**Version abstraction principle:** Kotlin never sees Rust types. All data crosses the FFI as JSON strings or opaque byte blobs. If v8 changes internals, the JSON schema stays the same.
+
+**Key files:**
+- `rust/kuira-crypto-ffi/src/lib.rs` — register the new module
+- `rust/kuira-crypto-ffi/Cargo.toml` — depends on `midnight-zswap` v7
+
+---
+
+### Step 2: JNI C Bridge for ZswapLocalState
+
+**Goal:** Create the JNI C interface that marshals Kotlin calls to the Rust FFI.
+
+**What to build:**
+- New file: `core/crypto/src/main/cpp/zswap_bridge.c`
+- JNI function stubs (one per FFI function): `nativeCreate`, `nativeReplayEvents`, `nativeGetBalances`, `nativeSerialize`, `nativeDeserialize`, `nativeFree`, etc.
+- Error handling wrapper: All FFI calls are wrapped with try-catch for FFI panics
+- Link in CMakeLists.txt (already configured in Phase 1B; add `zswap_bridge.c` to sources)
+
+**Blocked by:** Step 1
+
+---
+
+### Step 3: Kotlin ZswapLocalState Wrapper + Android Tests
+
+**Goal:** Create a safe, idiomatic Kotlin wrapper that mirrors the `DustLocalState` pattern.
+
+**What to build:**
+- `core/crypto/src/main/kotlin/.../shielded/ZswapLocalState.kt`
+  - `replayEvents(seed, eventsHex)` → new state
+  - `getBalances()` → `Map<String, BigInteger>`
+  - `getCoinCount()` → Int
+  - `serialize()` / `deserialize()` — persistence
+  - `AutoCloseable` pattern for `native_free()` lifecycle
+  - Memory safety following `DustLocalState` security policies
+
+**Tests:**
+- `ZswapLocalStateTest.kt` — unit tests with mock Rust FFI
+- `ZswapLocalStateIntegrationTest.kt` — integration test with real FFI
+  - Replay test events, verify balance
+  - Serialize/deserialize round-trip
+  - Multiple state instances don't interfere
+
+**Blocked by:** Step 2
+
+---
+
+### Step 4: Shielded Event Models + GraphQL Subscription
+
+**Goal:** Define the event data structures and add a GraphQL subscription query for shielded events.
+
+**What to build:**
+
+**Event Model:**
+- `core/indexer/src/main/kotlin/.../model/ShieldedEvent.kt`
+  - `ShieldedEventUpdate(id: Long, raw: String, maxId: Long)`
 
 **GraphQL Subscription:**
-```graphql
-subscription ShieldedTransactions($sessionId: String!) {
-  shieldedTransactions(sessionId: $sessionId) {
-    commitments     # Array of note commitments
-    nullifiers      # Array of spent nullifiers
-    timestamp
-    # NOTE: Data is encrypted, requires decryption with enc_pk
+- Add to `GraphQLQueries.kt`:
+  ```graphql
+  subscription ZswapEvents($id: Int!) {
+    zswapLedgerEvents(id: $id) {
+      id
+      raw
+      maxId
+    }
   }
-}
-```
+  ```
 
-**Database Schema:**
-```kotlin
-@Entity(tableName = "shielded_utxos")
-data class ShieldedUtxoEntity(
-    @PrimaryKey val commitment: String,        // 32-byte note commitment
-    val encryptedNote: ByteArray,              // Encrypted note data
-    val value: Long,                           // Decrypted value
-    val owner: String,                         // Shielded address (enc_pk)
-    val tokenType: String,
-    val spent: Boolean,
-    val spentAt: Long?,
-    val createdAt: Long
-)
-```
+**WebSocket Client Integration:**
+- Add `subscribeToZswapEvents(startId: Long): Flow<ShieldedEventUpdate>` to `GraphQLWebSocketClient`
+- Reuse existing WebSocket infrastructure from Phase 4B-1
 
-**Decryption Required:**
-- Use `enc_pk` (encryption public key) from Phase 1B
-- Decrypt shielded notes to extract value
-- Match commitments to determine spendable UTXOs
-- Track nullifiers to detect spent notes
+**Key difference from unshielded:**
+- Unshielded: filtered by address, returns parsed JSON with readable data
+- Shielded: NOT filtered (receives ALL events), returns raw hex bytes (Rust processes entirely)
+- The `raw` field is opaque — do NOT parse in Kotlin, pass directly to Rust FFI
 
-**Estimate Breakdown:**
-- Shielded subscription: 2-3h
-- Note decryption logic: 3-4h (may require JNI to Rust)
-- Database + DAO: 1-2h
-- Balance manager: 2-3h
-- Testing: 2-3h
+**Can be done in parallel with Steps 1-3.**
 
-**Dependencies:**
-- ✅ Phase 1B: Shielded key derivation (encryption keys)
-- ✅ Phase 4B: WebSocket client infrastructure
-- ⏸️ **Note decryption:** May need Rust FFI (similar to Phase 2D-FFI)
+---
 
-**Recommendation:**
-Implement this BEFORE starting Phase 3 (Shielded Transactions). Can't send shielded transactions without knowing your shielded balance.
+### Step 5: Database Layer — State Persistence
+
+**Goal:** Room entity to store serialized ZswapLocalState so syncing resumes across app restarts.
+
+**What to build:**
+
+**Entity:**
+- `core/indexer/src/main/kotlin/.../storage/ShieldedStateEntity.kt`
+  - Singleton row (`id = 0`)
+  - `serializedState: ByteArray` — result of `state.serialize()`
+  - `lastEventId: Long` — last processed event (for resume)
+  - `lastUpdated: Long` — timestamp
+
+**DAO:**
+- `core/indexer/src/main/kotlin/.../storage/ShieldedStateDao.kt`
+  - `getState()`, `updateState()`, `clear()`
+
+**Migration:**
+- Add `ShieldedStateEntity` to `KuiraDatabase.kt` entities list
+- Create migration from previous version
+
+**Key design decision:** Store the entire serialized state as a blob. Don't normalize — the Rust state is opaque to Kotlin.
+
+**Can be done in parallel with Steps 1-3.**
+
+---
+
+### Step 6: ShieldedSyncManager — Orchestration
+
+**Goal:** Connect WebSocket subscription → event processing → database persistence → balance queries.
+
+**What to build:**
+- `core/indexer/src/main/kotlin/.../sync/ShieldedSyncManager.kt`
+- Responsibilities:
+  1. **Load state:** Deserialize stored `ShieldedStateEntity` to get `lastEventId`
+  2. **Subscribe:** Connect WebSocket, subscribe to `zswapLedgerEvents(id: lastEventId + 1)`
+  3. **Process:** For each batch of events: collect raw hex → call `state.replayEvents(seed, hexList)` → retrieve changes → serialize new state to database
+  4. **Progress tracking:** Emit `SyncProgress` (currentEventId, highestEventId, isConnected)
+  5. **Error handling:** On connection loss, retry with exponential backoff; preserve last known state
+
+**Comparison to unshielded:**
+- Unshielded: Subscription → parse JSON → UtxoManager → Room entities → BalanceRepository
+- Shielded: Subscription → raw hex → Rust FFI → Room blob → ShieldedBalanceRepository
+
+**Blocked by:** Steps 3, 4, and 5
+
+---
+
+### Step 7: ShieldedBalanceRepository
+
+**Goal:** Query balance from Rust state and expose via Flow for the UI layer.
+
+**What to build:**
+- `core/indexer/src/main/kotlin/.../repository/ShieldedBalanceRepository.kt`
+  - `getBalance()` → `Map<String, BigInteger>` (on-demand from serialized state)
+  - `observeBalance()` → `Flow<Map<String, BigInteger>>` (watches database for updates)
+
+**Design decisions:**
+- Balance queried on-demand from serialized state (no separate balance table)
+- Each query requires deserialization (acceptable — state is small, <1MB)
+- Observe pattern uses Room's Flow to detect database changes
+
+**Blocked by:** Step 6
+
+---
+
+### Step 8: UI Integration — Balance Screen
+
+**Goal:** Display shielded balance on the existing Balance screen, with loading and sync progress.
+
+**What to build:**
+
+**ViewModel:**
+- `ShieldedBalanceViewModel` (or extend existing `BalanceViewModel`)
+  - Observe `ShieldedBalanceRepository.observeBalance()`
+  - Expose sync progress from `ShieldedSyncManager`
+
+**Compose UI:**
+- Add shielded balance section to existing `BalanceScreen.kt`
+- Sync progress indicator (LinearProgressIndicator: currentEventId / highestEventId)
+- Loading/error states
+
+**Navigation:**
+- Add shielded balance to existing balance screen (not a separate screen)
+
+**Blocked by:** Step 7
+
+---
+
+### Supporting Documentation
+
+- `docs/learning/SHIELDED_BALANCE_DEEP_DIVE.md` — Why shielded is different, key hierarchy, commitments/nullifiers, ZswapLocalState internals
+- `docs/learning/SHIELDED_SDK_CODE_REFERENCE.md` — Annotated Rust SDK code (curves, encoding, encryption, Merkle tree, event replay)
+
+### Files Affected
+
+**Rust (New):**
+- `rust/kuira-crypto-ffi/src/zswap_ffi.rs`
+- `rust/kuira-crypto-ffi/src/lib.rs` (modify)
+
+**C/JNI (New):**
+- JNI bridge additions in `rust/kuira-crypto-ffi/jni/kuira_crypto_jni.c`
+
+**Kotlin (New):**
+- `core/crypto/.../shielded/ZswapLocalState.kt`
+- `core/indexer/.../model/ShieldedEvent.kt`
+- `core/indexer/.../storage/ShieldedStateEntity.kt`
+- `core/indexer/.../storage/ShieldedStateDao.kt`
+- `core/indexer/.../sync/ShieldedSyncManager.kt`
+- `core/indexer/.../repository/ShieldedBalanceRepository.kt`
+
+**Kotlin (Modify):**
+- `core/indexer/.../graphql/GraphQLQueries.kt` — add subscription
+- `core/indexer/.../websocket/GraphQLWebSocketClient.kt` — add method
+- `core/indexer/.../database/KuiraDatabase.kt` — add entity + migration
+- `feature/balance/.../BalanceScreen.kt` — add shielded section
 
 ---
 
