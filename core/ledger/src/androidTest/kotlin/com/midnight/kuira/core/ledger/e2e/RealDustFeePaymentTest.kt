@@ -279,7 +279,7 @@ class RealDustFeePaymentTest {
         println("   Events hex length: ${eventsHex.length} chars (${eventsHex.length / 2} bytes)")
 
         // Debug: Check event IDs to ensure they're sequential
-        val eventCount = eventsHex.split("6d69646e696768743a6576656e745b76355d3a").filter { it.isNotEmpty() }.size
+        val eventCount = eventsHex.split("6d69646e696768743a6576656e745b76395d3a").filter { it.isNotEmpty() }.size
         println("   Number of events (by prefix): $eventCount")
 
         val newState = initialState!!.replayEvents(seed, eventsHex)

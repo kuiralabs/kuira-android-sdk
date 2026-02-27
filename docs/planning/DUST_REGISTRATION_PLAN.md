@@ -10,10 +10,10 @@
 
 | # | Step | Status | Notes |
 |---|------|--------|-------|
-| 0 | Fix event prefix v5→v9 | ⏳ | `dust_ffi.rs:488` + `IndexerClientImpl.kt` comments |
-| 1 | Rust FFI — dust registration serialization | ⏳ | `create_dust_registration()` + `serialize_dust_registration_intent()` |
-| 2 | JNI bridge for registration | ⏳ | Wrappers in `kuira_crypto_jni.c` |
-| 3 | Kotlin DustRegistration wrapper | ⏳ | Extend `core/crypto/.../dust/` |
+| 0 | Fix event prefix v5→v9 | ✅ | `dust_ffi.rs:488`, `IndexerClientImpl.kt`, `RealDustFeePaymentTest.kt` |
+| 1 | Rust FFI — dust registration serialization | ✅ | `build_dust_registration_transaction()` in `serialize.rs` — test with sig verification passes |
+| 2 | JNI bridge for registration | ✅ | `nativeBuildDustRegistrationTransaction` in `kuira_crypto_jni.c` |
+| 3 | Kotlin DustRegistration wrapper | ✅ | `DustRegistrationBuilder.kt` in `core/ledger/.../dust/` |
 | 4 | `feature/dust` module — ViewModel & UI | ⏳ | DustScreen, DustViewModel, DustUiState, navigation |
 | 5 | Integration with Send flow | ⏳ | "No dust" → redirect to DustScreen |
 

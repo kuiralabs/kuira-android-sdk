@@ -533,7 +533,7 @@ class IndexerClientImpl(
             // Sort events by ID
             allEvents.sortBy { it.id }
 
-            // IMPORTANT: Each event's `raw` field contains "midnight:event[v5]:" + SCALE Event
+            // IMPORTANT: Each event's `raw` field contains "midnight:event[v9]:" + SCALE Event
             // The TypeScript SDK deserializes each event INDIVIDUALLY, then collects into Vec
             // We'll pass the raw events (WITH prefix) and let Rust handle stripping + deserializing
 
@@ -558,7 +558,7 @@ class IndexerClientImpl(
                 }
             }
             println("   Total hex length: ${combinedHex.length} chars")
-            println("   Note: Each event has 'midnight:event[v5]:' prefix")
+            println("   Note: Each event has 'midnight:event[v9]:' prefix")
 
             combinedHex
         } catch (e: Exception) {
