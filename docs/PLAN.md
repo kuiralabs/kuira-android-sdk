@@ -2,7 +2,7 @@
 
 **Project:** Midnight Wallet for Android
 **Estimate:** 120-169 hours across 8 phases (revised: +35-44h from original plan)
-**Status:** Phase 1 ✅ Complete | Phase 4A-Full ✅ Complete | Phase 4B (Unshielded) ✅ Complete | **Phase 2 ✅ Complete**
+**Status:** Phase 1 ✅ | Phase 4A-Full ✅ | Phase 4B (Unshielded) ✅ | **Phase 2 ✅** | **Phase 2F.1 (Dust Tank) ✅**
 
 **⚠️ Major Revisions:**
 - Shielded balance tracking (Phase 4B-Shielded) NOT implemented: +8-12h
@@ -23,8 +23,10 @@ See **PROGRESS.md** for current status and hours invested.
 3. ✅ **Phase 4B Complete**: WebSocket subscriptions + **UNSHIELDED** UTXO tracking (23.5h)
 4. ✅ **Phase 4B-UI Complete**: **UNSHIELDED** balance display (7h)
 5. ✅ **Phase 2 Complete**: Unshielded transactions (81h) - Test UI working
-6. ⚠️ **Phase 4B-Shielded MISSING**: Shielded balance tracking NOT implemented (est: 8-12h)
-7. ⏭️ **Phase 3 Next**: Shielded transactions (requires Phase 4B-Shielded first)
+6. ✅ **Phase 2F.1 Complete**: Dust tank display + registration (~12h) - Status check, balance display, full registration flow
+7. ⚠️ **Dust Sync Optimization NEEDED**: Block-by-block HTTP → WebSocket subscription (see `DUST_SYNC_OPTIMIZATION.md`)
+8. ⚠️ **Phase 4B-Shielded MISSING**: Shielded balance tracking NOT implemented (est: 8-12h)
+9. ⏭️ **Phase 3 Next**: Shielded transactions (requires Phase 4B-Shielded first)
 
 **Why This Order?**
 1. **Phase 1 first**: Must have keys before anything else ✅
@@ -49,13 +51,15 @@ See **PROGRESS.md** for current status and hours invested.
 | **Phase 2: Unshielded Transactions** | Send/receive transparent tokens | 89-109h | 81h | ✅ Complete |
 | ↳ 2A-2E: Transaction Infrastructure | Models, signing, DUST, submission | 72-93h | 81h | ✅ Complete |
 | ↳ 2F: Send UI (Test) | Test send form | 6-8h | incl | ✅ Complete |
-| ↳ 2F.1: Dust Tank Display | Lace-compatible dust UI | 11-15h | 0h | ⏸️ Deferred to Phase 6 |
+| ↳ 2F.1: Dust Tank Display | Dust status + registration UI | 11-15h | ~12h | ✅ Complete |
 | **Phase 4B-Shielded: Shielded Balances** | ⚠️ **MISSING** - Shielded UTXO tracking | 8-12h | 0h | ⏸️ Not Started |
 | **Phase 3: Shielded Transactions** | Private ZK transactions | 20-25h | 0h | ⏸️ Not Started |
 | **Phase 5: DApp Connector** | Contract interaction via WebView | 25-35h | 0h | ⏸️ Not Started |
 | **Phase 6: UI & Polish** | Production-ready app | 15-20h | 0h | ⏸️ Not Started |
 
-**Progress:** 173.5h / ~185h revised estimate (94% core functionality complete - Phase 2 done, remaining: Phase 4B-Shielded, Phase 3, Phase 5, Phase 6)
+**Progress:** ~185.5h / ~197h revised estimate (Phase 2 + Dust Tank done, remaining: Dust Sync Optimization, Phase 4B-Shielded, Phase 3, Phase 5, Phase 6)
+
+**⚠️ Known Performance Issue:** Dust sync takes 10+ minutes due to block-by-block HTTP scanning. Fix planned — switch to WebSocket subscription (see `docs/planning/DUST_SYNC_OPTIMIZATION.md`).
 
 ---
 
@@ -467,7 +471,7 @@ feature/balance/src/test/kotlin/.../
 
 ## ⚠️ Phase 4B-Shielded: Shielded Balance Tracking
 
-**Status:** ⏸️ **NOT STARTED** — Blocked by Dust Registration (Phase 2F.1)
+**Status:** ⏸️ **NOT STARTED** — Dust Registration complete (Phase 2F.1 ✅), ready to start
 **Estimate:** 8-12 hours
 **Priority:** HIGH — Required before Phase 3 (Shielded Transactions)
 

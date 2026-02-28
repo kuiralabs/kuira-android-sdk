@@ -245,52 +245,88 @@ class SendViewModel {
 
 ## Recommended Implementation Plan
 
-### **Phase 1: Quick Win (Switch to Subscription)**
+### **Phase 1: Quick Win (Switch to Subscription)** — IMPLEMENTING NOW
 
 **Goal:** 10 minutes → 30-60 seconds
 
-```kotlin
-// core/indexer/api/IndexerClientImpl.kt
-override suspend fun queryDustEvents(maxBlocks: Int): String {
-    // Replace block scanning with subscription
-    return subscribeToDustEventsOnce(fromId = 0)
-}
+#### File Changes (5 files)
 
-private suspend fun subscribeToDustEventsOnce(fromId: Long): String {
-    val events = mutableListOf<String>()
-    var maxId = Long.MAX_VALUE
+**1. `core/indexer/src/main/kotlin/.../api/GraphQLQueries.kt`** — Add subscription query
+- Add `SUBSCRIBE_DUST_LEDGER_EVENTS` constant
+- Subscription: `dustLedgerEvents(id: $id) { id, raw, maxId }`
+- Follows same pattern as existing `SUBSCRIBE_UNSHIELDED_TRANSACTIONS`
 
-    subscribeToDustEvents(fromId).collect { event ->
-        events.add(event.rawHex)
-        maxId = event.maxId
-        if (event.id >= maxId) {
-            cancel() // Stop when caught up
-        }
-    }
+**2. `core/indexer/src/main/kotlin/.../api/IndexerClient.kt`** — Add interface method
+- Add `subscribeToDustEvents(fromId: Long? = null): Flow<RawLedgerEvent>`
+- Returns `Flow<RawLedgerEvent>` (same model already used by `getEventsInRange`)
+- `fromId` is the event cursor — pass last known event ID to resume
 
-    return events.joinToString("")
-}
+**3. `core/indexer/src/main/kotlin/.../api/IndexerClientImpl.kt`** — Implement subscription + rewrite queryDustEvents
+- Implement `subscribeToDustEvents()` using `GraphQLWebSocketClient.subscribe()`
+  - Same pattern as `subscribeToUnshieldedTransactions()`: get/create WS client, connect, subscribe, parse response
+  - Parse `subscription.dustLedgerEvents` → `RawLedgerEvent(id, rawHex, maxId)`
+- Rewrite `queryDustEvents()` to use the subscription internally:
+  - Subscribe from `fromId = 0`
+  - Collect events until `event.id >= event.maxId` (caught up to chain tip)
+  - Sort by ID, concatenate raw hex, return combined string
+  - Same output format as before — `DustRepository` doesn't need changes
+- Remove block-by-block HTTP loop and `DustEventData` helper class
+
+**4. `DustRepository.kt`** — No changes needed
+- Already calls `indexerClient.queryDustEvents(maxBlocks)` and gets combined hex string
+- The switch is transparent — same input/output contract
+
+**5. `DustViewModel.kt` / `DustScreen.kt`** — No changes needed
+- UI layer is unaffected — the performance improvement is entirely in the transport layer
+
+#### Data flow (before vs after)
+
+**Before:**
+```
+DustRepository.syncFromBlockchain()
+  → IndexerClientImpl.queryDustEvents()
+    → HTTP POST per block (71,000+ requests)
+    → Collect DustEventData list
+    → Concatenate hex
+  → DustLocalState.replayEvents(seed, combinedHex)
 ```
 
-**Time:** 2-3 hours
-**Impact:** 20x faster (10 min → 30 sec)
+**After:**
+```
+DustRepository.syncFromBlockchain()
+  → IndexerClientImpl.queryDustEvents()
+    → WebSocket subscribe dustLedgerEvents(id: 0)
+    → Stream RawLedgerEvent until id >= maxId
+    → Concatenate hex
+  → DustLocalState.replayEvents(seed, combinedHex)
+```
+
+#### Key detail: batching for replayEvents
+
+`DustLocalState.replayEvents(seed, eventsHex)` returns a NEW state object (Rust FFI).
+Calling it per-event would create/destroy thousands of FFI objects. Instead:
+- Collect all events from subscription into a list
+- Concatenate hex once
+- Replay once (same as current behavior)
+- This matches the SDK pattern (bufferCount(10) + batch replay)
 
 ---
 
-### **Phase 2: Incremental Sync**
+### **Phase 2: Incremental Sync** (Future)
 
 **Goal:** First sync 30s, subsequent syncs < 1s
 
-1. Store `lastProcessedEventId` with cached DustLocalState
-2. On sync: query only events WHERE `id > lastProcessedEventId`
-3. Replay only new events
+1. Store `lastProcessedEventId` alongside cached DustLocalState in DataStore
+2. On sync: subscribe from `id = lastProcessedEventId + 1` (not from 0)
+3. Replay only new events onto existing state
+4. `DustRepository` already has `saveState()` / `loadState()` — extend with event ID
 
 **Time:** 3-4 hours
 **Impact:** Subsequent syncs instant
 
 ---
 
-### **Phase 3: Background Sync Manager**
+### **Phase 3: Background Sync Manager** (Future)
 
 **Goal:** Never block UI
 
@@ -362,12 +398,44 @@ App → Disconnect
 
 ---
 
-## Open Questions
+## Confirmed Findings (from SDK Investigation)
 
-1. **Does subscription stream efficiently?** Need to test with real indexer
-2. **What's the optimal batch size?** For pagination approach
-3. **How to handle sync failures?** Retry strategy, fallback to cached state
-4. **Cache invalidation?** When to force full re-sync
+These were open questions that are now resolved after reading the TypeScript SDK source code.
+
+### 1. Does subscription stream efficiently?
+**YES — confirmed.** The TypeScript SDK uses a single WebSocket subscription via `dustLedgerEvents(id: $id)`. The CLI (`midnight-wallet-cli/src/commands/dust.ts`) uses `WalletFacade` with `DustWallet`, which connects to the indexer via WebSocket (`indexerWsUrl`) and streams all events in a single connection. First sync takes seconds, not minutes.
+
+### 2. What's the optimal batch size?
+**SDK uses 10 events per batch.** From `midnight-wallet/packages/dust-wallet/src/Sync.ts`:
+- `bufferCount(10)` — collects 10 events per batch
+- `bufferTime(1)` — 1ms timeout (flush partial batches quickly)
+- `throttleTime(4)` — applies batches every 4ms
+- This means: stream events → batch 10 at a time → replay into `DustLocalState`
+
+### 3. How to handle sync failures?
+**Resume via `maxId`.** Each event response includes `maxId` (total events in the ledger). The subscription parameter `id` acts as a cursor — pass the last successfully processed event ID to resume. The SDK stores `lastEventId` and reconnects from there.
+
+### 4. Cache invalidation?
+**Incremental by design.** Once initial sync is complete, subsequent syncs only need events from `lastEventId + 1`. No full re-sync needed unless local state is corrupted/deleted.
+
+### 5. GraphQL subscription schema (confirmed from SDK)
+```graphql
+subscription DustLedgerEvents($id: Int) {
+  dustLedgerEvents(id: $id) {
+    id          # Sequential event ID (cursor for resume)
+    raw         # Hex-encoded event data (passed to DustLocalState.replayEvents)
+    maxId       # Total events in ledger (for progress tracking)
+  }
+}
+```
+
+### 6. Event types (4 types, all in `raw` field)
+- `ParamChange` — Network parameter updates
+- `DustInitialUtxo` — New dust registration
+- `DustGenerationDtimeUpdate` — Generation timestamp update
+- `DustSpendProcessed` — Dust spent in transaction
+
+All events are global (not filtered by address). `DustLocalState.replayEvents()` filters internally using the dust seed.
 
 ---
 
@@ -375,4 +443,8 @@ App → Disconnect
 
 - Midnight Indexer Schema: `midnight-libraries/midnight-indexer/indexer-api/graphql/schema-v3.graphql`
 - TypeScript SDK Dust Wallet: `midnight-libraries/midnight-wallet/packages/dust-wallet/src/DustCoreWallet.ts`
-- Our Current Implementation: `core/indexer/api/IndexerClientImpl.kt:queryDustEvents()`
+- TypeScript SDK Dust Sync: `midnight-libraries/midnight-wallet/packages/dust-wallet/src/Sync.ts`
+- TypeScript SDK Subscription: `midnight-libraries/midnight-wallet/packages/indexer-client/src/graphql/subscriptions/DustLedgerEvents.ts`
+- CLI Dust Command: `midnight-wallet-cli/src/commands/dust.ts` (uses WalletFacade → WebSocket)
+- CLI Facade: `midnight-wallet-cli/src/lib/facade.ts` (DustWallet connects to `indexerWsUrl`)
+- Our Current Implementation: `core/indexer/api/IndexerClientImpl.kt:queryDustEvents()` (block-by-block — to be replaced)
