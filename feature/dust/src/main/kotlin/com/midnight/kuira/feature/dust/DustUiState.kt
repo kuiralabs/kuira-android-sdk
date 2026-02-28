@@ -18,7 +18,7 @@ import java.math.BigInteger
  * ```kotlin
  * when (state) {
  *     is DustUiState.Loading -> ShowLoading()
- *     is DustUiState.Status -> ShowDustTank(state.balance, state.tokenCount)
+ *     is DustUiState.Status -> ShowDustTank(state.balance, state.nightBalance)
  *     is DustUiState.NoDust -> ShowRegistrationForm()
  *     is DustUiState.Registering -> ShowProgress(state.step)
  *     is DustUiState.RegistrationSuccess -> ShowSuccess(state.txHash)
@@ -42,13 +42,13 @@ sealed class DustUiState {
      * Dust exists — show tank display.
      *
      * @property balance Current dust balance in Specks (time-adjusted)
-     * @property tokenCount Number of available dust tokens
+     * @property nightBalance Total NIGHT balance (in Stars) backing dust generation
      * @property timeToCapacityMs Milliseconds until full generation (0 if at capacity)
      * @property isAtCapacity Whether all tokens are at max capacity
      */
     data class Status(
         val balance: BigInteger,
-        val tokenCount: Int,
+        val nightBalance: BigInteger,
         val timeToCapacityMs: Long,
         val isAtCapacity: Boolean
     ) : DustUiState()

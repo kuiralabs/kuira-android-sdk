@@ -138,12 +138,14 @@ class DustRepository @Inject constructor(
      * @return Current balance in Specks (BigInteger to support u128)
      */
     suspend fun getCurrentBalance(address: String): BigInteger {
-        // Try to get balance from DustLocalState (source of truth)
-        val serialized = getSerializedState(address) ?: return BigInteger.ZERO
-
-        // Deserialize state (TODO: implement deserialization in DustLocalState)
-        // For now, calculate from cached database tokens
-        return calculateBalanceFromCache(address)
+        // Use DustLocalState (source of truth) for balance calculation.
+        // DustLocalState.getBalance() computes time-based dust generation natively.
+        val state = loadState(address) ?: return BigInteger.ZERO
+        try {
+            return state.getBalance(currentTimeMillis())
+        } finally {
+            state.close()
+        }
     }
 
     /**
@@ -344,15 +346,13 @@ class DustRepository @Inject constructor(
 
             android.util.Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes of dust events")
 
-            // Step 2: Create or load DustLocalState
-            val existingState = getSerializedState(address)
-            val initialState = if (existingState != null) {
-                android.util.Log.d(TAG, "Loading existing dust state")
-                DustLocalState.deserialize(existingState)
-            } else {
-                android.util.Log.d(TAG, "Creating new dust state")
-                DustLocalState.create()
-            }
+            // Step 2: Create fresh DustLocalState
+            // Always start fresh because queryDustEvents() returns ALL events from genesis.
+            // The Merkle tree requires sequential insertion — replaying from 0 into a state
+            // that already has events causes NonLinearInsertion errors.
+            // Incremental sync (reusing saved state) is planned for Phase 2.
+            android.util.Log.d(TAG, "Creating fresh dust state for full replay")
+            val initialState = DustLocalState.create()
 
             if (initialState == null) {
                 android.util.Log.e(TAG, "Failed to create/load DustLocalState")
@@ -379,8 +379,8 @@ class DustRepository @Inject constructor(
                     // Step 5: Save updated state
                     saveState(address, restoredState)
 
-                    android.util.Log.d(TAG, "✅ Dust sync complete for $address")
-                    return true
+                    android.util.Log.d(TAG, "✅ Dust sync complete for $address ($utxoCount UTXOs)")
+                    return utxoCount > 0
 
                 } finally {
                     restoredState.close()

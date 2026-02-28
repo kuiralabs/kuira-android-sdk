@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -204,6 +207,51 @@ class IndexerClientImpl(
                         unshieldedTransactionsJson
                     )
                     emit(update)
+                }
+        }
+    }
+
+    // ==================== DUST EVENTS (Subscription) ====================
+
+    override fun subscribeToDustEvents(fromId: Long?): Flow<RawLedgerEvent> {
+        val variables = buildMap<String, Any> {
+            if (fromId != null) {
+                put("id", fromId)
+            }
+        }
+
+        return flow {
+            val client = getOrCreateWsClient()
+
+            try {
+                client.connect()
+            } catch (e: IllegalStateException) {
+                if (e.message?.contains("Already connected") != true) {
+                    throw e
+                }
+            }
+
+            client.subscribe(GraphQLQueries.SUBSCRIBE_DUST_LEDGER_EVENTS, variables)
+                .buffer(Channel.UNLIMITED)
+                .collect { jsonElement ->
+                    val dataElement = jsonElement.jsonObject["data"]
+                    if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+                        return@collect
+                    }
+
+                    val dustEventJson = dataElement
+                        .jsonObject["dustLedgerEvents"]
+                        ?: throw InvalidResponseException("Missing dustLedgerEvents in response")
+
+                    val eventObj = dustEventJson.jsonObject
+                    val id = eventObj["id"]?.jsonPrimitive?.long
+                        ?: throw InvalidResponseException("Dust event missing 'id' field")
+                    val rawHex = eventObj["raw"]?.jsonPrimitive?.content
+                        ?: throw InvalidResponseException("Dust event missing 'raw' field")
+                    val maxId = eventObj["maxId"]?.jsonPrimitive?.long
+                        ?: throw InvalidResponseException("Dust event missing 'maxId' field")
+
+                    emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
                 }
         }
     }
@@ -436,144 +484,40 @@ class IndexerClientImpl(
         }
     }
 
-    override suspend fun queryDustEvents(maxBlocks: Int): String = retryWithPolicy() {
-        try {
-            println("\n🔍 Querying dust events from recent $maxBlocks blocks...")
+    override suspend fun queryDustEvents(maxBlocks: Int): String = try {
+        println("\n🔍 Querying dust events via WebSocket subscription...")
 
-            // First, get the current block height
-            val currentHeightQuery = """
-                query CurrentBlock {
-                  block {
-                    height
-                  }
-                }
-            """.trimIndent()
-
-            val heightResponse = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(query = currentHeightQuery, variables = null))
-            }
-
-            val heightJson = json.parseToJsonElement(heightResponse.bodyAsText()).jsonObject
-            val currentHeight = heightJson["data"]?.jsonObject?.get("block")?.jsonObject?.get("height")?.jsonPrimitive?.long ?: 0L
-
-            println("   Current block height: $currentHeight")
-
-            // Collect all dust events from ALL blocks (not just recent)
-            // We need ALL events from chain start to properly replay the Merkle tree
-            val allEvents = mutableListOf<DustEventData>()
-
-            // IMPORTANT: Merkle tree is GLOBAL and SEQUENTIAL
-            // We must replay ALL dust events from genesis to build correct tree state
-            // Even events for other wallets affect the global Merkle tree structure
-            println("   Scanning ALL blocks from 0 to $currentHeight (needed for Merkle tree)...")
-            println("   This may take a few minutes...")
-            val startBlock = 0L
-
-            for (height in startBlock..currentHeight) {
-                // Progress logging every 5000 blocks
-                if (height % 5000 == 0L && height > 0) {
-                    println("   Progress: block $height / $currentHeight (${(height * 100 / currentHeight)}%)")
-                }
-                val query = """
-                    query BlockDustEvents {
-                      block(offset: { height: $height }) {
-                        height
-                        transactions {
-                          dustLedgerEvents {
-                            id
-                            raw
-                            maxId
-                          }
-                        }
-                      }
-                    }
-                """.trimIndent()
-
-                val response = httpClient.post(graphqlEndpoint) {
-                    contentType(ContentType.Application.Json)
-                    setBody(GraphQLRequest(query = query, variables = null))
-                }
-
-                val responseBody = response.bodyAsText()
-                val jsonResponse = json.parseToJsonElement(responseBody).jsonObject
-
-                // Check if block exists
-                val blockData = jsonResponse["data"]?.jsonObject?.get("block")
-                if (blockData == null || blockData.toString() == "null") {
-                    // No more blocks
-                    break
-                }
-
-                // Extract dust events from this block
-                val block = blockData.jsonObject
-                val transactions = block["transactions"]?.jsonArray ?: continue
-
-                for (tx in transactions) {
-                    val dustEvents = tx.jsonObject["dustLedgerEvents"]?.jsonArray ?: continue
-                    if (dustEvents.isEmpty()) continue
-
-                    // Found transactions with dust events
-                    for (event in dustEvents) {
-                        val eventObj = event.jsonObject
-                        val id = eventObj["id"]?.jsonPrimitive?.long ?: continue
-                        val raw = eventObj["raw"]?.jsonPrimitive?.content ?: continue
-                        val maxId = eventObj["maxId"]?.jsonPrimitive?.long ?: continue
-
-                        allEvents.add(DustEventData(id, raw, maxId))
-                    }
+        var eventCount = 0
+        val allEvents = subscribeToDustEvents(fromId = null)
+            .onEach { event ->
+                eventCount++
+                if (eventCount % 500 == 0) {
+                    println("   Progress: $eventCount events received (${event.id}/${event.maxId})")
                 }
             }
-
-            if (allEvents.isEmpty()) {
-                println("⚠️  No dust events found in recent blocks")
-                return@retryWithPolicy ""
+            .transformWhile { event ->
+                emit(event)
+                event.id < event.maxId // stop after catching up to chain tip
             }
+            .toList()
 
-            // Sort events by ID
-            allEvents.sortBy { it.id }
+        if (allEvents.isEmpty()) {
+            println("⚠️  No dust events found")
+            ""
+        } else {
+            // Sort by ID (subscription should deliver in order, but be safe)
+            val sorted = allEvents.sortedBy { it.id }
+            val combinedHex = sorted.joinToString("") { it.rawHex }
 
-            // IMPORTANT: Each event's `raw` field contains "midnight:event[v9]:" + SCALE Event
-            // The TypeScript SDK deserializes each event INDIVIDUALLY, then collects into Vec
-            // We'll pass the raw events (WITH prefix) and let Rust handle stripping + deserializing
-
-            val combinedHex = allEvents.joinToString("") { it.raw }
-
-            println("✅ Found ${allEvents.size} dust events")
-            println("   Event IDs: ${allEvents.map { it.id }.take(10)}${if (allEvents.size > 10) "..." else ""}")
-            println("   Last IDs: ${allEvents.map { it.id }.takeLast(10)}")
-
-            // Check for gaps in event IDs
-            val ids = allEvents.map { it.id }
-            val gaps = mutableListOf<Pair<Long, Long>>()
-            for (i in 0 until ids.size - 1) {
-                if (ids[i + 1] - ids[i] > 1) {
-                    gaps.add(Pair(ids[i], ids[i + 1]))
-                }
-            }
-            if (gaps.isNotEmpty()) {
-                println("⚠️  WARNING: Gaps detected in event IDs:")
-                gaps.forEach { (from, to) ->
-                    println("      Gap: ${from} → ${to} (missing ${to - from - 1} events)")
-                }
-            }
+            println("✅ Found ${sorted.size} dust events via subscription")
+            println("   Event IDs: ${sorted.first().id}..${sorted.last().id}")
             println("   Total hex length: ${combinedHex.length} chars")
-            println("   Note: Each event has 'midnight:event[v9]:' prefix")
 
             combinedHex
-        } catch (e: Exception) {
-            throw InvalidResponseException("Failed to query dust events: ${e.message}", e)
         }
+    } catch (e: Exception) {
+        throw InvalidResponseException("Failed to query dust events: ${e.message}", e)
     }
-
-    /**
-     * Dust event data structure.
-     */
-    private data class DustEventData(
-        val id: Long,
-        val raw: String,
-        val maxId: Long
-    )
 
     override suspend fun isHealthy(): Boolean {
         return try {

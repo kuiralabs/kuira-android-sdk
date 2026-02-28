@@ -129,4 +129,23 @@ object GraphQLQueries {
           }
         }
     """
+
+    /**
+     * Subscribe to dust ledger events.
+     *
+     * Streams ALL dust events from the given ID (global, not filtered by address).
+     * DustLocalState.replayEvents() filters internally using the dust seed.
+     *
+     * Variables:
+     * - id: Int (optional, event cursor — pass last processed ID to resume)
+     */
+    const val SUBSCRIBE_DUST_LEDGER_EVENTS = """
+        subscription DustLedgerEvents(${'$'}id: Int) {
+          dustLedgerEvents(id: ${'$'}id) {
+            id
+            raw
+            maxId
+          }
+        }
+    """
 }

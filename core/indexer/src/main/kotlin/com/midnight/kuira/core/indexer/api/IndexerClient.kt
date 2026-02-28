@@ -155,28 +155,35 @@ interface IndexerClient {
     suspend fun getEventsInRange(fromId: Long, toId: Long): List<RawLedgerEvent>
 
     /**
-     * Query dust events from recent blocks.
+     * Subscribe to dust ledger events via WebSocket.
      *
-     * Scans recent blocks to find all dust ledger events (registration, spends, etc.).
-     * Returns combined SCALE-encoded events that can be replayed into DustLocalState.
+     * Streams ALL dust events from the given event ID. Events are global
+     * (not filtered by address) — DustLocalState.replayEvents() filters
+     * internally using the dust seed.
      *
-     * **GraphQL Query:**
+     * **GraphQL Subscription:**
      * ```graphql
-     * query BlockDustEvents {
-     *   block(offset: { height: $height }) {
-     *     height
-     *     transactions {
-     *       dustLedgerEvents {
-     *         id
-     *         raw
-     *         maxId
-     *       }
-     *     }
+     * subscription DustLedgerEvents($id: Int) {
+     *   dustLedgerEvents(id: $id) {
+     *     id
+     *     raw
+     *     maxId
      *   }
      * }
      * ```
      *
-     * @param maxBlocks Maximum number of recent blocks to scan (default: 100)
+     * @param fromId Start from this event ID (cursor for resume). Null starts from beginning.
+     * @return Flow of raw dust ledger events
+     */
+    fun subscribeToDustEvents(fromId: Long? = null): Flow<RawLedgerEvent>
+
+    /**
+     * Query all dust events via WebSocket subscription.
+     *
+     * Subscribes to dustLedgerEvents, collects all events until caught up to chain tip,
+     * then returns combined SCALE-encoded hex that can be replayed into DustLocalState.
+     *
+     * @param maxBlocks Unused (kept for backward compatibility). All events are streamed.
      * @return Combined SCALE hex string of all dust events, sorted by ID
      */
     suspend fun queryDustEvents(maxBlocks: Int = 100): String

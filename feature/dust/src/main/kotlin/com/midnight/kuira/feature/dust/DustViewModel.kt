@@ -10,13 +10,14 @@ import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.crypto.dust.DustKeyDeriver
-import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.ProofServerClient
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
+import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
+import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import java.math.BigInteger
 import javax.inject.Inject
 
@@ -52,11 +55,11 @@ import javax.inject.Inject
 @HiltViewModel
 class DustViewModel @Inject constructor(
     private val dustRepository: DustRepository,
-    private val dustBalanceCalculator: DustBalanceCalculator,
     private val proofServerClient: ProofServerClient,
     private val serializer: TransactionSerializer,
     private val nodeRpcClient: NodeRpcClient,
-    private val networkConfig: NetworkConfig
+    private val networkConfig: NetworkConfig,
+    private val utxoManager: UtxoManager
 ) : ViewModel() {
 
     /**
@@ -125,29 +128,8 @@ class DustViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Dust exists — get status
-                val balance = dustRepository.getCurrentBalance(address)
-                val tokenCount = dustRepository.getTokenCount(address)
-
-                // Calculate time to capacity from available tokens
-                val tokens = dustRepository.getAvailableTokens(address)
-                val currentTime = System.currentTimeMillis()
-                val timeToCapacity = if (tokens.isNotEmpty()) {
-                    tokens.maxOf { dustBalanceCalculator.calculateTimeToCapacity(it, currentTime) }
-                } else {
-                    0L
-                }
-                val atCapacity = tokens.isNotEmpty() &&
-                    tokens.all { dustBalanceCalculator.isAtCapacity(it, currentTime) }
-
-                Log.d(TAG, "Dust status: balance=$balance, tokens=$tokenCount, atCapacity=$atCapacity")
-
-                _state.value = DustUiState.Status(
-                    balance = balance,
-                    tokenCount = tokenCount,
-                    timeToCapacityMs = timeToCapacity,
-                    isAtCapacity = atCapacity
-                )
+                // Dust exists — show status using DustLocalState (source of truth)
+                showDustStatus(address)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to check dust status", e)
@@ -169,20 +151,19 @@ class DustViewModel @Inject constructor(
      * Full registration flow:
      * 1. Derive NIGHT key at m/44'/2400'/0'/0/0
      * 2. Derive dust key at m/44'/2400'/0'/2/0
-     * 3. Build registration tx (Rust FFI)
-     * 4. Prove tx (proof server)
-     * 5. Seal proven tx
-     * 6. Submit to blockchain and wait for finalization
-     * 7. Sync dust state
+     * 3. Fetch NIGHT UTXOs (required for guaranteed unshielded offer)
+     * 4. Build registration tx (Rust FFI) with UTXOs
+     * 5. Prove tx (proof server)
+     * 6. Seal proven tx
+     * 7. Submit to blockchain and wait for finalization
+     * 8. Sync dust state
      *
      * @param address Wallet address to register
      * @param seedPhrase 24-word mnemonic
-     * @param allowFeePayment Max dust for fee payment (Specks)
      */
     fun registerDust(
         address: String,
-        seedPhrase: String,
-        allowFeePayment: BigInteger
+        seedPhrase: String
     ) {
         viewModelScope.launch {
             var seed: ByteArray? = null
@@ -222,31 +203,58 @@ class DustViewModel @Inject constructor(
                     ?: throw IllegalStateException("Failed to derive dust public key")
                 Log.d(TAG, "Dust public key: ${dustPublicKeyHex.take(16)}...")
 
-                // Step 3: Build registration transaction
+                // Step 3: Fetch NIGHT UTXOs for guaranteed unshielded offer
+                Log.d(TAG, "Fetching NIGHT UTXOs for address: $address")
+                val allUtxos = utxoManager.getUnspentUtxos(address)
+                val nightUtxos = allUtxos.filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
+
+                if (nightUtxos.isEmpty()) {
+                    _state.value = DustUiState.Error(
+                        "No NIGHT UTXOs available. Cannot register without NIGHT tokens."
+                    )
+                    return@launch
+                }
+                Log.d(TAG, "Found ${nightUtxos.size} NIGHT UTXOs")
+
+                // Serialize UTXOs to JSON for Rust FFI
+                // Includes ctime (creation timestamp) for dust generation calculation
+                val utxosJsonArray = JSONArray()
+                for (utxo in nightUtxos) {
+                    val obj = JSONObject()
+                    obj.put("value", utxo.value)
+                    obj.put("intent_hash", utxo.intentHash)
+                    obj.put("output_no", utxo.outputIndex)
+                    obj.put("ctime", utxo.ctime)
+                    utxosJsonArray.put(obj)
+                }
+                val utxosJson = utxosJsonArray.toString()
+                Log.d(TAG, "UTXO JSON: $utxosJson")
+
+                // Step 4: Build registration transaction with UTXOs
                 Log.d(TAG, "Building dust registration transaction")
                 val ttl = System.currentTimeMillis() + TTL_OFFSET_MS
                 val scaleHex = DustRegistrationBuilder.build(
                     nightPrivateKey = nightPrivateKey,
                     dustPublicKeyHex = dustPublicKeyHex,
-                    allowFeePayment = allowFeePayment,
+                    utxosJson = utxosJson,
                     ttlMillis = ttl
                 ) ?: throw IllegalStateException("Failed to build dust registration transaction")
                 Log.d(TAG, "Registration tx built: ${scaleHex.length} hex chars")
 
-                // Step 4: Prove transaction
+                // Step 5: Prove transaction
                 _state.value = DustUiState.Registering(RegistrationStep.PROVING)
                 Log.d(TAG, "Sending to proof server...")
                 val provenHex = proofServerClient.proveTransaction(scaleHex)
                 Log.d(TAG, "Transaction proven: ${provenHex.length} hex chars")
 
-                // Step 5: Seal proven transaction
+                // Step 6: Seal proven transaction
                 _state.value = DustUiState.Registering(RegistrationStep.SEALING)
                 Log.d(TAG, "Sealing proven transaction...")
                 val sealedHex = serializer.sealProvenTransaction(provenHex)
                     ?: throw IllegalStateException("Failed to seal proven transaction")
                 Log.d(TAG, "Transaction sealed: ${sealedHex.length} hex chars")
 
-                // Step 6: Submit to blockchain
+                // Step 7: Submit to blockchain
                 _state.value = DustUiState.Registering(RegistrationStep.SUBMITTING)
                 Log.d(TAG, "Submitting to blockchain...")
                 val result = nodeRpcClient.submitAndWaitForFinalization(
@@ -254,28 +262,41 @@ class DustViewModel @Inject constructor(
                     timeoutMs = SUBMISSION_TIMEOUT_MS
                 )
 
-                // Step 7: Handle result
+                // Step 8: Handle result
                 when (result) {
                     is TransactionFinalizationResult.Finalized -> {
                         Log.d(TAG, "Registration finalized: txHash=${result.txHash}")
 
-                        // Trigger dust sync to pick up new registration
+                        // Sync dust from blockchain and show status automatically
                         try {
                             dustRepository.syncFromBlockchain(
                                 address = address,
                                 dustSeed = dustSeed,
                                 maxBlocks = 100
                             )
+                            // Auto-show status after registration
+                            showDustStatus(address)
                         } catch (e: Exception) {
                             Log.w(TAG, "Post-registration sync failed (non-fatal)", e)
+                            _state.value = DustUiState.RegistrationSuccess(txHash = result.txHash)
                         }
-
-                        _state.value = DustUiState.RegistrationSuccess(txHash = result.txHash)
                     }
 
                     is TransactionFinalizationResult.InBlock -> {
                         Log.d(TAG, "Registration in block (not yet finalized): ${result.txHash}")
-                        _state.value = DustUiState.RegistrationSuccess(txHash = result.txHash)
+
+                        // Sync dust from blockchain and show status automatically
+                        try {
+                            dustRepository.syncFromBlockchain(
+                                address = address,
+                                dustSeed = dustSeed,
+                                maxBlocks = 100
+                            )
+                            showDustStatus(address)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Post-registration sync failed (non-fatal)", e)
+                            _state.value = DustUiState.RegistrationSuccess(txHash = result.txHash)
+                        }
                     }
 
                     is TransactionFinalizationResult.Dropped -> {
@@ -316,6 +337,29 @@ class DustViewModel @Inject constructor(
     }
 
     /**
+     * Show current dust status from cached state (no blockchain sync).
+     *
+     * Used after registration to immediately display dust status
+     * without requiring a manual "Check Status" click.
+     */
+    private suspend fun showDustStatus(address: String) {
+        val balance = dustRepository.getCurrentBalance(address)
+
+        // Get total NIGHT balance backing dust generation
+        val balanceMap = utxoManager.calculateBalance(address)
+        val nightBalance = balanceMap[UtxoSpend.NATIVE_TOKEN_TYPE] ?: BigInteger.ZERO
+
+        Log.d(TAG, "Dust status: balance=$balance, nightBalance=$nightBalance")
+
+        _state.value = DustUiState.Status(
+            balance = balance,
+            nightBalance = nightBalance,
+            timeToCapacityMs = 0L,
+            isAtCapacity = false
+        )
+    }
+
+    /**
      * Reset to loading state and re-check dust status.
      */
     fun reset(address: String, seedPhrase: String) {
@@ -330,9 +374,6 @@ class DustViewModel @Inject constructor(
 
         // Submission timeout: 120 seconds (dust registration can be slower)
         private const val SUBMISSION_TIMEOUT_MS = 120_000L
-
-        // Default allow fee payment: 1,000,000 Specks (1 Dust)
-        val DEFAULT_ALLOW_FEE_PAYMENT: BigInteger = BigInteger.valueOf(1_000_000)
 
         // MVP test seed phrases per network — Bob is the sender
         private val DEFAULT_TEST_SEED_PHRASES = mapOf(

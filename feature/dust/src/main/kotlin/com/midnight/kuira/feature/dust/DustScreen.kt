@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
@@ -69,7 +67,6 @@ fun DustScreen(
     // User inputs with MVP test defaults
     var addressInput by remember { mutableStateOf(address.ifBlank { viewModel.defaultTestAddress }) }
     var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
-    var allowFeePayment by remember { mutableStateOf("1000000") } // 1 Dust in Specks
 
     Scaffold(
         topBar = {
@@ -90,6 +87,41 @@ fun DustScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Dust status/action cards at the TOP for visibility
+            when (val currentState = state) {
+                is DustUiState.Idle -> { /* No status card — waiting for user to check */ }
+                is DustUiState.Loading -> LoadingCard()
+
+                is DustUiState.Status -> DustStatusCard(
+                    balance = currentState.balance,
+                    nightBalance = currentState.nightBalance,
+                    timeToCapacityMs = currentState.timeToCapacityMs,
+                    isAtCapacity = currentState.isAtCapacity,
+                    formatter = formatter
+                )
+
+                is DustUiState.NoDust -> NoDustCard(
+                    onRegister = {
+                        viewModel.registerDust(addressInput, seedPhrase)
+                    },
+                    enabled = addressInput.isNotBlank() && seedPhrase.isNotBlank()
+                )
+
+                is DustUiState.Registering -> RegisteringCard(
+                    step = currentState.step
+                )
+
+                is DustUiState.RegistrationSuccess -> SuccessCard(
+                    txHash = currentState.txHash,
+                    onReset = { viewModel.reset(addressInput, seedPhrase) }
+                )
+
+                is DustUiState.Error -> ErrorCard(
+                    message = currentState.message,
+                    onRetry = { viewModel.checkDustStatus(addressInput, seedPhrase) }
+                )
+            }
+
             // Address Input
             AddressInputCard(
                 address = addressInput,
@@ -111,48 +143,6 @@ fun DustScreen(
                 ) {
                     Text("Check Dust Status")
                 }
-            }
-
-            // State Display
-            when (val currentState = state) {
-                is DustUiState.Idle -> { /* No status card — waiting for user to check */ }
-                is DustUiState.Loading -> LoadingCard()
-
-                is DustUiState.Status -> DustStatusCard(
-                    balance = currentState.balance,
-                    tokenCount = currentState.tokenCount,
-                    timeToCapacityMs = currentState.timeToCapacityMs,
-                    isAtCapacity = currentState.isAtCapacity,
-                    formatter = formatter
-                )
-
-                is DustUiState.NoDust -> NoDustCard(
-                    allowFeePayment = allowFeePayment,
-                    onAllowFeePaymentChange = { allowFeePayment = it },
-                    onRegister = {
-                        val feePayment = try {
-                            BigInteger(allowFeePayment)
-                        } catch (e: NumberFormatException) {
-                            DustViewModel.DEFAULT_ALLOW_FEE_PAYMENT
-                        }
-                        viewModel.registerDust(addressInput, seedPhrase, feePayment)
-                    },
-                    enabled = addressInput.isNotBlank() && seedPhrase.isNotBlank()
-                )
-
-                is DustUiState.Registering -> RegisteringCard(
-                    step = currentState.step
-                )
-
-                is DustUiState.RegistrationSuccess -> SuccessCard(
-                    txHash = currentState.txHash,
-                    onReset = { viewModel.reset(addressInput, seedPhrase) }
-                )
-
-                is DustUiState.Error -> ErrorCard(
-                    message = currentState.message,
-                    onRetry = { viewModel.checkDustStatus(addressInput, seedPhrase) }
-                )
             }
         }
     }
@@ -259,12 +249,13 @@ private fun LoadingCard() {
 @Composable
 private fun DustStatusCard(
     balance: BigInteger,
-    tokenCount: Int,
+    nightBalance: BigInteger,
     timeToCapacityMs: Long,
     isAtCapacity: Boolean,
     formatter: BalanceFormatter
 ) {
     val balanceFormatted = formatter.formatCompact(balance, "DUST")
+    val nightFormatted = formatter.formatCompact(nightBalance, "NIGHT")
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -300,10 +291,11 @@ private fun DustStatusCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Token count
+            // NIGHT balance backing dust generation
             Text(
-                text = "Tokens: $tokenCount",
-                style = MaterialTheme.typography.bodyMedium
+                text = "Generating from $nightFormatted",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -346,8 +338,6 @@ private fun DustStatusCard(
 
 @Composable
 private fun NoDustCard(
-    allowFeePayment: String,
-    onAllowFeePaymentChange: (String) -> Unit,
     onRegister: () -> Unit,
     enabled: Boolean
 ) {
@@ -374,23 +364,6 @@ private fun NoDustCard(
                     "This creates a registration transaction on the blockchain.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Allow fee payment input
-            OutlinedTextField(
-                value = allowFeePayment,
-                onValueChange = { newValue ->
-                    if (newValue.isEmpty() || newValue.matches(Regex("^\\d+$"))) {
-                        onAllowFeePaymentChange(newValue)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Allow Fee Payment (Specks)") },
-                placeholder = { Text("1000000") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             Spacer(modifier = Modifier.height(16.dp))

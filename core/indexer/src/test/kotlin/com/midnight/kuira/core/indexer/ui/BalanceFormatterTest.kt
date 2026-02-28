@@ -11,7 +11,7 @@ import java.util.Locale
  *
  * **Test Coverage:**
  * - Basic formatting with thousands separators
- * - Decimal precision (6 decimals for TNIGHT/DUST)
+ * - Decimal precision (6 decimals for TNIGHT, 15 for DUST)
  * - Token symbol inclusion/exclusion
  * - Compact formatting (trim trailing zeros)
  * - Edge cases (zero, large amounts)
@@ -61,9 +61,11 @@ class BalanceFormatterTest {
     }
 
     @Test
-    fun `format preserves 6 decimal places for DUST`() {
-        val result = formatter.format(BigInteger.valueOf(999_999), "DUST")
-        assertEquals("0.999999 DUST", result)
+    fun `format preserves 15 decimal places for DUST`() {
+        // 1 DUST = 10^15 Specks
+        val oneDust = BigInteger("1000000000000000") // 10^15
+        val result = formatter.format(oneDust, "DUST")
+        assertEquals("1.000000000000000 DUST", result)
     }
 
     @Test
@@ -134,14 +136,26 @@ class BalanceFormatterTest {
 
     @Test
     fun `format DUST token`() {
-        val result = formatter.format(BigInteger.valueOf(5_500_000), "DUST")
-        assertEquals("5.500000 DUST", result)
+        // 5.5 DUST = 5.5 * 10^15 Specks
+        val fiveAndHalfDust = BigInteger("5500000000000000")
+        val result = formatter.format(fiveAndHalfDust, "DUST")
+        assertEquals("5.500000000000000 DUST", result)
     }
 
     @Test
     fun `formatCompact works with DUST`() {
-        val result = formatter.formatCompact(BigInteger.valueOf(5_500_000), "DUST")
+        // 5.5 DUST = 5.5 * 10^15 Specks
+        val fiveAndHalfDust = BigInteger("5500000000000000")
+        val result = formatter.formatCompact(fiveAndHalfDust, "DUST")
         assertEquals("5.5 DUST", result)
+    }
+
+    @Test
+    fun `format DUST small amount in Specks`() {
+        // 16037980000000 Specks ≈ 0.01604 DUST
+        val specks = BigInteger("16037980000000")
+        val result = formatter.formatCompact(specks, "DUST")
+        assertEquals("0.01603798 DUST", result)
     }
 
     // ==================== Precision Tests ====================
