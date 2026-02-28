@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,7 +68,8 @@ import com.midnight.kuira.core.indexer.sync.SyncState
 @Composable
 fun BalanceScreen(
     viewModel: BalanceViewModel = hiltViewModel(),
-    onNavigateToSend: ((String) -> Unit)? = null
+    onNavigateToSend: ((String) -> Unit)? = null,
+    onNavigateToDust: ((String) -> Unit)? = null
 ) {
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
@@ -94,6 +96,20 @@ fun BalanceScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    // Dust button (if navigation callback provided)
+                    onNavigateToDust?.let { navigateToDust ->
+                        IconButton(
+                            onClick = { navigateToDust(address) },
+                            enabled = address.isNotBlank() && address.startsWith("mn_")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Dust Tank",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
                     // Send button (if navigation callback provided)
                     onNavigateToSend?.let { navigateToSend ->
                         IconButton(
