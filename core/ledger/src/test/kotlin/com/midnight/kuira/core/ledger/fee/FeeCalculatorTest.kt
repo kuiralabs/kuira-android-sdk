@@ -83,7 +83,7 @@ class FeeCalculatorTest {
      * - `margin` = number of blocks of safety buffer (default: 5)
      *
      * **Reference:**
-     * - `/rust/kuira-crypto-ffi/src/fee_ffi.rs:calculate_transaction_fee()`
+     * - `/kuira-crypto-ffi/src/fee_ffi.rs:calculate_transaction_fee()`
      */
     @Test
     fun `document fee calculation formula`() {

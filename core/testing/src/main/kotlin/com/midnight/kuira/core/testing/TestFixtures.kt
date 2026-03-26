@@ -20,29 +20,23 @@ object TestFixtures {
      * Expected seed for TEST_MNEMONIC_24_WORDS with passphrase "TREZOR"
      * (Official Trezor test vectors use "TREZOR" passphrase for all vectors)
      *
-     * ⚠️ LACE COMPATIBILITY: This is TRUNCATED to 32 bytes (not 64 bytes)
-     * Our implementation follows Lace wallet's approach of using only the first
-     * 32 bytes of the BIP-39 seed for wallet interoperability.
+     * Full 64-byte PBKDF2 output (Lace compatible).
      * See docs/LACE_COMPATIBILITY.md for full explanation.
-     *
-     * Full 64-byte seed would be: bda85446...bbd30971[70af7a4d...68f92fcc8]
      */
     const val EXPECTED_SEED_TREZOR_PASSPHRASE =
-        "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd30971"
+        "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd30971" +
+        "70af7a4d73245cafa9c3cca8d561a7c3de6f5d4a10be8ed2a5e608d68f92fcc8"
 
     /**
      * Expected seed for TEST_MNEMONIC_24_WORDS with empty passphrase ("")
      * (Most wallets use empty passphrase by default)
      *
-     * ⚠️ LACE COMPATIBILITY: This is TRUNCATED to 32 bytes (not 64 bytes)
-     * Our implementation follows Lace wallet's approach of using only the first
-     * 32 bytes of the BIP-39 seed for wallet interoperability.
+     * Full 64-byte PBKDF2 output (Lace compatible).
      * See docs/LACE_COMPATIBILITY.md for full explanation.
-     *
-     * Full 64-byte seed would be: 408b285c...c49acf70[5489c6fc...399480840]
      */
     const val EXPECTED_SEED_EMPTY_PASSPHRASE =
-        "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70"
+        "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70" +
+        "5489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840"
 
     /**
      * Placeholder test address format (Bech32m for Midnight)

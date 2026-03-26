@@ -46,7 +46,7 @@ class FfiTransactionSerializerIntegrationTest {
          * Sender: From "abandon abandon...art" mnemonic at m/44'/2400'/0'/0/0
          * Recipient: Valid Bech32m encoding of 32 zero bytes (for testing)
          */
-        private const val SENDER_ADDRESS = "mn_addr_undeployed15jlkezafp4mju3v7cdh3ywre2y2s3szgpqrkw8p4tzxjqhuaqhlsd2etrq"
+        private const val SENDER_ADDRESS = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx"
 
         // Generate a valid recipient address (32 zero bytes encoded as Bech32m)
         private val RECIPIENT_ADDRESS by lazy {

@@ -73,11 +73,11 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **Native Library:**
  * This class loads `libkuira_crypto_ffi.so` (Android) which is compiled from:
- * - Location: `rust/kuira-crypto-ffi/`
- * - Dependencies: `midnight-ledger` (currently v7.0.0, version-abstract FFI)
+ * - Location: `kuira-crypto-ffi/`
+ * - Dependencies: `midnight-ledger` (version-abstract FFI — see Cargo.toml)
  *
  * **References:**
- * - Rust FFI: `rust/kuira-crypto-ffi/src/dust_ffi.rs`
+ * - Rust FFI: `kuira-crypto-ffi/src/dust_ffi.rs`
  * - Dust Spec: `midnight-libraries/midnight-ledger/spec/dust.md`
  */
 class DustLocalState private constructor(

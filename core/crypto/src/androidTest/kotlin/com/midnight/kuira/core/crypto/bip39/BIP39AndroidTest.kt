@@ -123,8 +123,8 @@ class BIP39AndroidTest {
             // Verify seed derivation works
             val seed = BIP39.mnemonicToSeed(mnemonic)
             assertEquals(
-                "Seed should be 32 bytes for $wordCount words on Android (Lace compatibility)",
-                32,
+                "Seed should be 64 bytes for $wordCount words on Android (Lace compatibility)",
+                64,
                 seed.size
             )
         }

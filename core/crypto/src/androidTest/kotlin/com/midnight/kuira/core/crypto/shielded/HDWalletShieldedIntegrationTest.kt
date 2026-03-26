@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
  * **Test Vector:**
  * Mnemonic: "abandon abandon ... art" (24 words)
  * Path: m/44'/2400'/0'/3/0
- * Expected output matches Midnight SDK (key derivation identical across v6/v7)
+ * Expected output matches Midnight SDK (key derivation version-abstract via Rust FFI)
  */
 @RunWith(AndroidJUnit4::class)
 class HDWalletShieldedIntegrationTest {
@@ -75,12 +75,12 @@ class HDWalletShieldedIntegrationTest {
                     // Expected values from Midnight SDK
                     assertEquals(
                         "Coin public key should match Midnight SDK",
-                        "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",
+                        "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
                         shieldedKeys.coinPublicKey
                     )
                     assertEquals(
                         "Encryption public key should match Midnight SDK",
-                        "58d0c3c4c2c6bcfbc369e01c1d893a7d93992762407daea4a4574cbc7efb3157",
+                        "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b",
                         shieldedKeys.encryptionPublicKey
                     )
 
@@ -134,7 +134,7 @@ class HDWalletShieldedIntegrationTest {
 
                 // Index 0 should match test vector
                 assertEquals(
-                    "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",
+                    "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
                     shieldedKeys[0].coinPublicKey
                 )
 
@@ -222,7 +222,7 @@ class HDWalletShieldedIntegrationTest {
         // Verify keys were derived successfully
         assertNotNull(shieldedKeys)
         assertEquals(
-            "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",
+            "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             shieldedKeys!!.coinPublicKey
         )
     }

@@ -44,7 +44,7 @@ import java.util.Arrays
  * 7. Verify serialization succeeds
  *
  * **Funded Address (Index 0):**
- * `mn_addr_undeployed15jlkezafp4mju3v7cdh3ywre2y2s3szgpqrkw8p4tzxjqhuaqhlsd2etrq`
+ * `mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx`
  * - Current balance: 1 NIGHT
  * - Dust registration: Required for transaction fees
  * - Derivation: m/44'/2400'/0'/0/0 from test mnemonic
@@ -70,7 +70,7 @@ class RealDustFeePaymentTest {
 
         // Dust will be registered at index 0 (standard first address)
         // This address will be derived from the mnemonic at m/44'/2400'/0'/0/0
-        private const val FUNDED_ADDRESS = "mn_addr_undeployed15jlkezafp4mju3v7cdh3ywre2y2s3szgpqrkw8p4tzxjqhuaqhlsd2etrq"
+        private const val FUNDED_ADDRESS = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx"
 
         // Native token
         private val NATIVE_TOKEN = "0".repeat(64)

@@ -50,10 +50,11 @@ class BIP39Test {
     @Test
     fun `given valid 12-word mnemonic when deriving seed then matches test vector`() {
         // Given - Trezor test vector with "TREZOR" passphrase
-        // ⚠️ LACE COMPATIBILITY: First 32 bytes only (not full 64 bytes)
+        // Full 64-byte PBKDF2 output (Lace compatible)
         val mnemonic = "legal winner thank year wave sausage worth useful legal winner thank yellow"
         val expectedSeed =
-            "2e8905819b8723fe2c1d161860e5ee1830318dbf49a83bd451cfb8440c28bd6f"
+            "2e8905819b8723fe2c1d161860e5ee1830318dbf49a83bd451cfb8440c28bd6f" +
+            "a457fe1296106559a3c80937a1c1069be3a3a5bd381ee6260e8d9739fce1f607"
 
         // When - Using passphrase "TREZOR" as per official Trezor test vectors
         val actualSeed = BIP39.mnemonicToSeed(mnemonic, "TREZOR")
@@ -65,11 +66,12 @@ class BIP39Test {
     @Test
     fun `given mnemonic with passphrase when deriving seed then applies passphrase`() {
         // Given
-        // ⚠️ LACE COMPATIBILITY: First 32 bytes only (not full 64 bytes)
+        // Full 64-byte PBKDF2 output (Lace compatible)
         val mnemonic = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"
         val passphrase = "TREZOR"
         val expectedSeed =
-            "d71de856f81a8acc65e6fc851a38d4d7ec216fd0796d0a6827a3ad6ed5511a30"
+            "d71de856f81a8acc65e6fc851a38d4d7ec216fd0796d0a6827a3ad6ed5511a30" +
+            "fa280f12eb2e47ed2ac03b5c462a0358d18d69fe4f985ec81778c1b370b652a8"
 
         // When
         val actualSeed = BIP39.mnemonicToSeed(mnemonic, passphrase)
@@ -160,16 +162,16 @@ class BIP39Test {
     }
 
     @Test
-    fun `given 24-word mnemonic when generating seed then produces 32 bytes`() {
+    fun `given 24-word mnemonic when generating seed then produces 64 bytes`() {
         // Given
         val mnemonic = TestFixtures.TEST_MNEMONIC_24_WORDS
 
         // When
         val seed = BIP39.mnemonicToSeed(mnemonic)
 
-        // Then - ⚠️ LACE COMPATIBILITY: We truncate to 32 bytes (not standard 64 bytes)
+        // Then - Full 64-byte PBKDF2 output (Lace compatible)
         // See docs/LACE_COMPATIBILITY.md for explanation
-        assertEquals(32, seed.size)
+        assertEquals(64, seed.size)
     }
 }
 

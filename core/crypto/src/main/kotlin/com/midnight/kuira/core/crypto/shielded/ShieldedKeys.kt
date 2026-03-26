@@ -32,7 +32,7 @@ package com.midnight.kuira.core.crypto.shielded
  *
  * **References:**
  * - Midnight Ledger: `midnight-libraries/midnight-ledger/zswap/src/keys.rs`
- * - Midnight Wallet SDK: `midnight-zswap` (v7.0.0)
+ * - Midnight Wallet SDK: `midnight-zswap` (see Cargo.toml for version)
  *
  * @property coinPublicKey 64-character hex string (32 bytes) - ZSwap coin public key
  * @property encryptionPublicKey 64-character hex string (32 bytes) - ZSwap encryption public key

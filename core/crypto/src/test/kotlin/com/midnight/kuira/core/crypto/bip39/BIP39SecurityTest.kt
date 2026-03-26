@@ -65,7 +65,7 @@ class BIP39SecurityTest {
     // ========== Seed Length Consistency ==========
 
     @Test
-    fun `when deriving seed then always produces 32 bytes`() {
+    fun `when deriving seed then always produces 64 bytes`() {
         // Given
         val mnemonics = List(5) { BIP39.generateMnemonic() }
 
@@ -73,15 +73,15 @@ class BIP39SecurityTest {
         mnemonics.forEach { mnemonic ->
             val seed = BIP39.mnemonicToSeed(mnemonic)
             assertEquals(
-                "Seed should always be 32 bytes (Lace compatibility)",
-                32,
+                "Seed should always be 64 bytes (Lace compatibility)",
+                64,
                 seed.size
             )
         }
     }
 
     @Test
-    fun `when deriving seed for all word counts then always produces 32 bytes`() {
+    fun `when deriving seed for all word counts then always produces 64 bytes`() {
         // Given
         val wordCounts = listOf(12, 15, 18, 21, 24)
 
@@ -90,8 +90,8 @@ class BIP39SecurityTest {
             val mnemonic = BIP39.generateMnemonic(wordCount = wordCount)
             val seed = BIP39.mnemonicToSeed(mnemonic)
             assertEquals(
-                "Seed should always be 32 bytes for Lace compatibility (wordCount=$wordCount)",
-                32,
+                "Seed should always be 64 bytes for Lace compatibility (wordCount=$wordCount)",
+                64,
                 seed.size
             )
         }

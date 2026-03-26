@@ -80,8 +80,8 @@ class ShieldedAddressGenerationTest {
                     val hrp = "mn_shield-addr_$networkId"
                     val address = Bech32m.encode(hrp, fullAddressBytes)
 
-                    // Expected from Lace-compatible Midnight TypeScript SDK (32-byte seed)
-                    val expectedAddress = "mn_shield-addr_test1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cewjpgr"
+                    // Expected from Lace-compatible Midnight TypeScript SDK (64-byte seed)
+                    val expectedAddress = "mn_shield-addr_test1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2cyckupm"
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
@@ -136,10 +136,10 @@ class ShieldedAddressGenerationTest {
                     val hrp = "mn_shield-addr_$networkId"
                     val address = Bech32m.encode(hrp, fullAddressBytes)
 
-                    // Expected from Lace-compatible Midnight TypeScript SDK (32-byte seed)
-                    val expectedCoinPk = "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7"
-                    val expectedEncPk = "58d0c3c4c2c6bcfbc369e01c1d893a7d93992762407daea4a4574cbc7efb3157"
-                    val expectedAddress = "mn_shield-addr_dev1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cl6vd04"
+                    // Expected from Lace-compatible Midnight TypeScript SDK (64-byte seed)
+                    val expectedCoinPk = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524"
+                    val expectedEncPk = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
+                    val expectedAddress = "mn_shield-addr_dev1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2czvgsxd"
 
                     assertEquals("Coin PK should match TypeScript SDK", expectedCoinPk, shieldedKeys.coinPublicKey)
                     assertEquals("Enc PK should match TypeScript SDK", expectedEncPk, shieldedKeys.encryptionPublicKey)
@@ -190,8 +190,8 @@ class ShieldedAddressGenerationTest {
                     val hrp = "mn_shield-addr_$networkId"
                     val address = Bech32m.encode(hrp, fullAddressBytes)
 
-                    // Expected from Lace-compatible Midnight TypeScript SDK (32-byte seed)
-                    val expectedAddress = "mn_shield-addr_undeployed1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cl6ysq7"
+                    // Expected from Lace-compatible Midnight TypeScript SDK (64-byte seed)
+                    val expectedAddress = "mn_shield-addr_undeployed1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2czvqdfx"
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
@@ -240,8 +240,8 @@ class ShieldedAddressGenerationTest {
                     val hrp = "mn_shield-addr"  // NO network suffix for mainnet
                     val address = Bech32m.encode(hrp, fullAddressBytes)
 
-                    // Expected from Lace-compatible Midnight TypeScript SDK (32-byte seed)
-                    val expectedAddress = "mn_shield-addr1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4ctsgm4w"
+                    // Expected from Lace-compatible Midnight TypeScript SDK (64-byte seed)
+                    val expectedAddress = "mn_shield-addr1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2ckxvxuk"
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 

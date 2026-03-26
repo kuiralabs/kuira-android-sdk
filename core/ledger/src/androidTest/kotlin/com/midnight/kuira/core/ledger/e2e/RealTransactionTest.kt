@@ -10,8 +10,13 @@ import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
 import com.midnight.kuira.core.indexer.database.UtxoDatabase
+import com.midnight.kuira.core.indexer.utxo.UtxoManager
+import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.withTimeoutOrNull
 import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
+import com.midnight.kuira.core.ledger.api.ProofServerClientImpl
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
@@ -77,7 +82,7 @@ class RealTransactionTest {
          * FUNDED ADDRESS - Derived at m/44'/2400'/0'/0/0 from TEST_MNEMONIC (INDEX 0)
          * This is the standard first address for the test wallet
          */
-        private const val FUNDED_ADDRESS = "mn_addr_undeployed15jlkezafp4mju3v7cdh3ywre2y2s3szgpqrkw8p4tzxjqhuaqhlsd2etrq"
+        private const val FUNDED_ADDRESS = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx"
 
         /**
          * Recipient address will be derived at: m/44'/2400'/0'/0/4 (INDEX 4)
@@ -95,6 +100,7 @@ class RealTransactionTest {
          * Node URL (Android emulator uses 10.0.2.2 for host's localhost).
          */
         private const val NODE_URL = "http://10.0.2.2:9944"
+        private const val PROOF_SERVER_URL = "http://10.0.2.2:6300"
 
         /**
          * Amount to send in test transaction.
@@ -118,11 +124,10 @@ class RealTransactionTest {
         database = UtxoDatabase.getInstance(context)
 
         // Generate wallet from mnemonic
-        var seed = BIP39.mnemonicToSeed(TEST_MNEMONIC, passphrase = "")
+        val bip39Seed = BIP39.mnemonicToSeed(TEST_MNEMONIC, passphrase = "")
 
-        // ⚠️ LACE WALLET COMPATIBILITY: BIP39.mnemonicToSeed() returns 32 bytes (NOT 64)
-        // This matches Lace wallet convention. HDWallet.fromSeed() uses these 32 bytes.
-        wallet = HDWallet.fromSeed(seed)
+        // BIP39.mnemonicToSeed() returns full 64-byte PBKDF2 seed, matching Lace wallet.
+        wallet = HDWallet.fromSeed(bip39Seed)
 
         // Derive DUST key at m/44'/2400'/0'/2/0 (Role 2 = Dust, Index 0)
         // Midnight SDK derives dust key at Roles.Dust (role 2), NOT NightExternal (role 0)
@@ -131,7 +136,7 @@ class RealTransactionTest {
             .selectRole(MidnightKeyRole.DUST)
             .deriveKeyAt(0)
 
-        // Store dust seed for replaying events
+        // Store dust seed for replaying events (class field, used in test + teardown)
         seed = dustDerivedKey.privateKeyBytes.copyOf()
         dustDerivedKey.clear()
 
@@ -205,34 +210,46 @@ class RealTransactionTest {
         }
         println()
 
-        // Insert FRESH UTXO - Just created with current node version!
-        // This UTXO was JUST funded via TypeScript SDK
-        // It belongs to Android-derived address (index 3), created seconds ago!
-        println("📝 Inserting FRESH on-chain UTXO...")
-        val realIntentHash = "00e28d3099efda8b36d6277c61f4ce062d52102898b1314c16bd28c9d905b59c"  // 32 bytes (64 hex chars)
-        val realTransactionHash = "00e28d3099efda8b36d6277c61f4ce062d52102898b1314c16bd28c9d905b59c"  // Same as intent hash for test
-
-        val realUtxo = com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity(
-            id = "$realTransactionHash:0",  // Database ID uses transactionHash
-            transactionHash = realTransactionHash,
-            intentHash = realIntentHash,
-            outputIndex = 0,
-            owner = FUNDED_ADDRESS,
-            ownerPublicKey = TransactionSigner.getPublicKey(privateKey)!!.toHex(),
-            tokenType = NATIVE_TOKEN,
-            value = "5000000", // 5 NIGHT (FRESH UTXO)
-            ctime = System.currentTimeMillis() / 1000,
-            registeredForDustGeneration = false,
-            state = com.midnight.kuira.core.indexer.database.UtxoState.AVAILABLE
+        // Sync unshielded UTXOs from the indexer (same pattern as SubscriptionManager)
+        println("📡 Syncing unshielded UTXOs from indexer...")
+        val wsIndexerClient = IndexerClientImpl(
+            baseUrl = "http://10.0.2.2:8088/api/v3",
+            developmentMode = true
         )
-        database.unshieldedUtxoDao().insertUtxos(listOf(realUtxo))
-        println("✅ FRESH UTXO inserted: ${realIntentHash.take(12)}...")
-        println("   Value: 5 NIGHT (5,000,000 smallest units) - JUST CREATED!")
-        println()
-        println("   💡 After test: Check recipient's balance to verify transaction")
-        println("      Recipient (index 4): $recipientAddress")
-        println("      Expected: 1 NIGHT (1,000,000 smallest units)")
-        println("      Using FRESH UTXO created with current node version!")
+        val utxoManager = UtxoManager(database.unshieldedUtxoDao())
+        try {
+            var txCount = 0
+            var highestTxId = 0
+            var lastSeenTxId = 0
+            var progressReceived = false
+            withTimeoutOrNull(30_000L) {
+                wsIndexerClient.subscribeToUnshieldedTransactions(
+                    address = FUNDED_ADDRESS,
+                    transactionId = null  // Omit to replay all from beginning (CLI pattern)
+                ).takeWhile { update ->
+                    utxoManager.processUpdate(update)
+                    when (update) {
+                        is UnshieldedTransactionUpdate.Transaction -> {
+                            txCount++
+                            lastSeenTxId = maxOf(lastSeenTxId, update.transaction.id)
+                            // Check if we've caught up after receiving progress
+                            !(progressReceived && lastSeenTxId >= highestTxId)
+                        }
+                        is UnshieldedTransactionUpdate.Progress -> {
+                            highestTxId = update.highestTransactionId
+                            progressReceived = true
+                            // If no transactions expected or already caught up, stop
+                            !(highestTxId == 0 || lastSeenTxId >= highestTxId)
+                        }
+                    }
+                }.collect {}
+            } ?: println("   ⚠️ Sync timed out after 30s")
+            println("   ✅ Synced $txCount transactions (highest=$highestTxId, lastSeen=$lastSeenTxId)")
+            val utxos = database.unshieldedUtxoDao().getUnspentUtxos(FUNDED_ADDRESS)
+            println("   ✅ ${utxos.size} UTXOs available after sync")
+        } finally {
+            wsIndexerClient.close()
+        }
     }
 
     @After
@@ -326,17 +343,13 @@ class RealTransactionTest {
         // Step 4: Build transaction
         println("\n🔨 Step 4: Building transaction...")
 
-        // Get owner public key from database (should be stored)
-        val ownerPublicKeyOrNull = selectedUtxo.ownerPublicKey
-        assertNotNull("UTXO missing owner_public_key field. Database needs migration.", ownerPublicKeyOrNull)
-        val ownerPublicKey = ownerPublicKeyOrNull!!
-
+        // Use the public key derived from wallet (indexer doesn't return it)
         val input = UtxoSpend(
             intentHash = selectedUtxo.intentHash,
             outputNo = selectedUtxo.outputIndex,
             value = utxoValue,
             owner = senderAddress,
-            ownerPublicKey = ownerPublicKey,
+            ownerPublicKey = senderPublicKeyHex,
             tokenType = NATIVE_TOKEN
         )
 
@@ -439,16 +452,31 @@ class RealTransactionTest {
             serializer.serialize(signedIntent)
         }
 
-        println("   ✅ SCALE serialized: ${scaleHex.length / 2} bytes")
+        println("   ✅ SCALE serialized (unproven): ${scaleHex.length / 2} bytes")
         println("   SCALE hex: ${scaleHex.take(80)}...")
 
-        // Step 8: Submit to node
-        println("\n🌐 Step 8: Submitting to Midnight node with REAL signature...")
+        // Step 8: Prove transaction via proof server
+        println("\n🔐 Step 8: Proving transaction via proof server...")
+        val proofServerClient = ProofServerClientImpl(
+            proofServerUrl = PROOF_SERVER_URL,
+            developmentMode = true
+        )
+        val provenHex = proofServerClient.proveTransaction(scaleHex)
+        println("   ✅ Transaction proven: ${provenHex.length / 2} bytes")
+
+        // Step 9: Seal proven transaction
+        println("\n🔏 Step 9: Sealing proven transaction...")
+        val sealedHex = serializer.sealProvenTransaction(provenHex)
+        assertNotNull("Failed to seal proven transaction", sealedHex)
+        println("   ✅ Transaction sealed: ${sealedHex!!.length / 2} bytes")
+
+        // Step 10: Submit to node
+        println("\n🌐 Step 10: Submitting sealed transaction to Midnight node...")
 
         val nodeClient = NodeRpcClientImpl(nodeUrl = NODE_URL)
 
         try {
-            val txHash = nodeClient.submitTransaction(scaleHex)
+            val txHash = nodeClient.submitTransaction(sealedHex)
 
             // SUCCESS - Transaction accepted!
             println("   ✅ ✅ ✅ TRANSACTION ACCEPTED BY NODE!")

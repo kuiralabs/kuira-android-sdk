@@ -2,11 +2,12 @@ package com.midnight.kuira.feature.dust
 
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.database.UtxoState
-import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.ProofServerClient
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
+import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.Dispatchers
@@ -25,10 +26,9 @@ import java.math.BigInteger
 /**
  * Unit tests for DustViewModel.
  *
- * **What's real vs mocked:**
- * - Real: DustBalanceCalculator (pure domain logic — no I/O)
- * - Mocked: DustRepository (database + FFI), ProofServerClient (network),
- *   TransactionSerializer (FFI), NodeRpcClient (network)
+ * **What's mocked:**
+ * - DustRepository (database + FFI), ProofServerClient (network),
+ *   TransactionSerializer (FFI), NodeRpcClient (network), UtxoManager (database)
  *
  * **Known gap:** The registerDust happy path (build → prove → seal → submit)
  * is not testable because DustKeyDeriver and DustRegistrationBuilder are
@@ -43,10 +43,8 @@ class DustViewModelTest {
     private lateinit var proofServerClient: ProofServerClient
     private lateinit var serializer: TransactionSerializer
     private lateinit var nodeRpcClient: NodeRpcClient
+    private lateinit var utxoManager: UtxoManager
     private lateinit var viewModel: DustViewModel
-
-    // Real calculator — pure domain logic, no reason to mock
-    private val dustBalanceCalculator = DustBalanceCalculator()
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -58,14 +56,15 @@ class DustViewModelTest {
         proofServerClient = mock()
         serializer = mock()
         nodeRpcClient = mock()
+        utxoManager = mock()
 
         viewModel = DustViewModel(
             dustRepository = dustRepository,
-            dustBalanceCalculator = dustBalanceCalculator,
             proofServerClient = proofServerClient,
             serializer = serializer,
             nodeRpcClient = nodeRpcClient,
-            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
+            utxoManager = utxoManager
         )
     }
 
@@ -142,10 +141,12 @@ class DustViewModelTest {
             generationRatePerSecond = "1000"
         )
 
+        val nightBalance = BigInteger.valueOf(5_000_000)
         whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(balance)
-        whenever(dustRepository.getTokenCount(TEST_ADDRESS)).thenReturn(tokenCount)
-        whenever(dustRepository.getAvailableTokens(TEST_ADDRESS)).thenReturn(listOf(token))
+        whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(
+            mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
+        )
 
         viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
 
@@ -153,70 +154,17 @@ class DustViewModelTest {
         assertTrue("Expected Status but got ${state::class.simpleName}", state is DustUiState.Status)
         val status = state as DustUiState.Status
         assertEquals(balance, status.balance)
-        assertEquals(tokenCount, status.tokenCount)
-        assertFalse(status.isAtCapacity)
-
-        // Real calculator should produce a positive time-to-capacity
-        // (not a hardcoded mock value)
-        assertTrue(
-            "timeToCapacityMs should be > 0 for generating token, got ${status.timeToCapacityMs}",
-            status.timeToCapacityMs > 0
-        )
-        // Should be roughly 990 seconds (990,000ms), give large margin for timing
-        assertTrue(
-            "timeToCapacityMs should be roughly 900-1000 seconds, got ${status.timeToCapacityMs}ms",
-            status.timeToCapacityMs in 800_000L..1_100_000L
-        )
+        assertEquals(nightBalance, status.nightBalance)
     }
 
     @Test
-    fun `checkDustStatus with token at capacity reports isAtCapacity true`() = runTest {
-        // Token created 1 hour ago with high rate and small capacity → definitely at capacity
-        val token = createToken(
-            initialValue = "500000",
-            creationTimeMillis = System.currentTimeMillis() - 3_600_000,
-            dustCapacitySpecks = "1000000",
-            generationRatePerSecond = "10000"
-        )
+    fun `checkDustStatus shows nightBalance from utxoManager`() = runTest {
+        val nightBalance = BigInteger.valueOf(10_000_000)
 
         whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.valueOf(1_000_000))
-        whenever(dustRepository.getTokenCount(TEST_ADDRESS)).thenReturn(1)
-        whenever(dustRepository.getAvailableTokens(TEST_ADDRESS)).thenReturn(listOf(token))
-
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
-
-        val state = viewModel.state.value
-        assertTrue(state is DustUiState.Status)
-        val status = state as DustUiState.Status
-        assertTrue("Token created 1h ago with high rate should be at capacity", status.isAtCapacity)
-        assertEquals(0L, status.timeToCapacityMs)
-    }
-
-    @Test
-    fun `checkDustStatus with multiple tokens uses maxOf for time and all for capacity`() = runTest {
-        // Token A: at capacity (created long ago, high rate, small capacity)
-        val tokenAtCapacity = createToken(
-            nullifier = "token_a",
-            initialValue = "500000",
-            creationTimeMillis = System.currentTimeMillis() - 3_600_000,
-            dustCapacitySpecks = "1000000",
-            generationRatePerSecond = "10000"
-        )
-        // Token B: NOT at capacity (created 1s ago, low rate, huge capacity)
-        val tokenGenerating = createToken(
-            nullifier = "token_b",
-            initialValue = "0",
-            creationTimeMillis = System.currentTimeMillis() - 1_000,
-            dustCapacitySpecks = "100000000",
-            generationRatePerSecond = "1"
-        )
-
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
-        whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.valueOf(1_000_001))
-        whenever(dustRepository.getTokenCount(TEST_ADDRESS)).thenReturn(2)
-        whenever(dustRepository.getAvailableTokens(TEST_ADDRESS)).thenReturn(
-            listOf(tokenAtCapacity, tokenGenerating)
+        whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(
+            mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
         )
 
         viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
@@ -224,34 +172,21 @@ class DustViewModelTest {
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Status)
         val status = state as DustUiState.Status
-
-        // isAtCapacity should be false: tokens.all requires ALL to be at capacity
-        assertFalse(
-            "isAtCapacity should be false when any token is still generating",
-            status.isAtCapacity
-        )
-        // timeToCapacityMs should be the MAX across tokens (Token B has huge remaining)
-        assertTrue(
-            "timeToCapacityMs should be very large (token B has 100M capacity at rate 1/s), got ${status.timeToCapacityMs}",
-            status.timeToCapacityMs > 1_000_000L
-        )
+        assertEquals(nightBalance, status.nightBalance)
     }
 
     @Test
-    fun `checkDustStatus with empty available tokens returns zero time and not at capacity`() = runTest {
-        // Dust is registered but no available tokens (all spent or pending)
+    fun `checkDustStatus with no NIGHT UTXOs shows zero nightBalance`() = runTest {
         whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.ZERO)
-        whenever(dustRepository.getTokenCount(TEST_ADDRESS)).thenReturn(0)
-        whenever(dustRepository.getAvailableTokens(TEST_ADDRESS)).thenReturn(emptyList())
+        whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(emptyMap())
 
         viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Status)
         val status = state as DustUiState.Status
-        assertEquals(0L, status.timeToCapacityMs)
-        assertFalse("Empty token list should not report at capacity", status.isAtCapacity)
+        assertEquals(BigInteger.ZERO, status.nightBalance)
     }
 
     // ========================================================================
@@ -278,7 +213,7 @@ class DustViewModelTest {
 
     @Test
     fun `registerDust with blank address shows error without entering Registering state`() = runTest {
-        viewModel.registerDust("", "seed", BigInteger.valueOf(1_000_000))
+        viewModel.registerDust("", "seed")
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Error)
@@ -287,7 +222,7 @@ class DustViewModelTest {
 
     @Test
     fun `registerDust with blank seed shows error without entering Registering state`() = runTest {
-        viewModel.registerDust("mn_addr_test", "", BigInteger.valueOf(1_000_000))
+        viewModel.registerDust("mn_addr_test", "")
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Error)
@@ -301,7 +236,7 @@ class DustViewModelTest {
     @Test
     fun `registerDust with invalid seed phrase shows error`() = runTest {
         // BIP39.mnemonicToSeed will throw for invalid mnemonic — real crypto, not mocked
-        viewModel.registerDust(TEST_ADDRESS, "invalid seed", BigInteger.valueOf(1_000_000))
+        viewModel.registerDust(TEST_ADDRESS, "invalid seed")
 
         val state = viewModel.state.value
         assertTrue("Expected Error but got ${state::class.simpleName}", state is DustUiState.Error)

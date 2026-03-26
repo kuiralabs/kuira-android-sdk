@@ -37,7 +37,7 @@ class SealedTransactionInstrumentedTest {
                 intentHash = "00e28d3099efda8b36d6277c61f4ce062d52102898b1314c16bd28c9d905b59c",
                 outputNo = 0,
                 value = BigInteger("5000000"),
-                owner = "mn_addr_testnet1ejywu6w8vvfdxj8hf0ruzqszc065nz7n3t6h99da8h3thx2e5kvw5pz",
+                owner = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx",
                 ownerPublicKey = "7de754a427c2723bd9e04f7e7876b70bed051aaa439966aaff1596a2c3309fe0",
                 tokenType = "0000000000000000000000000000000000000000000000000000000000000000"
             )
@@ -47,12 +47,12 @@ class SealedTransactionInstrumentedTest {
         val outputs = listOf(
             UtxoOutput(
                 value = BigInteger("1000000"),
-                owner = "mn_addr_testnet1ejywu6w8vvfdxj8hf0ruzqszc065nz7n3t6h99da8h3thx2e5kvw5pz",  // Test address
+                owner = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx",  // Test address
                 tokenType = "0000000000000000000000000000000000000000000000000000000000000000"
             ),
             UtxoOutput(
                 value = BigInteger("4000000"),
-                owner = "mn_addr_testnet1ejywu6w8vvfdxj8hf0ruzqszc065nz7n3t6h99da8h3thx2e5kvw5pz",  // Change address
+                owner = "mn_addr_undeployed19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqauuvtx",  // Change address
                 tokenType = "0000000000000000000000000000000000000000000000000000000000000000"
             )
         )

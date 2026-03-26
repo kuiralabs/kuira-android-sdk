@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
  * **Requirements:**
  * - Native library `libkuira_crypto_ffi.so` must be bundled in APK
  * - Library must be built for the target device architecture (arm64-v8a, armeabi-v7a, x86, x86_64)
- * - Rust FFI compiled against midnight-zswap (currently v7.0.0, version-abstract)
+ * - Rust FFI compiled against midnight-zswap (version-abstract — see Cargo.toml)
  *
  * **Test Vectors:**
  * These use the standard BIP-39 test mnemonic:
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  *
  * Derived at path: `m/44'/2400'/0'/3/0` (Zswap role, index 0)
  *
- * Expected outputs match Midnight SDK (key derivation is identical across v6/v7)
+ * Expected outputs match Midnight SDK (key derivation is version-abstract via Rust FFI)
  */
 @RunWith(AndroidJUnit4::class)
 class ShieldedKeyDeriverIntegrationTest {
@@ -62,10 +62,10 @@ class ShieldedKeyDeriverIntegrationTest {
         assertNotNull("Keys should be derived successfully", keys)
         keys!!
 
-        // Expected values from Midnight SDK (identical across v6/v7)
+        // Expected values from Midnight SDK (version-abstract via Rust FFI)
         assertEquals(
             "Coin public key should match Midnight SDK output",
-            "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",
+            "ee0a94d8a30aa71088e83832d0f45f864766cf50a79117093a15c634e8490ed2",
             keys.coinPublicKey
         )
         assertEquals(
@@ -161,7 +161,7 @@ class ShieldedKeyDeriverIntegrationTest {
         // Verify keys were derived
         assertNotNull(keys)
         assertEquals(
-            "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7",
+            "ee0a94d8a30aa71088e83832d0f45f864766cf50a79117093a15c634e8490ed2",
             keys!!.coinPublicKey
         )
 
@@ -176,9 +176,9 @@ class ShieldedKeyDeriverIntegrationTest {
     @Test
     fun testConcurrentDerivations() {
         // Test thread safety - derive keys concurrently
-        // Lace-compatible shielded seed (derived from 32-byte BIP-39 seed at m/44'/2400'/0'/3/0)
+        // Shielded seed (derived from BIP-39 seed at m/44'/2400'/0'/3/0)
         val seed = hexToBytes("5212aab1ab7134133dae5820e87697a4327218ee908d73c234ea0a7b95d0b176")
-        val expectedCoinPk = "09c2f6f847d07e1a3faece35557eef5a811481991cef0689f47ebc90c0ab95f7"
+        val expectedCoinPk = "ee0a94d8a30aa71088e83832d0f45f864766cf50a79117093a15c634e8490ed2"
 
         val threads = List(10) { threadIndex ->
             Thread {

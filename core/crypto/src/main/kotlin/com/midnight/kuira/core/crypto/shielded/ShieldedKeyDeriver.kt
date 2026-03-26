@@ -24,13 +24,12 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **Native Library:**
  * This class loads `libkuira_crypto_ffi.so` (Android) which is compiled from:
- * - Location: `rust/kuira-crypto-ffi/`
- * - Dependencies: `midnight-zswap` (currently v7.0.0), `midnight-serialize`
+ * - Location: `kuira-crypto-ffi/`
+ * - Dependencies: `midnight-zswap`, `midnight-serialize` (version-abstract — see Cargo.toml)
  *
  * **Version Compatibility:**
- * Key derivation algorithm is identical across v6/v7 (same domain separators, same KDF).
  * The Rust FFI is the version abstraction boundary — Kotlin depends on stable function
- * signatures, not Midnight version internals.
+ * signatures, not Midnight version internals. See MIDNIGHT_GUIDELINES.md for version details.
  *
  * **Thread Safety:**
  * This object is thread-safe. The underlying Rust functions are pure and stateless.
@@ -58,7 +57,7 @@ import javax.annotation.concurrent.ThreadSafe
  * - On Android, check Logcat for native error messages
  *
  * **References:**
- * - Rust FFI: `rust/kuira-crypto-ffi/src/lib.rs`
+ * - Rust FFI: `kuira-crypto-ffi/src/lib.rs`
  * - Algorithm: `docs/SHIELDED_ADDRESS_ALGORITHM.md`
  * - POC Results: `docs/SHIELDED_JNI_POC_RESULTS.md`
  */
@@ -145,7 +144,7 @@ object ShieldedKeyDeriver {
      * - Total: < 2ms per derivation
      *
      * **Compatibility:**
-     * The output matches Midnight SDK (key derivation identical across v6/v7):
+     * The output matches Midnight SDK (key derivation version-abstract via Rust FFI):
      * ```javascript
      * const zswapKeys = ZswapSecretKeys.fromSeed(seed);
      * const coinPk = zswapKeys.coinPublicKey;  // Matches our coinPublicKey

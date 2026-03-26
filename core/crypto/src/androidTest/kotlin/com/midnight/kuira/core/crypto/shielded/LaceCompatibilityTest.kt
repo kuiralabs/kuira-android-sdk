@@ -29,16 +29,14 @@ import org.junit.runner.RunWith
  *
  * ## The Non-Standard Behavior
  *
- * Lace uses ONLY the first 32 bytes of the BIP-39 seed (not the standard 64 bytes).
- * This was confirmed by the Lace team in GitHub issue #2133.
- *
- * Our implementation follows Lace's approach to ensure compatibility.
+ * Lace now uses the full 64-byte BIP-39 seed (PBKDF2 output).
+ * Our implementation matches this behavior for compatibility.
  *
  * ## Test Vectors Source
  *
  * These test vectors were generated using:
  * 1. The official Lace wallet (https://www.lace.io/)
- * 2. Midnight TypeScript SDK with 32-byte truncated seed
+ * 2. Midnight TypeScript SDK with full 64-byte seed
  * 3. Verification script: `generate-lace-addresses-all-networks.mjs` (see kuira-verification-test repo)
  *
  * ## References
@@ -73,8 +71,8 @@ class LaceCompatibilityTest {
         val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
         val bip39Seed = BIP39.mnemonicToSeed(mnemonic)
 
-        // Verify seed is 32 bytes (Lace standard, not 64 bytes like standard BIP-39)
-        assertEquals("Seed should be 32 bytes for Lace compatibility", 32, bip39Seed.size)
+        // Verify seed is 64 bytes (full PBKDF2 output, Lace compatible)
+        assertEquals("Seed should be 64 bytes for Lace compatibility", 64, bip39Seed.size)
 
         MemoryUtils.useAndWipe(bip39Seed) { seed ->
             val hdWallet = HDWallet.fromSeed(seed)
@@ -95,7 +93,7 @@ class LaceCompatibilityTest {
                     val address = Bech32m.encode("mn_shield-addr_preview", fullAddressBytes)
 
                     // Expected address from Lace wallet
-                    val laceAddress = "mn_shield-addr_preview1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cenlp3y"
+                    val laceAddress = "mn_shield-addr_preview1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2cy9mucu"
 
                     assertEquals("Address MUST match Lace wallet", laceAddress, address)
 
@@ -125,11 +123,11 @@ class LaceCompatibilityTest {
         val bip39Seed = BIP39.mnemonicToSeed(mnemonic)
 
         val expectedAddresses = mapOf(
-            "test" to "mn_shield-addr_test1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cewjpgr",
-            "dev" to "mn_shield-addr_dev1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cl6vd04",
-            "preview" to "mn_shield-addr_preview1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cenlp3y",
-            "undeployed" to "mn_shield-addr_undeployed1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4cl6ysq7",
-            "mainnet" to "mn_shield-addr1p8p0d7z86plp50awec642lh0t2q3fqvernhsdz05067fps9tjhm435xrcnpvd08mcd57q8qa3ya8myueya3yqldw5jj9wn9u0manz4ctsgm4w"
+            "test" to "mn_shield-addr_test1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2cyckupm",
+            "dev" to "mn_shield-addr_dev1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2czvgsxd",
+            "preview" to "mn_shield-addr_preview1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2cy9mucu",
+            "undeployed" to "mn_shield-addr_undeployed1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2czvqdfx",
+            "mainnet" to "mn_shield-addr1jsy2ala7ahrtndz7r0xxy8g6yulmvlmhmclkt0amrq2dsnutv5j08tnsd0egept2gpmfpdrgpqd87ksj8efr2qdknapet27d0cvsx2ckxvxuk"
         )
 
         MemoryUtils.useAndWipe(bip39Seed) { seed ->
@@ -179,41 +177,35 @@ class LaceCompatibilityTest {
     }
 
     /**
-     * This test documents what happens if we use the FULL 64-byte BIP-39 seed
-     * (standard behavior) instead of Lace's 32-byte truncated seed.
-     *
-     * **Result**: Completely different addresses (wallet incompatibility)
-     *
-     * This test exists to document WHY we truncate the seed and what happens
-     * if someone tries to "fix" it back to standard BIP-39.
+     * This test verifies that BIP39.mnemonicToSeed() returns the full 64-byte
+     * PBKDF2 output, matching standard BIP-39 and Lace wallet behavior.
      */
     @Test
-    fun documentNonCompatibility_Full64ByteSeed() {
+    fun verifyFullSeedMatchesStandardBIP39() {
         val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
 
-        // Simulate what would happen if we used full 64-byte seed
+        // Standard BIP-39 via BitcoinJMnemonicService: 64 bytes
         val service = com.midnight.kuira.core.crypto.bip39.BitcoinJMnemonicService()
-        val full64ByteSeed = service.mnemonicToSeed(mnemonic, "")  // Standard BIP-39: 64 bytes
+        val standardSeed = service.mnemonicToSeed(mnemonic, "")
 
-        assertEquals("Standard BIP-39 produces 64 bytes", 64, full64ByteSeed.size)
+        assertEquals("Standard BIP-39 produces 64 bytes", 64, standardSeed.size)
 
-        // Our actual implementation truncates to 32 bytes
-        val our32ByteSeed = BIP39.mnemonicToSeed(mnemonic)
-        assertEquals("Our implementation produces 32 bytes", 32, our32ByteSeed.size)
+        // Our BIP39.mnemonicToSeed() should also return 64 bytes
+        val ourSeed = BIP39.mnemonicToSeed(mnemonic)
+        assertEquals("Our implementation produces 64 bytes", 64, ourSeed.size)
 
-        // The first 32 bytes should match
+        // Both should be identical (full PBKDF2 output)
         assertArrayEquals(
-            "First 32 bytes should be identical",
-            full64ByteSeed.copyOfRange(0, 32),
-            our32ByteSeed
+            "BIP39.mnemonicToSeed() should match standard BIP-39 output",
+            standardSeed,
+            ourSeed
         )
 
         println("")
-        println("⚠️  DOCUMENTATION: Why We Truncate Seeds")
-        println("Full BIP-39 Seed: ${full64ByteSeed.size} bytes")
-        println("Our Truncated Seed: ${our32ByteSeed.size} bytes")
-        println("Reason: Lace wallet compatibility")
-        println("See: docs/LACE_COMPATIBILITY.md")
+        println("VERIFIED: BIP39.mnemonicToSeed() returns full 64-byte PBKDF2 output")
+        println("Standard BIP-39 Seed: ${standardSeed.size} bytes")
+        println("Our Seed: ${ourSeed.size} bytes")
+        println("Match: ${standardSeed.contentEquals(ourSeed)}")
     }
 
     // Helper function

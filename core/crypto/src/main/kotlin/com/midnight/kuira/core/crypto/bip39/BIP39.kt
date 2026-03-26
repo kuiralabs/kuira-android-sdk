@@ -94,16 +94,11 @@ object BIP39 {
      *
      * @param mnemonic The mnemonic phrase (12-24 words)
      * @param passphrase Optional passphrase for additional security (default: empty string)
-     * @return 32-byte seed (TRUNCATED for Lace compatibility)
+     * @return 64-byte seed (full BIP-39 PBKDF2 output, matching Lace wallet)
      * @throws IllegalArgumentException if mnemonic is invalid
      */
     fun mnemonicToSeed(mnemonic: String, passphrase: String = ""): ByteArray {
-        val fullSeed = service.mnemonicToSeed(mnemonic, passphrase)  // 64 bytes from standard BIP-39
-
-        // ⚠️ TRUNCATE TO 32 BYTES FOR LACE WALLET COMPATIBILITY
-        // This is NOT standard BIP-39 behavior, but necessary for ecosystem compatibility.
-        // See docs/LACE_COMPATIBILITY.md for full explanation.
-        return fullSeed.copyOfRange(0, 32)
+        return service.mnemonicToSeed(mnemonic, passphrase)  // 64 bytes from standard BIP-39
     }
 
     /**

@@ -343,7 +343,7 @@ class BalanceViewModelTest {
         val dust = state.balances.find { it.tokenType == "DUST" }
 
         assertEquals("5 TNIGHT", tnight?.balanceFormatted)
-        assertEquals("3 DUST", dust?.balanceFormatted)
+        assertEquals("0.000000003 DUST", dust?.balanceFormatted)
     }
 
     // ==================== Total Balance Calculation ====================
@@ -658,7 +658,7 @@ class BalanceViewModelTest {
         val dust = state2.balances.find { it.tokenType == "DUST" }
         val tnight = state2.balances.find { it.tokenType == "TNIGHT" }
 
-        assertEquals("1 DUST", dust?.balanceFormatted)
+        assertEquals("0.000000001 DUST", dust?.balanceFormatted)
         assertEquals("0.5 TNIGHT", tnight?.balanceFormatted)
     }
 
