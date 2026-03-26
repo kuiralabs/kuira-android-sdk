@@ -14,7 +14,7 @@ class ShieldedKeysTest {
 
     @Test
     fun `given valid 64-char hex keys when creating ShieldedKeys then succeeds`() {
-        val coinPk = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a"
+        val coinPk = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524"
         val encPk = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
 
         val keys = ShieldedKeys(
@@ -29,7 +29,7 @@ class ShieldedKeysTest {
     @Test(expected = IllegalArgumentException::class)
     fun `given coin key with wrong length when creating ShieldedKeys then throws`() {
         ShieldedKeys(
-            coinPublicKey = "274c79e9", // Too short
+            coinPublicKey = "9408aeff", // Too short
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
     }
@@ -37,7 +37,7 @@ class ShieldedKeysTest {
     @Test(expected = IllegalArgumentException::class)
     fun `given encryption key with wrong length when creating ShieldedKeys then throws`() {
         ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706b" // Too short
         )
     }
@@ -45,7 +45,7 @@ class ShieldedKeysTest {
     @Test(expected = IllegalArgumentException::class)
     fun `given uppercase hex when creating ShieldedKeys then throws`() {
         ShieldedKeys(
-            coinPublicKey = "274C79E90FDF0E29468299FF624DC7092423041BA3976B76464FEAE3A07B994A", // Uppercase
+            coinPublicKey = "9408AEFFBEEDC6B9B45E1BCC621D1A273FB67F77DE3F65BFBB1814D84F8B6524", // Uppercase
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
     }
@@ -53,7 +53,7 @@ class ShieldedKeysTest {
     @Test(expected = IllegalArgumentException::class)
     fun `given non-hex characters when creating ShieldedKeys then throws`() {
         ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994g", // 'g' is invalid
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b652g", // 'g' is invalid
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
     }
@@ -61,23 +61,23 @@ class ShieldedKeysTest {
     @Test
     fun `given valid keys when calling coinPublicKeyBytes then returns correct bytes`() {
         val keys = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
         val bytes = keys.coinPublicKeyBytes()
 
         assertEquals(32, bytes.size)
-        assertEquals(0x27.toByte(), bytes[0])
-        assertEquals(0x4c.toByte(), bytes[1])
-        assertEquals(0x79.toByte(), bytes[2])
-        assertEquals(0xe9.toByte(), bytes[3])
+        assertEquals(0x94.toByte(), bytes[0])
+        assertEquals(0x08.toByte(), bytes[1])
+        assertEquals(0xae.toByte(), bytes[2])
+        assertEquals(0xff.toByte(), bytes[3])
     }
 
     @Test
     fun `given valid keys when calling encryptionPublicKeyBytes then returns correct bytes`() {
         val keys = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
@@ -93,28 +93,28 @@ class ShieldedKeysTest {
     @Test
     fun `given ShieldedKeys when calling toString then masks keys`() {
         val keys = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
         val str = keys.toString()
 
         // Should show only first 8 characters
-        assertTrue(str.contains("274c79e9"))
+        assertTrue(str.contains("9408aeff"))
         assertTrue(str.contains("f3ae706b"))
         // Should not show full keys
-        assertFalse(str.contains("274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a"))
+        assertFalse(str.contains("9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524"))
     }
 
     @Test
     fun `given two identical ShieldedKeys when comparing then are equal`() {
         val keys1 = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
         val keys2 = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
@@ -125,12 +125,12 @@ class ShieldedKeysTest {
     @Test
     fun `given two different ShieldedKeys when comparing then are not equal`() {
         val keys1 = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994a",
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6524",
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 
         val keys2 = ShieldedKeys(
-            coinPublicKey = "274c79e90fdf0e29468299ff624dc7092423041ba3976b76464feae3a07b994b", // Different last char
+            coinPublicKey = "9408aeffbeedc6b9b45e1bcc621d1a273fb67f77de3f65bfbb1814d84f8b6525", // Different last char
             encryptionPublicKey = "f3ae706bf28c856a407690b468081a7f5a123e523501b69f4395abcd7e19032b"
         )
 

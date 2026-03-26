@@ -36,7 +36,7 @@ android {
     externalNativeBuild {
         cmake {
             // Path to CMakeLists.txt in Rust FFI project
-            path = file("../../rust/kuira-crypto-ffi/CMakeLists.txt")
+            path = file("../../kuira-crypto-ffi/CMakeLists.txt")
             version = "3.22.1"  // Match CMake version from CMakeLists.txt
         }
     }
