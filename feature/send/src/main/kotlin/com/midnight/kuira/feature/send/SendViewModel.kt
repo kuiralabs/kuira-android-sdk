@@ -727,16 +727,16 @@ class SendViewModel @Inject constructor(
         private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
         private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
 
-        // MVP test recipients per network — Alice is the recipient (from kuira-verification-test wallet files)
+        // MVP test recipients per network — Bob (from CLI: mn wallet info bob)
         val DEFAULT_TEST_RECIPIENTS = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvsydj6y4", // Alice
-            "mn_addr_undeployed" to "mn_addr_undeployed10jz0h6mg83lmxktur4t7dzdkdvprcsvskhfg8qmuqasleaumkzvs7kgy4y", // Alice
-            "mn_addr_preview" to ""
+            "mn_addr_preprod" to "mn_addr_preprod1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsev7kky",
+            "mn_addr_undeployed" to "mn_addr_undeployed1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsrhyg84",
+            "mn_addr_preview" to "mn_addr_preview1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsedqx9e"
         )
-        // MVP test seed phrases per network — Bob is the sender (from kuira-verification-test wallet files)
+        // MVP test seed phrases per network — Alice is the sender (from CLI: mn wallet info alice)
         val DEFAULT_TEST_SEED_PHRASES = mapOf(
-            MidnightNetwork.PREPROD to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist", // Bob
-            MidnightNetwork.UNDEPLOYED to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist" // Bob (same mnemonic, different network)
+            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
+            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
         )
     }
 }

@@ -329,11 +329,11 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
         const val TIME_PATTERN = "h:mm a"
         const val DATE_TIME_PATTERN = "MMM d 'at' h:mm a"
 
-        // MVP test addresses per network — Bob is the sender (from kuira-verification-test wallet files)
+        // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
         val DEFAULT_TEST_ADDRESSES = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqjj0mtk", // Bob
-            "mn_addr_undeployed" to "mn_addr_undeployed14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqgf4968", // Bob
-            "mn_addr_preview" to "" // No test wallet yet
+            "mn_addr_preprod" to "mn_addr_preprod1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsyhxq03",
+            "mn_addr_undeployed" to "mn_addr_undeployed1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvs7vu77q",
+            "mn_addr_preview" to "mn_addr_preview1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsykcsuv"
         )
     }
 }

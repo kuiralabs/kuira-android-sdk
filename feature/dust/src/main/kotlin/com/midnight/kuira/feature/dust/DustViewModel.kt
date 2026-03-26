@@ -375,17 +375,17 @@ class DustViewModel @Inject constructor(
         // Submission timeout: 120 seconds (dust registration can be slower)
         private const val SUBMISSION_TIMEOUT_MS = 120_000L
 
-        // MVP test seed phrases per network — Bob is the sender
+        // MVP test seed phrases per network — Alice (from CLI: mn wallet info alice)
         private val DEFAULT_TEST_SEED_PHRASES = mapOf(
-            MidnightNetwork.PREPROD to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist",
-            MidnightNetwork.UNDEPLOYED to "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist"
+            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
+            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
         )
 
-        // MVP test addresses per network — Bob's address
+        // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
         private val DEFAULT_TEST_ADDRESSES = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqjj0mtk",
-            "mn_addr_undeployed" to "mn_addr_undeployed14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqgf4968",
-            "mn_addr_preview" to ""
+            "mn_addr_preprod" to "mn_addr_preprod1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsyhxq03",
+            "mn_addr_undeployed" to "mn_addr_undeployed1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvs7vu77q",
+            "mn_addr_preview" to "mn_addr_preview1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsykcsuv"
         )
     }
 }
