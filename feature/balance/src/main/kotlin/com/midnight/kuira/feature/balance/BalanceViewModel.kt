@@ -331,9 +331,9 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
         // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
         val DEFAULT_TEST_ADDRESSES = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsyhxq03",
-            "mn_addr_undeployed" to "mn_addr_undeployed1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvs7vu77q",
-            "mn_addr_preview" to "mn_addr_preview1g74p9wpalws8fy94uh4ljnslvyqsuj0z7g3w40mwknqfxnmsphvsykcsuv"
+            "mn_addr_preprod" to "mn_addr_preprod18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds232yy8",
+            "mn_addr_undeployed" to "mn_addr_undeployed18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60dss2s64k",
+            "mn_addr_preview" to "mn_addr_preview18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds2s55h6"
         )
     }
 }
