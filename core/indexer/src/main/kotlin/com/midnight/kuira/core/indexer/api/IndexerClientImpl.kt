@@ -258,29 +258,47 @@ class IndexerClientImpl(
 
     // ==================== SYNC ENGINE (Phase 4A) ====================
 
-    override fun subscribeToZswapEvents(fromId: Long?): Flow<RawLedgerEvent> = flow {
-        val subscription = """
-            subscription {
-                zswapLedgerEvents${if (fromId != null) "(fromId: $fromId)" else ""} {
-                    id
-                    raw
-                    maxId
+    override fun subscribeToZswapEvents(fromId: Long?): Flow<RawLedgerEvent> {
+        val variables = buildMap<String, Any> {
+            if (fromId != null) {
+                put("id", fromId)
+            }
+        }
+
+        return flow {
+            val client = getOrCreateWsClient()
+
+            try {
+                client.connect()
+            } catch (e: IllegalStateException) {
+                if (e.message?.contains("Already connected") != true) {
+                    throw e
                 }
             }
-        """.trimIndent()
 
-        // TODO: Implement WebSocket subscription using graphql-ws protocol
-        // For Phase 4A, this is a placeholder that demonstrates the API
+            client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
+                .buffer(Channel.UNLIMITED)
+                .collect { jsonElement ->
+                    val dataElement = jsonElement.jsonObject["data"]
+                    if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+                        return@collect
+                    }
 
-        // WebSocket subscription flow:
-        // 1. Connect to wsEndpoint
-        // 2. Send connection_init message
-        // 3. Wait for connection_ack
-        // 4. Send subscribe message with subscription query
-        // 5. Receive next messages with data
-        // 6. Parse JSON and emit RawLedgerEvent objects
+                    val zswapEventJson = dataElement
+                        .jsonObject["zswapLedgerEvents"]
+                        ?: throw InvalidResponseException("Missing zswapLedgerEvents in response")
 
-        error("WebSocket subscriptions not yet implemented - Phase 4A infrastructure only")
+                    val eventObj = zswapEventJson.jsonObject
+                    val id = eventObj["id"]?.jsonPrimitive?.long
+                        ?: throw InvalidResponseException("Zswap event missing 'id' field")
+                    val rawHex = eventObj["raw"]?.jsonPrimitive?.content
+                        ?: throw InvalidResponseException("Zswap event missing 'raw' field")
+                    val maxId = eventObj["maxId"]?.jsonPrimitive?.long
+                        ?: throw InvalidResponseException("Zswap event missing 'maxId' field")
+
+                    emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
+                }
+        }
     }
 
     override fun subscribeToBlocks(): Flow<BlockInfo> = flow {
@@ -517,6 +535,23 @@ class IndexerClientImpl(
         }
     } catch (e: Exception) {
         throw InvalidResponseException("Failed to query dust events: ${e.message}", e)
+    }
+
+    override suspend fun queryZswapEvents(): String = try {
+        val allEvents = subscribeToZswapEvents(fromId = null)
+            .transformWhile { event ->
+                emit(event)
+                event.id < event.maxId
+            }
+            .toList()
+
+        if (allEvents.isEmpty()) {
+            ""
+        } else {
+            allEvents.sortedBy { it.id }.joinToString("") { it.rawHex }
+        }
+    } catch (e: Exception) {
+        throw InvalidResponseException("Failed to query zswap events: ${e.message}", e)
     }
 
     override suspend fun isHealthy(): Boolean {

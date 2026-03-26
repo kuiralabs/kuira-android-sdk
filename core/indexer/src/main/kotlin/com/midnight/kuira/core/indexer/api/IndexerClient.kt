@@ -189,6 +189,16 @@ interface IndexerClient {
     suspend fun queryDustEvents(maxBlocks: Int = 100): String
 
     /**
+     * Query all zswap (shielded) events from the blockchain via subscription.
+     *
+     * Subscribes, collects all events until caught up, returns combined hex.
+     * Same pattern as [queryDustEvents] but for shielded coin events.
+     *
+     * @return Combined SCALE hex string of all zswap events, sorted by ID
+     */
+    suspend fun queryZswapEvents(): String
+
+    /**
      * Check if indexer is healthy and reachable.
      *
      * @return true if indexer is responding, false otherwise

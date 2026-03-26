@@ -29,9 +29,16 @@ import javax.inject.Singleton
 @Retention(AnnotationRetention.BINARY)
 annotation class DustStateDataStore
 
-// Extension property for creating DataStore
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ShieldedStateDataStore
+
 private val Context.dustStateDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "dust_state"
+)
+
+private val Context.shieldedStateDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "shielded_state"
 )
 
 /**
@@ -154,6 +161,15 @@ object IndexerModule {
         @ApplicationContext context: Context
     ): DataStore<Preferences> {
         return context.dustStateDataStore
+    }
+
+    @Provides
+    @Singleton
+    @ShieldedStateDataStore
+    fun provideShieldedStateDataStore(
+        @ApplicationContext context: Context
+    ): DataStore<Preferences> {
+        return context.shieldedStateDataStore
     }
 
     /**

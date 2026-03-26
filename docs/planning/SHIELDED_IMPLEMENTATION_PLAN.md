@@ -1,8 +1,23 @@
 # Shielded Implementation Plan for Kuira
 
-**Date:** 2026-03-25
-**Status:** Reviewed — Fact-checked, all questions resolved. Ready for implementation.
+**Status:** In Progress
 **Estimate:** Phase 4B-Shielded (~12h) + Phase 3 (~15-20h) = ~27-32h total
+
+## Progress
+
+- [x] Step 1: Rust FFI — `zswap_ffi.rs` (70/70 tests passing)
+- [x] Step 2: JNI Bridge (`kuira_crypto_jni.c`) + Android cross-compile done
+- [x] Step 3: Kotlin Wrapper (`ZswapLocalState.kt`) — compiles, all unit tests pass
+- [x] Step 4: GraphQL Subscription + `queryZswapEvents()` — compiles, mirrors dust pattern
+- [x] Step 5: `ShieldedRepository` + DataStore persistence — compiles, all unit tests pass
+- [ ] Step 6: UI Integration (Balance Screen)
+- [ ] Step 7: Rust FFI — Shielded Transfer Building
+- [ ] Step 8: Shielded Send UI
+- [ ] Step 9: Shielded Address Display
+- [ ] Step 10: Integration Testing
+
+---
+
 **Prerequisites:** Ledger v8 upgrade complete, 64-byte seed fix applied, dust registration working
 **Reference Implementation:** CLI wallet `shielded` branch (`midnight-wallet-cli`)
 

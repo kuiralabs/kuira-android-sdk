@@ -148,4 +148,23 @@ object GraphQLQueries {
           }
         }
     """
+
+    /**
+     * Subscribe to zswap (shielded) ledger events.
+     *
+     * Streams ALL zswap events from the given ID (global, not filtered by address).
+     * ZswapLocalState.replayEvents() decrypts internally using the zswap secret keys.
+     *
+     * Variables:
+     * - id: Int (optional, event cursor — pass last processed ID to resume)
+     */
+    const val SUBSCRIBE_ZSWAP_LEDGER_EVENTS = """
+        subscription ZswapLedgerEvents(${'$'}id: Int) {
+          zswapLedgerEvents(id: ${'$'}id) {
+            id
+            raw
+            maxId
+          }
+        }
+    """
 }
