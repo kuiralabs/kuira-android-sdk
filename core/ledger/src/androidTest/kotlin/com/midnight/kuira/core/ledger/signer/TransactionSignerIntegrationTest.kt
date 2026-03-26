@@ -287,10 +287,7 @@ class TransactionSignerIntegrationTest {
         // s should be non-zero
         assertFalse("s component should not be all zeros", s.all { it == 0.toByte() })
 
-        println("✅ Phase 1 → Phase 2D integration test passed")
-        println("   Private key: ${privateKey.toHex()}")
-        println("   Public key: ${publicKey.toHex()}")
-        println("   Signature: ${signature.toHex()}")
+        println("Phase 1->2D integration: pubkey=${publicKey.toHex().take(16)}...")
     }
 
     // ============================================================================
@@ -313,9 +310,7 @@ class TransactionSignerIntegrationTest {
         val totalTime = endTime - startTime
         val avgTime = totalTime.toDouble() / iterations
 
-        println("✅ Signing performance:")
-        println("   $iterations signatures in ${totalTime}ms")
-        println("   Average: ${avgTime}ms per signature")
+        println("Signing performance: $iterations signatures in ${totalTime}ms (avg ${avgTime}ms)")
 
         // Sanity check: Should be fast (< 100ms per signature)
         assertTrue("Signing should be fast (< 100ms per signature)", avgTime < 100)
@@ -352,7 +347,7 @@ class TransactionSignerIntegrationTest {
             assertFalse("Thread should complete", thread.isAlive)
         }
 
-        println("✅ Concurrent signing test passed: $threadCount threads × $signaturesPerThread signatures")
+        println("Concurrent signing: $threadCount threads x $signaturesPerThread signatures")
     }
 
     // ============================================================================
@@ -396,7 +391,6 @@ class TransactionSignerIntegrationTest {
         }
 
         // If we reach here without crash, memory management is working
-        println("✅ 1000 signing operations completed without crash")
     }
 
     @Test

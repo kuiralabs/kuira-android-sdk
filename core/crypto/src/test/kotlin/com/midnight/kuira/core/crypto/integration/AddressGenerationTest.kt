@@ -188,15 +188,6 @@ class AddressGenerationTest {
             val undeployedAddress = Bech32m.encode("mn_addr_undeployed", addressData)
             val previewAddress = Bech32m.encode("mn_addr_preview", addressData)
 
-            val seedHex = seed.joinToString("") { "%02x".format(it) }
-            println("\nSeed (64 bytes - Lace compatible):")
-            println("  $seedHex")
-            println()
-            println("Addresses:")
-            println("  Undeployed: $undeployedAddress")
-            println("  Test:       $testAddress")
-            println("  Preview:    $previewAddress")
-
             // Verify known addresses (Lace compatibility - 64-byte seed)
             assertEquals(
                 "mn_addr_test19kxg8sxrsty37elmm6yd68tuy7prryjst2r48eapf2fdtd8z4gpqvayl85",

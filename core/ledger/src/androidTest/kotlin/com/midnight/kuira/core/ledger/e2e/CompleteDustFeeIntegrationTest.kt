@@ -71,10 +71,6 @@ class CompleteDustFeeIntegrationTest {
 
     @Before
     fun setup() {
-        println("\n╔════════════════════════════════════════════════════════════════╗")
-        println("║  COMPREHENSIVE DUST FEE INTEGRATION TEST - SETUP              ║")
-        println("╚════════════════════════════════════════════════════════════════╝")
-
         // Generate wallet
         seed = BIP39.mnemonicToSeed(TEST_MNEMONIC, passphrase = "")
         wallet = HDWallet.fromSeed(seed)
@@ -96,11 +92,6 @@ class CompleteDustFeeIntegrationTest {
         senderAddress = Bech32m.encode("mn_addr_undeployed", addressData)
         senderPublicKey = xOnlyPublicKey.toHex()
 
-        println("✅ Wallet:")
-        println("   Address: $senderAddress")
-        println("   Public Key: ${senderPublicKey.take(24)}...")
-        println("   Private Key: ${privateKey.toHex().take(24)}...")
-
         derivedKey.clear()
     }
 
@@ -110,32 +101,16 @@ class CompleteDustFeeIntegrationTest {
         Arrays.fill(privateKey, 0.toByte())
         Arrays.fill(seed, 0.toByte())
         dustState?.close()
-        println("🧹 Cleanup complete\n")
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST 1: Verify DustLocalState FFI Works
-    // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
     fun test1_DustLocalStateCreation() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 1: DustLocalState Creation (Rust FFI)                 │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
-        // Create dust state
         dustState = DustLocalState.create()
         assertNotNull("DustLocalState.create() should return non-null", dustState)
-
-        println("✅ DustLocalState created successfully via Rust FFI")
     }
 
     @Test
     fun test2_DustLocalStateSerialization() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 2: DustLocalState Serialization (Round-Trip)          │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
         // Create state
         dustState = DustLocalState.create()
         assertNotNull(dustState)
@@ -145,14 +120,9 @@ class CompleteDustFeeIntegrationTest {
         assertNotNull("Serialization should return data", serialized)
         assertTrue("Serialized data should not be empty", serialized!!.isNotEmpty())
 
-        println("✅ Serialized: ${serialized.size} bytes")
-        println("   First 32 bytes: ${serialized.take(32).joinToString("") { "%02x".format(it) }}")
-
         // Deserialize
         val deserialized = DustLocalState.deserialize(serialized)
         assertNotNull("Deserialization should succeed", deserialized)
-
-        println("✅ Deserialized successfully")
 
         // Clean up
         deserialized?.close()
@@ -160,43 +130,21 @@ class CompleteDustFeeIntegrationTest {
 
     @Test
     fun test3_DustBalanceCalculation() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 3: Dust Balance Calculation                           │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
-        // Create state
         dustState = DustLocalState.create()
         assertNotNull(dustState)
 
-        // Get balance at current time
-        val currentTime = System.currentTimeMillis()
-        val balance = dustState!!.getBalance(currentTime)
-
+        val balance = dustState!!.getBalance(System.currentTimeMillis())
         assertNotNull("Balance should be returned", balance)
-        println("✅ Balance: $balance Specks")
-
-        // Should be zero (no UTXOs registered yet)
         assertEquals("Balance should be 0 for new state", BigInteger.ZERO, balance)
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST 4: Verify Transaction Signing Works
-    // ═══════════════════════════════════════════════════════════════════════════
-
     @Test
     fun test4_SchnorrSigningWorks() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 4: Schnorr Signing (TransactionSigner Rust FFI)       │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
         val testMessage = "Test message for signing".toByteArray()
 
         val signature = TransactionSigner.signData(privateKey, testMessage)
         assertNotNull("Signing should succeed", signature)
         assertEquals("Signature should be 64 bytes (BIP-340)", 64, signature!!.size)
-
-        println("✅ Signature: ${signature.toHex().take(40)}...")
-        println("   Length: ${signature.size} bytes")
 
         // Verify signature
         val publicKey = TransactionSigner.getPublicKey(privateKey)
@@ -204,48 +152,31 @@ class CompleteDustFeeIntegrationTest {
 
         val isValid = TransactionSigner.verifySignature(publicKey!!, testMessage, signature)
         assertTrue("Signature should be valid", isValid)
-
-        println("✅ Signature verified successfully")
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST 5: Verify Transaction Serialization Works (WITHOUT Dust)
-    // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
     fun test5_TransactionSerializationWithoutDust() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 5: Transaction Serialization (NO DUST)                │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
-        // Create test UTXO
         val testUtxo = UtxoSpend(
             intentHash = TEST_INTENT_HASH,
             outputNo = 0,
-            value = BigInteger("1000000000"),  // 1000 NIGHT
+            value = BigInteger("1000000000"),
             owner = senderAddress,
             ownerPublicKey = senderPublicKey,
             tokenType = NATIVE_TOKEN
         )
 
         val paymentOutput = UtxoOutput(
-            value = BigInteger("100000000"),  // 100 NIGHT
+            value = BigInteger("100000000"),
             owner = RECIPIENT_ADDRESS,
             tokenType = NATIVE_TOKEN
         )
 
         val changeOutput = UtxoOutput(
-            value = BigInteger("900000000"),  // 900 NIGHT change
+            value = BigInteger("900000000"),
             owner = senderAddress,
             tokenType = NATIVE_TOKEN
         )
 
-        println("📝 Transaction:")
-        println("   Input: ${testUtxo.value} (${testUtxo.value.divide(BigInteger("1000000"))} NIGHT)")
-        println("   Output 1: ${paymentOutput.value} to recipient")
-        println("   Output 2: ${changeOutput.value} change")
-
-        // Get signing message from FFI
         val serializer = FfiTransactionSerializer()
         val ttl = System.currentTimeMillis() + (5 * 60 * 1000)
 
@@ -257,51 +188,32 @@ class CompleteDustFeeIntegrationTest {
         )
 
         assertNotNull("Signing message should be generated", signingMessageHex)
-        println("✅ Signing message: ${signingMessageHex!!.take(40)}...")
 
-        // Sign the transaction
-        val signingMessage = hexToBytes(signingMessageHex)
+        val signingMessage = hexToBytes(signingMessageHex!!)
         val signature = TransactionSigner.signData(privateKey, signingMessage)
         assertNotNull("Signing should succeed", signature)
 
-        println("✅ Signature: ${signature!!.toHex().take(40)}...")
-
-        // Create signed offer
         val signedOffer = UnshieldedOffer(
             inputs = listOf(testUtxo),
             outputs = listOf(paymentOutput, changeOutput),
-            signatures = listOf(signature)
+            signatures = listOf(signature!!)
         )
 
-        // Create Intent WITHOUT dust actions
         val intent = com.midnight.kuira.core.ledger.model.Intent.withDefaultTtl(
             guaranteedOffer = signedOffer,
             dustActions = null
         )
 
-        // Serialize to SCALE
         val scaleHex = serializer.serialize(intent)
         assertNotNull("Serialization should succeed", scaleHex)
         assertTrue("SCALE hex should not be empty", scaleHex.isNotEmpty())
 
-        println("✅ SCALE Serialization: ${scaleHex.take(80)}...")
-        println("   Total length: ${scaleHex.length} chars (${scaleHex.length / 2} bytes)")
-
-        // Verify SCALE starts with expected tag
         assertTrue("Should start with midnight:transaction tag",
-            scaleHex.startsWith("6d69646e696768743a"))  // "midnight:" in hex
+            scaleHex.startsWith("6d69646e696768743a"))
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST 6: COMPREHENSIVE - All Mechanisms Together
-    // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
     fun test6_AllDustMechanismsWork() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 6: ALL DUST MECHANISMS (Comprehensive)                │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
         var testsPassed = 0
         val totalTests = 7
 
@@ -309,10 +221,9 @@ class CompleteDustFeeIntegrationTest {
         try {
             dustState = DustLocalState.create()
             assertNotNull(dustState)
-            println("✅ [1/$totalTests] DustLocalState creation")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [1/$totalTests] DustLocalState creation FAILED: ${e.message}")
+            println("DustLocalState creation FAILED: ${e.message}")
         }
 
         // 2. Wallet
@@ -320,31 +231,27 @@ class CompleteDustFeeIntegrationTest {
             assertNotNull(wallet)
             assertNotNull(privateKey)
             assertTrue(seed.isNotEmpty())
-            println("✅ [2/$totalTests] Wallet generation")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [2/$totalTests] Wallet generation FAILED: ${e.message}")
+            println("Wallet generation FAILED: ${e.message}")
         }
 
         // 3. TransactionSigner
         try {
-            val testMsg = "test".toByteArray()
-            val sig = TransactionSigner.signData(privateKey, testMsg)
+            val sig = TransactionSigner.signData(privateKey, "test".toByteArray())
             assertNotNull(sig)
-            println("✅ [3/$totalTests] TransactionSigner (Schnorr)")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [3/$totalTests] TransactionSigner FAILED: ${e.message}")
+            println("TransactionSigner FAILED: ${e.message}")
         }
 
         // 4. FfiTransactionSerializer
         try {
             val serializer = FfiTransactionSerializer()
             assertNotNull(serializer)
-            println("✅ [4/$totalTests] FfiTransactionSerializer")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [4/$totalTests] FfiTransactionSerializer FAILED: ${e.message}")
+            println("FfiTransactionSerializer FAILED: ${e.message}")
         }
 
         // 5. DustLocalState serialization
@@ -354,10 +261,9 @@ class CompleteDustFeeIntegrationTest {
             val deserialized = DustLocalState.deserialize(serialized!!)
             assertNotNull(deserialized)
             deserialized?.close()
-            println("✅ [5/$totalTests] DustLocalState serialization")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [5/$totalTests] DustLocalState serialization FAILED: ${e.message}")
+            println("DustLocalState serialization FAILED: ${e.message}")
         }
 
         // 6. Balance calculation
@@ -365,10 +271,9 @@ class CompleteDustFeeIntegrationTest {
             val balance = dustState!!.getBalance(System.currentTimeMillis())
             assertNotNull(balance)
             assertEquals(BigInteger.ZERO, balance)
-            println("✅ [6/$totalTests] Balance calculation")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [6/$totalTests] Balance calculation FAILED: ${e.message}")
+            println("Balance calculation FAILED: ${e.message}")
         }
 
         // 7. Public key derivation
@@ -376,29 +281,16 @@ class CompleteDustFeeIntegrationTest {
             val pubKey = TransactionSigner.getPublicKey(privateKey)
             assertNotNull(pubKey)
             assertEquals(32, pubKey!!.size)
-            println("✅ [7/$totalTests] Public key derivation")
             testsPassed++
         } catch (e: Exception) {
-            println("❌ [7/$totalTests] Public key derivation FAILED: ${e.message}")
+            println("Public key derivation FAILED: ${e.message}")
         }
-
-        println("\n═══════════════════════════════════════════════════════════════")
-        println("  RESULTS: $testsPassed/$totalTests tests passed")
-        println("═══════════════════════════════════════════════════════════════")
 
         assertEquals("All dust mechanisms should work", totalTests, testsPassed)
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST 7: Verify Native Library Contains All Required Functions
-    // ═══════════════════════════════════════════════════════════════════════════
-
     @Test
     fun test7_NativeLibraryHasAllFunctions() {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 7: Native Library Function Availability               │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
         var functionsAvailable = 0
 
         // Test create_dust_local_state
@@ -406,11 +298,8 @@ class CompleteDustFeeIntegrationTest {
             val state = DustLocalState.create()
             assertNotNull(state)
             state?.close()
-            println("✅ create_dust_local_state")
             functionsAvailable++
-        } catch (e: Exception) {
-            println("❌ create_dust_local_state MISSING")
-        }
+        } catch (_: Exception) { }
 
         // Test serialize_dust_state
         try {
@@ -418,11 +307,8 @@ class CompleteDustFeeIntegrationTest {
             val serialized = state?.serialize()
             assertNotNull(serialized)
             state?.close()
-            println("✅ serialize_dust_state")
             functionsAvailable++
-        } catch (e: Exception) {
-            println("❌ serialize_dust_state MISSING")
-        }
+        } catch (_: Exception) { }
 
         // Test deserialize_dust_state
         try {
@@ -432,35 +318,22 @@ class CompleteDustFeeIntegrationTest {
             assertNotNull(deserialized)
             state?.close()
             deserialized?.close()
-            println("✅ deserialize_dust_state")
             functionsAvailable++
-        } catch (e: Exception) {
-            println("❌ deserialize_dust_state MISSING")
-        }
+        } catch (_: Exception) { }
 
         // Test sign_data
         try {
             val sig = TransactionSigner.signData(privateKey, "test".toByteArray())
             assertNotNull(sig)
-            println("✅ sign_data (Schnorr)")
             functionsAvailable++
-        } catch (e: Exception) {
-            println("❌ sign_data MISSING")
-        }
+        } catch (_: Exception) { }
 
         // Test serialize_unshielded_transaction
         try {
             val serializer = FfiTransactionSerializer()
             assertNotNull(serializer)
-            println("✅ serialize_unshielded_transaction")
             functionsAvailable++
-        } catch (e: Exception) {
-            println("❌ serialize_unshielded_transaction MISSING")
-        }
-
-        println("\n═══════════════════════════════════════════════════════════════")
-        println("  NATIVE FUNCTIONS: $functionsAvailable/5 available")
-        println("═══════════════════════════════════════════════════════════════")
+        } catch (_: Exception) { }
 
         assertEquals("All native functions should be available", 5, functionsAvailable)
     }

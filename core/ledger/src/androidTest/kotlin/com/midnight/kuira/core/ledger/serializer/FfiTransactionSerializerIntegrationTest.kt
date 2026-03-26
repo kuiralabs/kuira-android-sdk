@@ -159,8 +159,7 @@ class FfiTransactionSerializerIntegrationTest {
         // SCALE transactions are typically 200-500 bytes
         assertTrue("SCALE hex should be reasonable size (>100 chars)", scaleHex.length > 100)
 
-        println("✅ Serialized transaction: ${scaleHex.length / 2} bytes")
-        println("   SCALE hex: ${scaleHex.take(64)}...")
+        println("Serialized transaction: ${scaleHex.length / 2} bytes")
     }
 
     @Test
@@ -213,7 +212,7 @@ class FfiTransactionSerializerIntegrationTest {
         assertTrue(scaleHex.isNotEmpty())
         assertTrue(scaleHex.length > 100)
 
-        println("✅ Serialized multi-input transaction: ${scaleHex.length / 2} bytes")
+        println("Serialized multi-input transaction: ${scaleHex.length / 2} bytes")
     }
 
     @Test
@@ -262,7 +261,7 @@ class FfiTransactionSerializerIntegrationTest {
         assertNotNull(scaleHex)
         assertTrue(scaleHex.isNotEmpty())
 
-        println("✅ Serialized transaction with change: ${scaleHex.length / 2} bytes")
+        println("Serialized transaction with change: ${scaleHex.length / 2} bytes")
     }
 
     @Test
@@ -307,7 +306,7 @@ class FfiTransactionSerializerIntegrationTest {
         assertNotNull("Bech32m decoding should succeed", scaleHex)
         assertTrue(scaleHex.isNotEmpty())
 
-        println("✅ Bech32m address decoding successful")
+        println("Bech32m address decoding successful")
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -392,6 +391,6 @@ class FfiTransactionSerializerIntegrationTest {
         assertTrue("Both results should be valid hex", result1.all { it in "0123456789abcdef" })
         assertTrue("Both results should be valid hex", result2.all { it in "0123456789abcdef" })
 
-        println("✅ Serialization uses random binding commitments")
+        println("Serialization uses random binding commitments")
     }
 }

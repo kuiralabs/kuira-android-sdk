@@ -24,9 +24,6 @@ class MidnightKeyDerivationTest {
         // Step 1: Derive BIP-39 seed (64 bytes, Lace compatible)
         val seed = BIP39.mnemonicToSeed(mnemonic, passphrase = "")
 
-        println("=== MIDNIGHT KEY DERIVATION TEST ===\n")
-        println("Mnemonic: ${mnemonic.substring(0, 50)}...")
-        println()
 
         // Step 2: Create HD wallet
         val wallet = HDWallet.fromSeed(seed)
@@ -39,11 +36,6 @@ class MidnightKeyDerivationTest {
 
         val unshieldedSeed = unshieldedKey.privateKeyBytes.joinToString("") { "%02x".format(it) }
 
-        println("1. UNSHIELDED seed at m/44'/2400'/0'/0/0:")
-        println("   Expected: af7a998947b1b1fd12d99cb40ee98a739e6a2518d8965690781d85ea0e3a5e13")
-        println("   Actual:   $unshieldedSeed")
-        println("   Match: ${unshieldedSeed == "af7a998947b1b1fd12d99cb40ee98a739e6a2518d8965690781d85ea0e3a5e13"}")
-        println()
 
         // Step 4: Derive SHIELDED key (role 3 = ZSWAP)
         val shieldedKey = wallet
@@ -53,10 +45,6 @@ class MidnightKeyDerivationTest {
 
         val shieldedSeed = shieldedKey.privateKeyBytes.joinToString("") { "%02x".format(it) }
 
-        println("2. SHIELDED seed at m/44'/2400'/0'/3/0:")
-        println("   Actual:   $shieldedSeed")
-        println("   Length:   ${shieldedKey.privateKeyBytes.size} bytes")
-        println()
 
         // Step 5: Derive DUST key (role 2 = DUST)
         val dustKey = wallet
@@ -66,10 +54,6 @@ class MidnightKeyDerivationTest {
 
         val dustSeed = dustKey.privateKeyBytes.joinToString("") { "%02x".format(it) }
 
-        println("3. DUST seed at m/44'/2400'/0'/2/0:")
-        println("   Actual:   $dustSeed")
-        println("   Length:   ${dustKey.privateKeyBytes.size} bytes")
-        println()
 
         // Verify unshielded key matches known test vector (Lace compatibility - 64-byte seed)
         assertEquals(
@@ -86,15 +70,6 @@ class MidnightKeyDerivationTest {
         assert(unshieldedSeed != shieldedSeed) { "Unshielded and shielded keys must differ" }
         assert(unshieldedSeed != dustSeed) { "Unshielded and dust keys must differ" }
         assert(shieldedSeed != dustSeed) { "Shielded and dust keys must differ" }
-
-        println("SUCCESS: All three key types derived correctly from 64-byte seed!")
-        println()
-        println("This verifies:")
-        println("  Unshielded transactions (public)")
-        println("  Shielded transactions (private with ZK proofs)")
-        println("  Dust transactions (fee payments)")
-        println()
-        println("Kuira crypto module is compatible with Midnight!")
 
         // Clean up
         unshieldedKey.clear()

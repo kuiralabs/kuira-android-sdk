@@ -217,7 +217,7 @@ class DustLocalStateInstrumentedTest {
             serialized!!.size < 10 * 1024
         )
 
-        println("Serialized DustLocalState size: ${serialized.size} bytes")
+        println("Serialized DustLocalState: ${serialized.size} bytes")
 
         // Cleanup
         state.close()
@@ -503,7 +503,7 @@ class DustLocalStateInstrumentedTest {
             assertNotNull("Serialization should succeed", serialized)
             assertTrue("Serialized data should not be empty", serialized!!.isNotEmpty())
 
-            println("Serialized state: ${serialized.size} bytes")
+            // Serialized state size verified
 
             // When - Deserialize
             val deserializedState = DustLocalState.deserialize(serialized)
@@ -526,9 +526,7 @@ class DustLocalStateInstrumentedTest {
                     deserializedCount
                 )
 
-                println("✅ Round-trip serialization successful!")
-                println("   Balance: $originalBalance Specks")
-                println("   UTXO count: $originalCount")
+                println("Round-trip serialization: balance=$originalBalance, utxos=$originalCount")
             } finally {
                 deserializedState?.close()
             }

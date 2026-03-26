@@ -85,15 +85,8 @@ class ShieldedAddressGenerationTest {
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
-                    // Print for manual verification
-                    println("=== TEST NETWORK SHIELDED ADDRESS ===")
-                    println("Network: $networkId")
-                    println("Coin Public Key: ${shieldedKeys.coinPublicKey}")
-                    println("Encryption Public Key: ${shieldedKeys.encryptionPublicKey}")
-                    println("Address: $address")
-                    println("Expected: $expectedAddress")
-                    println("Match: ${address == expectedAddress}")
-                    println("=====================================")
+                    // Key values for debugging
+                    println("Test network address: $address")
 
                     // Verify round-trip decode
                     val (decodedHrp, decodedData) = Bech32m.decode(address)
@@ -145,14 +138,7 @@ class ShieldedAddressGenerationTest {
                     assertEquals("Enc PK should match TypeScript SDK", expectedEncPk, shieldedKeys.encryptionPublicKey)
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
-                    println("=== DEV NETWORK SHIELDED ADDRESS ===")
-                    println("Network: $networkId")
-                    println("Coin Public Key: ${shieldedKeys.coinPublicKey}")
-                    println("Encryption Public Key: ${shieldedKeys.encryptionPublicKey}")
-                    println("Address: $address")
-                    println("Expected: $expectedAddress")
-                    println("Match: ${address == expectedAddress}")
-                    println("====================================")
+                    println("Dev network address: $address")
 
                 } finally {
                     shieldedKey.clear()
@@ -195,14 +181,7 @@ class ShieldedAddressGenerationTest {
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
-                    println("=== UNDEPLOYED NETWORK SHIELDED ADDRESS ===")
-                    println("Network: $networkId")
-                    println("Coin Public Key: ${shieldedKeys.coinPublicKey}")
-                    println("Encryption Public Key: ${shieldedKeys.encryptionPublicKey}")
-                    println("Address: $address")
-                    println("Expected: $expectedAddress")
-                    println("Match: ${address == expectedAddress}")
-                    println("===========================================")
+                    println("Undeployed network address: $address")
 
                 } finally {
                     shieldedKey.clear()
@@ -245,14 +224,7 @@ class ShieldedAddressGenerationTest {
 
                     assertEquals("Address should match TypeScript SDK", expectedAddress, address)
 
-                    println("=== MAINNET SHIELDED ADDRESS ===")
-                    println("Network: mainnet (no suffix)")
-                    println("Coin Public Key: ${shieldedKeys.coinPublicKey}")
-                    println("Encryption Public Key: ${shieldedKeys.encryptionPublicKey}")
-                    println("Address: $address")
-                    println("Expected: $expectedAddress")
-                    println("Match: ${address == expectedAddress}")
-                    println("================================")
+                    println("Mainnet address: $address")
 
                 } finally {
                     shieldedKey.clear()

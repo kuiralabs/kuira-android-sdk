@@ -114,35 +114,20 @@ class RealDustFeePaymentTest {
 
     @Before
     fun setup() {
-        println("\n╔════════════════════════════════════════════════════════════════╗")
-        println("║  REAL DUST FEE PAYMENT TEST - SETUP                           ║")
-        println("╚════════════════════════════════════════════════════════════════╝")
-
         // Initialize node client
         nodeClient = NodeRpcClientImpl(NODE_URL)
 
         // Generate wallet
         val fullSeed = BIP39.mnemonicToSeed(TEST_MNEMONIC, passphrase = "")
 
-        println("🔑 BIP-39 Seed:")
-        println("   Full seed length: ${fullSeed.size} bytes")
-        println("   First 32 bytes: ${fullSeed.copyOfRange(0, 32).joinToString("") { "%02x".format(it) }}")
-        if (fullSeed.size > 32) {
-            println("   Last 32 bytes: ${fullSeed.copyOfRange(32, fullSeed.size).joinToString("") { "%02x".format(it) }}")
-        }
-
-        // ⚠️ LACE WALLET COMPATIBILITY: BIP39.mnemonicToSeed() returns 32 bytes (NOT 64)
-        // This matches Lace wallet convention. HDWallet.fromSeed() uses these 32 bytes.
         wallet = HDWallet.fromSeed(fullSeed)
 
         // Derive DUST key at m/44'/2400'/0'/2/0 (Role 2 = Dust, Index 0)
-        // Midnight SDK derives dust key at Roles.Dust (role 2), NOT NightExternal (role 0)
         val dustDerivedKey = wallet
             .selectAccount(0)
             .selectRole(MidnightKeyRole.DUST)
             .deriveKeyAt(0)
 
-        // This dust private key is what gets passed to DustSecretKey.fromSeed()
         seed = dustDerivedKey.privateKeyBytes.copyOf()
 
         // Also derive unshielded key at role 0 for address generation
@@ -166,11 +151,6 @@ class RealDustFeePaymentTest {
         // Verify this matches the funded address
         assertEquals("Address mismatch! Check derivation path", FUNDED_ADDRESS, senderAddress)
 
-        println("✅ Wallet:")
-        println("   Address: $senderAddress")
-        println("   Public Key: ${senderPublicKey.take(24)}...")
-        println("   Dust seed derived at role 2 (Dust)")
-
         derivedKey.clear()
         dustDerivedKey.clear()
     }
@@ -181,23 +161,15 @@ class RealDustFeePaymentTest {
         Arrays.fill(privateKey, 0.toByte())
         Arrays.fill(seed, 0.toByte())
         dustState?.close()
-        println("🧹 Cleanup complete\n")
     }
 
     // Helper: Read cached dust events from file
     private fun readCachedDustEvents(): String? {
         return try {
             val file = getCacheFile()
-            if (file.exists()) {
-                println("   📂 Using cached dust events from ${file.absolutePath}")
-                println("   📂 Cache size: ${file.length() / 1024} KB")
-                file.readText()
-            } else {
-                println("   ℹ️  No cache found at ${file.absolutePath}")
-                null
-            }
+            if (file.exists()) file.readText() else null
         } catch (e: Exception) {
-            println("   ⚠️  Failed to read cache: ${e.message}")
+            println("Failed to read cache: ${e.message}")
             null
         }
     }
@@ -207,29 +179,18 @@ class RealDustFeePaymentTest {
         try {
             val file = getCacheFile()
             file.writeText(eventsHex)
-            println("   💾 Cached dust events to ${file.absolutePath}")
-            println("   💾 Cache size: ${file.length() / 1024} KB")
         } catch (e: Exception) {
-            println("   ⚠️  Failed to write cache: ${e.message}")
+            println("Failed to write cache: ${e.message}")
         }
     }
 
     // Helper: Query dust events (with optional hardcoded snapshot for fast testing)
     private suspend fun queryDustEventsWithCache(indexerClient: com.midnight.kuira.core.indexer.api.IndexerClientImpl): String {
-        // Use hardcoded events for fast development iteration (5 min → 5 sec)
         if (USE_HARDCODED_EVENTS && HARDCODED_DUST_EVENTS.isNotEmpty()) {
-            println("   ⚡ Using hardcoded dust events (instant)")
-            println("   ⚡ Length: ${HARDCODED_DUST_EVENTS.length / 2} bytes")
-            println("   ⚠️  WARNING: Using hardcoded data! Set USE_HARDCODED_EVENTS=false for real blockchain test")
             return HARDCODED_DUST_EVENTS
         }
 
-        // Query from blockchain (slow: ~5 minutes, but accurate)
-        println("   ⏳ Querying from blockchain (this will take ~5 minutes)...")
-        println("   💡 TIP: After first run, copy dust events hex to HARDCODED_DUST_EVENTS for fast testing")
-        val eventsHex = indexerClient.queryDustEvents(maxBlocks = 100)
-
-        return eventsHex
+        return indexerClient.queryDustEvents(maxBlocks = 100)
     }
 
     /**
@@ -244,69 +205,37 @@ class RealDustFeePaymentTest {
      */
     @Test
     fun test1_QueryAndReplayDustEvents() = runBlocking {
-        println("\n┌─────────────────────────────────────────────────────────────┐")
-        println("│ TEST 1: Query & Replay Dust Events                         │")
-        println("└─────────────────────────────────────────────────────────────┘")
-
-        // Create indexer client
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
             baseUrl = "http://10.0.2.2:8088/api/v3",
             developmentMode = true
         )
 
-        // Query dust events from blockchain (with caching)
-        println("📡 Querying dust events from indexer...")
         val eventsHex = queryDustEventsWithCache(indexerClient)
 
         if (eventsHex.isEmpty()) {
-            println("⚠️  No dust events found!")
-            println("   Have you registered dust via Lace wallet?")
             fail("No dust events on blockchain - register dust first")
         }
-
-        println("✅ Retrieved ${eventsHex.length / 2} bytes of dust events")
-        println("   First 200 chars: ${eventsHex.take(200)}...")
-        println("   Last 100 chars: ...${eventsHex.takeLast(100)}")
 
         // Create initial empty dust state
         val initialState = DustLocalState.create()
         assertNotNull("Failed to create DustLocalState", initialState)
 
-        // Replay events with wallet seed
-        println("📦 Replaying events into DustLocalState...")
-        println("   Dust seed (role 2, index 0) length: ${seed.size} bytes")
-        println("   Dust seed (full 32 bytes): ${seed.joinToString("") { "%02x".format(it) }}")
-        println("   Events hex length: ${eventsHex.length} chars (${eventsHex.length / 2} bytes)")
-
-        // Debug: Check event IDs to ensure they're sequential
-        val eventCount = eventsHex.split("6d69646e696768743a6576656e745b76395d3a").filter { it.isNotEmpty() }.size
-        println("   Number of events (by prefix): $eventCount")
-
         val newState = initialState!!.replayEvents(seed, eventsHex)
         if (newState == null) {
-            println("❌ replayEvents() returned null!")
-            println("   Seed size: ${seed.size}")
-            println("   Events hex: ${eventsHex.take(200)}...")
-            fail("Failed to replay dust events - FFI returned null")
+            fail("Failed to replay dust events - FFI returned null (seed size: ${seed.size}, events: ${eventsHex.length / 2} bytes)")
         }
         assertNotNull("Failed to replay dust events", newState)
 
         dustState = newState
-        println("✅ Events replayed successfully")
 
         // Check dust balance
-        val currentTime = System.currentTimeMillis()
-        val balance = dustState!!.getBalance(currentTime)
-
-        println("\n💰 Dust Balance:")
-        println("   Balance: $balance Specks")
-        println("   Time: $currentTime ms")
+        val balance = dustState!!.getBalance(System.currentTimeMillis())
+        println("Dust balance: $balance Specks")
 
         // Verify we have dust available
         assertTrue("No dust available after replaying events", balance > BigInteger.ZERO)
 
         indexerClient.close()
-        println("\n✅ Test passed - dust state restored from blockchain")
     }
 
     /**
@@ -332,19 +261,7 @@ class RealDustFeePaymentTest {
      */
     @Test
     fun test2_SerializeTransactionWithDustFee() = runBlocking {
-        println("\n╔════════════════════════════════════════════════════════════════╗")
-        println("║  SERIALIZE TRANSACTION WITH DUST FEE (Phase 2-DUST Complete)  ║")
-        println("╚════════════════════════════════════════════════════════════════╝")
-
-        println("\n📋 This test proves:")
-        println("   ✅ Dust events can be queried from indexer")
-        println("   ✅ Dust state can be restored")
-        println("   ✅ Transactions can be built and signed")
-        println("   ✅ Serialization with dust fee payment works")
-        println("   → Phase 2-DUST COMPLETE\n")
-
-        // Step 1: Query dust events and restore state
-        println("📡 Step 1: Querying dust events from indexer...")
+        // Query dust events and restore state
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
             baseUrl = "http://10.0.2.2:8088/api/v3",
             developmentMode = true
@@ -352,7 +269,6 @@ class RealDustFeePaymentTest {
 
         val eventsHex = queryDustEventsWithCache(indexerClient)
         require(eventsHex.isNotEmpty()) { "No dust events found - register dust first!" }
-        println("✅ Retrieved ${eventsHex.length / 2} bytes of dust events")
 
         // Create and restore dust state
         val initialState = DustLocalState.create()
@@ -364,10 +280,8 @@ class RealDustFeePaymentTest {
 
         val balance = dustState!!.getBalance(System.currentTimeMillis())
         assertTrue("No dust available (balance: $balance)", balance > BigInteger.ZERO)
-        println("✅ Dust state restored - Balance: $balance Specks")
 
-        // Step 2: Build transaction (1 NIGHT to self)
-        println("\n📝 Step 2: Building transaction...")
+        // Build transaction (1 NIGHT to self)
         val recipientKey = wallet
             .selectAccount(0)
             .selectRole(MidnightKeyRole.NIGHT_EXTERNAL)
@@ -377,64 +291,47 @@ class RealDustFeePaymentTest {
         val recipientAddressData = MessageDigest.getInstance("SHA-256").digest(recipientPubKey)
         val recipientAddress = Bech32m.encode("mn_addr_undeployed", recipientAddressData)
 
-        // Use real UTXO (1 NIGHT available)
         val inputUtxo = UtxoSpend(
-            intentHash = "1d4cc71c548796e2dcec00000000000000000000000000000000000000000000",  // 32 bytes (64 hex chars)
+            intentHash = "1d4cc71c548796e2dcec00000000000000000000000000000000000000000000",
             outputNo = 0,
-            value = BigInteger("1000000"),  // 1 NIGHT
+            value = BigInteger("1000000"),
             owner = senderAddress,
             ownerPublicKey = senderPublicKey,
             tokenType = NATIVE_TOKEN
         )
 
         val paymentOutput = UtxoOutput(
-            value = BigInteger("500000"),  // 0.5 NIGHT to recipient
+            value = BigInteger("500000"),
             owner = recipientAddress,
             tokenType = NATIVE_TOKEN
         )
 
         val changeOutput = UtxoOutput(
-            value = BigInteger("500000"),  // 0.5 NIGHT change (minus dust fee)
+            value = BigInteger("500000"),
             owner = senderAddress,
             tokenType = NATIVE_TOKEN
         )
 
-        println("✅ Transaction built:")
-        println("   Input: ${inputUtxo.value} from $senderAddress")
-        println("   Output 1: ${paymentOutput.value} to $recipientAddress")
-        println("   Output 2: ${changeOutput.value} change")
-
-        // Step 3: Sign transaction
-        println("\n✍️  Step 3: Signing transaction...")
+        // Sign transaction
         val serializer = com.midnight.kuira.core.ledger.api.FfiTransactionSerializer()
 
-        // Get signing message for the input
         val signingMessageHex = serializer.getSigningMessageForInput(
             inputs = listOf(inputUtxo),
             outputs = listOf(paymentOutput, changeOutput),
             inputIndex = 0,
-            ttl = System.currentTimeMillis() + 300_000  // 5 min TTL
+            ttl = System.currentTimeMillis() + 300_000
         ) ?: throw IllegalStateException("Failed to get signing message")
 
         val signingMessage = hexToBytes(signingMessageHex)
         val signature = TransactionSigner.signData(privateKey, signingMessage)
             ?: throw IllegalStateException("Failed to sign transaction")
 
-        println("✅ Transaction signed (${signature.size} bytes)")
-
-        // Step 4: Serialize with dust fee payment
-        println("\n🔧 Step 4: Serializing with dust fee payment...")
-
-        // Check how many dust UTXOs we have
+        // Serialize with dust fee payment
         val utxoCount = dustState!!.getUtxoCount()
-        println("   Dust UTXOs available: $utxoCount")
         if (utxoCount == 0) {
-            println("   ⚠️  WARNING: No dust UTXOs available!")
-            println("   This is expected if the dust was consumed or hasn't been generated yet")
             fail("No dust UTXOs available for fee payment")
         }
 
-        // Build dust UTXO selections (select first available UTXO)
         val dustUtxoSelections = """[{"utxo_index": 0, "v_fee": "1000"}]"""
 
         val scaleHex = serializer.serializeWithDust(
@@ -449,19 +346,12 @@ class RealDustFeePaymentTest {
 
         assertNotNull("Serialization with dust failed", scaleHex)
         assertTrue("Empty SCALE output", scaleHex.isNotEmpty())
-        println("✅ Serialization succeeded!")
-        println("   SCALE hex length: ${scaleHex.length} chars (${scaleHex.length / 2} bytes)")
-        println("   First 100 chars: ${scaleHex.take(100)}...")
 
         // Verify it starts with Midnight tag
         assertTrue(
             "SCALE output doesn't start with midnight tag",
             scaleHex.startsWith("6d69646e69676874") // "midnight" in hex
         )
-
-        println("\n✅ TEST PASSED - Phase 2-DUST COMPLETE")
-        println("   Dust fee payment serialization works!")
-        println("   Next: Phase 2 Phase 2E (RPC submission)")
 
         recipientKey.clear()
         indexerClient.close()

@@ -97,10 +97,7 @@ class LaceCompatibilityTest {
 
                     assertEquals("Address MUST match Lace wallet", laceAddress, address)
 
-                    println("✅ LACE COMPATIBILITY VERIFIED")
-                    println("Lace Address:  $laceAddress")
-                    println("Kuira Address: $address")
-                    println("Match: ${address == laceAddress}")
+                    println("Lace compatibility verified for preview network")
 
                 } finally {
                     shieldedKey.clear()
@@ -161,7 +158,6 @@ class LaceCompatibilityTest {
                             address
                         )
 
-                        println("✅ $network: MATCH")
                     }
 
                 } finally {
@@ -171,9 +167,6 @@ class LaceCompatibilityTest {
                 hdWallet.clear()
             }
         }
-
-        println("")
-        println("✅ ALL NETWORKS: LACE COMPATIBILITY VERIFIED")
     }
 
     /**
@@ -201,11 +194,7 @@ class LaceCompatibilityTest {
             ourSeed
         )
 
-        println("")
-        println("VERIFIED: BIP39.mnemonicToSeed() returns full 64-byte PBKDF2 output")
-        println("Standard BIP-39 Seed: ${standardSeed.size} bytes")
-        println("Our Seed: ${ourSeed.size} bytes")
-        println("Match: ${standardSeed.contentEquals(ourSeed)}")
+        // BIP39.mnemonicToSeed() returns full 64-byte PBKDF2 output
     }
 
     // Helper function

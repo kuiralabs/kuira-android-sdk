@@ -160,10 +160,7 @@ class BalanceRepositoryIntegrationTest {
         val utxos = database.unshieldedUtxoDao().getUnspentUtxos(TEST_UNSHIELDED_ADDRESS)
         assertEquals(utxoCount, utxos.size)
 
-        println("✅ Loaded $utxoCount UTXOs from Indexer API via subscription")
-        utxos.forEach { utxo ->
-            println("  - ${utxo.tokenType}: ${utxo.value} (tx: ${utxo.intentHash.take(10)}...)")
-        }
+        println("Loaded $utxoCount UTXOs from Indexer API")
     }
 
     /**
@@ -207,11 +204,7 @@ class BalanceRepositoryIntegrationTest {
         // Verify total is positive
         assertTrue("Total balance should be > 0, got $totalBalance", totalBalance > BigInteger.ZERO)
 
-        println("✅ Total balance: $totalBalance")
-        println("   Token breakdown:")
-        balances.forEach { balance ->
-            println("   - ${balance.tokenType}: ${balance.balance} (${balance.utxoCount} UTXOs)")
-        }
+        println("Total balance: $totalBalance (${balances.size} token types)")
 
         // Verify UTXO counts
         balances.forEach { balance ->
@@ -254,7 +247,7 @@ class BalanceRepositoryIntegrationTest {
         // Verify positive
         assertTrue("Total balance should be > 0, got $totalBalance", totalBalance > BigInteger.ZERO)
 
-        println("✅ Total balance across all tokens: $totalBalance")
+        println("Total balance across all tokens: $totalBalance")
     }
 
     // ==================== Advanced Scenarios ====================
@@ -299,7 +292,7 @@ class BalanceRepositoryIntegrationTest {
         val tnightBalance = balances.find { it.tokenType == "TNIGHT" }
         assertEquals(largeAmount, tnightBalance?.balance)
 
-        println("✅ BigInteger handles large amounts correctly: $largeAmount")
+        println("BigInteger handles large amounts: $largeAmount")
     }
 
     /**
@@ -336,7 +329,7 @@ class BalanceRepositoryIntegrationTest {
         assertEquals("DUST", balances[2].tokenType)    // Smallest last
         assertEquals(BigInteger.valueOf(1_000_000), balances[2].balance)
 
-        println("✅ Balances sorted correctly by amount")
+        // Balances sorted correctly by amount
     }
 
     // ==================== Helper Methods ====================

@@ -145,7 +145,7 @@ class TransactionSignerSecurityTest {
         }
 
         // No manual cleanup needed - useSigningKey() handled everything
-        println("✅ Public API memory safety verified: automatic cleanup works")
+        // Public API memory safety verified: automatic cleanup works
     }
 
     @Test
@@ -171,7 +171,7 @@ class TransactionSignerSecurityTest {
         }
 
         // If we reach here without crash or OOM, basic memory management is working
-        println("✅ 1000 signing operations completed without memory issues")
+        // 1000 signing operations completed without memory issues
     }
 
     // ============================================================================
@@ -306,7 +306,7 @@ class TransactionSignerSecurityTest {
             assertEquals("Thread $threadId: signature should be 64 bytes", 64, sig!!.size)
         }
 
-        println("✅ Concurrent signing with different keys: no interference")
+        // Concurrent signing with different keys: no interference
     }
 
     // ============================================================================
@@ -332,7 +332,7 @@ class TransactionSignerSecurityTest {
         val isValid = TransactionSigner.verifySignature(publicKey, message, signature)
         assertTrue("Signature MUST be verifiable with correct public key", isValid)
 
-        println("✅ Signature verification passed: cryptographically valid")
+        // Signature verification passed
     }
 
     @Test
@@ -361,7 +361,7 @@ class TransactionSignerSecurityTest {
             TransactionSigner.verifySignature(publicKey, tamperedMessage, signature)
         )
 
-        println("✅ Signature verification correctly rejects tampered messages")
+        // Signature verification correctly rejects tampered messages
     }
 
     @Test
@@ -392,7 +392,7 @@ class TransactionSignerSecurityTest {
             TransactionSigner.verifySignature(publicKey2!!, message, signature)
         )
 
-        println("✅ Signature verification correctly rejects wrong public keys")
+        // Signature verification correctly rejects wrong public keys
     }
 
     @Test
@@ -415,7 +415,7 @@ class TransactionSignerSecurityTest {
             assertTrue("BIP-340 test vector signature must verify", isValid)
         }
 
-        println("✅ All BIP-340 test vector signatures verify successfully")
+        // All BIP-340 test vector signatures verify successfully
     }
 
     @Test
@@ -452,7 +452,7 @@ class TransactionSignerSecurityTest {
             assertTrue("Signature $index must verify despite different nonce", isValid)
         }
 
-        println("✅ All 5 different signatures of same data verify correctly")
+        // All 5 different signatures of same data verify correctly
     }
 
     @Test
@@ -473,7 +473,7 @@ class TransactionSignerSecurityTest {
         assertFalse("R component should not be all zeros", r.all { it == 0.toByte() })
         assertFalse("s component should not be all zeros", s.all { it == 0.toByte() })
 
-        println("✅ Signature format valid: R=${r.toHex().substring(0, 8)}... s=${s.toHex().substring(0, 8)}...")
+        // Signature format valid
     }
 
     @Test
@@ -496,7 +496,7 @@ class TransactionSignerSecurityTest {
         assertFalse("sig2 and sig3 should differ", sig2.contentEquals(sig3!!))
         assertFalse("sig1 and sig3 should differ", sig1.contentEquals(sig3))
 
-        println("✅ Random nonce confirmed: same data produces different signatures")
+        // Random nonce confirmed: same data produces different signatures
     }
 
     // ============================================================================
@@ -512,7 +512,7 @@ class TransactionSignerSecurityTest {
         val isValid = TransactionSigner.verifySignature(publicKey, message, malformedSig)
         assertFalse("Malformed signature (all zeros) should be rejected", isValid)
 
-        println("✅ All-zero signature correctly rejected")
+        // All-zero signature correctly rejected
     }
 
     @Test
@@ -524,7 +524,7 @@ class TransactionSignerSecurityTest {
         val isValid = TransactionSigner.verifySignature(publicKey, message, randomSig)
         assertFalse("Malformed signature (random bytes) should be rejected", isValid)
 
-        println("✅ Random signature bytes correctly rejected")
+        // Random signature bytes correctly rejected
     }
 
     @Test
@@ -541,7 +541,7 @@ class TransactionSignerSecurityTest {
         val isValid = TransactionSigner.verifySignature(invalidPublicKey, message, signature!!)
         assertFalse("Invalid public key (all zeros) should fail verification", isValid)
 
-        println("✅ All-zero public key correctly rejected")
+        // All-zero public key correctly rejected
     }
 
     @Test
@@ -558,7 +558,7 @@ class TransactionSignerSecurityTest {
             assertTrue("Error message should mention actual length", e.message!!.contains("32"))
         }
 
-        println("✅ Too-short signature correctly rejected with clear error")
+        // Too-short signature correctly rejected
     }
 
     @Test
@@ -575,7 +575,7 @@ class TransactionSignerSecurityTest {
             assertTrue("Error message should mention actual length", e.message!!.contains("128"))
         }
 
-        println("✅ Too-long signature correctly rejected with clear error")
+        // Too-long signature correctly rejected
     }
 
     @Test
@@ -596,7 +596,7 @@ class TransactionSignerSecurityTest {
         val isValid = TransactionSigner.verifySignature(publicKey!!, emptyMessage, signature)
         assertTrue("Empty message signature should verify correctly", isValid)
 
-        println("✅ Empty message signature verifies correctly")
+        // Empty message signature verifies correctly
     }
 
     // ============================================================================
