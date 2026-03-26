@@ -49,7 +49,9 @@ sealed class BalanceUiState {
     data class Success(
         val balances: List<TokenBalanceDisplay>,
         val lastUpdated: String,
-        val totalBalance: BigInteger
+        val totalBalance: BigInteger,
+        val shieldedBalances: Map<String, BigInteger>? = null,
+        val shieldedAddress: String? = null
     ) : BalanceUiState()
 
     /**

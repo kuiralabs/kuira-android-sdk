@@ -4,11 +4,19 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
+import com.midnight.kuira.core.crypto.address.Bech32m
+import com.midnight.kuira.core.crypto.bip32.HDWallet
+import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
+import com.midnight.kuira.core.crypto.bip39.BIP39
+import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
 import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
 import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
+import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,18 +71,17 @@ import javax.inject.Inject
 class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 @Inject constructor(
     private val repository: BalanceRepository,
+    private val shieldedRepository: ShieldedRepository,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val formatter: BalanceFormatter,
     private val networkConfig: NetworkConfig,
-    private val clock: Clock = Clock.systemDefaultZone()  // Injected for testability
+    private val clock: Clock = Clock.systemDefaultZone()
 ) : ViewModel() {
 
-    /**
-     * Default test address for the currently selected network (MVP only).
-     * Maps network to a known test wallet address for faster testing.
-     */
     val defaultTestAddress: String = DEFAULT_TEST_ADDRESSES[networkConfig.network.addressPrefix]
         ?: ""
+
+    val defaultTestSeedPhrase: String = DEFAULT_TEST_SEED_PHRASES[networkConfig.network] ?: ""
 
     private val _balanceState = MutableStateFlow<BalanceUiState>(BalanceUiState.Loading())
     val balanceState: StateFlow<BalanceUiState> = _balanceState.asStateFlow()
@@ -89,6 +96,10 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     // Job tracking for proper cancellation
     private var collectionJob: Job? = null
     private var syncJob: Job? = null
+
+    // Cached shielded data (preserved across unshielded Flow emissions)
+    private var cachedShieldedBalances: Map<String, BigInteger>? = null
+    private var cachedShieldedAddress: String? = null
 
     // Track when user last triggered a load/refresh (NOT when database emitted)
     // This timestamp is set ONLY on explicit user actions (loadBalances/refresh)
@@ -107,6 +118,31 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
      * @param address The unshielded address to track (must be valid Midnight address)
      * @throws IllegalArgumentException if address is invalid
      */
+    /**
+     * Load unshielded balances + shielded balance together.
+     * Shielded runs after unshielded starts (non-blocking).
+     */
+    fun loadBalancesWithShielded(address: String, seedPhrase: String) {
+        loadBalances(address)
+        if (seedPhrase.isNotBlank()) {
+            viewModelScope.launch {
+                // Wait for unshielded to reach Success before starting shielded sync
+                // (they share the same WebSocket client — can't run concurrently)
+                var waitMs = 0L
+                while (_balanceState.value !is BalanceUiState.Success) {
+                    kotlinx.coroutines.delay(500)
+                    waitMs += 500
+                    if (waitMs > 30_000) {
+                        Log.w(TAG, "Timed out waiting for unshielded Success after ${waitMs}ms")
+                        return@launch
+                    }
+                }
+                Log.d(TAG, "Unshielded reached Success after ${waitMs}ms, starting shielded sync")
+                loadShieldedBalance(address, seedPhrase)
+            }
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalCoroutinesApi::class)
     fun loadBalances(address: String) {
@@ -160,7 +196,9 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                             BalanceUiState.Success(
                                 balances = displayBalances,
                                 lastUpdated = lastUpdatedString,
-                                totalBalance = totalBalance
+                                totalBalance = totalBalance,
+                                shieldedBalances = cachedShieldedBalances,
+                                shieldedAddress = cachedShieldedAddress
                             )
                         }
                         .catch { throwable ->
@@ -248,6 +286,87 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     }
 
     /**
+     * Load shielded balance by syncing zswap events.
+     *
+     * Derives the zswap key from the seed phrase, syncs events, and updates
+     * the current Success state with shielded balances.
+     */
+    fun loadShieldedBalance(address: String, seedPhrase: String) {
+        if (seedPhrase.isBlank()) return
+
+        viewModelScope.launch {
+            var seed: ByteArray? = null
+            var hdWallet: HDWallet? = null
+
+            try {
+                seed = BIP39.mnemonicToSeed(seedPhrase)
+                hdWallet = HDWallet.fromSeed(seed)
+
+                // Derive zswap seed at m/44'/2400'/0'/3/0
+                val zswapKey = hdWallet.selectAccount(0)
+                    .selectRole(MidnightKeyRole.ZSWAP)
+                    .deriveKeyAt(0)
+                val zswapSeed = zswapKey.privateKeyBytes.copyOf()
+                zswapKey.clear()
+
+                // Derive shielded address from keys
+                val shieldedKeys = ShieldedKeyDeriver.deriveKeys(zswapSeed)
+                val shieldedAddress = shieldedKeys?.let {
+                    val coinPkBytes = hexToBytes(it.coinPublicKey)
+                    val encPkBytes = hexToBytes(it.encryptionPublicKey)
+                    val prefix = "mn_shield-addr" + when (networkConfig.network) {
+                        MidnightNetwork.PREPROD -> "_preprod"
+                        MidnightNetwork.PREVIEW -> "_preview"
+                        MidnightNetwork.UNDEPLOYED -> "_undeployed"
+                        else -> ""
+                    }
+                    Bech32m.encode(prefix, coinPkBytes + encPkBytes)
+                }
+
+                // Sync zswap events
+                val hasCoins = shieldedRepository.syncFromBlockchain(address, zswapSeed)
+
+                // Get balances
+                val balances = if (hasCoins) {
+                    shieldedRepository.getBalances(address)
+                } else {
+                    emptyMap()
+                }
+
+                // Cache shielded data for future unshielded Flow emissions
+                cachedShieldedBalances = balances
+                cachedShieldedAddress = shieldedAddress
+
+                Log.d(TAG, "Shielded balance cached: ${balances.size} token types, ${balances.values.sumOf { it }} total")
+
+                // Directly update the current state to show shielded immediately
+                val current = _balanceState.value
+                if (current is BalanceUiState.Success) {
+                    _balanceState.value = current.copy(
+                        shieldedBalances = balances,
+                        shieldedAddress = shieldedAddress
+                    )
+                    Log.d(TAG, "UI state updated with shielded balances")
+                } else {
+                    Log.d(TAG, "State is ${current::class.simpleName}, shielded will appear on next Flow emission")
+                }
+
+                // Wipe seed material
+                java.util.Arrays.fill(zswapSeed, 0.toByte())
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load shielded balance", e)
+            } finally {
+                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                hdWallet?.clear()
+            }
+        }
+    }
+
+    private fun hexToBytes(hex: String): ByteArray {
+        return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+    }
+
+    /**
      * Format last updated timestamp for display.
      *
      * Compares the stored timestamp (when user triggered load/refresh)
@@ -320,14 +439,20 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     }
 
     private companion object {
-        // Time threshold constants
+        const val TAG = "BalanceViewModel"
+
         const val ONE_MINUTE_THRESHOLD = 1L
         const val MINUTES_IN_HOUR = 60L
         const val HOURS_IN_DAY = 24L
 
-        // Date formatting patterns
         const val TIME_PATTERN = "h:mm a"
         const val DATE_TIME_PATTERN = "MMM d 'at' h:mm a"
+
+        // MVP test seed phrases — Alice (from CLI: mn wallet info alice)
+        private val DEFAULT_TEST_SEED_PHRASES = mapOf(
+            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
+            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
+        )
 
         // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
         val DEFAULT_TEST_ADDRESSES = mapOf(

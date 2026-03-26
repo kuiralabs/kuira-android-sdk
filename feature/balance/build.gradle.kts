@@ -46,6 +46,7 @@ android {
 
 dependencies {
     // Core modules
+    implementation(project(":core:crypto"))
     implementation(project(":core:indexer"))
     implementation(project(":core:network"))
 

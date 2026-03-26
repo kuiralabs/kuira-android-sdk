@@ -10,7 +10,7 @@
 - [x] Step 3: Kotlin Wrapper (`ZswapLocalState.kt`) — compiles, all unit tests pass
 - [x] Step 4: GraphQL Subscription + `queryZswapEvents()` — compiles, mirrors dust pattern
 - [x] Step 5: `ShieldedRepository` + DataStore persistence — compiles, all unit tests pass
-- [ ] Step 6: UI Integration (Balance Screen)
+- [x] Step 6: UI Integration — seed input + shielded balance card on Balance Screen
 - [ ] Step 7: Rust FFI — Shielded Transfer Building
 - [ ] Step 8: Shielded Send UI
 - [ ] Step 9: Shielded Address Display

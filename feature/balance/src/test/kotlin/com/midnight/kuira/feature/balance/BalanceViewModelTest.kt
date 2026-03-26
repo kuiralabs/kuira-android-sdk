@@ -73,7 +73,8 @@ class BalanceViewModelTest {
         formatter = BalanceFormatter()
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
         val testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
-        viewModel = BalanceViewModel(repository, subscriptionManagerFactory, formatter, testNetworkConfig, fakeClock)
+        val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository = mock()
+        viewModel = BalanceViewModel(repository, shieldedRepository, subscriptionManagerFactory, formatter, testNetworkConfig, fakeClock)
     }
 
     /**

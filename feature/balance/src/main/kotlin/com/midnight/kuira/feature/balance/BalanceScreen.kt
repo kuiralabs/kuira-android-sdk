@@ -25,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
@@ -74,13 +75,14 @@ fun BalanceScreen(
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
 
-    // Address input state - pre-filled with test address matching the selected network
     var address by remember { mutableStateOf(viewModel.defaultTestAddress) }
+    var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
+    var shieldedVisible by remember { mutableStateOf(true) }
 
-    // Auto-load balance on launch for faster testing (MVP ONLY)
+    // Auto-load unshielded + shielded on launch (MVP)
     LaunchedEffect(Unit) {
         if (address.isNotBlank()) {
-            viewModel.loadBalances(address)
+            viewModel.loadBalancesWithShielded(address, seedPhrase)
         }
     }
 
@@ -133,7 +135,10 @@ fun BalanceScreen(
         PullToRefreshBox(
             isRefreshing = balanceState is BalanceUiState.Loading &&
                           (balanceState as? BalanceUiState.Loading)?.isRefreshing == true,
-            onRefresh = { viewModel.refresh(address) },
+            onRefresh = {
+                viewModel.refresh(address)
+                viewModel.loadShieldedBalance(address, seedPhrase)
+            },
             state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
@@ -150,11 +155,10 @@ fun BalanceScreen(
                 AddressInputSection(
                     address = address,
                     onAddressChange = { newAddress ->
-                        // Fix: Ensure clean replacement, not concatenation
                         android.util.Log.d("BalanceScreen", "Address changed: '${newAddress}'")
                         address = newAddress.trim()
                     },
-                    onLoadBalances = { viewModel.loadBalances(address) },
+                    onLoadBalances = { viewModel.loadBalancesWithShielded(address, seedPhrase) },
                     onCopyAddress = { copyToClipboard(context, address) },
                     onClearAddress = { address = "" },
                     isAddressValid = address.isNotBlank() && address.startsWith("mn_")
@@ -176,11 +180,31 @@ fun BalanceScreen(
                             lastUpdated = state.lastUpdated,
                             totalBalance = state.totalBalance.toString()
                         )
+
+                        // Shielded Balance Section
+                        if (state.shieldedBalances != null) {
+                            ShieldedBalanceCard(
+                                balances = state.shieldedBalances,
+                                shieldedAddress = state.shieldedAddress,
+                                visible = shieldedVisible,
+                                onToggleVisibility = { shieldedVisible = !shieldedVisible }
+                            )
+                        }
                     }
                     is BalanceUiState.Error -> {
                         ErrorSection(message = state.message)
                     }
                 }
+
+                // Seed phrase input at bottom
+                OutlinedTextField(
+                    value = seedPhrase,
+                    onValueChange = { seedPhrase = it },
+                    label = { Text("Seed Phrase (for shielded)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 3
+                )
             }
         }
     }
@@ -550,4 +574,80 @@ private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Midnight Address", text)
     clipboard.setPrimaryClip(clip)
+}
+
+@Composable
+private fun ShieldedBalanceCard(
+    balances: Map<String, java.math.BigInteger>,
+    shieldedAddress: String?,
+    visible: Boolean,
+    onToggleVisibility: () -> Unit
+) {
+    val formatter = remember { com.midnight.kuira.core.indexer.ui.BalanceFormatter() }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Shielded Balance",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+                TextButton(onClick = onToggleVisibility) {
+                    Text(
+                        text = if (visible) "Hide" else "Show",
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+
+            if (visible) {
+                if (balances.isEmpty()) {
+                    Text(
+                        text = "No shielded coins",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                } else {
+                    balances.forEach { (tokenType, amount) ->
+                        val label = if (tokenType.all { it == '0' }) "NIGHT" else tokenType.take(8)
+                        Text(
+                            text = formatter.formatCompact(amount, label),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
+
+                if (shieldedAddress != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Address: ${shieldedAddress.take(30)}...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
+                    )
+                }
+            } else {
+                Text(
+                    text = "******",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
 }
