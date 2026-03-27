@@ -70,7 +70,7 @@ class ShieldedRepository @Inject constructor(
      * @return true if sync succeeded and coins found
      */
     suspend fun syncFromBlockchain(address: String, zswapSeed: ByteArray): Boolean {
-        Log.d(TAG, "Syncing shielded state for $address, seed[0]=${zswapSeed[0]}, seed[31]=${zswapSeed[31]}")
+        Log.d(TAG, "Syncing shielded state for $address")
 
         try {
             val eventsHex = queryZswapEventsViaOwnClient()
@@ -80,7 +80,7 @@ class ShieldedRepository @Inject constructor(
                 return false
             }
 
-            Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes, hash=${eventsHex.hashCode()}, first20=${eventsHex.take(20)}")
+            Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes of zswap events")
 
             val initialState = ZswapLocalState.create()
             if (initialState == null) {

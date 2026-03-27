@@ -359,11 +359,8 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                 shieldedSyncSeed?.let { java.util.Arrays.fill(it, 0.toByte()) }
                 shieldedSyncSeed = zswapSeed.copyOf()
                 shieldedSyncAddress = address
-                Log.d(TAG, "Stored sync seed[0]=${shieldedSyncSeed!![0]}, seed[31]=${shieldedSyncSeed!![31]}")
-
                 // Wipe local copy AFTER storing
                 java.util.Arrays.fill(zswapSeed, 0.toByte())
-                Log.d(TAG, "After wipe: field seed[0]=${shieldedSyncSeed!![0]}, seed[31]=${shieldedSyncSeed!![31]}")
 
                 startShieldedSync()
             } catch (e: Exception) {
@@ -376,35 +373,50 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     }
 
     /**
-     * Start persistent shielded subscription with incremental event replay.
-     * Periodic shielded balance poll.
-     * Uses seed stored in shieldedSyncSeed field (set by loadShieldedBalance).
+     * Persistent shielded subscription.
+     *
+     * Subscribes to zswapLedgerEvents via dedicated WebSocket (not shared with unshielded).
+     * When new events arrive (after catching up to chain tip), does a full re-sync.
+     * Re-subscribes in a loop if the subscription completes.
      */
     private fun startShieldedSync() {
         shieldedSyncJob?.cancel()
         shieldedSyncJob = viewModelScope.launch {
             try {
+                val seed = shieldedSyncSeed ?: return@launch
+                val addr = shieldedSyncAddress ?: return@launch
+
+                // Track highest event ID to only re-sync on truly new events
+                var lastMaxId = 0L
+
                 while (true) {
-                    kotlinx.coroutines.delay(10_000)
+                    Log.d(TAG, "Subscribing to zswap events (lastMaxId=$lastMaxId)")
+                    shieldedRepository.subscribeToZswapEvents(fromId = lastMaxId)
+                        .collect { event ->
+                            lastMaxId = maxOf(lastMaxId, event.id)
 
-                    val seed = shieldedSyncSeed ?: return@launch
-                    val addr = shieldedSyncAddress ?: return@launch
+                            // Only re-sync when we see the chain tip advance
+                            if (event.id >= event.maxId && event.maxId > lastMaxId - 1) {
+                                val hasCoins = shieldedRepository.syncFromBlockchain(addr, seed)
+                                val balances = if (hasCoins) shieldedRepository.getBalances(addr) else emptyMap()
 
-                    val hasCoins = shieldedRepository.syncFromBlockchain(addr, seed)
-                    val balances = if (hasCoins) shieldedRepository.getBalances(addr) else emptyMap()
-
-                    if (balances != cachedShieldedBalances) {
-                        cachedShieldedBalances = balances
-                        val current = _balanceState.value
-                        if (current is BalanceUiState.Success) {
-                            _balanceState.value = current.copy(shieldedBalances = balances)
-                            Log.d(TAG, "Shielded balance updated: ${balances.values.sumOf { it }}")
+                                if (balances != cachedShieldedBalances) {
+                                    cachedShieldedBalances = balances
+                                    val current = _balanceState.value
+                                    if (current is BalanceUiState.Success) {
+                                        _balanceState.value = current.copy(shieldedBalances = balances)
+                                        Log.d(TAG, "Shielded balance updated: ${balances.values.sumOf { it }}")
+                                    }
+                                }
+                            }
                         }
-                    }
+                    // Subscription completed — wait and re-subscribe
+                    Log.d(TAG, "Shielded subscription ended, re-subscribing in 3s")
+                    kotlinx.coroutines.delay(3000)
                 }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
-                    Log.e(TAG, "Shielded poll error", e)
+                    Log.e(TAG, "Shielded subscription error", e)
                 }
             }
         }
