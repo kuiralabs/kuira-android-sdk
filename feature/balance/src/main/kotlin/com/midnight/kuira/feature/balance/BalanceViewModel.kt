@@ -100,6 +100,9 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     // Cached shielded data (preserved across unshielded Flow emissions)
     private var cachedShieldedBalances: Map<String, BigInteger>? = null
     private var cachedShieldedAddress: String? = null
+    private var shieldedSyncJob: Job? = null
+    private var shieldedSyncSeed: ByteArray? = null
+    private var shieldedSyncAddress: String? = null
 
     // Track when user last triggered a load/refresh (NOT when database emitted)
     // This timestamp is set ONLY on explicit user actions (loadBalances/refresh)
@@ -339,25 +342,70 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
                 Log.d(TAG, "Shielded balance cached: ${balances.size} token types, ${balances.values.sumOf { it }} total")
 
-                // Directly update the current state to show shielded immediately
+                // Update UI state immediately
                 val current = _balanceState.value
+                Log.d(TAG, "Current state type: ${current::class.simpleName}, updating with shielded")
                 if (current is BalanceUiState.Success) {
                     _balanceState.value = current.copy(
                         shieldedBalances = balances,
                         shieldedAddress = shieldedAddress
                     )
-                    Log.d(TAG, "UI state updated with shielded balances")
+                    Log.d(TAG, "State updated with shielded balances")
                 } else {
-                    Log.d(TAG, "State is ${current::class.simpleName}, shielded will appear on next Flow emission")
+                    Log.w(TAG, "State is NOT Success (${current::class.simpleName}), cannot update shielded")
                 }
 
-                // Wipe seed material
+                // Store seed for periodic polling (will be wiped on ViewModel clear)
+                shieldedSyncSeed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                shieldedSyncSeed = zswapSeed.copyOf()
+                shieldedSyncAddress = address
+                Log.d(TAG, "Stored sync seed[0]=${shieldedSyncSeed!![0]}, seed[31]=${shieldedSyncSeed!![31]}")
+
+                // Wipe local copy AFTER storing
                 java.util.Arrays.fill(zswapSeed, 0.toByte())
+                Log.d(TAG, "After wipe: field seed[0]=${shieldedSyncSeed!![0]}, seed[31]=${shieldedSyncSeed!![31]}")
+
+                startShieldedSync()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load shielded balance", e)
             } finally {
                 seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
                 hdWallet?.clear()
+            }
+        }
+    }
+
+    /**
+     * Start persistent shielded subscription with incremental event replay.
+     * Periodic shielded balance poll.
+     * Uses seed stored in shieldedSyncSeed field (set by loadShieldedBalance).
+     */
+    private fun startShieldedSync() {
+        shieldedSyncJob?.cancel()
+        shieldedSyncJob = viewModelScope.launch {
+            try {
+                while (true) {
+                    kotlinx.coroutines.delay(10_000)
+
+                    val seed = shieldedSyncSeed ?: return@launch
+                    val addr = shieldedSyncAddress ?: return@launch
+
+                    val hasCoins = shieldedRepository.syncFromBlockchain(addr, seed)
+                    val balances = if (hasCoins) shieldedRepository.getBalances(addr) else emptyMap()
+
+                    if (balances != cachedShieldedBalances) {
+                        cachedShieldedBalances = balances
+                        val current = _balanceState.value
+                        if (current is BalanceUiState.Success) {
+                            _balanceState.value = current.copy(shieldedBalances = balances)
+                            Log.d(TAG, "Shielded balance updated: ${balances.values.sumOf { it }}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    Log.e(TAG, "Shielded poll error", e)
+                }
             }
         }
     }
@@ -433,9 +481,11 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
     override fun onCleared() {
         super.onCleared()
-        // Cancel jobs when ViewModel is cleared (automatic subscription cleanup)
         collectionJob?.cancel()
         syncJob?.cancel()
+        shieldedSyncJob?.cancel()
+        shieldedSyncSeed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+        shieldedSyncSeed = null
     }
 
     private companion object {

@@ -7,8 +7,23 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
+import com.midnight.kuira.core.indexer.api.GraphQLQueries
 import com.midnight.kuira.core.indexer.di.ShieldedStateDataStore
+import com.midnight.kuira.core.indexer.model.RawLedgerEvent
+import com.midnight.kuira.core.indexer.websocket.GraphQLWebSocketClient
+import com.midnight.kuira.core.network.NetworkConfig
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.transformWhile
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,28 +31,32 @@ import javax.inject.Singleton
 /**
  * Repository for shielded (zswap) wallet operations.
  *
- * Mirrors [DustRepository] pattern:
- * - Sync zswap events from blockchain via indexer
- * - Persist ZswapLocalState to DataStore
- * - Query shielded balances from state
- *
- * **Architecture:**
- * ```
- * ShieldedRepository
- *  ├─ ZswapLocalState (FFI) — Source of truth, in-memory Rust state
- *  ├─ IndexerClient — Event subscription
- *  └─ DataStore (Persistence) — Serialized state + last event ID
- * ```
+ * Uses its OWN WebSocket client, independent from the shared IndexerClient.
+ * This prevents the unshielded SubscriptionManager from killing the shielded
+ * subscription when it resets the shared WebSocket connection.
  */
 @Singleton
 class ShieldedRepository @Inject constructor(
     @ShieldedStateDataStore private val dataStore: DataStore<Preferences>,
-    private val indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient
+    private val indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient,
+    private val networkConfig: NetworkConfig
 ) {
     companion object {
         private const val TAG = "ShieldedRepository"
         private fun stateKey(address: String) = stringPreferencesKey("zswap_state_$address")
         private fun eventIdKey(address: String) = longPreferencesKey("zswap_last_event_$address")
+    }
+
+    // Each subscription gets a fresh WebSocket client to avoid state corruption
+    private val wsEndpoint = networkConfig.indexerBaseUrl
+        .replace("http://", "ws://")
+        .replace("https://", "wss://") + "/graphql/ws"
+
+    private fun createFreshWsClient(): GraphQLWebSocketClient {
+        val httpClient = HttpClient(OkHttp) {
+            install(io.ktor.client.plugins.websocket.WebSockets)
+        }
+        return GraphQLWebSocketClient(url = wsEndpoint, httpClient = httpClient)
     }
 
     /**
@@ -51,17 +70,17 @@ class ShieldedRepository @Inject constructor(
      * @return true if sync succeeded and coins found
      */
     suspend fun syncFromBlockchain(address: String, zswapSeed: ByteArray): Boolean {
-        Log.d(TAG, "Syncing shielded state for $address")
+        Log.d(TAG, "Syncing shielded state for $address, seed[0]=${zswapSeed[0]}, seed[31]=${zswapSeed[31]}")
 
         try {
-            val eventsHex = indexerClient.queryZswapEvents()
+            val eventsHex = queryZswapEventsViaOwnClient()
 
             if (eventsHex.isEmpty()) {
                 Log.d(TAG, "No zswap events found")
                 return false
             }
 
-            Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes of zswap events")
+            Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes, hash=${eventsHex.hashCode()}, first20=${eventsHex.take(20)}")
 
             val initialState = ZswapLocalState.create()
             if (initialState == null) {
@@ -119,6 +138,58 @@ class ShieldedRepository @Inject constructor(
         } finally {
             state.close()
         }
+    }
+
+    /**
+     * Subscribe to zswap events using dedicated WebSocket (not shared with unshielded).
+     */
+    fun subscribeToZswapEvents(fromId: Long? = null): Flow<RawLedgerEvent> {
+        val variables = buildMap<String, Any> {
+            if (fromId != null) {
+                put("id", fromId)
+            }
+        }
+
+        return flow {
+            val client = createFreshWsClient()
+            client.connect()
+
+            client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
+                .buffer(Channel.UNLIMITED)
+                .collect { jsonElement ->
+                    val dataElement = jsonElement.jsonObject["data"]
+                    if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+                        return@collect
+                    }
+
+                    val eventObj = dataElement.jsonObject["zswapLedgerEvents"]?.jsonObject
+                        ?: return@collect
+
+                    val id = eventObj["id"]?.jsonPrimitive?.long ?: return@collect
+                    val rawHex = eventObj["raw"]?.jsonPrimitive?.content ?: return@collect
+                    val maxId = eventObj["maxId"]?.jsonPrimitive?.long ?: return@collect
+
+                    emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
+                }
+        }
+    }
+
+    /**
+     * Query all zswap events using own WebSocket client (not shared).
+     */
+    /**
+     * Query all zswap events using dedicated WebSocket (not shared with unshielded).
+     * Same pattern as IndexerClientImpl.queryDustEvents.
+     */
+    private suspend fun queryZswapEventsViaOwnClient(): String {
+        val allEvents = subscribeToZswapEvents(fromId = null)
+            .transformWhile { event ->
+                emit(event)
+                event.id < event.maxId
+            }
+            .toList()
+
+        return if (allEvents.isEmpty()) "" else allEvents.sortedBy { it.id }.joinToString("") { it.rawHex }
     }
 
     /** Check if cached shielded state exists. */

@@ -148,6 +148,7 @@ class GraphQLWebSocketClient(
         val operationId = generateOperationId()
         val channel = Channel<JsonElement>(Channel.UNLIMITED)
         activeSubscriptions[operationId] = channel
+        android.util.Log.d("GraphQLWebSocket", "Starting subscription $operationId, active subs: ${activeSubscriptions.keys}")
 
         try {
             // Send subscribe message
@@ -176,7 +177,7 @@ class GraphQLWebSocketClient(
                 emit(result)
             }
         } finally {
-            // Clean up
+            android.util.Log.d("GraphQLWebSocket", "Subscription $operationId Flow ended, cleaning up")
             activeSubscriptions.remove(operationId)
             sendMessage(GraphQLWebSocketMessage.Complete(id = operationId))
         }
@@ -282,6 +283,7 @@ class GraphQLWebSocketClient(
                 activeSubscriptions.remove(message.id)
             }
             is GraphQLWebSocketMessage.Complete -> {
+                android.util.Log.d("GraphQLWebSocket", "Subscription ${message.id} completed by server, active subs: ${activeSubscriptions.keys}")
                 activeSubscriptions[message.id]?.close()
                 activeSubscriptions.remove(message.id)
             }

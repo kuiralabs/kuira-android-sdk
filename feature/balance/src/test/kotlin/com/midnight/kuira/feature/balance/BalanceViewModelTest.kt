@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -1197,5 +1198,52 @@ class BalanceViewModelTest {
 
         // Balance state should still work
         assertTrue(viewModel.balanceState.value is BalanceUiState.Success)
+    }
+
+    // ==================== Shielded Balance ====================
+
+    @Test
+    fun `Success state includes shielded fields defaulting to null`() = runTest {
+        val balances = listOf(TokenBalance("TNIGHT", BigInteger.valueOf(1_000_000), 1))
+        whenever(repository.observeBalances(testAddress))
+            .thenReturn(flowOf(balances))
+
+        viewModel.loadBalances(testAddress)
+        advanceUntilIdle()
+
+        val state = viewModel.balanceState.value as BalanceUiState.Success
+        assertNull("shieldedBalances should default to null", state.shieldedBalances)
+        assertNull("shieldedAddress should default to null", state.shieldedAddress)
+    }
+
+    @Test
+    fun `Success state preserves shielded data across emissions`() = runTest {
+        val balances = listOf(TokenBalance("TNIGHT", BigInteger.valueOf(1_000_000), 1))
+        val balanceFlow = kotlinx.coroutines.flow.MutableSharedFlow<List<TokenBalance>>()
+        whenever(repository.observeBalances(testAddress))
+            .thenReturn(balanceFlow)
+
+        viewModel.loadBalances(testAddress)
+        advanceUntilIdle()
+
+        // First emission
+        balanceFlow.emit(balances)
+        advanceUntilIdle()
+
+        val state1 = viewModel.balanceState.value as BalanceUiState.Success
+        assertNull(state1.shieldedBalances)
+
+        // Second emission should still have null shielded (no shielded sync ran)
+        balanceFlow.emit(balances)
+        advanceUntilIdle()
+
+        val state2 = viewModel.balanceState.value as BalanceUiState.Success
+        assertNull(state2.shieldedBalances)
+    }
+
+    @Test
+    fun `defaultTestSeedPhrase is populated for preprod`() {
+        assertTrue(viewModel.defaultTestSeedPhrase.isNotBlank())
+        assertEquals(24, viewModel.defaultTestSeedPhrase.split(" ").size)
     }
 }
