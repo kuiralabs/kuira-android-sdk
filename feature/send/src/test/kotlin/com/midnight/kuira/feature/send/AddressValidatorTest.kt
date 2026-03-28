@@ -145,6 +145,54 @@ class AddressValidatorTest {
     }
 
     // ========================================================================
+    // Shielded Address Tests (Step 8/9)
+    // ========================================================================
+
+    @Test
+    fun `valid shielded address passes validation`() {
+        // Shielded address = 64 bytes (coin_pk 32 + enc_pk 32)
+        val coinPk = ByteArray(32) { (it * 3).toByte() }
+        val encPk = ByteArray(32) { (it * 7).toByte() }
+        val payload = coinPk + encPk
+        val address = Bech32m.encode("mn_shield-addr_undeployed", payload)
+
+        val result = AddressValidator.validate(address)
+
+        assertTrue("Shielded address should be valid", result is AddressValidator.ValidationResult.Valid)
+        val valid = result as AddressValidator.ValidationResult.Valid
+        assertTrue(valid.isShielded)
+        assertEquals(64, valid.publicKey.size)
+        assertEquals("undeployed", valid.network)
+    }
+
+    @Test
+    fun `shielded address with wrong data length fails`() {
+        // Only 32 bytes instead of 64
+        val payload = ByteArray(32) { it.toByte() }
+        val address = Bech32m.encode("mn_shield-addr_preview", payload)
+
+        val result = AddressValidator.validate(address)
+
+        assertTrue(result is AddressValidator.ValidationResult.Invalid)
+    }
+
+    @Test
+    fun `can distinguish shielded from unshielded`() {
+        val unshieldedKey = ByteArray(32) { it.toByte() }
+        val unshieldedAddr = Bech32m.encode("mn_addr_preview", unshieldedKey)
+
+        val coinPk = ByteArray(32) { (it * 3).toByte() }
+        val encPk = ByteArray(32) { (it * 7).toByte() }
+        val shieldedAddr = Bech32m.encode("mn_shield-addr_preview", coinPk + encPk)
+
+        val unshieldedResult = AddressValidator.validate(unshieldedAddr) as AddressValidator.ValidationResult.Valid
+        val shieldedResult = AddressValidator.validate(shieldedAddr) as AddressValidator.ValidationResult.Valid
+
+        assertFalse("Unshielded should not be shielded", unshieldedResult.isShielded)
+        assertTrue("Shielded should be shielded", shieldedResult.isShielded)
+    }
+
+    // ========================================================================
     // ValidationResult Tests
     // ========================================================================
 

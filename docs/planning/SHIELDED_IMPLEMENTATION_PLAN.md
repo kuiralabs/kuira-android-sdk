@@ -11,7 +11,7 @@
 - [x] Step 4: GraphQL Subscription + `queryZswapEvents()` — compiles, mirrors dust pattern
 - [x] Step 5: `ShieldedRepository` + DataStore persistence — compiles, all unit tests pass
 - [x] Step 6: UI Integration — seed input + shielded balance card on Balance Screen
-- [ ] Step 7: Rust FFI — Shielded Transfer Building
+- [x] Step 7: Composable Transfer Primitives — 7 FFI functions + JNI + Kotlin builder (91 Rust / 11 unit / 5 Android tests)
 - [ ] Step 8: Shielded Send UI
 - [ ] Step 9: Shielded Address Display
 - [ ] Step 10: Integration Testing

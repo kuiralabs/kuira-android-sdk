@@ -10,13 +10,15 @@ import com.midnight.kuira.core.crypto.address.Bech32m
  * - Validate address format (prefix, length, checksum)
  * - Prevent sending to invalid addresses
  *
- * **Midnight Address Format:**
+ * **Midnight Address Formats:**
  * ```
- * mn_addr_<network>1<data><checksum>
+ * Unshielded: mn_addr_<network>1<32-byte pubkey><checksum>
+ * Shielded:   mn_shield-addr_<network>1<64-byte coin_pk+enc_pk><checksum>
  * ```
  *
  * **Examples:**
- * - Valid: `mn_addr_preview1qe8qj25qkva7ug6qf3rvl3y0a366ydt2nvq30rwk5ckznavfdansq8yfx3u`
+ * - Valid unshielded: `mn_addr_preview1qe8qj25qkva7...`
+ * - Valid shielded: `mn_shield-addr_undeployed1jsy2ala7...`
  * - Invalid: `invalid_address` (wrong prefix)
  * - Invalid: `mn_addr_preview1abcd` (invalid checksum)
  *
@@ -46,7 +48,7 @@ object AddressValidator {
      * - `mn_addr_testnet` - Devnet (legacy)
      * - `mn_addr` - Mainnet (future)
      */
-    private val VALID_PREFIXES = setOf(
+    private val VALID_UNSHIELDED_PREFIXES = setOf(
         "mn_addr_preprod",
         "mn_addr_preview",
         "mn_addr_undeployed",
@@ -54,10 +56,21 @@ object AddressValidator {
         "mn_addr"
     )
 
-    /**
-     * Expected address data length (32 bytes for BIP-340 public key).
-     */
-    private const val EXPECTED_DATA_LENGTH = 32
+    private val VALID_SHIELDED_PREFIXES = setOf(
+        "mn_shield-addr_preprod",
+        "mn_shield-addr_preview",
+        "mn_shield-addr_undeployed",
+        "mn_shield-addr_testnet",
+        "mn_shield-addr"
+    )
+
+    private val VALID_PREFIXES = VALID_UNSHIELDED_PREFIXES + VALID_SHIELDED_PREFIXES
+
+    /** 32 bytes for unshielded (BIP-340 public key) */
+    private const val UNSHIELDED_DATA_LENGTH = 32
+
+    /** 64 bytes for shielded (coin_pk 32 + enc_pk 32) */
+    private const val SHIELDED_DATA_LENGTH = 64
 
     /**
      * Validate a Midnight address.
@@ -66,7 +79,7 @@ object AddressValidator {
      * 1. Not blank
      * 2. Valid Bech32m format (checksum)
      * 3. Valid prefix (mn_addr_*)
-     * 4. Correct data length (32 bytes)
+     * 4. Correct data length (32 bytes unshielded, 64 bytes shielded)
      *
      * @param address Address to validate
      * @return ValidationResult.Valid or ValidationResult.Invalid with reason
@@ -81,7 +94,7 @@ object AddressValidator {
         val hasValidPrefix = VALID_PREFIXES.any { address.startsWith(it) }
         if (!hasValidPrefix) {
             return ValidationResult.Invalid(
-                "Invalid address format. Must start with a valid Midnight address prefix (e.g., 'mn_addr_preprod', 'mn_addr_preview')"
+                "Invalid address format. Must start with a valid Midnight prefix (e.g., 'mn_addr_preview' or 'mn_shield-addr_preview')"
             )
         }
 
@@ -89,25 +102,29 @@ object AddressValidator {
         return try {
             val (hrp, data) = Bech32m.decode(address)
 
-            // Validate data length (should be 32 bytes for BIP-340 public key)
-            if (data.size != EXPECTED_DATA_LENGTH) {
+            val isShielded = VALID_SHIELDED_PREFIXES.any { hrp == it }
+
+            // Validate data length based on address type
+            val expectedLength = if (isShielded) SHIELDED_DATA_LENGTH else UNSHIELDED_DATA_LENGTH
+            if (data.size != expectedLength) {
                 return ValidationResult.Invalid(
-                    "Invalid address data length. Expected $EXPECTED_DATA_LENGTH bytes, got ${data.size}"
+                    "Invalid address data length. Expected $expectedLength bytes, got ${data.size}"
                 )
             }
 
-            // All checks passed
-            // Extract network: "mn_addr" -> "", "mn_addr_preview" -> "preview"
+            // Extract network from HRP
             val network = when {
-                hrp == "mn_addr" -> ""  // Mainnet has no suffix
+                hrp == "mn_addr" || hrp == "mn_shield-addr" -> ""
+                hrp.startsWith("mn_shield-addr_") -> hrp.removePrefix("mn_shield-addr_")
                 hrp.startsWith("mn_addr_") -> hrp.removePrefix("mn_addr_")
-                else -> ""  // Shouldn't happen if prefix validation worked
+                else -> ""
             }
 
             ValidationResult.Valid(
                 address = address,
                 network = network,
-                publicKey = data
+                publicKey = data,
+                isShielded = isShielded,
             )
         } catch (e: IllegalArgumentException) {
             // Bech32m.decode() throws IllegalArgumentException on invalid checksum
@@ -127,12 +144,13 @@ object AddressValidator {
          *
          * @property address The validated address
          * @property network Network ID (e.g., "preview", "testnet")
-         * @property publicKey Decoded public key (32 bytes)
+         * @property publicKey Decoded payload: 32 bytes (unshielded pubkey) or 64 bytes (shielded coin_pk + enc_pk)
          */
         data class Valid(
             val address: String,
             val network: String,
-            val publicKey: ByteArray
+            val publicKey: ByteArray,
+            val isShielded: Boolean = false,
         ) : ValidationResult() {
             override fun equals(other: Any?): Boolean {
                 if (this === other) return true
@@ -140,6 +158,7 @@ object AddressValidator {
                 if (address != other.address) return false
                 if (network != other.network) return false
                 if (!publicKey.contentEquals(other.publicKey)) return false
+                if (isShielded != other.isShielded) return false
                 return true
             }
 
@@ -147,6 +166,7 @@ object AddressValidator {
                 var result = address.hashCode()
                 result = 31 * result + network.hashCode()
                 result = 31 * result + publicKey.contentHashCode()
+                result = 31 * result + isShielded.hashCode()
                 return result
             }
         }
