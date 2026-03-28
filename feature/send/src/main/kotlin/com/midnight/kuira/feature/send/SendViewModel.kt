@@ -620,26 +620,23 @@ class SendViewModel @Inject constructor(
                                 return@launch
                             }
 
-                            // Select dust UTXOs for fee (use first UTXO with fee=1, same as unshielded)
-                            val dustUtxoCount = dustState.getUtxoCount()
-                            if (dustUtxoCount == 0) {
-                                dustState.close()
-                                _state.value = SendUiState.Error("No dust UTXOs available for fees")
-                                return@launch
-                            }
-                            val dustUtxosJson = "[{\"utxo_index\":0,\"v_fee\":\"1\"}]"
+                            val txHex = dustState.use { ds ->
+                                if (ds.getUtxoCount() == 0) {
+                                    _state.value = SendUiState.Error("No dust UTXOs available for fees")
+                                    return@launch
+                                }
 
-                            // Step 3: Build final transaction with offer + dust
-                            val txHex = ZswapTransferBuilder.buildTransactionWithDust(
-                                offerHex = transferResult.offerHex,
-                                networkId = networkId,
-                                dustStatePtr = dustState.getStatePointer(),
-                                dustSeed = dustSeed,
-                                dustUtxosJson = dustUtxosJson,
-                                currentTimeMs = System.currentTimeMillis(),
-                                ttlMs = ttlMs,
-                            )
-                            dustState.close()
+                                // Step 3: Build final transaction with offer + dust
+                                ZswapTransferBuilder.buildTransactionWithDust(
+                                    offerHex = transferResult.offerHex,
+                                    networkId = networkId,
+                                    dustStatePtr = ds.getStatePointer(),
+                                    dustSeed = dustSeed,
+                                    dustUtxosJson = "[{\"utxo_index\":0,\"v_fee\":\"1\"}]",
+                                    currentTimeMs = System.currentTimeMillis(),
+                                    ttlMs = ttlMs,
+                                )
+                            }
 
                             if (txHex == null) {
                                 _state.value = SendUiState.Error("Failed to build shielded transaction with dust")
