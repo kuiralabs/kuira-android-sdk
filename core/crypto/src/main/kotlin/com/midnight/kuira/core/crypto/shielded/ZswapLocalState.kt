@@ -36,8 +36,20 @@ class ZswapLocalState private constructor(
             return if (ptr != 0L) ZswapLocalState(ptr) else null
         }
 
+        /** Free a native state pointer directly (for ZswapTransferBuilder cleanup). */
+        fun freeNativePtr(ptr: Long) {
+            if (ptr != 0L) nativeFreeStatic(ptr)
+        }
+
         @JvmStatic private external fun nativeCreate(): Long
         @JvmStatic private external fun nativeDeserialize(hexStr: String): Long
+        @JvmStatic private external fun nativeFreeStatic(statePtr: Long)
+    }
+
+    /** Expose native pointer for ZswapTransferBuilder (package-private). */
+    internal fun nativePtr(): Long {
+        require(nativePtr != 0L) { "State already closed" }
+        return nativePtr
     }
 
     /**

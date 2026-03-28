@@ -303,43 +303,201 @@ Add shielded section to `BalanceScreen.kt`:
 
 ## Phase 3: Shielded Transactions
 
-### Step 7: Rust FFI — Shielded Transfer Building (5-6h)
+### Step 7: Rust FFI — Composable Shielded Transfer Primitives (6-8h)
 
-This is the most complex step. Need to build a shielded transfer transaction entirely in Rust.
+**Architecture Decision:** ADR-001 (see `docs/decisions/ADR-001-COMPOSABLE-ZSWAP-FFI.md`)
 
-**What `facade.transferTransaction({ type: 'shielded' })` does internally:**
+Instead of a single monolithic `zswap_build_transfer()` function, we decompose shielded transaction building into 7 composable FFI primitives. This supports future phases (DApp Connector's `balanceUnsealedTransaction`, Agent Runtime policy enforcement, shield↔unshield operations) without rewriting the FFI layer.
 
-1. `shielded.transferTransaction(secretKeys, outputs)` — creates an `UnprovenTransaction` that:
-   - Selects coins from ZswapLocalState to spend
-   - Creates ZK proof preimages for each spent coin
-   - Creates encrypted outputs for recipient
-   - Balances the zswap offer (inputs = outputs)
-2. Merged with dust fee payment (same as unshielded)
-3. Signed → Proved → Sealed → Submitted
+**Primitives (in implementation order):**
 
-**New FFI function:**
+#### 7a. `zswap_select_coins` (coin selection)
 
 ```rust
+/// Selects coins from state to cover the requested amount.
+/// Returns JSON array of QualifiedCoinInfo objects.
+///
+/// Selection strategy: greedy — fewest coins to cover amount.
+/// Caller can implement custom selection by iterating state.coins directly.
 #[no_mangle]
-pub extern "C" fn zswap_build_transfer(
-    state_ptr: *mut ZswapLocalState<InMemoryDB>,
-    secret_keys_seed: *const u8,
-    seed_len: usize,
-    recipient_address_hex: *const c_char,  // shielded address (coin_pk + enc_pk)
-    token_type_hex: *const c_char,
-    amount: *const c_char,  // string for u128
-    ttl_ms: u64,
-) -> *const c_char;  // hex-encoded unproven transaction (or null on error)
+pub extern "C" fn zswap_select_coins(
+    state_ptr: *const ZswapState<InMemoryDB>,
+    token_type_hex: *const c_char,   // hex-encoded ShieldedTokenType
+    amount_str: *const c_char,       // u128 as decimal string
+) -> *const c_char;  // JSON: [{type_hex, value, nonce_hex, mt_index}, ...] or null on error
 ```
 
-This returns an unproven transaction that goes through the existing prove → seal → submit pipeline.
+Tests:
+- Empty state → returns error (insufficient balance)
+- Single coin covers amount → returns 1 coin
+- Multiple coins needed → returns smallest set
+- Exact amount → no over-selection
+- **Excludes coins in pending_spends** (prevents double-spend on sequential calls)
 
-**Now understood (from fact-check):**
-- `State::spend()` selects a coin, creates `Input<ProofPreimage>` with nullifier + Merkle proof path + value commitment. Coin moves to `pending_spends`.
-- `Output::new(coin, segment, recipient_coin_pk, recipient_enc_pk)` creates encrypted output with `CoinCiphertext`. Returns `Output<ProofPreimage>`.
-- Offers are assembled from inputs + outputs via `ZswapOffer::fromInput/fromOutput` then merged.
-- The unproven transaction (with `ProofPreimage` objects) goes to the proof server for ZK proof generation, same `/prove-tx` endpoint as unshielded.
-- Merge with dust: same `Transaction::merge()` pattern as unshielded — create dust intent separately, merge into base transaction.
+#### 7b. `zswap_spend_coin` (create spending input)
+
+```rust
+/// Creates an Input<ProofPreimage> by spending a coin from the state.
+/// Returns ZswapSpendResult { new_state ptr, result_json }.
+///
+/// Calls: state.spend(&mut OsRng, &secret_keys, &coin, segment)
+/// Key location: "midnight/zswap/spend"
+#[no_mangle]
+pub extern "C" fn zswap_spend_coin(
+    state_ptr: *const ZswapState<InMemoryDB>,
+    seed_ptr: *const u8,
+    seed_len: usize,                  // must be 32
+    coin_json: *const c_char,         // JSON QualifiedCoinInfo from select_coins
+) -> ZswapSpendResult;  // { new_state: *mut, result_json: *mut } — both null on error
+```
+
+Returns a `ZswapSpendResult` struct with a direct state pointer (no serialization overhead).
+The original state is unchanged (immutable pattern).
+
+**Critical behavior:** `spend()` does NOT remove coins from `state.coins` — the coin stays
+in `coins` AND is added to `pending_spends`. Removal from `coins` only happens when
+`apply()` processes the on-chain confirmation. `zswap_select_coins` handles this by
+excluding coins in `pending_spends` from selection.
+
+Tests:
+- Spend valid coin → input has correct nullifier, merkle root
+- Coin added to pending_spends (not removed from coins — awaits on-chain confirmation)
+- Original state unchanged after spend
+- Invalid coin → returns error
+- Seed zeroized after use
+
+#### 7c. `zswap_create_output` (create recipient coin)
+
+```rust
+/// Creates an Output<ProofPreimage> — an encrypted coin for the recipient.
+///
+/// Calls: Output::new(&mut OsRng, &coin_info, segment, &target_cpk, Some(target_epk))
+/// Key location: "midnight/zswap/output"
+#[no_mangle]
+pub extern "C" fn zswap_create_output(
+    recipient_coin_pk_hex: *const c_char,  // 64-char hex (32 bytes)
+    recipient_enc_pk_hex: *const c_char,   // 64-char hex (32 bytes)
+    token_type_hex: *const c_char,
+    amount_str: *const c_char,             // u128 as decimal string
+    segment: i32,                          // -1 for None
+) -> *const c_char;  // JSON: {output_hex, binding_randomness_hex} or null
+```
+
+The output contains a `CoinCiphertext` encrypted with recipient's enc_pk. Only the recipient can decrypt it.
+
+Tests:
+- Output creates valid CoinCiphertext
+- Ciphertext decryptable with matching secret key
+- Different recipients produce different commitments
+- Null/invalid keys → returns error
+
+#### 7d. `zswap_build_offer` (assemble Offer from inputs + outputs)
+
+```rust
+/// Builds an Offer<ProofPreimage> from serialized inputs and outputs.
+/// Auto-calculates deltas (token balance sheet).
+///
+/// Calls: Offer::new(inputs, outputs, transients)
+#[no_mangle]
+pub extern "C" fn zswap_build_offer(
+    inputs_hex_json: *const c_char,   // JSON array of input hex strings
+    outputs_hex_json: *const c_char,  // JSON array of output hex strings
+) -> *const c_char;  // JSON: {offer_hex, binding_randomness_hex, deltas_json} or null
+```
+
+Tests:
+- Single input + single output → balanced offer (delta = 0)
+- Input > output → positive delta (leftover, needs change)
+- Multiple inputs merged correctly
+- Empty inputs and outputs → returns error
+
+#### 7e. `zswap_merge_offers` (combine two offers)
+
+```rust
+/// Merges two Offer<ProofPreimage> into one.
+/// Used for: combining transfer offer with contract balancing,
+/// or combining multiple independent offers.
+///
+/// Calls: offer1.merge(&offer2)
+#[no_mangle]
+pub extern "C" fn zswap_merge_offers(
+    offer1_hex: *const c_char,
+    offer2_hex: *const c_char,
+) -> *const c_char;  // merged offer hex or null on error (e.g., overlapping coins)
+```
+
+Tests:
+- Disjoint offers merge successfully
+- Overlapping nullifiers → returns error (NonDisjointCoinMerge)
+- Deltas combined correctly
+
+#### 7f. `zswap_serialize_offer` (serialize for proof server)
+
+```rust
+/// Serializes an unproven Offer to tagged SCALE format for the proof server.
+///
+/// Calls: tagged_serialize(&offer)
+#[no_mangle]
+pub extern "C" fn zswap_serialize_offer(
+    offer_hex: *const c_char,
+) -> *const c_char;  // SCALE hex for proof server, or null
+```
+
+Tests:
+- Serialize → deserialize round-trip preserves offer
+- Output format matches what proof server expects
+
+#### 7g. `zswap_build_transaction` (proven offer + dust → final Transaction)
+
+```rust
+/// Combines a proven ZswapOffer with dust fee payment into a final Transaction.
+/// This is the last Rust step before submission to the node.
+///
+/// Takes the proven offer (from proof server) and dust components,
+/// assembles the full ledger::structure::Transaction, serializes to SCALE.
+#[no_mangle]
+pub extern "C" fn zswap_build_transaction(
+    proven_offer_hex: *const c_char,   // proven offer from proof server
+    dust_state_ptr: *const DustLocalState<InMemoryDB>,
+    dust_seed_ptr: *const u8,
+    dust_seed_len: usize,
+    dust_utxos_json: *const c_char,
+    current_time_ms: u64,
+    ttl_ms: u64,
+    binding_randomness_hex: *const c_char,
+) -> *const c_char;  // SCALE hex for node submission, or null
+```
+
+Tests:
+- Proven offer + dust → valid Transaction
+- TTL correctly set
+- Binding commitments balance
+
+**Rust SDK types involved:**
+
+| Type | Role |
+|---|---|
+| `QualifiedCoinInfo` | Coin in state with merkle tree index |
+| `Input<ProofPreimage>` | Spending authorization (nullifier + merkle proof + value commitment) |
+| `Output<ProofPreimage>` | New coin for recipient (commitment + ciphertext + value commitment) |
+| `CoinCiphertext` | Coin info encrypted with recipient's enc_pk |
+| `Offer<ProofPreimage>` | Collection of inputs + outputs + transients + deltas |
+| `Offer<Proof>` | Proven offer (from proof server) |
+| `Transaction` | Full transaction (proven offer + dust + TTL) |
+
+**Implementation order within Step 7:**
+
+```
+7a (select_coins) — standalone, no dependencies
+7b (spend_coin)   — depends on 7a for coin format
+7c (create_output) — standalone
+7d (build_offer)   — depends on 7b + 7c output format
+7e (merge_offers)  — depends on 7d
+7f (serialize)     — depends on 7d
+7g (build_tx)      — depends on 7f + existing dust FFI
+```
+
+7a, 7b, and 7c can be implemented and tested independently. 7d-7g build on top.
 
 ### Step 8: Shielded Send UI (3-4h)
 
