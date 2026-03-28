@@ -234,6 +234,25 @@ class ZswapTransferBuilder private constructor() {
             return nativeBuildShieldedTransaction(offerHex, networkId, dustTxHex, ttlMs)
         }
 
+        /**
+         * Build shielded Transaction with dust fee payment.
+         * The dust spend is built internally from the DustLocalState.
+         */
+        fun buildTransactionWithDust(
+            offerHex: String,
+            networkId: String,
+            dustStatePtr: Long,
+            dustSeed: ByteArray,
+            dustUtxosJson: String,
+            currentTimeMs: Long,
+            ttlMs: Long,
+        ): String? {
+            ensureNativeLoaded()
+            return nativeBuildShieldedTransactionWithDust(
+                offerHex, networkId, dustStatePtr, dustSeed, dustUtxosJson, currentTimeMs, ttlMs
+            )
+        }
+
         private fun cleanupStatePtrs(ptrs: List<Long>) {
             ptrs.forEach { ZswapLocalState.freeNativePtr(it) }
         }
@@ -371,6 +390,7 @@ class ZswapTransferBuilder private constructor() {
         @JvmStatic private external fun nativeMergeOffers(offer1Hex: String, offer2Hex: String): String?
         @JvmStatic private external fun nativeSerializeOffer(offerHex: String): String?
         @JvmStatic private external fun nativeBuildShieldedTransaction(offerHex: String, networkId: String, dustTxHex: String?, ttlMs: Long): String?
+        @JvmStatic private external fun nativeBuildShieldedTransactionWithDust(offerHex: String, networkId: String, dustStatePtr: Long, dustSeed: ByteArray, dustUtxosJson: String, currentTimeMs: Long, ttlMs: Long): String?
 
         // ── Internal Helpers ──
 

@@ -28,6 +28,7 @@ import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
 import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
+import com.midnight.kuira.core.crypto.dust.DustLocalState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -552,28 +553,27 @@ class SendViewModel @Inject constructor(
                 val zswapSeed = zswapKey.privateKeyBytes
 
                 try {
-                    // Load shielded state from cache (synced by BalanceViewModel)
-                    var state = shieldedRepository.loadState(fromAddress)
-
-                    // If no cached state, sync from blockchain first
-                    if (state == null) {
-                        Log.d(TAG, "No cached shielded state — syncing from blockchain")
-                        val synced = shieldedRepository.syncFromBlockchain(fromAddress, zswapSeed)
-                        if (!synced) {
-                            _state.value = SendUiState.Error("No shielded coins found. Receive shielded NIGHT first.")
-                            return@launch
-                        }
-                        state = shieldedRepository.loadState(fromAddress)
+                    // Always fresh-sync shielded state before spending.
+                    // Stale state causes ReplayProtectionViolation (error 193) because
+                    // nullifiers from previous attempts may already be on-chain.
+                    Log.d(TAG, "Syncing shielded state from blockchain before transfer...")
+                    val synced = shieldedRepository.syncFromBlockchain(fromAddress, zswapSeed)
+                    if (!synced) {
+                        _state.value = SendUiState.Error("No shielded coins found. Receive shielded NIGHT first.")
+                        return@launch
                     }
-
+                    val state = shieldedRepository.loadState(fromAddress)
                     if (state == null) {
-                        _state.value = SendUiState.Error("Failed to load shielded state")
+                        _state.value = SendUiState.Error("Failed to load shielded state after sync")
                         return@launch
                     }
 
                     state.use { activeState ->
                         val nightTokenType = "0".repeat(64) // all zeros for NIGHT
+                        val ttlMs = System.currentTimeMillis() + 3600_000
+                        val networkId = networkConfig.network.name.lowercase()
 
+                        // Step 1: Build shielded offer (select coins → spend → outputs → offer)
                         val transferResult = ZswapTransferBuilder.buildTransfer(
                             state = activeState,
                             seed = zswapSeed,
@@ -581,8 +581,8 @@ class SendViewModel @Inject constructor(
                             recipientEncPk = encPkHex,
                             tokenType = nightTokenType,
                             amount = amount,
-                            networkId = networkConfig.network.name.lowercase(),
-                            ttlMs = System.currentTimeMillis() + 3600_000,
+                            networkId = networkId,
+                            ttlMs = ttlMs,
                         )
 
                         if (transferResult == null) {
@@ -592,32 +592,93 @@ class SendViewModel @Inject constructor(
                             return@launch
                         }
 
-                        // Prove + seal + submit (proof takes 2-5 minutes for shielded)
-                        _state.value = SendUiState.Proving
+                        // Step 2: Load dust state for fee payment
+                        val dustKey = hdWallet!!
+                            .selectAccount(0)
+                            .selectRole(MidnightKeyRole.DUST)
+                            .deriveKeyAt(0)
+                        val dustSeed = dustKey.privateKeyBytes
 
-                        val result = transactionSubmitter.submitPrebuiltTransaction(
-                            unprovenTxHex = transferResult.transactionHex,
-                            timeoutMs = 360_000L // 6 min timeout (proof ~2-5 min)
-                        )
-
-                        when (result) {
-                            is TransactionSubmitter.SubmissionResult.Success -> {
-                                Log.i(TAG, "Shielded transfer finalized: ${result.txHash}")
-                                _state.value = SendUiState.Success(
-                                    txHash = result.txHash,
-                                    recipientAddress = toAddress,
-                                    amountSent = amount,
+                        try {
+                            // Sync dust if needed
+                            if (!dustRepository.hasCachedState(fromAddress)) {
+                                Log.d(TAG, "Syncing dust for shielded transfer...")
+                                val dustSynced = dustRepository.syncFromBlockchain(
+                                    address = fromAddress,
+                                    dustSeed = dustSeed,
+                                    maxBlocks = 100
                                 )
+                                if (!dustSynced) {
+                                    _state.value = SendUiState.Error("No dust registered. Register dust in Lace first.")
+                                    return@launch
+                                }
                             }
-                            is TransactionSubmitter.SubmissionResult.Failed -> {
-                                _state.value = SendUiState.Error("Shielded transfer failed: ${result.reason}")
+
+                            val dustState = dustRepository.loadState(fromAddress)
+                            if (dustState == null) {
+                                _state.value = SendUiState.Error("Failed to load dust state")
+                                return@launch
                             }
-                            is TransactionSubmitter.SubmissionResult.Pending -> {
-                                _state.value = SendUiState.Error("Shielded transfer pending: ${result.reason}")
+
+                            // Select dust UTXOs for fee (use first UTXO with fee=1, same as unshielded)
+                            val dustUtxoCount = dustState.getUtxoCount()
+                            if (dustUtxoCount == 0) {
+                                dustState.close()
+                                _state.value = SendUiState.Error("No dust UTXOs available for fees")
+                                return@launch
                             }
-                            is TransactionSubmitter.SubmissionResult.StaleUtxo -> {
-                                _state.value = SendUiState.Error("Stale coins detected. Please sync and retry.")
+                            val dustUtxosJson = "[{\"utxo_index\":0,\"v_fee\":\"1\"}]"
+
+                            // Step 3: Build final transaction with offer + dust
+                            val txHex = ZswapTransferBuilder.buildTransactionWithDust(
+                                offerHex = transferResult.offerHex,
+                                networkId = networkId,
+                                dustStatePtr = dustState.getStatePointer(),
+                                dustSeed = dustSeed,
+                                dustUtxosJson = dustUtxosJson,
+                                currentTimeMs = System.currentTimeMillis(),
+                                ttlMs = ttlMs,
+                            )
+                            dustState.close()
+
+                            if (txHex == null) {
+                                _state.value = SendUiState.Error("Failed to build shielded transaction with dust")
+                                return@launch
                             }
+
+                            // Step 4: Prove + seal + submit
+                            _state.value = SendUiState.Proving
+
+                            val result = transactionSubmitter.submitPrebuiltTransaction(
+                                unprovenTxHex = txHex,
+                                timeoutMs = 360_000L
+                            )
+
+                            when (result) {
+                                is TransactionSubmitter.SubmissionResult.Success -> {
+                                    Log.i(TAG, "Shielded transfer finalized: ${result.txHash}")
+                                    // Invalidate dust cache — UTXO was consumed on-chain.
+                                    // Next transfer will re-sync fresh dust state.
+                                    dustRepository.deleteState(fromAddress)
+                                    _state.value = SendUiState.Success(
+                                        txHash = result.txHash,
+                                        recipientAddress = toAddress,
+                                        amountSent = amount,
+                                    )
+                                }
+                                is TransactionSubmitter.SubmissionResult.Failed -> {
+                                    _state.value = SendUiState.Error("Shielded transfer failed: ${result.reason}")
+                                }
+                                is TransactionSubmitter.SubmissionResult.Pending -> {
+                                    _state.value = SendUiState.Error("Shielded transfer pending: ${result.reason}")
+                                }
+                                is TransactionSubmitter.SubmissionResult.StaleUtxo -> {
+                                    _state.value = SendUiState.Error("Stale coins detected. Please sync and retry.")
+                                }
+                            }
+                        } finally {
+                            dustKey.clear()
+                            java.util.Arrays.fill(dustSeed, 0.toByte())
                         }
                     }
 
@@ -893,7 +954,7 @@ class SendViewModel @Inject constructor(
         // MVP test recipients per network — Bob (from CLI: mn wallet info bob)
         val DEFAULT_TEST_RECIPIENTS = mapOf(
             "mn_addr_preprod" to "mn_addr_preprod1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsev7kky",
-            "mn_addr_undeployed" to "mn_addr_undeployed1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsrhyg84",
+            "mn_addr_undeployed" to "mn_shield-addr_undeployed1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajs4fj9f5",
             "mn_addr_preview" to "mn_addr_preview1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsedqx9e"
         )
         // MVP test seed phrases per network — Alice is the sender (from CLI: mn wallet info alice)

@@ -19,7 +19,7 @@ enum class MidnightNetwork(
     UNDEPLOYED("Undeployed", "mn_addr_undeployed");
 
     companion object {
-        val DEFAULT = PREPROD
+        val DEFAULT = UNDEPLOYED
 
         fun fromName(name: String): MidnightNetwork {
             return entries.find { it.name == name } ?: DEFAULT
