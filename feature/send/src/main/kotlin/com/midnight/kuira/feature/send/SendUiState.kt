@@ -57,6 +57,13 @@ sealed class SendUiState {
     data object Signing : SendUiState()
 
     /**
+     * Generating ZK proof via proof server (shielded transactions only).
+     *
+     * Shows "Generating ZK proof..." to user. This can take 2-5 minutes.
+     */
+    data object Proving : SendUiState()
+
+    /**
      * Submitting transaction to blockchain.
      *
      * Shows "Submitting to blockchain..." to user.

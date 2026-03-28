@@ -629,6 +629,94 @@ class TransactionSubmitter(
         ) : SubmissionResult()
     }
 
+    /**
+     * Submit a pre-built unproven transaction (e.g., from ZswapTransferBuilder).
+     *
+     * Skips serialization — the transaction is already SCALE-encoded.
+     * Performs: prove → seal → submit → wait for finalization.
+     *
+     * @param unprovenTxHex Pre-built hex-encoded unproven transaction
+     * @param timeoutMs Maximum time to wait for finalization
+     * @return SubmissionResult indicating success or failure
+     */
+    suspend fun submitPrebuiltTransaction(
+        unprovenTxHex: String,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): SubmissionResult {
+        // Step 1: Prove transaction via proof server
+        val provenTxHex = try {
+            proofServerClient.proveTransaction(unprovenTxHex)
+        } catch (e: ProofServerException) {
+            Log.e(TAG, "Proof server error (shielded)", e)
+            return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Proof generation failed: ${e.message}"
+            )
+        }
+
+        // Step 2: Seal the proven transaction
+        val sealedTxHex = try {
+            serializer.sealProvenTransaction(provenTxHex)
+                ?: throw IllegalStateException("Sealing returned null")
+        } catch (e: Exception) {
+            Log.e(TAG, "Sealing error (shielded)", e)
+            return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Transaction sealing failed: ${e.message}"
+            )
+        }
+
+        // Step 3: Submit via WebSocket and wait for finalization
+        Log.d(TAG, "Submitting shielded transaction and waiting for finalization...")
+
+        val finalizationResult = try {
+            nodeRpcClient.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
+        } catch (e: TransactionRejected) {
+            return SubmissionResult.Failed(
+                txHash = e.txHash,
+                reason = "Shielded transaction rejected: ${e.reason}"
+            )
+        } catch (e: NodeRpcException) {
+            return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Node RPC error: ${e.message}"
+            )
+        }
+
+        return when (finalizationResult) {
+            is TransactionFinalizationResult.Finalized -> {
+                Log.i(TAG, "Shielded transaction FINALIZED: ${finalizationResult.txHash}")
+                SubmissionResult.Success(
+                    txHash = finalizationResult.txHash,
+                    blockHeight = finalizationResult.blockHeight ?: 0L
+                )
+            }
+            is TransactionFinalizationResult.InBlock -> {
+                SubmissionResult.Pending(
+                    txHash = finalizationResult.txHash,
+                    reason = "Transaction in block, waiting for finalization"
+                )
+            }
+            is TransactionFinalizationResult.Timeout -> {
+                SubmissionResult.Pending(
+                    txHash = finalizationResult.txHash,
+                    reason = "Finalization timeout (transaction may still be processing)"
+                )
+            }
+            is TransactionFinalizationResult.Dropped,
+            is TransactionFinalizationResult.Invalid,
+            is TransactionFinalizationResult.Usurped -> {
+                val (txHash, reason) = when (finalizationResult) {
+                    is TransactionFinalizationResult.Dropped -> finalizationResult.txHash to finalizationResult.reason
+                    is TransactionFinalizationResult.Invalid -> finalizationResult.txHash to finalizationResult.reason
+                    is TransactionFinalizationResult.Usurped -> finalizationResult.txHash to "Transaction replaced"
+                    else -> "" to "Unknown error"
+                }
+                SubmissionResult.Failed(txHash = txHash, reason = reason)
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "TransactionSubmitter"
 

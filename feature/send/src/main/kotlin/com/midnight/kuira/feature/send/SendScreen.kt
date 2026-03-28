@@ -171,7 +171,7 @@ fun SendScreen(
                         BigInteger.ZERO
                     }
 
-                    viewModel.sendTransaction(
+                    viewModel.send(
                         fromAddress = address,
                         toAddress = recipientAddress,
                         amount = amountInStars,
@@ -184,6 +184,7 @@ fun SendScreen(
             when (val currentState = state) {
                 is SendUiState.Building -> LoadingCard("Building transaction...")
                 is SendUiState.Signing -> LoadingCard("Signing transaction...")
+                is SendUiState.Proving -> LoadingCard("Generating ZK proof (this may take a few minutes)...")
                 is SendUiState.Submitting -> LoadingCard("Submitting to blockchain...")
                 is SendUiState.SyncingAndRetrying -> SyncingAndRetryingCard(
                     retryAttempt = currentState.retryAttempt,

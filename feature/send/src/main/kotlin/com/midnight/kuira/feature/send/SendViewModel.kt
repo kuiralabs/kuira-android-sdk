@@ -26,6 +26,8 @@ import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
+import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +86,7 @@ class SendViewModel @Inject constructor(
     private val serializer: TransactionSerializer,
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
+    private val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val syncStateManager: SyncStateManager,
     private val networkConfig: NetworkConfig
@@ -126,6 +129,26 @@ class SendViewModel @Inject constructor(
      *
      * @param address Sender's address
      */
+    /**
+     * Send transaction — auto-detects shielded vs unshielded from recipient address.
+     *
+     * Routes to [sendTransaction] for `mn_addr_*` addresses or
+     * [sendShieldedTransaction] for `mn_shield-addr_*` addresses.
+     */
+    fun send(
+        fromAddress: String,
+        toAddress: String,
+        amount: BigInteger,
+        seedPhrase: String,
+    ) {
+        val validation = AddressValidator.validate(toAddress)
+        if (validation is AddressValidator.ValidationResult.Valid && validation.isShielded) {
+            sendShieldedTransaction(fromAddress, toAddress, amount, seedPhrase)
+        } else {
+            sendTransaction(fromAddress, toAddress, amount, seedPhrase)
+        }
+    }
+
     fun loadBalance(address: String) {
         viewModelScope.launch {
             try {
@@ -468,6 +491,146 @@ class SendViewModel @Inject constructor(
                 seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
                 derivedKey?.clear()
                 dustKey?.clear()
+                hdWallet?.clear()
+            }
+        }
+    }
+
+    /**
+     * Send a shielded transaction.
+     *
+     * **Process:**
+     * 1. Load ZswapLocalState (from ShieldedRepository cache)
+     * 2. Derive zswap keys (m/44'/2400'/0'/3/0)
+     * 3. Parse recipient's shielded address into coin_pk + enc_pk
+     * 4. Build transfer via ZswapTransferBuilder
+     * 5. Prove → seal → submit via TransactionSubmitter
+     *
+     * @param toAddress Recipient's shielded address (mn_shield-addr_...)
+     * @param amount Amount to send (micro-units)
+     * @param seedPhrase User's 24-word mnemonic
+     */
+    fun sendShieldedTransaction(
+        fromAddress: String,
+        toAddress: String,
+        amount: BigInteger,
+        seedPhrase: String,
+    ) {
+        viewModelScope.launch {
+            var seed: ByteArray? = null
+            var hdWallet: HDWallet? = null
+
+            try {
+                _state.value = SendUiState.Building
+
+                // Validate shielded address
+                val validation = AddressValidator.validate(toAddress)
+                if (validation !is AddressValidator.ValidationResult.Valid || !validation.isShielded) {
+                    _state.value = SendUiState.Error("Invalid shielded address")
+                    return@launch
+                }
+
+                if (amount <= BigInteger.ZERO) {
+                    _state.value = SendUiState.Error("Amount must be greater than zero")
+                    return@launch
+                }
+
+                // Extract coin_pk (first 32 bytes) and enc_pk (last 32 bytes)
+                val payload = validation.publicKey
+                val coinPkHex = payload.take(32).toByteArray()
+                    .joinToString("") { "%02x".format(it) }
+                val encPkHex = payload.drop(32).toByteArray()
+                    .joinToString("") { "%02x".format(it) }
+
+                // Derive zswap seed
+                seed = BIP39.mnemonicToSeed(seedPhrase)
+                hdWallet = HDWallet.fromSeed(seed)
+                val zswapKey = hdWallet
+                    .selectAccount(0)
+                    .selectRole(MidnightKeyRole.ZSWAP)
+                    .deriveKeyAt(0)
+                val zswapSeed = zswapKey.privateKeyBytes
+
+                try {
+                    // Load shielded state from cache (synced by BalanceViewModel)
+                    var state = shieldedRepository.loadState(fromAddress)
+
+                    // If no cached state, sync from blockchain first
+                    if (state == null) {
+                        Log.d(TAG, "No cached shielded state — syncing from blockchain")
+                        val synced = shieldedRepository.syncFromBlockchain(fromAddress, zswapSeed)
+                        if (!synced) {
+                            _state.value = SendUiState.Error("No shielded coins found. Receive shielded NIGHT first.")
+                            return@launch
+                        }
+                        state = shieldedRepository.loadState(fromAddress)
+                    }
+
+                    if (state == null) {
+                        _state.value = SendUiState.Error("Failed to load shielded state")
+                        return@launch
+                    }
+
+                    state.use { activeState ->
+                        val nightTokenType = "0".repeat(64) // all zeros for NIGHT
+
+                        val transferResult = ZswapTransferBuilder.buildTransfer(
+                            state = activeState,
+                            seed = zswapSeed,
+                            recipientCoinPk = coinPkHex,
+                            recipientEncPk = encPkHex,
+                            tokenType = nightTokenType,
+                            amount = amount,
+                            networkId = networkConfig.network.name.lowercase(),
+                            ttlMs = System.currentTimeMillis() + 3600_000,
+                        )
+
+                        if (transferResult == null) {
+                            _state.value = SendUiState.Error(
+                                "Insufficient shielded balance or transfer build failed"
+                            )
+                            return@launch
+                        }
+
+                        // Prove + seal + submit (proof takes 2-5 minutes for shielded)
+                        _state.value = SendUiState.Proving
+
+                        val result = transactionSubmitter.submitPrebuiltTransaction(
+                            unprovenTxHex = transferResult.transactionHex,
+                            timeoutMs = 360_000L // 6 min timeout (proof ~2-5 min)
+                        )
+
+                        when (result) {
+                            is TransactionSubmitter.SubmissionResult.Success -> {
+                                Log.i(TAG, "Shielded transfer finalized: ${result.txHash}")
+                                _state.value = SendUiState.Success(
+                                    txHash = result.txHash,
+                                    recipientAddress = toAddress,
+                                    amountSent = amount,
+                                )
+                            }
+                            is TransactionSubmitter.SubmissionResult.Failed -> {
+                                _state.value = SendUiState.Error("Shielded transfer failed: ${result.reason}")
+                            }
+                            is TransactionSubmitter.SubmissionResult.Pending -> {
+                                _state.value = SendUiState.Error("Shielded transfer pending: ${result.reason}")
+                            }
+                            is TransactionSubmitter.SubmissionResult.StaleUtxo -> {
+                                _state.value = SendUiState.Error("Stale coins detected. Please sync and retry.")
+                            }
+                        }
+                    }
+
+                } finally {
+                    zswapKey.clear()
+                    java.util.Arrays.fill(zswapSeed, 0.toByte())
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Shielded transaction failed", e)
+                _state.value = SendUiState.Error("Shielded transfer error: ${e.message}")
+            } finally {
+                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
                 hdWallet?.clear()
             }
         }
