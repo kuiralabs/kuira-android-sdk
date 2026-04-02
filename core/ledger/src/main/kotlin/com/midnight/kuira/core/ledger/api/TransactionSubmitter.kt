@@ -6,6 +6,7 @@ import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.crypto.proving.LocalProver
 import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import kotlinx.coroutines.Dispatchers
@@ -50,18 +51,23 @@ class TransactionSubmitter(
     private val dustActionsBuilder: DustActionsBuilder? = null,
     private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null,
     private val provingKeyManager: ProvingKeyManager? = null,
+    /** Current proving mode — LOCAL or REMOTE. Defaults to LOCAL when keys are available. */
+    var provingMode: ProvingMode = ProvingMode.DEFAULT,
 ) {
 
+    /** Which proving mode was used for the last transaction (for display). */
+    var lastProvingMode: ProvingMode = provingMode
+        private set
+
     /**
-     * Prove a transaction using local keys if available, otherwise fall back to proof server.
+     * Prove a transaction using the configured proving mode.
      *
-     * Local proving: no network needed, proof preimages never leave the phone.
-     * Remote proving: requires proof server connection (fallback).
+     * LOCAL: proves on-device using cached keys. Falls back to REMOTE if keys missing or proving fails.
+     * REMOTE: sends to proof server via HTTP.
      */
     private suspend fun proveTransaction(unprovenTxHex: String): String {
-        // Try local proving first (CPU-intensive — run on Default dispatcher)
-        if (provingKeyManager?.hasWalletKeys() == true) {
-            Log.d(TAG, "Proving locally (keys cached at ${provingKeyManager.keysDir})")
+        if (provingMode == ProvingMode.LOCAL && provingKeyManager?.hasWalletKeys() == true) {
+            Log.d(TAG, "Proving locally (keys at ${provingKeyManager.keysDir})")
             val result = withContext(Dispatchers.Default) {
                 LocalProver.proveTransaction(
                     unprovenTxHex,
@@ -70,13 +76,14 @@ class TransactionSubmitter(
             }
             if (result != null) {
                 Log.i(TAG, "Local proving succeeded")
+                lastProvingMode = ProvingMode.LOCAL
                 return result
             }
             Log.w(TAG, "Local proving failed, falling back to proof server")
         }
 
-        // Fall back to remote proof server
         Log.d(TAG, "Proving via remote proof server")
+        lastProvingMode = ProvingMode.REMOTE
         return proofServerClient.proveTransaction(unprovenTxHex)
     }
 

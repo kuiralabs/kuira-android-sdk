@@ -4,7 +4,9 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -101,9 +103,17 @@ fun SendScreen(
         }
     }
 
+    // Send mode: shielded (private) vs unshielded (public)
+    var isShieldedSend by remember { mutableStateOf(true) }
+
     // User inputs with test placeholders (MVP ONLY - for faster testing)
-    // MVP test defaults: auto-filled based on selected network
-    var recipientAddress by remember { mutableStateOf(viewModel.defaultTestRecipient) }
+    // Update recipient when send mode changes
+    var recipientAddress by remember(isShieldedSend) {
+        mutableStateOf(
+            if (isShieldedSend) viewModel.defaultShieldedRecipient
+            else viewModel.defaultTestRecipient
+        )
+    }
     var amountInput by remember { mutableStateOf("1") }
     var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
 
@@ -136,6 +146,19 @@ fun SendScreen(
                     formatter = formatter
                 )
             }
+
+            // Send Mode Selector (Shielded vs Unshielded)
+            SendModeSelector(
+                isShielded = isShieldedSend,
+                onModeChange = { isShieldedSend = it }
+            )
+
+            // Proving Mode Selector
+            ProvingModeSelector(
+                isLocal = viewModel.isLocalProvingEnabled,
+                proofServerUrl = viewModel.proofServerUrl,
+                onToggle = { viewModel.toggleProvingMode() },
+            )
 
             // Recipient Address Input
             RecipientAddressSection(
@@ -266,6 +289,94 @@ private fun BalanceCard(
                 text = balanceFormatted,
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun SendModeSelector(
+    isShielded: Boolean,
+    onModeChange: (Boolean) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Send Mode",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = isShielded,
+                    onClick = { onModeChange(true) },
+                    label = { Text("Shielded (Private)") },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    selected = !isShielded,
+                    onClick = { onModeChange(false) },
+                    label = { Text("Unshielded (Public)") },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Text(
+                text = if (isShielded) "ZK proof — recipient only sees encrypted coin"
+                       else "Transparent — visible on chain",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProvingModeSelector(
+    isLocal: Boolean,
+    proofServerUrl: String,
+    onToggle: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+        ),
+        onClick = onToggle,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    text = "ZK Prover",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = if (isLocal) "On-device (no network needed)"
+                           else proofServerUrl,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                )
+            }
+            Text(
+                text = if (isLocal) "Local" else "Remote",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
         }
     }

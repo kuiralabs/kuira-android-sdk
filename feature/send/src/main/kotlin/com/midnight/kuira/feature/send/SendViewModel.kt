@@ -27,6 +27,7 @@ import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
 import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
 import com.midnight.kuira.core.crypto.dust.DustLocalState
@@ -100,6 +101,28 @@ class SendViewModel @Inject constructor(
      * Uses Alice's address for preprod, falls back to empty for unknown networks.
      */
     val defaultTestRecipient: String = DEFAULT_TEST_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
+
+    /** Default shielded recipient (for send mode toggle). */
+    val defaultShieldedRecipient: String = DEFAULT_SHIELDED_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
+
+    /** Whether local proving is enabled (keys cached + mode set to LOCAL). */
+    val isLocalProvingEnabled: Boolean
+        get() = provingKeyManager.hasWalletKeys() &&
+                transactionSubmitter.provingMode == ProvingMode.LOCAL
+
+    /** Proof server URL for display when in remote mode. */
+    val proofServerUrl: String = networkConfig.proofServerUrl
+
+    /** Toggle between local and remote proving. */
+    fun toggleProvingMode() {
+        val newMode = if (transactionSubmitter.provingMode == ProvingMode.LOCAL) {
+            ProvingMode.REMOTE
+        } else {
+            ProvingMode.LOCAL
+        }
+        transactionSubmitter.provingMode = newMode
+        Log.d(TAG, "Proving mode changed to: $newMode")
+    }
 
     /**
      * Default test seed phrase for the currently selected network (MVP only).
@@ -959,11 +982,17 @@ class SendViewModel @Inject constructor(
         private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
         private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
 
-        // MVP test recipients per network — Bob (from CLI: mn wallet info bob)
+        // MVP test recipients — Bob unshielded (from CLI: mn wallet info bob)
         val DEFAULT_TEST_RECIPIENTS = mapOf(
             "mn_addr_preprod" to "mn_addr_preprod1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsev7kky",
-            "mn_addr_undeployed" to "mn_shield-addr_undeployed1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajs4fj9f5",
+            "mn_addr_undeployed" to "mn_addr_undeployed1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsrhyg84",
             "mn_addr_preview" to "mn_addr_preview1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsedqx9e"
+        )
+        // MVP test recipients — Bob shielded
+        val DEFAULT_SHIELDED_RECIPIENTS = mapOf(
+            "mn_addr_preprod" to "",
+            "mn_addr_undeployed" to "mn_shield-addr_undeployed1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajs4fj9f5",
+            "mn_addr_preview" to ""
         )
         // MVP test seed phrases per network — Alice is the sender (from CLI: mn wallet info alice)
         val DEFAULT_TEST_SEED_PHRASES = mapOf(
