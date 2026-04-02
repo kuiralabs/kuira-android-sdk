@@ -102,6 +102,8 @@ class ProvingKeyManager(private val context: Context) {
     }
 
     private fun downloadFile(urlString: String, destination: File) {
+        // Write to temp file first, rename on completion (atomic — prevents partial files)
+        val tempFile = File(destination.parent, "${destination.name}.tmp")
         val connection = URL(urlString).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 30_000
@@ -114,10 +116,20 @@ class ProvingKeyManager(private val context: Context) {
             }
 
             connection.inputStream.use { input ->
-                destination.outputStream().use { output ->
+                tempFile.outputStream().use { output ->
                     input.copyTo(output, bufferSize = 8192)
                 }
             }
+
+            // Atomic rename — only succeeds if download was complete
+            if (!tempFile.renameTo(destination)) {
+                // Fallback: copy and delete (renameTo can fail across filesystems)
+                tempFile.copyTo(destination, overwrite = true)
+                tempFile.delete()
+            }
+        } catch (e: Exception) {
+            tempFile.delete() // Clean up partial download
+            throw e
         } finally {
             connection.disconnect()
         }

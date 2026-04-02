@@ -4,8 +4,12 @@ import android.util.Log
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
+import com.midnight.kuira.core.crypto.proving.LocalProver
+import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.model.Intent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
@@ -45,7 +49,7 @@ class TransactionSubmitter(
     private val utxoManager: UtxoManager,
     private val dustActionsBuilder: DustActionsBuilder? = null,
     private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null,
-    private val provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager? = null,
+    private val provingKeyManager: ProvingKeyManager? = null,
 ) {
 
     /**
@@ -55,13 +59,15 @@ class TransactionSubmitter(
      * Remote proving: requires proof server connection (fallback).
      */
     private suspend fun proveTransaction(unprovenTxHex: String): String {
-        // Try local proving first
+        // Try local proving first (CPU-intensive — run on Default dispatcher)
         if (provingKeyManager?.hasWalletKeys() == true) {
             Log.d(TAG, "Proving locally (keys cached at ${provingKeyManager.keysDir})")
-            val result = com.midnight.kuira.core.crypto.proving.LocalProver.proveTransaction(
-                unprovenTxHex,
-                provingKeyManager.keysDir.absolutePath,
-            )
+            val result = withContext(Dispatchers.Default) {
+                LocalProver.proveTransaction(
+                    unprovenTxHex,
+                    provingKeyManager.keysDir.absolutePath,
+                )
+            }
             if (result != null) {
                 Log.i(TAG, "Local proving succeeded")
                 return result
