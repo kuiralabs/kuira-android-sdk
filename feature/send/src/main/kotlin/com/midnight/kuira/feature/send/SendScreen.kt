@@ -154,8 +154,9 @@ fun SendScreen(
             )
 
             // Proving Mode Selector
+            val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
             ProvingModeSelector(
-                isLocal = viewModel.isLocalProvingEnabled,
+                isLocal = isLocalProving,
                 proofServerUrl = viewModel.proofServerUrl,
                 onToggle = { viewModel.toggleProvingMode() },
             )

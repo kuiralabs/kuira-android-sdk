@@ -105,10 +105,11 @@ class SendViewModel @Inject constructor(
     /** Default shielded recipient (for send mode toggle). */
     val defaultShieldedRecipient: String = DEFAULT_SHIELDED_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
 
-    /** Whether local proving is enabled (keys cached + mode set to LOCAL). */
-    val isLocalProvingEnabled: Boolean
-        get() = provingKeyManager.hasWalletKeys() &&
-                transactionSubmitter.provingMode == ProvingMode.LOCAL
+    /** Whether local proving is enabled — observable for Compose recomposition. */
+    private val _isLocalProving = MutableStateFlow(
+        provingKeyManager.hasWalletKeys() && transactionSubmitter.provingMode == ProvingMode.LOCAL
+    )
+    val isLocalProvingEnabled: StateFlow<Boolean> = _isLocalProving.asStateFlow()
 
     /** Proof server URL for display when in remote mode. */
     val proofServerUrl: String = networkConfig.proofServerUrl
@@ -121,6 +122,7 @@ class SendViewModel @Inject constructor(
             ProvingMode.LOCAL
         }
         transactionSubmitter.provingMode = newMode
+        _isLocalProving.value = newMode == ProvingMode.LOCAL && provingKeyManager.hasWalletKeys()
         Log.d(TAG, "Proving mode changed to: $newMode")
     }
 
