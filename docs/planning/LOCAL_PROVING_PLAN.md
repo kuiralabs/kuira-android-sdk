@@ -3,7 +3,7 @@
 **Date:** 2026-04-01
 **Status:** Planning
 **Priority:** Before Phase 5 (DApp Connector) — this is core infrastructure
-**Estimate:** 15-25 hours
+**Estimate:** 18-26 hours
 **ADR:** Pending (ADR-002)
 
 ---
@@ -144,135 +144,279 @@ Proving Mode:
 
 ## Implementation Plan
 
-### Step 1: Add midnight-zkir to kuira-crypto-ffi (4-6h)
+### Implementation Approach: TDD Tracer Bullet
 
-**Cargo.toml changes:**
+Start with the smallest provable unit (single dust preimage, k=10) to validate the
+entire pipeline end-to-end. Then scale to full transaction proving.
+
+```
+Tracer bullet: prove 1 dust preimage locally → verify proof is valid
+  → Scale to: prove full Transaction with multiple preimages
+    → Integrate: replace ProofServerClient in pipeline
+      → Polish: key management, UX, settings
+```
+
+### Step 1: Rust FFI — Transaction-Level Proving (5-7h)
+
+**Cargo.toml additions:**
 ```toml
 midnight-zkir = { path = "../../../../midnight/midnight-libraries/midnight-ledger/zkir" }
 midnight-zk-stdlib = { path = "../../../../midnight/midnight-libraries/midnight-zk/zk_stdlib" }
+tokio = { version = "1", features = ["rt"] }
 ```
 
-**New FFI function:**
+**Verified:** `midnight-zkir` cross-compiles for `aarch64-linux-android` (tested April 1 2026).
+
+**New FFI function — prove an entire Transaction (not individual preimages):**
+
 ```rust
-/// Proves a serialized ProofPreimage locally using the zkir engine.
+/// Proves all ZK preimages in a Transaction locally.
 ///
-/// Replaces the HTTP call to the proof server for k ≤ 15 circuits.
+/// Mirrors the proof server's /prove-tx endpoint:
+/// 1. Deserializes the (Transaction, HashMap) tuple
+/// 2. Creates a LocalProvingProvider with keys from the given directory
+/// 3. Calls tx.prove(provider, cost_model) — iterates all preimages
+/// 4. Serializes the proven Transaction
 ///
 /// # Parameters
-/// - `preimage_hex`: Tagged-serialized ProofPreimage (from the unproven transaction)
-/// - `prover_key`: Proving key bytes (from cached file)
-/// - `verifier_key`: Verifier key bytes (from cached file)
-/// - `ir`: ZKIR bytes (from cached file)
-/// - `params`: BLS params bytes (from cached file)
+/// - `unproven_tx_hex`: Tagged-serialized (Transaction, HashMap) tuple (same format as proof server input)
+/// - `keys_dir`: Path to directory containing cached proving keys
+/// - `cost_model_hex`: Serialized CostModel (from indexer's ledger parameters)
 ///
 /// # Returns
-/// Tagged-serialized Proof bytes (hex), or null on error.
+/// Tagged-serialized proven Transaction (hex), same format as proof server output.
+/// Returns null on error.
 #[no_mangle]
-pub extern "C" fn zkir_prove_local(
-    preimage_hex: *const c_char,
-    prover_key: *const u8, prover_key_len: usize,
-    verifier_key: *const u8, verifier_key_len: usize,
-    ir: *const u8, ir_len: usize,
-    params: *const u8, params_len: usize,
+pub extern "C" fn zkir_prove_transaction_local(
+    unproven_tx_hex: *const c_char,
+    keys_dir: *const c_char,
+    cost_model_hex: *const c_char,
 ) -> *const c_char;
 ```
 
-**Key challenge:** The `prove_unchecked` function is `async`. Need to bridge to sync FFI via `tokio::runtime::Runtime::block_on()` or a dedicated proving thread.
+**Key design decisions:**
 
-### Step 2: Proving Key Management (3-4h)
+1. **Transaction-level proving** (not preimage-level) — matches proof server behavior.
+   The `Transaction.prove(provider, cost_model)` method iterates all preimages internally
+   (zswap spend, output, sign, dust spend — 4+ proofs per shielded transfer).
 
-**Kotlin: `ProvingKeyManager`**
-- Download keys from S3 on first use (same URLs as SDK)
-- Cache in app internal storage (~24MB)
-- Version-aware (keys change with ledger versions)
-- Keys needed for wallet operations:
-  - `zswap/9/spend.prover` (10.5 MB)
-  - `zswap/9/output.prover` (5.5 MB)
-  - `zswap/9/sign.prover` (2.7 MB)
-  - `dust/9/spend.prover` (2.1 MB)
-  - `bls_midnight_2p13` (1.5 MB)
-  - Corresponding `.verifier` and `.bzkir` files (~small)
+2. **Directory-based key resolution** — Rust implements `Resolver` trait that reads keys
+   from a local directory path (e.g., `/data/data/com.midnight.kuira/files/proving_keys/`).
+   This avoids passing 20MB+ of key bytes across FFI boundaries.
 
-### Step 3: JNI Bridge + Kotlin Wrapper (2-3h)
+   ```rust
+   struct LocalFileResolver {
+       keys_dir: PathBuf,
+       tx_keys: HashMap<String, ProvingKeyMaterial>,  // from (Transaction, HashMap) input
+       params_cache: HashMap<u8, ParamsProver>,
+   }
 
-Same pattern as all our other JNI bridges. The `LocalProver` Kotlin class wraps the FFI:
+   impl Resolver for LocalFileResolver {
+       async fn resolve_key(&self, key: KeyLocation) -> io::Result<Option<ProvingKeyMaterial>> {
+           // 1. Check transaction-specific keys first (for contract circuits)
+           if let Some(km) = self.tx_keys.get(key.0.as_ref()) {
+               return Ok(Some(km.clone()));
+           }
+           // 2. Fall back to local files for built-in keys:
+           //    "midnight/zswap/spend" → keys_dir/zswap/spend.{prover,verifier,bzkir}
+           //    "midnight/dust/spend"  → keys_dir/dust/spend.{prover,verifier,bzkir}
+       }
+   }
+
+   impl ParamsProverProvider for LocalFileResolver {
+       async fn get_params(&self, k: u8) -> io::Result<ParamsProver> {
+           // Read keys_dir/bls_midnight_2p{k}
+       }
+   }
+   ```
+
+   This matches the proof server's `Resolver::new()` which chains:
+   transaction-specific keys (HashMap) → dust keys (DustResolver) → public params.
+   For wallet-only transactions the HashMap is empty; for future DApp Connector
+   support, contract-specific keys will be passed through.
+
+3. **Async bridge** — create a single-threaded tokio runtime per prove call (same pattern
+   as proof server: `tokio::runtime::Builder::new_current_thread().build().block_on()`).
+
+4. **CostModel from indexer** — the `cost_model_hex` parameter comes from the indexer's
+   ledger parameters (already fetched by `SendViewModel` for fee calculation). This is NOT
+   hardcoded. Note: the proof server's deprecated `/prove-tx` endpoint uses
+   `INITIAL_TRANSACTION_COST_MODEL` which may differ from the current on-chain cost model.
+   We use the current ledger params (same as the newer `/prove` endpoint approach).
+
+5. **SplittableRng** — `OsRng` implements `SplittableRng` in the Midnight crates via a
+   blanket impl. No issue.
+
+### Step 2: Proving Key Management — Kotlin (3-4h)
+
+**`ProvingKeyManager.kt`** — manages key download, caching, and version tracking.
 
 ```kotlin
-class LocalProver {
+class ProvingKeyManager(
+    private val context: Context,
+    private val networkConfig: NetworkConfig,
+) {
+    /** Directory where proving keys are cached. */
+    val keysDir: File = File(context.filesDir, "proving_keys")
+
+    /** Whether all required wallet keys are cached. */
+    fun hasWalletKeys(): Boolean
+
+    /** Download all wallet proving keys from S3. Shows progress. */
+    suspend fun downloadWalletKeys(onProgress: (Float) -> Unit)
+
+    /** Total size of cached keys. */
+    fun cachedSizeBytes(): Long
+
+    /** Delete all cached keys. */
+    fun clearCache()
+}
+```
+
+**Key file layout on device:**
+```
+/data/data/com.midnight.kuira/files/proving_keys/
+├── version.txt                    (e.g., "9")
+├── zswap/
+│   ├── spend.prover               (10.5 MB)
+│   ├── spend.verifier             (~2 KB)
+│   ├── spend.bzkir                (~500 B)
+│   ├── output.prover              (5.5 MB)
+│   ├── output.verifier
+│   ├── output.bzkir
+│   ├── sign.prover                (2.7 MB)
+│   ├── sign.verifier
+│   └── sign.bzkir
+├── dust/
+│   ├── spend.prover               (2.1 MB)
+│   ├── spend.verifier
+│   └── spend.bzkir
+└── bls_midnight_2p13              (1.5 MB)
+```
+
+**Total first download: ~24 MB.** Cached permanently, invalidated only on version change.
+
+**S3 URLs (same as SDK — `WasmProver.makeDefaultKeyMaterialProvider()`):**
+```
+https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com/zswap/{ver}/spend.prover
+https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com/dust/{ver}/spend.prover
+https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com/bls_midnight_2p{k}
+```
+
+**Version detection:** Read from ledger parameters (already available via indexer).
+Fallback: hardcode current version `9` with version check on app update.
+
+### Step 3: JNI Bridge + Kotlin `LocalProver` (2-3h)
+
+```kotlin
+class LocalProver private constructor() {
     companion object {
-        /** Prove a single preimage locally. */
-        fun prove(preimageHex: String, keyLocation: String): String?
+        /**
+         * Prove a transaction locally using cached proving keys.
+         *
+         * @param unprovenTxHex Same format sent to proof server
+         * @param keysDir Path to proving keys directory
+         * @param costModelHex Serialized CostModel from ledger params
+         * @return Proven transaction hex (same format as proof server response)
+         */
+        fun proveTransaction(
+            unprovenTxHex: String,
+            keysDir: String,
+            costModelHex: String,
+        ): String?
 
-        /** Prove an entire unproven transaction locally. */
-        fun proveTransaction(unprovenTxHex: String): String?
-
-        /** Check if proving keys are cached. */
-        fun hasKeys(): Boolean
-
-        /** Download and cache proving keys. */
-        suspend fun downloadKeys(onProgress: (Float) -> Unit)
+        @JvmStatic private external fun nativeProveTransactionLocal(
+            unprovenTxHex: String,
+            keysDir: String,
+            costModelHex: String,
+        ): String?
     }
 }
 ```
 
-### Step 4: Integration with Transaction Pipeline (3-4h)
+### Step 4: Pipeline Integration (3-4h)
 
-Replace `ProofServerClient.proveTransaction()` with `LocalProver.proveTransaction()`:
+Modify `TransactionSubmitter` to support both local and remote proving:
 
 ```kotlin
-// Before (remote):
-val provenTxHex = proofServerClient.proveTransaction(unprovenTxHex)
-
-// After (local):
-val provenTxHex = if (localProver.hasKeys()) {
-    localProver.proveTransaction(unprovenTxHex)
+// In submitPrebuiltTransaction or submitWithFees:
+val provenTxHex = if (provingKeyManager.hasWalletKeys()) {
+    // LOCAL proving — no network needed
+    val costModelHex = indexerClient.getLedgerParametersHex()
+    LocalProver.proveTransaction(unprovenTxHex, provingKeyManager.keysDir.path, costModelHex)
+        ?: throw ProofComputationException("Local proving failed")
 } else {
-    proofServerClient.proveTransaction(unprovenTxHex)  // fallback
+    // REMOTE proving — fallback to proof server
+    proofServerClient.proveTransaction(unprovenTxHex)
 }
+// seal → submit pipeline is unchanged
 ```
 
-The rest of the pipeline (seal → submit) stays identical.
+Also update `SendViewModel.sendShieldedTransaction()` and `submitWithFees()` to use
+the same local/remote routing.
 
-### Step 5: Android Build + Testing (3-5h)
+### Step 5: Android Build + Integration Testing (3-5h)
 
-- Cross-compile `midnight-zkir` + `midnight-zk` for ARM64
-- Resolve any compilation issues (rayon thread pool config, etc.)
-- Benchmark on real device vs proof server
-- Integration test: prove → seal → submit → finalize on localnet
+- Update `build-android.sh` to compile `midnight-zkir` + `midnight-zk` for all Android ABIs
+- Configure rayon thread pool for mobile (limit to 4 threads on <8 core devices)
+- Integration test on localnet:
+  - Download proving keys from S3
+  - Build unproven shielded transfer
+  - Prove locally
+  - Seal
+  - Submit to node
+  - Verify finalization
+- Benchmark: local proving time vs proof server time
+- Memory profiling: peak RAM during proving
 
-### Step 6: UX — Proving Key Download + Settings (2-3h)
+### Step 6: UX — Key Download + Proving Mode (2-3h)
 
-- First-launch prompt: "Download proving keys (24MB) for offline transactions?"
-- Settings: Proving Mode (Local / Remote / Auto)
-- Progress indicator during proof generation
-- Show proving time in transaction detail
+- First-launch prompt: "Download proving keys (24MB) for faster, more private transactions?"
+- Settings screen: Proving Mode toggle (Local / Remote / Auto)
+- Progress indicator during proof generation ("Generating ZK proof...")
+- Transaction detail: show proving mode used and time taken
 
 ---
 
 ## Dependency Chain
 
 ```
-Step 1 (Rust FFI)
-  → Step 2 (Key Management) — can be parallel
-  → Step 3 (JNI + Kotlin)
+Step 1 (Rust FFI — LocalFileResolver + prove)
+  → Step 2 (Key Management) — can start in parallel
+  → Step 3 (JNI + Kotlin LocalProver)
     → Step 4 (Pipeline Integration)
-      → Step 5 (Build + Test)
+      → Step 5 (Build + Integration Test)
         → Step 6 (UX)
 ```
 
-Steps 1 and 2 can be done in parallel. Total critical path: ~15-20 hours.
+Steps 1 and 2 can be done in parallel. Total critical path: ~18-24 hours.
 
 ---
 
-## Risks
+## Gaps Identified During Review (April 1 2026)
+
+| Gap | Resolution |
+|---|---|
+| Plan proposed per-preimage FFI, but pipeline sends full Transaction | Changed to `zkir_prove_transaction_local` — proves entire Transaction |
+| No design for key delivery across FFI | Directory-based `LocalFileResolver` — Rust reads files, no FFI byte transfer |
+| Missing CostModel parameter | Added `cost_model_hex` from indexer's ledger parameters |
+| `SplittableRng` trait concern | Verified: `OsRng` has blanket impl in Midnight crates |
+| Async `prove()` bridge to FFI | Use `tokio::runtime::Builder::new_current_thread().block_on()` (same as proof server) |
+| Transaction.prove() returns new Transaction type | Proven tx serialized with `tagged_serialize` — same format as proof server response |
+| Version sync for proving keys | Read from ledger parameters, fallback to hardcoded with version check |
+| Resolver must handle tx-specific keys (HashMap from input tuple) | LocalFileResolver checks tx_keys HashMap first, then local files |
+| Cost model source differs from deprecated /prove-tx | Use current ledger params from indexer (not INITIAL_TRANSACTION_COST_MODEL) |
+
+## Risks (Updated)
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| midnight-zkir doesn't compile for ARM64 | Low | High | Pure Rust, no platform deps. Test early. |
+| midnight-zkir doesn't compile for ARM64 | **Eliminated** | — | Verified April 1 2026 |
 | rayon thread pool issues on Android | Medium | Low | Configure max threads, test on device |
-| async prove() hard to bridge to FFI | Low | Medium | Use block_on() or background thread |
 | Proving slower than expected on phone | Low | Low | Still have proof server fallback |
 | Proving key format changes between versions | Medium | Low | Version-aware key management |
+| File I/O latency reading keys from storage | Low | Low | Keys are memory-mapped or read once and cached |
+| Memory pressure during proving (peak ~30MB) | Low | Low | Modern phones have 6-12GB RAM |
 
 ---
 
