@@ -26,6 +26,7 @@ import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
 import com.midnight.kuira.core.crypto.dust.DustLocalState
@@ -88,7 +89,7 @@ class SendViewModel @Inject constructor(
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
     private val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository,
-    private val provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager,
+    private val provingKeyManager: ProvingKeyManager,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val syncStateManager: SyncStateManager,
     private val networkConfig: NetworkConfig

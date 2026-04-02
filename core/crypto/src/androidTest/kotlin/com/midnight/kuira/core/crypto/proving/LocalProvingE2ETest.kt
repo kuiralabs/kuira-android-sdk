@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
 import kotlinx.coroutines.runBlocking
+import java.math.BigInteger
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,7 +57,7 @@ class LocalProvingE2ETest {
             recipientCoinPk = coinPkHex,
             recipientEncPk = encPkHex,
             tokenType = NIGHT_TOKEN,
-            amount = java.math.BigInteger("1000000"),
+            amount = BigInteger("1000000"),
         )
         assertNotNull("Should create output", outputResult)
         Log.d(TAG, "Output created: ${outputResult!!.outputHex.length / 2} bytes")

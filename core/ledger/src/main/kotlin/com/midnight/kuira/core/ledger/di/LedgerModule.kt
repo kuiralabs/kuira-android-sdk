@@ -116,27 +116,14 @@ object LedgerModule {
     @Singleton
     fun provideDustSpendCreator(): DustSpendCreator = DustSpendCreator
 
-    /**
-     * Provide TransactionSubmitter singleton.
-     *
-     * **Singleton Scope:** Stateless orchestrator, safe to share.
-     *
-     * **Dependencies:**
-     * - NodeRpcClient: Submits transaction to node
-     * - ProofServerClient: Proves transactions (Phase 2)
-     * - IndexerClient: Tracks transaction confirmation
-     * - TransactionSerializer: Serializes to SCALE
-     * - DustActionsBuilder: Builds dust fee payment (optional, Phase 2E)
-     * - DustRepository: Manages dust state (optional, Phase 2E)
-     *
-     * **Note:** DustActionsBuilder and DustRepository are auto-provided by Hilt via @Inject constructor
-     */
+    /** Provide ProvingKeyManager for local ZK proving (Phase 4C). */
     @Provides
     @Singleton
     fun provideProvingKeyManager(@ApplicationContext context: Context): ProvingKeyManager {
         return ProvingKeyManager(context)
     }
 
+    /** Provide TransactionSubmitter singleton — orchestrates prove → seal → submit. */
     @Provides
     @Singleton
     fun provideTransactionSubmitter(
