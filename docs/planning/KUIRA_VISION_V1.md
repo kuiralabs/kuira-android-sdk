@@ -225,23 +225,29 @@ Kuira has a solid foundation with ~185.5 hours invested:
 | Phase 4B: WebSocket + UTXO Tracking | Complete | 23.5h |
 | Phase 2: Unshielded Transactions | Complete | 81h |
 | Phase 2F.1: Dust Tank | Complete | ~12h |
-| Phase 4B-Shielded: Shielded Balances | Not Started | est 8-12h |
-| Phase 3: Shielded Transactions | Not Started | est 20-25h |
+| Phase 4B-Shielded: Shielded Balances | Complete | ~14h |
+| Phase 3: Shielded Transactions | Complete | ~22h |
 | Phase 5: DApp Connector | Not Started | est 25-35h |
 | Phase 6: UI & Polish | Not Started | est 15-20h |
 
 **What's working:**
 - Unshielded transactions end-to-end (send/receive NIGHT)
+- **Shielded transactions end-to-end (send shielded NIGHT with ZK proofs)**
 - Rust FFI bridge (Kotlin → C → Rust → midnight-zswap)
+- **Composable transfer primitives (7 FFI functions, ADR-001)**
 - UTXO tracking via WebSocket subscriptions + Room database
+- **Shielded balance display with real-time WebSocket updates**
 - Balance display with correct formatting (DUST: 15 decimals, NIGHT: 6 decimals)
 - Dust tank registration and status display
 - Key derivation (BIP-39/32, shielded JubJub keys, dust keys)
+- **Auto-detect shielded vs unshielded from recipient address**
+- **Shielded address validation (mn_shield-addr_* prefix, 64-byte payload)**
 
-**What's remaining (original plan):**
-- Shielded balance tracking + shielded transactions
-- DApp connector (Phase 5)
-- UI polish
+**What's remaining:**
+- **Local ZK Proving (Phase 4C)** — next priority, core infrastructure. Proves on phone, no proof server needed. See `docs/planning/LOCAL_PROVING_PLAN.md`
+- DApp connector (Phase 5) — enables dApp ecosystem
+- UI polish (Phase 6)
+- Agent Store infrastructure (Phases 7-10+)
 
 ### Alignment: We're on the Right Track
 

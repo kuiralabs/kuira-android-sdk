@@ -1,20 +1,36 @@
 # Shielded Implementation Plan for Kuira
 
-**Status:** In Progress
-**Estimate:** Phase 4B-Shielded (~12h) + Phase 3 (~15-20h) = ~27-32h total
+**Status:** Steps 1-9 Complete, Step 10 In Progress
+**Actual Hours:** Phase 4B-Shielded (~14h) + Phase 3 (~22h) = ~36h total
 
 ## Progress
 
-- [x] Step 1: Rust FFI — `zswap_ffi.rs` (70/70 tests passing)
+- [x] Step 1: Rust FFI — `zswap_ffi.rs` (91 tests passing)
 - [x] Step 2: JNI Bridge (`kuira_crypto_jni.c`) + Android cross-compile done
 - [x] Step 3: Kotlin Wrapper (`ZswapLocalState.kt`) — compiles, all unit tests pass
 - [x] Step 4: GraphQL Subscription + `queryZswapEvents()` — compiles, mirrors dust pattern
 - [x] Step 5: `ShieldedRepository` + DataStore persistence — compiles, all unit tests pass
 - [x] Step 6: UI Integration — seed input + shielded balance card on Balance Screen
 - [x] Step 7: Composable Transfer Primitives — 7 FFI functions + JNI + Kotlin builder (91 Rust / 11 unit / 5 Android tests)
-- [ ] Step 8: Shielded Send UI
-- [ ] Step 9: Shielded Address Display
-- [ ] Step 10: Integration Testing
+- [x] Step 8: Shielded Send UI — auto-detect shielded address, SendViewModel routing, Proving state, dust integration
+- [x] Step 9: Shielded Address Display — Bech32m encoding (coin_pk + enc_pk), AddressValidator shielded support
+- [ ] Step 10: Integration Testing — end-to-end on localnet (partially validated via manual testing)
+
+## Key Achievements
+
+- **Shielded send works end-to-end on localnet** (proven March 28, 2026)
+- **Consecutive sends work** — dust cache invalidation after success prevents error 170
+- **Auto-detect routing** — `send()` routes to shielded or unshielded based on address prefix
+- **ADR-001** — Composable FFI primitives over monolithic (docs/decisions/ADR-001-COMPOSABLE-ZSWAP-FFI.md)
+- **Full pipeline:** state sync → coin select → spend → output → offer → dust merge → prove → seal → submit → finalize
+
+## Bugs Fixed During Implementation
+
+| Error | Meaning | Fix |
+|-------|---------|-----|
+| 138 (BalanceCheckOverspend) | No dust fees in transaction | Added `zswap_build_shielded_transaction_with_dust` |
+| 193 (ReplayProtectionViolation) | Stale nullifiers from cached state | Always fresh-sync shielded state before spending |
+| 170 (InvalidDustSpendProof) | Stale dust UTXO on consecutive sends | `dustRepository.deleteState()` after successful transfer |
 
 ---
 
