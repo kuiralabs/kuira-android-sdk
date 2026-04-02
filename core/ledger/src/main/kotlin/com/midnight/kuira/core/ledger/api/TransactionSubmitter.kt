@@ -66,25 +66,28 @@ class TransactionSubmitter(
      * REMOTE: sends to proof server via HTTP.
      */
     private suspend fun proveTransaction(unprovenTxHex: String): String {
-        if (provingMode == ProvingMode.LOCAL && provingKeyManager?.hasWalletKeys() == true) {
-            Log.d(TAG, "Proving locally (keys at ${provingKeyManager.keysDir})")
-            val result = withContext(Dispatchers.Default) {
-                LocalProver.proveTransaction(
-                    unprovenTxHex,
-                    provingKeyManager.keysDir.absolutePath,
-                )
-            }
-            if (result != null) {
+        return when (provingMode) {
+            ProvingMode.LOCAL -> {
+                if (provingKeyManager?.hasWalletKeys() != true) {
+                    throw IllegalStateException("Local proving selected but proving keys are not downloaded")
+                }
+                Log.d(TAG, "Proving locally (keys at ${provingKeyManager.keysDir})")
+                val result = withContext(Dispatchers.Default) {
+                    LocalProver.proveTransaction(
+                        unprovenTxHex,
+                        provingKeyManager.keysDir.absolutePath,
+                    )
+                } ?: throw IllegalStateException("Local proving failed — check proving keys")
                 Log.i(TAG, "Local proving succeeded")
                 lastProvingMode = ProvingMode.LOCAL
-                return result
+                result
             }
-            Log.w(TAG, "Local proving failed, falling back to proof server")
+            ProvingMode.REMOTE -> {
+                Log.d(TAG, "Proving via remote proof server")
+                lastProvingMode = ProvingMode.REMOTE
+                proofServerClient.proveTransaction(unprovenTxHex)
+            }
         }
-
-        Log.d(TAG, "Proving via remote proof server")
-        lastProvingMode = ProvingMode.REMOTE
-        return proofServerClient.proveTransaction(unprovenTxHex)
     }
 
     /**

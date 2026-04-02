@@ -6,6 +6,7 @@ import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.model.UtxoSpend
+import com.midnight.kuira.core.crypto.proving.ProvingMode
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -52,7 +53,8 @@ class TransactionSubmitterTest {
             proofServerClient = proofServerClient,
             indexerClient = indexerClient,
             serializer = serializer,
-            utxoManager = utxoManager
+            utxoManager = utxoManager,
+            provingMode = ProvingMode.REMOTE,
         )
 
         // Given: Signed intent
@@ -104,7 +106,8 @@ class TransactionSubmitterTest {
             proofServerClient = proofServerClient,
             indexerClient = indexerClient,
             serializer = serializer,
-            utxoManager = utxoManager
+            utxoManager = utxoManager,
+            provingMode = ProvingMode.REMOTE,
         )
 
         // Given: Signed intent
@@ -151,7 +154,8 @@ class TransactionSubmitterTest {
             proofServerClient = proofServerClient,
             indexerClient = indexerClient,
             serializer = serializer,
-            utxoManager = utxoManager
+            utxoManager = utxoManager,
+            provingMode = ProvingMode.REMOTE,
         )
 
         // Given: Signed intent
