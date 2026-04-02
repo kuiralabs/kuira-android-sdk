@@ -105,6 +105,7 @@ fun SendScreen(
 
     // Send mode: shielded (private) vs unshielded (public)
     var isShieldedSend by remember { mutableStateOf(true) }
+    val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
 
     // User inputs with test placeholders (MVP ONLY - for faster testing)
     // Update recipient when send mode changes
@@ -154,7 +155,6 @@ fun SendScreen(
             )
 
             // Proving Mode Selector
-            val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
             ProvingModeSelector(
                 isLocal = isLocalProving,
                 proofServerUrl = viewModel.proofServerUrl,

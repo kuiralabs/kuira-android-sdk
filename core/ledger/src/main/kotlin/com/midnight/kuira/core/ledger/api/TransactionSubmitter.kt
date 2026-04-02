@@ -52,7 +52,7 @@ class TransactionSubmitter(
     private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null,
     private val provingKeyManager: ProvingKeyManager? = null,
     /** Current proving mode — LOCAL or REMOTE. Defaults to LOCAL when keys are available. */
-    var provingMode: ProvingMode = ProvingMode.DEFAULT,
+    @Volatile var provingMode: ProvingMode = ProvingMode.DEFAULT,
 ) {
 
     /** Which proving mode was used for the last transaction (for display). */
