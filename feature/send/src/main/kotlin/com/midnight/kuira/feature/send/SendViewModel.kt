@@ -88,6 +88,7 @@ class SendViewModel @Inject constructor(
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
     private val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository,
+    private val provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val syncStateManager: SyncStateManager,
     private val networkConfig: NetworkConfig
@@ -542,6 +543,15 @@ class SendViewModel @Inject constructor(
                     .joinToString("") { "%02x".format(it) }
                 val encPkHex = payload.drop(32).toByteArray()
                     .joinToString("") { "%02x".format(it) }
+
+                // Ensure proving keys are downloaded (one-time, ~24MB)
+                if (!provingKeyManager.hasWalletKeys()) {
+                    Log.d(TAG, "Downloading proving keys for local proving...")
+                    provingKeyManager.downloadWalletKeys { progress ->
+                        Log.d(TAG, "Proving key download: ${(progress * 100).toInt()}%")
+                    }
+                    Log.d(TAG, "Proving keys downloaded")
+                }
 
                 // Derive zswap seed
                 seed = BIP39.mnemonicToSeed(seedPhrase)

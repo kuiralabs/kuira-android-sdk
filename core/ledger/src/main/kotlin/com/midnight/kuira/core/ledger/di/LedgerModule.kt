@@ -11,10 +11,13 @@ import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 import com.midnight.kuira.core.ledger.fee.FeeCalculator
+import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import com.midnight.kuira.core.network.NetworkConfig
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -130,6 +133,12 @@ object LedgerModule {
      */
     @Provides
     @Singleton
+    fun provideProvingKeyManager(@ApplicationContext context: Context): ProvingKeyManager {
+        return ProvingKeyManager(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideTransactionSubmitter(
         nodeRpcClient: NodeRpcClient,
         proofServerClient: ProofServerClient,
@@ -137,7 +146,8 @@ object LedgerModule {
         serializer: TransactionSerializer,
         utxoManager: com.midnight.kuira.core.indexer.utxo.UtxoManager,
         dustActionsBuilder: DustActionsBuilder,
-        dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository
+        dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository,
+        provingKeyManager: ProvingKeyManager,
     ): TransactionSubmitter {
         return TransactionSubmitter(
             nodeRpcClient = nodeRpcClient,
@@ -147,9 +157,7 @@ object LedgerModule {
             utxoManager = utxoManager,
             dustActionsBuilder = dustActionsBuilder,
             dustRepository = dustRepository,
-            // Phase 4C: Local proving — null for now until ProvingKeyManager is provided via Hilt
-            // TODO: Inject ProvingKeyManager when key download UX is implemented (Step 6)
-            provingKeyManager = null,
+            provingKeyManager = provingKeyManager,
         )
     }
 }

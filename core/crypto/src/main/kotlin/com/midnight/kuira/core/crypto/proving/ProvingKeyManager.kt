@@ -161,6 +161,7 @@ class ProvingKeyManager(private val context: Context) {
             "dust/spend.verifier",
             "dust/spend.bzkir",
             "bls_midnight_2p13",
+            "bls_midnight_2p14",
         )
 
         /** S3 path → local path mapping for downloads. */
@@ -179,8 +180,9 @@ class ProvingKeyManager(private val context: Context) {
             "dust/$CURRENT_VERSION/spend.prover" to "dust/spend.prover",
             "dust/$CURRENT_VERSION/spend.verifier" to "dust/spend.verifier",
             "dust/$CURRENT_VERSION/spend.bzkir" to "dust/spend.bzkir",
-            // BLS parameters
+            // BLS parameters (k=13 for spend/dust, k=14 for output)
             "bls_midnight_2p13" to "bls_midnight_2p13",
+            "bls_midnight_2p14" to "bls_midnight_2p14",
         )
     }
 }

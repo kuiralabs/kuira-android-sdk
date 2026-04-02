@@ -48,6 +48,7 @@ class SendViewModelTest {
     private lateinit var indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient
     private lateinit var dustRepository: DustRepository
     private lateinit var shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository
+    private lateinit var provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager
     private lateinit var subscriptionManagerFactory: SubscriptionManagerFactory
     private lateinit var syncStateManager: SyncStateManager
     private lateinit var viewModel: SendViewModel
@@ -65,6 +66,7 @@ class SendViewModelTest {
         indexerClient = mock()
         dustRepository = mock()
         shieldedRepository = mock()
+        provingKeyManager = mock()
         subscriptionManagerFactory = mock()
         syncStateManager = mock()
 
@@ -76,6 +78,7 @@ class SendViewModelTest {
             indexerClient = indexerClient,
             dustRepository = dustRepository,
             shieldedRepository = shieldedRepository,
+            provingKeyManager = provingKeyManager,
             subscriptionManagerFactory = subscriptionManagerFactory,
             syncStateManager = syncStateManager,
             networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)

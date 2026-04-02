@@ -381,6 +381,12 @@ class ZswapTransferBuilder private constructor() {
             return result
         }
 
+        /** Exposed for testing — builds offer from hex arrays. */
+        fun nativeBuildOfferPublic(inputsHexJson: String, outputsHexJson: String): String? {
+            ensureNativeLoaded()
+            return nativeBuildOffer(inputsHexJson, outputsHexJson)
+        }
+
         // ── Native Methods (JNI bridge to Rust FFI) ──
 
         @JvmStatic private external fun nativeSelectCoins(statePtr: Long, tokenTypeHex: String, amountStr: String): String?
