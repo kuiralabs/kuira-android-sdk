@@ -44,8 +44,35 @@ class TransactionSubmitter(
     private val serializer: TransactionSerializer,
     private val utxoManager: UtxoManager,
     private val dustActionsBuilder: DustActionsBuilder? = null,
-    private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null
+    private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null,
+    private val provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager? = null,
 ) {
+
+    /**
+     * Prove a transaction using local keys if available, otherwise fall back to proof server.
+     *
+     * Local proving: no network needed, proof preimages never leave the phone.
+     * Remote proving: requires proof server connection (fallback).
+     */
+    private suspend fun proveTransaction(unprovenTxHex: String): String {
+        // Try local proving first
+        if (provingKeyManager?.hasWalletKeys() == true) {
+            Log.d(TAG, "Proving locally (keys cached at ${provingKeyManager.keysDir})")
+            val result = com.midnight.kuira.core.crypto.proving.LocalProver.proveTransaction(
+                unprovenTxHex,
+                provingKeyManager.keysDir.absolutePath,
+            )
+            if (result != null) {
+                Log.i(TAG, "Local proving succeeded")
+                return result
+            }
+            Log.w(TAG, "Local proving failed, falling back to proof server")
+        }
+
+        // Fall back to remote proof server
+        Log.d(TAG, "Proving via remote proof server")
+        return proofServerClient.proveTransaction(unprovenTxHex)
+    }
 
     /**
      * Submit a signed transaction and wait for finalization.
@@ -85,7 +112,7 @@ class TransactionSubmitter(
 
         // Step 2: Prove transaction via proof server
         val provenTxHex = try {
-            proofServerClient.proveTransaction(unprovenTxHex)
+            proveTransaction(unprovenTxHex)
         } catch (e: ProofServerException) {
             Log.e(TAG, "❌ Proof server error", e)
             return SubmissionResult.Failed(
@@ -319,7 +346,7 @@ class TransactionSubmitter(
 
         // Step 2: Prove and seal base transaction for fee calculation
         val baseProvenHex = try {
-            proofServerClient.proveTransaction(baseSerializedHex)
+            proveTransaction(baseSerializedHex)
         } catch (e: ProofServerException) {
             Log.e(TAG, "Failed to prove base transaction", e)
             return SubmissionResult.Failed(
@@ -408,7 +435,7 @@ class TransactionSubmitter(
 
             // Step 7: Prove transaction
             val provenTxHex = try {
-                proofServerClient.proveTransaction(unprovenTxHex)
+                proveTransaction(unprovenTxHex)
             } catch (e: ProofServerException) {
                 Log.e(TAG, "❌ Proof server error", e)
                 // Don't save dust state - it's still clean on disk
@@ -562,7 +589,7 @@ class TransactionSubmitter(
         val unprovenTxHex = serializer.serialize(signedIntent)
 
         // Step 2: Prove transaction
-        val provenTxHex = proofServerClient.proveTransaction(unprovenTxHex)
+        val provenTxHex = proveTransaction(unprovenTxHex)
 
         // Step 2.5: Seal the proven transaction
         val finalizedTxHex = serializer.sealProvenTransaction(provenTxHex)
@@ -645,7 +672,7 @@ class TransactionSubmitter(
     ): SubmissionResult {
         // Step 1: Prove transaction via proof server
         val provenTxHex = try {
-            proofServerClient.proveTransaction(unprovenTxHex)
+            proveTransaction(unprovenTxHex)
         } catch (e: ProofServerException) {
             Log.e(TAG, "Proof server error (shielded)", e)
             return SubmissionResult.Failed(

@@ -146,7 +146,10 @@ object LedgerModule {
             serializer = serializer,
             utxoManager = utxoManager,
             dustActionsBuilder = dustActionsBuilder,
-            dustRepository = dustRepository
+            dustRepository = dustRepository,
+            // Phase 4C: Local proving — null for now until ProvingKeyManager is provided via Hilt
+            // TODO: Inject ProvingKeyManager when key download UX is implemented (Step 6)
+            provingKeyManager = null,
         )
     }
 }
