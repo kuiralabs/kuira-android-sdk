@@ -2,6 +2,7 @@ package com.midnight.kuira.core.connector
 
 import com.midnight.kuira.core.connector.model.ConnectorApiError
 import com.midnight.kuira.core.connector.model.ConnectionStatus
+import com.midnight.kuira.core.connector.model.ErrorCodes
 import com.midnight.kuira.core.connector.model.DesiredInput
 import com.midnight.kuira.core.connector.model.DesiredOutput
 import com.midnight.kuira.core.connector.model.IntentId
@@ -22,7 +23,22 @@ import java.math.BigInteger
  *
  * Protocol: https://www.jsonrpc.org/specification
  */
-class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
+class JsonRpcRouter(
+    private val handler: ConnectedAPIHandler,
+    private val approvalManager: ApprovalManager = ApprovalManager { true },
+) {
+
+    companion object {
+        /** Write methods that require user approval before execution. */
+        private val WRITE_METHODS = mapOf(
+            "makeTransfer" to ApprovalCategory.TRANSFER,
+            "submitTransaction" to ApprovalCategory.TRANSACTION,
+            "signData" to ApprovalCategory.SIGN,
+            "balanceUnsealedTransaction" to ApprovalCategory.TRANSACTION,
+            "balanceSealedTransaction" to ApprovalCategory.TRANSACTION,
+            "makeIntent" to ApprovalCategory.INTENT,
+        )
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -51,6 +67,19 @@ class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
     }
 
     private suspend fun routeMethod(method: String, params: JsonObject): JsonElement {
+        // Gate write operations through approval
+        val category = WRITE_METHODS[method]
+        if (category != null) {
+            val approved = approvalManager.requestApproval(
+                ApprovalRequest(method, category, params)
+            )
+            if (!approved) {
+                throw ConnectorApiError(
+                    ErrorCodes.PERMISSION_REJECTED, "User rejected $method"
+                )
+            }
+        }
+
         return when (method) {
             "getConnectionStatus" -> {
                 val status = handler.getConnectionStatus()

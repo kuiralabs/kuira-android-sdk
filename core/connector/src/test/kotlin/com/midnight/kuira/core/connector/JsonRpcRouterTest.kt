@@ -17,6 +17,7 @@ import java.math.BigInteger
 
 class JsonRpcRouterTest {
 
+    private lateinit var handler: ConnectedAPIHandler
     private lateinit var router: JsonRpcRouter
     private val json = Json { ignoreUnknownKeys = true }
     private val nightToken = "0".repeat(64)
@@ -50,7 +51,7 @@ class JsonRpcRouterTest {
                 DustBalance(cap = BigInteger("1000"), balance = BigInteger("500"))
         }
 
-        val handler = ConnectedAPIHandler(
+        handler = ConnectedAPIHandler(
             networkConfig = networkConfig,
             walletAddresses = WalletAddresses(
                 unshieldedAddress = "mn_addr_undeployed1abc123",
@@ -330,5 +331,101 @@ class JsonRpcRouterTest {
         val error = parseError(unconfiguredRouter.handleMessage(rpc("signData", """{"data":"abc","options":{"encoding":"hex"}}""")))
         assertEquals(-32603, error["code"]?.jsonPrimitive?.int)
         assertTrue(error["message"]!!.jsonPrimitive.content.contains("InternalError"))
+    }
+
+    // ── Approval Flow ──
+
+    private fun routerWithApproval(
+        approvalFn: suspend (ApprovalRequest) -> Boolean,
+    ): JsonRpcRouter = JsonRpcRouter(handler, ApprovalManager(approvalFn))
+
+    @Test
+    fun `write method calls approval manager before execution`() = runTest {
+        var approvalRequested = false
+        val r = routerWithApproval { approvalRequested = true; true }
+        r.handleMessage(rpc("signData", """{"data":"cafe","options":{"encoding":"hex"}}"""))
+        assertTrue("Approval should have been requested", approvalRequested)
+    }
+
+    @Test
+    fun `rejected write method returns PERMISSION_REJECTED error`() = runTest {
+        val r = routerWithApproval { false }
+        val error = parseError(r.handleMessage(rpc("signData", """{"data":"cafe","options":{"encoding":"hex"}}""")))
+        assertEquals(-32603, error["code"]?.jsonPrimitive?.int)
+        assertTrue(error["message"]!!.jsonPrimitive.content.contains("PermissionRejected"))
+    }
+
+    @Test
+    fun `read method does not trigger approval`() = runTest {
+        var approvalCalled = false
+        val r = routerWithApproval { approvalCalled = true; true }
+        r.handleMessage(rpc("getConnectionStatus"))
+        assertFalse("Approval should NOT be called for reads", approvalCalled)
+    }
+
+    @Test
+    fun `approval request contains method name and category`() = runTest {
+        var captured: ApprovalRequest? = null
+        val r = routerWithApproval { captured = it; true }
+        r.handleMessage(rpc("makeTransfer", """{"desiredOutputs":[{"kind":"shielded","type":"$nightToken","value":"1000","recipient":"addr1"}]}"""))
+        assertNotNull(captured)
+        assertEquals("makeTransfer", captured!!.method)
+        assertEquals(ApprovalCategory.TRANSFER, captured!!.category)
+    }
+
+    @Test
+    fun `approval request contains raw params`() = runTest {
+        var captured: ApprovalRequest? = null
+        val r = routerWithApproval { captured = it; true }
+        r.handleMessage(rpc("signData", """{"data":"deadbeef","options":{"encoding":"hex"}}"""))
+        assertEquals("deadbeef", captured!!.params["data"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `rejected write method does not execute handler`() = runTest {
+        var handlerCalled = false
+        val trackingHandler = ConnectedAPIHandler(
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),
+            walletAddresses = handler.walletAddresses,
+            signDataFn = { _, _ -> handlerCalled = true; SignatureResult("", "", "") },
+        )
+        val r = JsonRpcRouter(trackingHandler, ApprovalManager { false })
+        r.handleMessage(rpc("signData", """{"data":"abc","options":{"encoding":"hex"}}"""))
+        assertFalse("Handler should NOT be called when rejected", handlerCalled)
+    }
+
+    @Test
+    fun `all six write methods trigger approval`() = runTest {
+        val approved = mutableListOf<String>()
+        val r = routerWithApproval { approved.add(it.method); true }
+
+        r.handleMessage(rpc("makeTransfer", """{"desiredOutputs":[{"kind":"shielded","type":"$nightToken","value":"1","recipient":"a"}]}"""))
+        r.handleMessage(rpc("submitTransaction", """{"tx":"hex"}"""))
+        r.handleMessage(rpc("signData", """{"data":"a","options":{"encoding":"hex"}}"""))
+        r.handleMessage(rpc("balanceUnsealedTransaction", """{"tx":"hex"}"""))
+        r.handleMessage(rpc("balanceSealedTransaction", """{"tx":"hex"}"""))
+        r.handleMessage(rpc("makeIntent", """{"desiredInputs":[],"desiredOutputs":[{"kind":"shielded","type":"$nightToken","value":"1","recipient":"a"}],"options":{"intentId":"random","payFees":true}}"""))
+
+        assertEquals(6, approved.size)
+        assertTrue(approved.containsAll(listOf(
+            "makeTransfer", "submitTransaction", "signData",
+            "balanceUnsealedTransaction", "balanceSealedTransaction", "makeIntent",
+        )))
+    }
+
+    @Test
+    fun `categories are correct for each write method`() = runTest {
+        val categories = mutableMapOf<String, ApprovalCategory>()
+        val r = routerWithApproval { categories[it.method] = it.category; true }
+
+        r.handleMessage(rpc("makeTransfer", """{"desiredOutputs":[{"kind":"shielded","type":"$nightToken","value":"1","recipient":"a"}]}"""))
+        r.handleMessage(rpc("signData", """{"data":"a","options":{"encoding":"hex"}}"""))
+        r.handleMessage(rpc("makeIntent", """{"desiredInputs":[],"desiredOutputs":[{"kind":"shielded","type":"$nightToken","value":"1","recipient":"a"}],"options":{"intentId":"random","payFees":true}}"""))
+        r.handleMessage(rpc("submitTransaction", """{"tx":"hex"}"""))
+
+        assertEquals(ApprovalCategory.TRANSFER, categories["makeTransfer"])
+        assertEquals(ApprovalCategory.SIGN, categories["signData"])
+        assertEquals(ApprovalCategory.INTENT, categories["makeIntent"])
+        assertEquals(ApprovalCategory.TRANSACTION, categories["submitTransaction"])
     }
 }
