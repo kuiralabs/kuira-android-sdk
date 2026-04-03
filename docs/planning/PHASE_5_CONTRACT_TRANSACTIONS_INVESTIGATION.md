@@ -1,7 +1,10 @@
 # Phase 5: Contract Transactions - Deep Investigation & Implementation Plan
 
 **Last Updated:** January 22, 2026
-**Status:** Investigation Complete - Ready for Planning
+**Status:** DEPRECATED — Superseded by `DAPP_CONNECTOR_PLAN.md` (April 2026)
+**Reason:** Written before Phase 3 (shielded tx), Phase 4C (local proving), and
+ADR-001 (composable FFI) were implemented. The new plan is based on the official
+`@midnight-ntwrk/dapp-connector-api` source and incorporates all completed infrastructure.
 **Estimated Effort:** 25-35 hours (revised from 15-20h after investigation)
 
 ---

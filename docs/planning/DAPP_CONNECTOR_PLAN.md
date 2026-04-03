@@ -50,11 +50,33 @@ The Kuira connector adapts this to Android, replacing:
 
 ---
 
-## ConnectedAPI Methods (18 total)
+## API Surface
 
-From `WalletConnectedAPI` + `HintUsage`:
+**Source of truth:** `@midnight-ntwrk/dapp-connector-api` (official Midnight package)
+at `midnight-libraries/midnight-dapp-connector-api/src/api.ts`
 
-### Read-Only (10 methods — auto-approved)
+### Phase 1: InitialAPI (connection handshake)
+
+DApps discover the wallet via `window.midnight` (WebView) or WebSocket handshake.
+Before any operations, the dApp must call `connect(networkId)` to establish a session.
+
+```typescript
+type InitialAPI = {
+  rdns: string;        // "com.kuira.wallet"
+  name: string;        // "Kuira"
+  icon: string;        // wallet icon URL
+  apiVersion: string;  // matches @midnight-ntwrk/dapp-connector-api version
+  connect(networkId: string): Promise<ConnectedAPI>;
+}
+```
+
+After `connect()`, the dApp receives the full `ConnectedAPI`.
+
+### Phase 2: ConnectedAPI (17 methods)
+
+`ConnectedAPI = WalletConnectedAPI (15 methods) + HintUsage (1 method)`
+
+#### Read-Only (10 methods — auto-approved)
 
 | Method | Returns | Kuira Source |
 |---|---|---|
@@ -65,29 +87,41 @@ From `WalletConnectedAPI` + `HintUsage`:
 | `getShieldedAddresses()` | `{ shieldedAddress, coinPk, encPk }` | ShieldedKeyDeriver |
 | `getDustAddress()` | `{ dustAddress }` | DustKeyDeriver |
 | `getTxHistory(page, size)` | `HistoryEntry[]` | Room DB |
-| `getConfiguration()` | `{ indexerUri, nodeUri, networkId, ... }` | NetworkConfig |
-| `getConnectionStatus()` | `{ status, networkId }` | Always connected |
-| `hintUsage(methods)` | `void` | Log which methods dApp needs |
+| `getConfiguration()` | `Configuration` (see below) | NetworkConfig |
+| `getConnectionStatus()` | `{ status, networkId }` | Session state |
+| `hintUsage(methods)` | `void` | Log/permission prompt |
 
-### Write (8 methods — require user approval)
+**`Configuration` type:**
+```typescript
+{
+  indexerUri: string;
+  indexerWsUri: string;
+  proverServerUri?: string;  // @deprecated — use getProvingProvider instead
+  substrateNodeUri: string;
+  networkId: string;
+}
+```
 
-| Method | What It Does | Kuira Implementation |
+#### Write (7 methods — require user approval)
+
+| Method | Ledger Type Expected | Kuira Implementation |
 |---|---|---|
-| `makeTransfer(outputs)` | Build + prove + submit transfer | ZswapTransferBuilder + LocalProver |
-| `submitTransaction(tx)` | Submit pre-built tx to node | TransactionSubmitter |
-| `balanceUnsealedTransaction(tx)` | Add wallet balancing to unsealed tx | Composable FFI (ADR-001) |
-| `balanceSealedTransaction(tx)` | Add dust fees to sealed tx | Composable FFI (ADR-001) |
-| `makeIntent(inputs, outputs)` | Build custom intent | Composable FFI (ADR-001) |
-| `signData(data, opts)` | Sign arbitrary data | TransactionSigner |
-| `getProvingProvider(km)` | Return proving capability | LocalProver (Phase 4C!) |
+| `makeTransfer(outputs, opts?)` | Builds full tx internally | ZswapTransferBuilder + LocalProver |
+| `submitTransaction(tx)` | `Transaction<Sig, Proof, Binding>` (sealed) | TransactionSubmitter (relay to node) |
+| `balanceUnsealedTransaction(tx, opts?)` | `Transaction<Sig, Proof, PreBinding>` (proven, unsealed) | Composable FFI — add inputs/outputs/dust, merge intents |
+| `balanceSealedTransaction(tx, opts?)` | `Transaction<Sig, Proof, Binding>` (sealed) | Composable FFI — add dust in separate intent, merge |
+| `makeIntent(inputs, outputs, opts)` | Builds unbalanced intent | Composable FFI — create intent with desired inputs/outputs |
+| `signData(data, opts)` | Signs with unshielded key | TransactionSigner (Schnorr BIP-340) |
+| `getProvingProvider(km)` | Returns `ProvingProvider` | LocalProver (Phase 4C!) — proves on phone |
 
 **ADR-001 payoff:** The composable FFI primitives we built in Phase 3 directly enable
 `balanceUnsealedTransaction`, `balanceSealedTransaction`, and `makeIntent` — these
 require adding wallet coins/dust to existing transactions, which is exactly what
 composable primitives were designed for.
 
-**Phase 4C payoff:** `getProvingProvider` can return the local prover, enabling dApps
-to prove on the phone without a proof server.
+**Phase 4C payoff:** `getProvingProvider` returns the local prover by default. DApps
+can prove on the phone without a proof server. The official API marks `proverServerUri`
+as `@deprecated` in favor of `getProvingProvider` — Kuira is ahead of this curve.
 
 ---
 
