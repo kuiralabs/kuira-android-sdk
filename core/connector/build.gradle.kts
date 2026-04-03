@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -42,6 +43,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // JSON-RPC message parsing
+    implementation(libs.kotlinx.serialization.json)
 
     // Internal dependencies — connector delegates to these
     implementation(project(":core:crypto"))

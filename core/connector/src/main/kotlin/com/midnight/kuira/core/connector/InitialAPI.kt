@@ -15,6 +15,8 @@ import com.midnight.kuira.core.network.NetworkConfig
 class InitialAPI(
     private val networkConfig: NetworkConfig,
     private val handlerFactory: (String) -> ConnectedAPIHandler,
+    /** Wallet icon URL or data URI. */
+    val icon: String = "",
 ) {
     /** Wallet identifier in reverse DNS notation. */
     val rdns: String = "com.kuira.wallet"

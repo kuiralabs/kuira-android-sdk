@@ -3,6 +3,7 @@ package com.midnight.kuira.core.connector
 import com.midnight.kuira.core.connector.model.Configuration
 import com.midnight.kuira.core.connector.model.ConnectionStatus
 import com.midnight.kuira.core.connector.model.ConnectorApiError
+import com.midnight.kuira.core.connector.model.DustBalance
 import com.midnight.kuira.core.connector.model.DesiredInput
 import com.midnight.kuira.core.connector.model.DesiredOutput
 import com.midnight.kuira.core.connector.model.ErrorCodes

@@ -73,7 +73,7 @@ class ConnectedAPIHandler(
         Log.d(TAG, "DApp hints usage of: ${methodNames.joinToString()}")
     }
 
-    // ── Remaining read methods (to be implemented) ──
+    // ── Balance & Address Methods ──
 
     suspend fun getUnshieldedBalances(): Map<TokenType, BigInteger> {
         return balanceProvider?.getUnshieldedBalances() ?: emptyMap()
@@ -169,14 +169,3 @@ class ConnectedAPIHandler(
         return ProvingProviderResult(proverServerUri = null)
     }
 }
-
-// Result types for address methods
-data class DustBalance(val cap: BigInteger, val balance: BigInteger)
-data class UnshieldedAddressResult(val unshieldedAddress: String)
-data class ShieldedAddressesResult(
-    val shieldedAddress: String,
-    val shieldedCoinPublicKey: String,
-    val shieldedEncryptionPublicKey: String,
-)
-data class DustAddressResult(val dustAddress: String)
-data class ProvingProviderResult(val proverServerUri: String?)

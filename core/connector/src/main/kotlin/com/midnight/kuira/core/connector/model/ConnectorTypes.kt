@@ -96,3 +96,15 @@ class ConnectorApiError(
     val code: String,
     override val message: String,
 ) : Exception(message)
+
+// ── Result types ──
+
+data class DustBalance(val cap: BigInteger, val balance: BigInteger)
+data class UnshieldedAddressResult(val unshieldedAddress: String)
+data class ShieldedAddressesResult(
+    val shieldedAddress: String,
+    val shieldedCoinPublicKey: String,
+    val shieldedEncryptionPublicKey: String,
+)
+data class DustAddressResult(val dustAddress: String)
+data class ProvingProviderResult(val proverServerUri: String?)
