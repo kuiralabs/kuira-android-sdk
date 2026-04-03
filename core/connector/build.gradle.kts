@@ -47,6 +47,9 @@ dependencies {
     // JSON-RPC message parsing
     implementation(libs.kotlinx.serialization.json)
 
+    // WebSocket server for DApp connector
+    implementation(libs.java.websocket)
+
     // Internal dependencies — connector delegates to these
     implementation(project(":core:crypto"))
     implementation(project(":core:indexer"))

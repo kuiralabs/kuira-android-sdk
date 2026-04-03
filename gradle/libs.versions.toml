@@ -17,6 +17,7 @@ bouncycastle = "1.78.1"
 # Networking & Serialization (Phase 4A)
 ktor = "2.3.7"
 kotlinxSerialization = "1.6.2"
+javaWebsocket = "1.5.7"
 room = "2.6.1"
 ksp = "2.0.21-1.0.28"
 
@@ -56,6 +57,8 @@ ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", v
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 # Kotlinx Serialization (Phase 4A)
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+# WebSocket server for DApp connector (Phase 5)
+java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
 # Room Database (Phase 4B)
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
