@@ -10,6 +10,7 @@ import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignEncoding
 import com.midnight.kuira.core.connector.model.TransferKind
 import com.midnight.kuira.core.connector.model.TxStatus
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import java.math.BigInteger
 
@@ -36,7 +37,7 @@ class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
 
             val result = routeMethod(method, params)
             return successResponse(id, result)
-        } catch (e: kotlinx.serialization.SerializationException) {
+        } catch (e: SerializationException) {
             return errorResponse(id, -32700, "Parse error: ${e.message}")
         } catch (e: MethodNotFoundException) {
             return errorResponse(id, -32601, e.message ?: "Method not found")
@@ -273,11 +274,11 @@ class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
             val obj = element.jsonObject
             DesiredOutput(
                 kind = TransferKind.valueOf(
-                    obj["kind"]!!.jsonPrimitive.content.uppercase()
+                    (obj["kind"] ?: throw IllegalArgumentException("Missing 'kind' in desiredOutput")).jsonPrimitive.content.uppercase()
                 ),
-                type = obj["type"]!!.jsonPrimitive.content,
-                value = BigInteger(obj["value"]!!.jsonPrimitive.content),
-                recipient = obj["recipient"]!!.jsonPrimitive.content,
+                type = (obj["type"] ?: throw IllegalArgumentException("Missing 'type' in desiredOutput")).jsonPrimitive.content,
+                value = BigInteger((obj["value"] ?: throw IllegalArgumentException("Missing 'value' in desiredOutput")).jsonPrimitive.content),
+                recipient = (obj["recipient"] ?: throw IllegalArgumentException("Missing 'recipient' in desiredOutput")).jsonPrimitive.content,
             )
         } ?: emptyList()
     }
@@ -287,10 +288,10 @@ class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
             val obj = element.jsonObject
             DesiredInput(
                 kind = TransferKind.valueOf(
-                    obj["kind"]!!.jsonPrimitive.content.uppercase()
+                    (obj["kind"] ?: throw IllegalArgumentException("Missing 'kind' in desiredInput")).jsonPrimitive.content.uppercase()
                 ),
-                type = obj["type"]!!.jsonPrimitive.content,
-                value = BigInteger(obj["value"]!!.jsonPrimitive.content),
+                type = (obj["type"] ?: throw IllegalArgumentException("Missing 'type' in desiredInput")).jsonPrimitive.content,
+                value = BigInteger((obj["value"] ?: throw IllegalArgumentException("Missing 'value' in desiredInput")).jsonPrimitive.content),
             )
         } ?: emptyList()
     }
@@ -314,7 +315,7 @@ class JsonRpcRouter(private val handler: ConnectedAPIHandler) {
     private fun parseSignDataOptions(obj: JsonObject?): SignDataOptions {
         requireNotNull(obj) { "Missing 'options' parameter" }
         val encoding = SignEncoding.valueOf(
-            obj["encoding"]!!.jsonPrimitive.content.uppercase()
+            (obj["encoding"] ?: throw IllegalArgumentException("Missing 'encoding' in options")).jsonPrimitive.content.uppercase()
         )
         val keyType = obj["keyType"]?.jsonPrimitive?.content ?: "unshielded"
         return SignDataOptions(

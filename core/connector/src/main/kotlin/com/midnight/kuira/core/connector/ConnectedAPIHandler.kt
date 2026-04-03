@@ -6,14 +6,6 @@ import com.midnight.kuira.core.network.NetworkConfig
 import java.math.BigInteger
 
 /**
- * Implements all 16 ConnectedAPI methods (15 WalletConnectedAPI + hintUsage).
- *
- * Pure business logic — delegates to existing Kuira services.
- * No networking, no Android UI. Transport layers wrap this class.
- *
- * Source of truth: @midnight-ntwrk/dapp-connector-api/src/api.ts
- */
-/**
  * Wallet addresses — derived once at wallet setup, passed to the handler.
  */
 data class WalletAddresses(
@@ -34,6 +26,14 @@ interface BalanceProvider {
     suspend fun getDustBalance(): DustBalance
 }
 
+/**
+ * Implements all 16 ConnectedAPI methods (15 WalletConnectedAPI + hintUsage).
+ *
+ * Pure business logic — delegates to existing Kuira services.
+ * No networking, no Android UI. Transport layers wrap this class.
+ *
+ * Source of truth: @midnight-ntwrk/dapp-connector-api/src/api.ts
+ */
 class ConnectedAPIHandler(
     private val networkConfig: NetworkConfig,
     val walletAddresses: WalletAddresses,
