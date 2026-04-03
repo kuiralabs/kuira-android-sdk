@@ -27,4 +27,5 @@ htmlReport/
 feature/send/build/
 core/network/build/
 feature/dust/build/
+core/connector/build/
 .claude/settings.local.json
