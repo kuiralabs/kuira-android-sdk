@@ -1,0 +1,384 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:2:1-19:12
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:2:1-19:12
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:2:1-19:12
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:2:1-19:12
+MERGED from [:core:connector] /Users/norman/Development/android/projects/kuira-android-wallet/core/connector/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:2:1-7:12
+MERGED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:10:1-20:12
+MERGED from [:core:wallet] /Users/norman/Development/android/projects/kuira-android-wallet/core/wallet/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:2:1-7:12
+MERGED from [:core:indexer] /Users/norman/Development/android/projects/kuira-android-wallet/core/indexer/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:2:1-7:12
+MERGED from [:core:network] /Users/norman/Development/android/projects/kuira-android-wallet/core/network/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:2:1-7:12
+MERGED from [com.google.dagger:hilt-android:2.54] /Users/norman/.gradle/caches/8.13/transforms/0142c95a833973f44a48ee7c06c3d55a/transformed/hilt-android-2.54/AndroidManifest.xml:16:1-19:12
+MERGED from [androidx.fragment:fragment:1.5.1] /Users/norman/.gradle/caches/8.13/transforms/88fb3a29f8c8ad67d3ac12011b792925/transformed/fragment-1.5.1/AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.compose.material3:material3-android:1.3.0] /Users/norman/.gradle/caches/8.13/transforms/03c0ab93bbe015920f0c4be62c841752/transformed/material3-release/AndroidManifest.xml:17:1-22:12
+MERGED from [:core:crypto] /Users/norman/Development/android/projects/kuira-android-wallet/core/crypto/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:2:1-9:12
+MERGED from [androidx.loader:loader:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/043e2008d5abf3979bc7c6046a1f8395/transformed/loader-1.0.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.compose.animation:animation-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/1c8da7fa763bd06b9e77d35c14a253a8/transformed/animation-core-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.material:material-ripple-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e125d344f221f72b27491fac485d4761/transformed/material-ripple-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.animation:animation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/70af698a356584b78817240ed8b02e17/transformed/animation-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e3622d3acf4d45fd198199b4b155e11a/transformed/foundation-layout-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.foundation:foundation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/fd2f1bf60d36426b2db75df88fb1b47e/transformed/foundation-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-geometry-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e5a48a889b573b4286a8baf39a06f321/transformed/ui-geometry/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-util-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/25db079a0ee40eb4cd7d675864e0b51e/transformed/ui-util/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-unit-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/db03e2f9528daa4529ccdf5b9aa698ff/transformed/ui-unit/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-graphics-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/082b046174d5177438526265e8abb95d/transformed/ui-graphics-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-text-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/a91119daaee9e836af9ebe4cd15e18c4/transformed/ui-text/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e410a6a7377d86d22d54fdcb0cc3e6cf/transformed/lifecycle-livedata-core-ktx-2.10.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/fc442a4a0c32b1d51551b72fca51009e/transformed/lifecycle-livedata-2.10.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.navigationevent:navigationevent-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/d6d49ebde77d1538d78ebe7086fcd74e/transformed/navigationevent/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.navigationevent:navigationevent-compose-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/afa02540e9d8ad1d27648e53bcc789f9/transformed/navigationevent-compose/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.runtime:runtime-annotation-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/ca72ede0f1bf0e131a2d5921c6af5e0a/transformed/runtime-annotation/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.savedstate:savedstate-ktx:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/8e91f45903fb25c04b16be33534ac693/transformed/savedstate-ktx-1.4.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.savedstate:savedstate-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/eb4a7b39add6d29493f4291913612a81/transformed/savedstate/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.savedstate:savedstate-compose-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/4c6f34b3bcc052cc03d96873c691d9b0/transformed/savedstate-compose/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.runtime:runtime-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e35d57d6a30c1793a75fe247ea593c03/transformed/runtime/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/15177042bb7e2156cac15ea28c75d9bc/transformed/runtime-saveable/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/38bd9e454befa4c735627eff2ca334c5/transformed/lifecycle-runtime-compose/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/ee9549df870ca754e55e523d338afb6a/transformed/lifecycle-runtime/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/970ec41127bc2fa35d425106cb74fb90/transformed/lifecycle-viewmodel-2.10.0/AndroidManifest.xml:2:1-5:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/de484ca26f92d953ac2d30163c6ac1db/transformed/lifecycle-viewmodel/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/95ec7aff7ae9be2fd1867274ea75a854/transformed/lifecycle-viewmodel-savedstate/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/f18c936263cc03a958f108c6f3e54642/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:17:1-23:12
+MERGED from [androidx.core:core-ktx:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/48269a876d5ccd42681daecb378d5bae/transformed/core-ktx-1.17.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.viewpager:viewpager:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/93a1ee6ec76a0379dd327d1868717f4b/transformed/viewpager-1.0.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.customview:customview:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/0bb991609ac9cdbe9d92a025b73f10bb/transformed/customview-1.0.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e7bdc0621cef102b3038f6dd6cb156b3/transformed/autofill-1.0.0/AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.graphics:graphics-path:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/6db2892467498d9c9f9f7b75ca5bfe9d/transformed/graphics-path-1.0.1/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:17:1-30:12
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/05d7beef1a652da715b85a6c323a56bc/transformed/lifecycle-runtime-ktx/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8e8974ea1a6614fd3a776e35f3712400/transformed/lifecycle-livedata-core-2.10.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e469a4e7a41ae6917cecdde4355358b4/transformed/lifecycle-viewmodel-ktx-2.10.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/d1d1c74921678a863853a649951e3062/transformed/lifecycle-viewmodel-compose/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.material:material-icons-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/95cca94d885b48f7c373ac988470d1eb/transformed/material-icons-core-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/bef63eb78d9313afd60bef3956f4cb5e/transformed/ui-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.activity:activity-ktx:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/6f478d448b300009e8bc21fe691c7f0a/transformed/activity-ktx-1.12.2/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.activity:activity:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/5828436ae62aa7a3532f4761ace59604/transformed/activity-1.12.2/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.activity:activity-compose:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/48f027bfd987e8f6ef98e02dabbbbdeb/transformed/activity-compose-1.12.2/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:17:1-31:12
+MERGED from [androidx.room:room-ktx:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/fd93ed1f32ad0747d4523e49e51b2c8c/transformed/room-ktx-2.6.1/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.datastore:datastore-core-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/fb3a979500e1cdbfb03bf02cda5d2d4a/transformed/datastore-core-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.datastore:datastore-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/2fecd01c8bb088f20b482cbe1baf8a51/transformed/datastore-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.datastore:datastore-preferences-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/88b3ab7e620954e21c2db04ff889467c/transformed/datastore-preferences-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.core:core-viewtree:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e1becf04a96863c8c9e6beaf21f4f754/transformed/core-viewtree-1.0.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.annotation:annotation-experimental:1.4.1] /Users/norman/.gradle/caches/8.13/transforms/8dad97ac3b61ef2b998c8a777d510a6b/transformed/annotation-experimental-1.4.1/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.sqlite:sqlite-framework:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/d78ddf5d976c1a2c4f4ff2b8d240e2ee/transformed/sqlite-framework-2.4.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.sqlite:sqlite:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/27f9f5b85f7b2fbbe485f716c92094e7/transformed/sqlite-2.4.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:17:1-55:12
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:17:1-33:12
+MERGED from [androidx.tracing:tracing:1.2.0] /Users/norman/.gradle/caches/8.13/transforms/6373ec5e87ffb176a0c0d0f35a29ca29/transformed/tracing-1.2.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/7444715268b13e1931cd465905183ff4/transformed/interpolator-1.0.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/a3e78b61a9ea5040ec043f3973eb7ea8/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:17:1-27:12
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/norman/.gradle/caches/8.13/transforms/5abd948cb5cf475af5d5711b3c3ea16a/transformed/core-runtime-2.2.0/AndroidManifest.xml:17:1-22:12
+MERGED from [com.google.dagger:dagger-lint-aar:2.54] /Users/norman/.gradle/caches/8.13/transforms/0900ee5dc5f5973828b3db0aaf1321d6/transformed/dagger-lint-aar-2.54/AndroidManifest.xml:16:1-19:12
+	package
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+	android:versionName
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+	android:versionCode
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:4:5-67
+MERGED from [:core:crypto] /Users/norman/Development/android/projects/kuira-android-wallet/core/crypto/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:7:5-67
+MERGED from [:core:crypto] /Users/norman/Development/android/projects/kuira-android-wallet/core/crypto/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:7:5-67
+	android:name
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:4:22-64
+application
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:6:5-18:19
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:6:5-18:19
+MERGED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:16:5-18:47
+MERGED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:16:5-18:47
+MERGED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:28:5-89
+MERGED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:28:5-89
+MERGED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:23:5-29:19
+MERGED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:23:5-29:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/a3e78b61a9ea5040ec043f3973eb7ea8/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/a3e78b61a9ea5040ec043f3973eb7ea8/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
+	android:extractNativeLibs
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+	android:appComponentFactory
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:28:18-86
+	android:label
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:8:9-41
+	android:allowBackup
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:7:9-36
+	android:networkSecurityConfig
+		ADDED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:17:9-69
+	android:theme
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:9:9-72
+	android:usesCleartextTraffic
+		ADDED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:18:9-44
+activity#com.midnight.example.bboard.BBoardActivity
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:10:9-17:20
+	android:exported
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:12:13-36
+	android:name
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:11:13-43
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:13:13-16:29
+action#android.intent.action.MAIN
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:14:17-69
+	android:name
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:14:25-66
+category#android.intent.category.LAUNCHER
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:15:17-77
+	android:name
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml:15:27-74
+uses-sdk
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+MERGED from [:core:connector] /Users/norman/Development/android/projects/kuira-android-wallet/core/connector/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:connector] /Users/norman/Development/android/projects/kuira-android-wallet/core/connector/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:13:5-44
+MERGED from [:core:ledger] /Users/norman/Development/android/projects/kuira-android-wallet/core/ledger/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:13:5-44
+MERGED from [:core:wallet] /Users/norman/Development/android/projects/kuira-android-wallet/core/wallet/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:wallet] /Users/norman/Development/android/projects/kuira-android-wallet/core/wallet/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:indexer] /Users/norman/Development/android/projects/kuira-android-wallet/core/indexer/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:indexer] /Users/norman/Development/android/projects/kuira-android-wallet/core/indexer/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:network] /Users/norman/Development/android/projects/kuira-android-wallet/core/network/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:network] /Users/norman/Development/android/projects/kuira-android-wallet/core/network/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [com.google.dagger:hilt-android:2.54] /Users/norman/.gradle/caches/8.13/transforms/0142c95a833973f44a48ee7c06c3d55a/transformed/hilt-android-2.54/AndroidManifest.xml:18:3-42
+MERGED from [com.google.dagger:hilt-android:2.54] /Users/norman/.gradle/caches/8.13/transforms/0142c95a833973f44a48ee7c06c3d55a/transformed/hilt-android-2.54/AndroidManifest.xml:18:3-42
+MERGED from [androidx.fragment:fragment:1.5.1] /Users/norman/.gradle/caches/8.13/transforms/88fb3a29f8c8ad67d3ac12011b792925/transformed/fragment-1.5.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.fragment:fragment:1.5.1] /Users/norman/.gradle/caches/8.13/transforms/88fb3a29f8c8ad67d3ac12011b792925/transformed/fragment-1.5.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.compose.material3:material3-android:1.3.0] /Users/norman/.gradle/caches/8.13/transforms/03c0ab93bbe015920f0c4be62c841752/transformed/material3-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.material3:material3-android:1.3.0] /Users/norman/.gradle/caches/8.13/transforms/03c0ab93bbe015920f0c4be62c841752/transformed/material3-release/AndroidManifest.xml:20:5-44
+MERGED from [:core:crypto] /Users/norman/Development/android/projects/kuira-android-wallet/core/crypto/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [:core:crypto] /Users/norman/Development/android/projects/kuira-android-wallet/core/crypto/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:5:5-44
+MERGED from [androidx.loader:loader:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/043e2008d5abf3979bc7c6046a1f8395/transformed/loader-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.loader:loader:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/043e2008d5abf3979bc7c6046a1f8395/transformed/loader-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.animation:animation-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/1c8da7fa763bd06b9e77d35c14a253a8/transformed/animation-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/1c8da7fa763bd06b9e77d35c14a253a8/transformed/animation-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-ripple-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e125d344f221f72b27491fac485d4761/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-ripple-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e125d344f221f72b27491fac485d4761/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/70af698a356584b78817240ed8b02e17/transformed/animation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/70af698a356584b78817240ed8b02e17/transformed/animation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e3622d3acf4d45fd198199b4b155e11a/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/e3622d3acf4d45fd198199b4b155e11a/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/fd2f1bf60d36426b2db75df88fb1b47e/transformed/foundation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/fd2f1bf60d36426b2db75df88fb1b47e/transformed/foundation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-geometry-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e5a48a889b573b4286a8baf39a06f321/transformed/ui-geometry/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-geometry-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e5a48a889b573b4286a8baf39a06f321/transformed/ui-geometry/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-util-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/25db079a0ee40eb4cd7d675864e0b51e/transformed/ui-util/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-util-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/25db079a0ee40eb4cd7d675864e0b51e/transformed/ui-util/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-unit-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/db03e2f9528daa4529ccdf5b9aa698ff/transformed/ui-unit/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-unit-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/db03e2f9528daa4529ccdf5b9aa698ff/transformed/ui-unit/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-graphics-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/082b046174d5177438526265e8abb95d/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-graphics-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/082b046174d5177438526265e8abb95d/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-text-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/a91119daaee9e836af9ebe4cd15e18c4/transformed/ui-text/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-text-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/a91119daaee9e836af9ebe4cd15e18c4/transformed/ui-text/AndroidManifest.xml:5:5-44
+MERGED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e410a6a7377d86d22d54fdcb0cc3e6cf/transformed/lifecycle-livedata-core-ktx-2.10.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e410a6a7377d86d22d54fdcb0cc3e6cf/transformed/lifecycle-livedata-core-ktx-2.10.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/fc442a4a0c32b1d51551b72fca51009e/transformed/lifecycle-livedata-2.10.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/fc442a4a0c32b1d51551b72fca51009e/transformed/lifecycle-livedata-2.10.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.navigationevent:navigationevent-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/d6d49ebde77d1538d78ebe7086fcd74e/transformed/navigationevent/AndroidManifest.xml:5:5-44
+MERGED from [androidx.navigationevent:navigationevent-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/d6d49ebde77d1538d78ebe7086fcd74e/transformed/navigationevent/AndroidManifest.xml:5:5-44
+MERGED from [androidx.navigationevent:navigationevent-compose-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/afa02540e9d8ad1d27648e53bcc789f9/transformed/navigationevent-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.navigationevent:navigationevent-compose-android:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/afa02540e9d8ad1d27648e53bcc789f9/transformed/navigationevent-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-annotation-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/ca72ede0f1bf0e131a2d5921c6af5e0a/transformed/runtime-annotation/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-annotation-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/ca72ede0f1bf0e131a2d5921c6af5e0a/transformed/runtime-annotation/AndroidManifest.xml:5:5-44
+MERGED from [androidx.savedstate:savedstate-ktx:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/8e91f45903fb25c04b16be33534ac693/transformed/savedstate-ktx-1.4.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.savedstate:savedstate-ktx:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/8e91f45903fb25c04b16be33534ac693/transformed/savedstate-ktx-1.4.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.savedstate:savedstate-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/eb4a7b39add6d29493f4291913612a81/transformed/savedstate/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/eb4a7b39add6d29493f4291913612a81/transformed/savedstate/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate-compose-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/4c6f34b3bcc052cc03d96873c691d9b0/transformed/savedstate-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.savedstate:savedstate-compose-android:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/4c6f34b3bcc052cc03d96873c691d9b0/transformed/savedstate-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e35d57d6a30c1793a75fe247ea593c03/transformed/runtime/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/e35d57d6a30c1793a75fe247ea593c03/transformed/runtime/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/15177042bb7e2156cac15ea28c75d9bc/transformed/runtime-saveable/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/15177042bb7e2156cac15ea28c75d9bc/transformed/runtime-saveable/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/38bd9e454befa4c735627eff2ca334c5/transformed/lifecycle-runtime-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/38bd9e454befa4c735627eff2ca334c5/transformed/lifecycle-runtime-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/ee9549df870ca754e55e523d338afb6a/transformed/lifecycle-runtime/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/ee9549df870ca754e55e523d338afb6a/transformed/lifecycle-runtime/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/970ec41127bc2fa35d425106cb74fb90/transformed/lifecycle-viewmodel-2.10.0/AndroidManifest.xml:4:5-43
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/970ec41127bc2fa35d425106cb74fb90/transformed/lifecycle-viewmodel-2.10.0/AndroidManifest.xml:4:5-43
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/de484ca26f92d953ac2d30163c6ac1db/transformed/lifecycle-viewmodel/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/de484ca26f92d953ac2d30163c6ac1db/transformed/lifecycle-viewmodel/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/95ec7aff7ae9be2fd1867274ea75a854/transformed/lifecycle-viewmodel-savedstate/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/95ec7aff7ae9be2fd1867274ea75a854/transformed/lifecycle-viewmodel-savedstate/AndroidManifest.xml:20:5-44
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/f18c936263cc03a958f108c6f3e54642/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/f18c936263cc03a958f108c6f3e54642/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
+MERGED from [androidx.core:core-ktx:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/48269a876d5ccd42681daecb378d5bae/transformed/core-ktx-1.17.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.core:core-ktx:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/48269a876d5ccd42681daecb378d5bae/transformed/core-ktx-1.17.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.viewpager:viewpager:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/93a1ee6ec76a0379dd327d1868717f4b/transformed/viewpager-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.viewpager:viewpager:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/93a1ee6ec76a0379dd327d1868717f4b/transformed/viewpager-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.customview:customview:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/0bb991609ac9cdbe9d92a025b73f10bb/transformed/customview-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.customview:customview:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/0bb991609ac9cdbe9d92a025b73f10bb/transformed/customview-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e7bdc0621cef102b3038f6dd6cb156b3/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e7bdc0621cef102b3038f6dd6cb156b3/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.graphics:graphics-path:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/6db2892467498d9c9f9f7b75ca5bfe9d/transformed/graphics-path-1.0.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.graphics:graphics-path:1.0.1] /Users/norman/.gradle/caches/8.13/transforms/6db2892467498d9c9f9f7b75ca5bfe9d/transformed/graphics-path-1.0.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/05d7beef1a652da715b85a6c323a56bc/transformed/lifecycle-runtime-ktx/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/05d7beef1a652da715b85a6c323a56bc/transformed/lifecycle-runtime-ktx/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8e8974ea1a6614fd3a776e35f3712400/transformed/lifecycle-livedata-core-2.10.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8e8974ea1a6614fd3a776e35f3712400/transformed/lifecycle-livedata-core-2.10.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e469a4e7a41ae6917cecdde4355358b4/transformed/lifecycle-viewmodel-ktx-2.10.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/e469a4e7a41ae6917cecdde4355358b4/transformed/lifecycle-viewmodel-ktx-2.10.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/d1d1c74921678a863853a649951e3062/transformed/lifecycle-viewmodel-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/d1d1c74921678a863853a649951e3062/transformed/lifecycle-viewmodel-compose/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-icons-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/95cca94d885b48f7c373ac988470d1eb/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-icons-core-android:1.7.0] /Users/norman/.gradle/caches/8.13/transforms/95cca94d885b48f7c373ac988470d1eb/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/bef63eb78d9313afd60bef3956f4cb5e/transformed/ui-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-android:1.9.2] /Users/norman/.gradle/caches/8.13/transforms/bef63eb78d9313afd60bef3956f4cb5e/transformed/ui-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-ktx:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/6f478d448b300009e8bc21fe691c7f0a/transformed/activity-ktx-1.12.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-ktx:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/6f478d448b300009e8bc21fe691c7f0a/transformed/activity-ktx-1.12.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/5828436ae62aa7a3532f4761ace59604/transformed/activity-1.12.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.activity:activity:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/5828436ae62aa7a3532f4761ace59604/transformed/activity-1.12.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.activity:activity-compose:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/48f027bfd987e8f6ef98e02dabbbbdeb/transformed/activity-compose-1.12.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-compose:1.12.2] /Users/norman/.gradle/caches/8.13/transforms/48f027bfd987e8f6ef98e02dabbbbdeb/transformed/activity-compose-1.12.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:21:5-44
+MERGED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:21:5-44
+MERGED from [androidx.room:room-ktx:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/fd93ed1f32ad0747d4523e49e51b2c8c/transformed/room-ktx-2.6.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.room:room-ktx:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/fd93ed1f32ad0747d4523e49e51b2c8c/transformed/room-ktx-2.6.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.datastore:datastore-core-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/fb3a979500e1cdbfb03bf02cda5d2d4a/transformed/datastore-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.datastore:datastore-core-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/fb3a979500e1cdbfb03bf02cda5d2d4a/transformed/datastore-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.datastore:datastore-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/2fecd01c8bb088f20b482cbe1baf8a51/transformed/datastore-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.datastore:datastore-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/2fecd01c8bb088f20b482cbe1baf8a51/transformed/datastore-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.datastore:datastore-preferences-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/88b3ab7e620954e21c2db04ff889467c/transformed/datastore-preferences-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.datastore:datastore-preferences-android:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/88b3ab7e620954e21c2db04ff889467c/transformed/datastore-preferences-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.core:core-viewtree:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e1becf04a96863c8c9e6beaf21f4f754/transformed/core-viewtree-1.0.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.core:core-viewtree:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/e1becf04a96863c8c9e6beaf21f4f754/transformed/core-viewtree-1.0.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.4.1] /Users/norman/.gradle/caches/8.13/transforms/8dad97ac3b61ef2b998c8a777d510a6b/transformed/annotation-experimental-1.4.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.4.1] /Users/norman/.gradle/caches/8.13/transforms/8dad97ac3b61ef2b998c8a777d510a6b/transformed/annotation-experimental-1.4.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.sqlite:sqlite-framework:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/d78ddf5d976c1a2c4f4ff2b8d240e2ee/transformed/sqlite-framework-2.4.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite-framework:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/d78ddf5d976c1a2c4f4ff2b8d240e2ee/transformed/sqlite-framework-2.4.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/27f9f5b85f7b2fbbe485f716c92094e7/transformed/sqlite-2.4.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite:2.4.0] /Users/norman/.gradle/caches/8.13/transforms/27f9f5b85f7b2fbbe485f716c92094e7/transformed/sqlite-2.4.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.tracing:tracing:1.2.0] /Users/norman/.gradle/caches/8.13/transforms/6373ec5e87ffb176a0c0d0f35a29ca29/transformed/tracing-1.2.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.tracing:tracing:1.2.0] /Users/norman/.gradle/caches/8.13/transforms/6373ec5e87ffb176a0c0d0f35a29ca29/transformed/tracing-1.2.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/7444715268b13e1931cd465905183ff4/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/norman/.gradle/caches/8.13/transforms/7444715268b13e1931cd465905183ff4/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/a3e78b61a9ea5040ec043f3973eb7ea8/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/a3e78b61a9ea5040ec043f3973eb7ea8/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/norman/.gradle/caches/8.13/transforms/5abd948cb5cf475af5d5711b3c3ea16a/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/norman/.gradle/caches/8.13/transforms/5abd948cb5cf475af5d5711b3c3ea16a/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
+MERGED from [com.google.dagger:dagger-lint-aar:2.54] /Users/norman/.gradle/caches/8.13/transforms/0900ee5dc5f5973828b3db0aaf1321d6/transformed/dagger-lint-aar-2.54/AndroidManifest.xml:18:3-42
+MERGED from [com.google.dagger:dagger-lint-aar:2.54] /Users/norman/.gradle/caches/8.13/transforms/0900ee5dc5f5973828b3db0aaf1321d6/transformed/dagger-lint-aar-2.54/AndroidManifest.xml:18:3-42
+	android:targetSdkVersion
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/examples/bboard/src/main/AndroidManifest.xml
+provider#androidx.startup.InitializationProvider
+ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/norman/.gradle/caches/8.13/transforms/5b4e1f61ee28af538d7f71d8a83c60a8/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
+	tools:node
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:28:13-31
+	android:authorities
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:26:13-68
+	android:exported
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:27:13-37
+	android:name
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:25:13-67
+meta-data#androidx.emoji2.text.EmojiCompatInitializer
+ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.emoji2:emoji2:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/b87962416118100ce95a1ed12247489c/transformed/emoji2-1.4.0/AndroidManifest.xml:30:17-75
+meta-data#androidx.lifecycle.ProcessLifecycleInitializer
+ADDED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.lifecycle:lifecycle-process:2.10.0] /Users/norman/.gradle/caches/8.13/transforms/8ff8efa37a57fc4c38eafeb24fa0e775/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:30:17-78
+permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:22:5-24:47
+	android:protectionLevel
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:24:9-44
+	android:name
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:23:9-81
+permission#com.midnight.example.bboard.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:22:5-24:47
+	android:protectionLevel
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:24:9-44
+	android:name
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:23:9-81
+uses-permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:26:5-97
+	android:name
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:26:22-94
+uses-permission#com.midnight.example.bboard.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:26:5-97
+	android:name
+		ADDED from [androidx.core:core:1.17.0] /Users/norman/.gradle/caches/8.13/transforms/fa5d3907f3bbe82456511e623eac5721/transformed/core-1.17.0/AndroidManifest.xml:26:22-94
+service#androidx.room.MultiInstanceInvalidationService
+ADDED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+	android:exported
+		ADDED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+	tools:ignore
+		ADDED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:28:13-60
+	android:directBootAware
+		ADDED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+	android:name
+		ADDED from [androidx.room:room-runtime:2.6.1] /Users/norman/.gradle/caches/8.13/transforms/b946c52299f54a43bdf391afd84811b1/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+meta-data#androidx.profileinstaller.ProfileInstallerInitializer
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:30:17-85
+receiver#androidx.profileinstaller.ProfileInstallReceiver
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:34:9-52:20
+	android:enabled
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:37:13-35
+	android:exported
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:38:13-36
+	android:permission
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:39:13-57
+	android:directBootAware
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:36:13-44
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:35:13-76
+intent-filter#action:name:androidx.profileinstaller.action.INSTALL_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:40:13-42:29
+action#androidx.profileinstaller.action.INSTALL_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:17-91
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:25-88
+intent-filter#action:name:androidx.profileinstaller.action.SKIP_FILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:43:13-45:29
+action#androidx.profileinstaller.action.SKIP_FILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:17-85
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:25-82
+intent-filter#action:name:androidx.profileinstaller.action.SAVE_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:46:13-48:29
+action#androidx.profileinstaller.action.SAVE_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:17-88
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:25-85
+intent-filter#action:name:androidx.profileinstaller.action.BENCHMARK_OPERATION
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:49:13-51:29
+action#androidx.profileinstaller.action.BENCHMARK_OPERATION
+ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:17-95
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.4.0] /Users/norman/.gradle/caches/8.13/transforms/a1beb56a61deaf2c7a56c6c26659f1b7/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:25-92
