@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -49,6 +51,10 @@ dependencies {
 
     // WebSocket server for DApp connector
     implementation(libs.java.websocket)
+
+    // Hilt DI
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     // Internal dependencies — connector delegates to these
     implementation(project(":core:crypto"))
