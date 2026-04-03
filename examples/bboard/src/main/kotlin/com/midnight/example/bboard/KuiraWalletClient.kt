@@ -1,149 +1,125 @@
 package com.midnight.example.bboard
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.*
-import org.java_websocket.client.WebSocketClient
-import org.java_websocket.handshake.ServerHandshake
-import java.net.URI
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
+import com.midnight.kuira.core.connector.model.ConnectionStatus
+import com.midnight.kuira.core.connector.transport.ConnectorBinder
 import kotlinx.coroutines.CompletableDeferred
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Kuira Wallet Client — how Android dApps talk to the wallet.
+ * Kuira Wallet Client — how native Android dApps talk to the wallet.
  *
- * Connects via WebSocket to Kuira's connector on localhost:9932.
- * Sends JSON-RPC 2.0 requests, receives responses.
+ * Binds to Kuira's ConnectorService via Android IPC. No WebSocket,
+ * no JSON-RPC, no serialization. Direct Kotlin API calls.
  *
- * This is what a dApp developer uses. No Midnight SDK needed —
- * just this client and JSON-RPC.
+ * This is the recommended transport for Android-native dApps.
  *
  * Usage:
  * ```kotlin
- * val wallet = KuiraWalletClient()
- * wallet.connect()
- * val status = wallet.call("getConnectionStatus")
- * val balances = wallet.call("getShieldedBalances")
- * wallet.disconnect()
+ * val wallet = KuiraWalletClient(context)
+ * wallet.bind()
+ * val status = wallet.getConnectionStatus()
+ * val addresses = wallet.getShieldedAddresses()
+ * wallet.unbind()
  * ```
  */
-class KuiraWalletClient(
-    private val port: Int = 9932,
-) {
-    private val json = Json { ignoreUnknownKeys = true }
-    private val nextId = AtomicInteger(1)
-    private val pending = ConcurrentHashMap<Int, CompletableDeferred<JsonObject>>()
-    private var ws: WebSocketClient? = null
+class KuiraWalletClient(private val context: Context) {
 
-    val isConnected: Boolean get() = ws?.isOpen == true
+    private var binder: ConnectorBinder? = null
+    private var bindDeferred: CompletableDeferred<Boolean>? = null
 
-    suspend fun connect(): Boolean = withContext(Dispatchers.IO) {
-        val latch = CompletableDeferred<Boolean>()
+    val isConnected: Boolean get() = binder != null
 
-        ws = object : WebSocketClient(URI("ws://127.0.0.1:$port")) {
-            override fun onOpen(handshakedata: ServerHandshake) {
-                latch.complete(true)
-            }
-            override fun onMessage(message: String) {
-                val obj = json.parseToJsonElement(message).jsonObject
-                val id = obj["id"]?.jsonPrimitive?.int ?: return
-                pending.remove(id)?.complete(obj)
-            }
-            override fun onClose(code: Int, reason: String, remote: Boolean) {
-                if (!latch.isCompleted) latch.complete(false)
-                pending.values.forEach {
-                    it.completeExceptionally(Exception("Connection closed"))
-                }
-                pending.clear()
-            }
-            override fun onError(ex: Exception) {
-                if (!latch.isCompleted) latch.complete(false)
-            }
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            binder = service as? ConnectorBinder
+            bindDeferred?.complete(binder != null)
         }
-        ws?.connect()
-        latch.await()
+        override fun onServiceDisconnected(name: ComponentName?) {
+            binder = null
+        }
     }
 
-    fun disconnect() {
-        ws?.close()
-        ws = null
-    }
+    suspend fun bind(): Boolean {
+        val deferred = CompletableDeferred<Boolean>()
+        bindDeferred = deferred
 
-    /**
-     * Call a ConnectedAPI method. Returns the "result" field from the response.
-     *
-     * @throws WalletError if the response contains an error
-     */
-    suspend fun call(method: String, params: JsonObject = buildJsonObject {}): JsonElement {
-        val client = ws ?: throw WalletError(-1, "Not connected")
-        val id = nextId.getAndIncrement()
-        val deferred = CompletableDeferred<JsonObject>()
-        pending[id] = deferred
-
-        val request = buildJsonObject {
-            put("jsonrpc", "2.0")
-            put("id", id)
-            put("method", method)
-            put("params", params)
-        }
-        client.send(request.toString())
-
-        val response = deferred.await()
-
-        val error = response["error"]?.jsonObject
-        if (error != null) {
-            throw WalletError(
-                error["code"]?.jsonPrimitive?.int ?: -1,
-                error["message"]?.jsonPrimitive?.content ?: "Unknown error",
+        val intent = Intent().apply {
+            setClassName(
+                "com.midnight.kuira",
+                "com.midnight.kuira.service.ConnectorService",
             )
         }
-        return response["result"] ?: JsonNull
+        val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        if (!bound) return false
+
+        return deferred.await()
     }
 
-    // ── Convenience methods (what bboard actually calls) ──
-
-    suspend fun getConnectionStatus(): ConnectionInfo {
-        val result = call("getConnectionStatus").jsonObject
-        return ConnectionInfo(
-            status = result["status"]?.jsonPrimitive?.content ?: "unknown",
-            networkId = result["networkId"]?.jsonPrimitive?.content,
-        )
+    fun unbind() {
+        context.unbindService(connection)
+        binder = null
     }
 
-    suspend fun getConfiguration(): WalletConfiguration {
-        val result = call("getConfiguration").jsonObject
+    // ── Direct Kotlin API (type-safe, no serialization) ──
+
+    fun getConnectionStatus(): ConnectionInfo {
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        val status = handler.getConnectionStatus()
+        return when (status) {
+            is ConnectionStatus.Connected -> ConnectionInfo("connected", status.networkId)
+            is ConnectionStatus.Disconnected -> ConnectionInfo("disconnected", null)
+        }
+    }
+
+    fun getConfiguration(): WalletConfiguration {
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        val config = handler.getConfiguration()
         return WalletConfiguration(
-            indexerUri = result["indexerUri"]?.jsonPrimitive?.content ?: "",
-            indexerWsUri = result["indexerWsUri"]?.jsonPrimitive?.content ?: "",
-            substrateNodeUri = result["substrateNodeUri"]?.jsonPrimitive?.content ?: "",
-            networkId = result["networkId"]?.jsonPrimitive?.content ?: "",
+            indexerUri = config.indexerUri,
+            indexerWsUri = config.indexerWsUri,
+            substrateNodeUri = config.substrateNodeUri,
+            networkId = config.networkId,
         )
     }
 
-    suspend fun getShieldedAddresses(): ShieldedAddresses {
-        val result = call("getShieldedAddresses").jsonObject
+    fun getShieldedAddresses(): ShieldedAddresses {
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        val result = handler.getShieldedAddresses()
         return ShieldedAddresses(
-            shieldedAddress = result["shieldedAddress"]?.jsonPrimitive?.content ?: "",
-            coinPublicKey = result["shieldedCoinPublicKey"]?.jsonPrimitive?.content ?: "",
-            encryptionPublicKey = result["shieldedEncryptionPublicKey"]?.jsonPrimitive?.content ?: "",
+            shieldedAddress = result.shieldedAddress,
+            coinPublicKey = result.shieldedCoinPublicKey,
+            encryptionPublicKey = result.shieldedEncryptionPublicKey,
         )
     }
 
-    suspend fun getUnshieldedAddress(): String {
-        val result = call("getUnshieldedAddress").jsonObject
-        return result["unshieldedAddress"]?.jsonPrimitive?.content ?: ""
+    fun getUnshieldedAddress(): String {
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        return handler.getUnshieldedAddress().unshieldedAddress
     }
 
     suspend fun balanceUnsealedTransaction(txHex: String): String {
-        val params = buildJsonObject { put("tx", txHex) }
-        val result = call("balanceUnsealedTransaction", params).jsonObject
-        return result["tx"]?.jsonPrimitive?.content ?: ""
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        return handler.balanceUnsealedTransaction(txHex)
     }
 
     suspend fun submitTransaction(txHex: String) {
-        val params = buildJsonObject { put("tx", txHex) }
-        call("submitTransaction", params)
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        handler.submitTransaction(txHex)
+    }
+
+    suspend fun signData(data: String, encoding: String = "hex"): SignResult {
+        val handler = binder?.handler ?: throw WalletError("Not bound to Kuira")
+        val result = handler.signData(
+            data,
+            com.midnight.kuira.core.connector.model.SignDataOptions(
+                com.midnight.kuira.core.connector.model.SignEncoding.valueOf(encoding.uppercase()),
+            ),
+        )
+        return SignResult(result.data, result.signature, result.verifyingKey)
     }
 }
 
@@ -159,4 +135,5 @@ data class ShieldedAddresses(
     val coinPublicKey: String,
     val encryptionPublicKey: String,
 )
-class WalletError(val code: Int, override val message: String) : Exception(message)
+data class SignResult(val data: String, val signature: String, val verifyingKey: String)
+class WalletError(override val message: String) : Exception(message)

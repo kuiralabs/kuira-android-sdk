@@ -1,24 +1,23 @@
 package com.midnight.example.bboard
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /**
- * BBoard ViewModel — connects to Kuira wallet and manages board state.
+ * BBoard ViewModel — connects to Kuira wallet via Bound Service.
  *
- * Demonstrates the full dApp → wallet integration flow:
- * 1. Connect to wallet
- * 2. Get configuration and addresses
- * 3. Post/takedown messages (triggers wallet approval)
+ * Demonstrates the Android-native dApp → wallet integration:
+ * 1. Bind to Kuira's ConnectorService (IPC, no network)
+ * 2. Get configuration and addresses (direct Kotlin calls)
+ * 3. Post/takedown messages (triggers wallet approval sheet)
  */
-class BBoardViewModel : ViewModel() {
+class BBoardViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val wallet = KuiraWalletClient()
+    private val wallet = KuiraWalletClient(application)
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Disconnected)
     val state: StateFlow<BBoardState> = _state
@@ -27,13 +26,12 @@ class BBoardViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting
             try {
-                val connected = wallet.connect()
-                if (!connected) {
-                    _state.value = BBoardState.Error("Could not connect to Kuira wallet. Is it running?")
+                val bound = wallet.bind()
+                if (!bound) {
+                    _state.value = BBoardState.Error("Could not bind to Kuira. Is it installed and running?")
                     return@launch
                 }
 
-                // Get wallet info — same calls the React bboard makes
                 val status = wallet.getConnectionStatus()
                 val config = wallet.getConfiguration()
                 val shielded = wallet.getShieldedAddresses()
@@ -59,26 +57,15 @@ class BBoardViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = current.copy(boardState = BoardState.Posting)
             try {
-                // In a real dApp, this would:
-                // 1. Build the contract transaction locally
-                // 2. Call wallet.balanceUnsealedTransaction(tx) — wallet adds coins
-                // 3. Call wallet.submitTransaction(balancedTx) — wallet submits
-
-                // For this example, we simulate with a signData call
-                // which triggers the Kuira approval sheet
-                wallet.call("signData", buildJsonObject {
-                    put("data", message)
-                    put("options", buildJsonObject {
-                        put("encoding", "text")
-                    })
-                })
+                // In a real dApp: build contract tx → balanceUnsealedTransaction → submitTransaction
+                // For this example: signData triggers the Kuira approval sheet
+                wallet.signData(message, "text")
 
                 _state.value = current.copy(
                     boardState = BoardState.Occupied(message = message, isOwner = true),
                 )
             } catch (e: WalletError) {
                 if (e.message.contains("PermissionRejected")) {
-                    // User rejected in Kuira approval sheet
                     _state.value = current.copy(boardState = BoardState.Vacant)
                 } else {
                     _state.value = BBoardState.Error(e.message)
@@ -95,12 +82,12 @@ class BBoardViewModel : ViewModel() {
     }
 
     fun disconnect() {
-        wallet.disconnect()
+        try { wallet.unbind() } catch (_: Exception) {}
         _state.value = BBoardState.Disconnected
     }
 
     override fun onCleared() {
-        wallet.disconnect()
+        try { wallet.unbind() } catch (_: Exception) {}
         super.onCleared()
     }
 }

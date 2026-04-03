@@ -44,11 +44,8 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // JSON parsing for wallet responses
+    // JSON parsing (only if using JSON-RPC via binder)
     implementation(libs.kotlinx.serialization.json)
-
-    // WebSocket client to connect to Kuira
-    implementation(libs.java.websocket)
 
     // Testing
     testImplementation(libs.junit)
