@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":feature:send"))
     implementation(project(":feature:dust"))
     implementation(project(":core:connector"))
+    implementation(libs.kotlinx.serialization.json)
     implementation(project(":core:designsystem"))
     implementation(project(":core:indexer"))
     implementation(project(":core:network"))

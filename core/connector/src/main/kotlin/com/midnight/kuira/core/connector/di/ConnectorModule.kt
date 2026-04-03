@@ -17,8 +17,8 @@ object ConnectorModule {
     @Singleton
     fun provideConnectorManager(
         networkConfig: NetworkConfig,
+        approvalManager: ApprovalManager,
     ): ConnectorManager {
-        // Auto-approve for MVP — real ApprovalManager wired in Step 5c
-        return ConnectorManager(networkConfig)
+        return ConnectorManager(networkConfig, approvalManager)
     }
 }
