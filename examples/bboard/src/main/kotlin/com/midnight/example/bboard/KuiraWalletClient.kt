@@ -1,5 +1,6 @@
 package com.midnight.example.bboard
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -10,31 +11,45 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Kuira Wallet Client — how native Android dApps talk to the wallet.
+ * Kuira Wallet Client for Android dApps.
  *
- * Binds to Kuira's ConnectorService via Android Messenger IPC.
- * Sends JSON-RPC strings, receives JSON-RPC responses — same protocol
- * as WebSocket but over cross-process Android IPC.
+ * Two-phase connection:
+ * 1. [requestApproval] — launch Kuira's approval Activity (user approves)
+ * 2. [bind] — bind to ConnectorService via Messenger IPC
  *
- * Usage:
- * ```kotlin
- * val wallet = KuiraWalletClient(context)
- * wallet.bind()
- * val status = wallet.getConnectionStatus()
- * wallet.unbind()
- * ```
+ * After binding, call wallet methods via [call] or convenience methods.
+ *
+ * The dApp (foreground) launches the approval Activity — this is the
+ * standard Android pattern used by Solana MWA, MetaMask, Phantom.
  */
 class KuiraWalletClient(private val context: Context) {
 
     companion object {
         private const val MSG_REQUEST = 1
         private const val MSG_RESPONSE = 2
+        private const val TAG = "KuiraClient"
+
+        /** Intent action for launching Kuira's connection approval screen */
+        const val ACTION_CONNECT_APPROVAL = "com.midnight.kuira.CONNECT_APPROVAL"
+        const val KUIRA_PACKAGE = "com.midnight.kuira"
+        const val ACTION_CONNECTOR = "com.midnight.kuira.CONNECTOR"
+
+        /**
+         * Create the Intent that the dApp should launch via startActivityForResult.
+         * Returns RESULT_OK if approved, RESULT_CANCELED if denied.
+         */
+        fun createApprovalIntent(): Intent {
+            return Intent(ACTION_CONNECT_APPROVAL).apply {
+                setPackage(KUIRA_PACKAGE)
+            }
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -48,6 +63,7 @@ class KuiraWalletClient(private val context: Context) {
         override fun handleMessage(msg: Message) {
             if (msg.what != MSG_RESPONSE) return
             val response = msg.data?.getString("response") ?: return
+            Log.d(TAG, "Reply: ${response.take(100)}")
             val obj = json.parseToJsonElement(response).jsonObject
             val id = obj["id"]?.jsonPrimitive?.int ?: return
             pending.remove(id)?.complete(obj)
@@ -58,23 +74,40 @@ class KuiraWalletClient(private val context: Context) {
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.d(TAG, "Service connected")
             serviceMessenger = Messenger(service)
             bindDeferred?.complete(true)
         }
         override fun onServiceDisconnected(name: ComponentName?) {
+            Log.d(TAG, "Service disconnected")
             serviceMessenger = null
         }
     }
 
+    /**
+     * Check if approval result was granted.
+     * Call this in your ActivityResultCallback.
+     */
+    fun isApproved(resultCode: Int): Boolean {
+        return resultCode == Activity.RESULT_OK
+    }
+
+    /**
+     * Bind to Kuira's ConnectorService after approval.
+     * Call this ONLY after [requestApproval] returned RESULT_OK.
+     */
     suspend fun bind(): Boolean {
         val deferred = CompletableDeferred<Boolean>()
         bindDeferred = deferred
 
-        val intent = Intent("com.midnight.kuira.CONNECTOR").apply {
-            setPackage("com.midnight.kuira")
+        val intent = Intent(ACTION_CONNECTOR).apply {
+            setPackage(KUIRA_PACKAGE)
         }
         val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-        if (!bound) return false
+        if (!bound) {
+            Log.e(TAG, "bindService returned false")
+            return false
+        }
 
         return deferred.await()
     }
@@ -87,7 +120,7 @@ class KuiraWalletClient(private val context: Context) {
     /**
      * Send a JSON-RPC request to Kuira and await the response.
      */
-    private suspend fun call(method: String, params: JsonObject = buildJsonObject {}): JsonElement {
+    suspend fun call(method: String, params: JsonObject = buildJsonObject {}): JsonElement {
         val messenger = serviceMessenger ?: throw WalletError("Not bound to Kuira")
         val id = nextId.getAndIncrement()
         val deferred = CompletableDeferred<JsonObject>()
@@ -99,6 +132,8 @@ class KuiraWalletClient(private val context: Context) {
             put("method", method)
             put("params", params)
         }
+
+        Log.d(TAG, "Sending: ${request.toString().take(100)}")
 
         val msg = Message.obtain(null, MSG_REQUEST).apply {
             data = Bundle().apply { putString("request", request.toString()) }
@@ -151,9 +186,7 @@ class KuiraWalletClient(private val context: Context) {
     suspend fun signData(data: String, encoding: String = "hex"): SignResult {
         val params = buildJsonObject {
             put("data", data)
-            put("options", buildJsonObject {
-                put("encoding", encoding)
-            })
+            put("options", buildJsonObject { put("encoding", encoding) })
         }
         val result = call("signData", params).jsonObject
         return SignResult(
@@ -166,15 +199,11 @@ class KuiraWalletClient(private val context: Context) {
 
 data class ConnectionInfo(val status: String, val networkId: String?)
 data class WalletConfiguration(
-    val indexerUri: String,
-    val indexerWsUri: String,
-    val substrateNodeUri: String,
-    val networkId: String,
+    val indexerUri: String, val indexerWsUri: String,
+    val substrateNodeUri: String, val networkId: String,
 )
 data class ShieldedAddresses(
-    val shieldedAddress: String,
-    val coinPublicKey: String,
-    val encryptionPublicKey: String,
+    val shieldedAddress: String, val coinPublicKey: String, val encryptionPublicKey: String,
 )
 data class SignResult(val data: String, val signature: String, val verifyingKey: String)
 class WalletError(override val message: String) : Exception(message)

@@ -3,6 +3,7 @@ package com.midnight.example.bboard
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,16 +54,36 @@ import androidx.lifecycle.viewmodel.compose.viewModel
  * but for Android-first development.
  */
 class BBoardActivity : ComponentActivity() {
+
+    private val approvalLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // Phase 1 complete — user approved or denied in Kuira
+        viewModel.onApprovalResult(result.resultCode)
+    }
+
+    private lateinit var viewModel: BBoardViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            BBoardApp()
+            viewModel = viewModel()
+            BBoardApp(
+                viewModel = viewModel,
+                onRequestConnect = {
+                    // Phase 1: launch Kuira's approval screen (we are foreground, so this works)
+                    approvalLauncher.launch(KuiraWalletClient.createApprovalIntent())
+                },
+            )
         }
     }
 }
 
 @Composable
-fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
+fun BBoardApp(
+    viewModel: BBoardViewModel = viewModel(),
+    onRequestConnect: () -> Unit = {},
+) {
     val state by viewModel.state.collectAsState()
 
     Surface(
@@ -74,7 +95,6 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 .fillMaxSize()
                 .padding(24.dp),
         ) {
-            // Header
             Text(
                 text = "bboard",
                 color = Color.White,
@@ -92,9 +112,9 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(32.dp))
 
             when (val s = state) {
-                is BBoardState.Disconnected -> DisconnectedView { viewModel.connectToWallet() }
+                is BBoardState.Disconnected -> DisconnectedView(onRequestConnect)
                 is BBoardState.Connecting -> ConnectingView()
-                is BBoardState.Error -> ErrorView(s.message) { viewModel.connectToWallet() }
+                is BBoardState.Error -> ErrorView(s.message, onRequestConnect)
                 is BBoardState.Connected -> ConnectedView(
                     state = s,
                     onPost = { viewModel.postMessage(it) },

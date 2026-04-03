@@ -1,34 +1,44 @@
 package com.midnight.example.bboard
 
+import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
- * BBoard ViewModel — connects to Kuira wallet via Bound Service.
+ * BBoard ViewModel — two-phase wallet connection.
  *
- * Demonstrates the Android-native dApp → wallet integration:
- * 1. Bind to Kuira's ConnectorService (IPC, no network)
- * 2. Get configuration and addresses (direct Kotlin calls)
- * 3. Post/takedown messages (triggers wallet approval sheet)
+ * Phase 1: Launch Kuira's approval Activity (user sees approval sheet)
+ * Phase 2: Bind to ConnectorService via IPC (after approval)
  */
 class BBoardViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val wallet = KuiraWalletClient(application)
+    val wallet = KuiraWalletClient(application)
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Disconnected)
     val state: StateFlow<BBoardState> = _state
 
-    fun connectToWallet() {
+    /** Called after the approval Activity returns */
+    fun onApprovalResult(resultCode: Int) {
+        if (wallet.isApproved(resultCode)) {
+            bindAndLoadWallet()
+        } else {
+            _state.value = BBoardState.Error("Connection denied")
+        }
+    }
+
+    private fun bindAndLoadWallet() {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting
             try {
                 val bound = wallet.bind()
                 if (!bound) {
-                    _state.value = BBoardState.Error("Could not bind to Kuira. Is it installed and running?")
+                    _state.value = BBoardState.Error("Could not bind to Kuira")
                     return@launch
                 }
 
@@ -57,10 +67,7 @@ class BBoardViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _state.value = current.copy(boardState = BoardState.Posting)
             try {
-                // In a real dApp: build contract tx → balanceUnsealedTransaction → submitTransaction
-                // For this example: signData triggers the Kuira approval sheet
                 wallet.signData(message, "text")
-
                 _state.value = current.copy(
                     boardState = BoardState.Occupied(message = message, isOwner = true),
                 )

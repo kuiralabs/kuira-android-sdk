@@ -1,5 +1,6 @@
 package com.midnight.kuira.ui.approval
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,36 +37,45 @@ import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 /**
- * Connection approval — shown when a dApp first connects to Kuira.
+ * Connection approval — launched BY the dApp (foreground) to request wallet access.
  *
- * "BBoard wants to connect to your wallet. Allow?"
+ * The dApp starts this activity via:
+ *   Intent("com.midnight.kuira.CONNECT_APPROVAL")
+ *
+ * Returns RESULT_OK if approved, RESULT_CANCELED if denied.
+ * The dApp then binds to ConnectorService after receiving RESULT_OK.
  */
 class ConnectionApprovalActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             ConnectionApprovalScreen(
+                callingApp = callingActivity?.packageName
+                    ?: intent?.data?.getQueryParameter("app")
+                    ?: "An app",
                 onApprove = {
-                    ConnectionApprovalBridge.complete(true)
+                    setResult(Activity.RESULT_OK)
                     finish()
                 },
                 onDeny = {
-                    ConnectionApprovalBridge.complete(false)
+                    setResult(Activity.RESULT_CANCELED)
                     finish()
                 },
             )
         }
     }
 
-    override fun onDestroy() {
-        ConnectionApprovalBridge.cancel()
-        super.onDestroy()
+    override fun onBackPressed() {
+        setResult(Activity.RESULT_CANCELED)
+        super.onBackPressed()
     }
 }
 
 @Composable
 private fun ConnectionApprovalScreen(
+    callingApp: String,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
 ) {
@@ -142,25 +151,23 @@ private fun ConnectionApprovalScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "An app wants to connect",
+                    text = callingApp,
                     color = MidnightColors.Light,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.W300,
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "This will allow the app to:",
+                    text = "wants to connect",
                     color = MidnightColors.LightMuted,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 PermissionLine("view your addresses")
                 PermissionLine("view your balances")
-                PermissionLine("request transactions (requires approval)")
+                PermissionLine("request transactions")
 
                 Spacer(modifier = Modifier.height(48.dp))
 
