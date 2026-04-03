@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.Messenger
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.midnight.kuira.core.connector.ConnectorManager
@@ -51,6 +52,7 @@ class ConnectorService : Service() {
 
     @Inject lateinit var connectorManager: ConnectorManager
     private var isForeground = false
+    private var messenger: Messenger? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -70,10 +72,21 @@ class ConnectorService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        // Called when external app binds (IPC)
         ensureConnectorStarted()
         Log.d(TAG, "Client bound: ${intent?.action}")
-        return connectorManager.binder
+
+        if (messenger == null) {
+            val binder = connectorManager.binder ?: return null
+            val router = com.midnight.kuira.core.connector.JsonRpcRouter(binder.handler)
+            messenger = Messenger(
+                ConnectorMessengerHandler(
+                    router,
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
+                    applicationContext,
+                )
+            )
+        }
+        return messenger!!.binder
     }
 
     override fun onDestroy() {
