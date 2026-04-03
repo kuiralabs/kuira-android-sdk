@@ -61,7 +61,7 @@ fun ApprovalSheetScreen(
     LaunchedEffect(Unit) {
         // Stars appear slightly delayed
         kotlinx.coroutines.delay(150)
-        starAlpha.animateTo(0.4f, tween(500))
+        starAlpha.animateTo(0.7f, tween(600))
     }
     LaunchedEffect(Unit) {
         // Sheet slides up

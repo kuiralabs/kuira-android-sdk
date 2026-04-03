@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -95,27 +98,36 @@ fun StarField(
     alpha: Float = 1f,
     starCount: Int = 25,
 ) {
+    var tick by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60) // ~16fps — enough for gentle twinkle
+            tick += 0.06f
+        }
+    }
+
     val stars = remember {
         val rng = Random(42)
         List(starCount) {
             StarData(
                 x = rng.nextFloat(),
                 y = rng.nextFloat(),
-                size = rng.nextFloat() * 1.2f + 0.3f,
-                baseAlpha = rng.nextFloat() * 0.4f + 0.2f,
-                twinkleSpeed = rng.nextFloat() * 2500f + 2000f,
+                size = rng.nextFloat() * 1.8f + 0.5f,
+                baseAlpha = rng.nextFloat() * 0.5f + 0.3f,
+                twinkleSpeed = rng.nextFloat() * 1.5f + 0.8f,
             )
         }
     }
 
     Canvas(modifier = modifier) {
-        val time = System.nanoTime() / 1_000_000_000f
         stars.forEach { star ->
-            val twinkle = (sin(time * (6.28f / (star.twinkleSpeed / 1000f))).toFloat() + 1f) / 2f
-            val starAlpha = star.baseAlpha * alpha * (0.4f + twinkle * 0.6f)
+            val twinkle = (sin(tick * star.twinkleSpeed).toFloat() + 1f) / 2f
+            val starAlpha = star.baseAlpha * alpha * (0.3f + twinkle * 0.7f)
+            val pulseSize = star.size + twinkle * 0.4f
             drawCircle(
                 color = Color.White.copy(alpha = starAlpha),
-                radius = star.size.dp.toPx(),
+                radius = pulseSize.dp.toPx(),
                 center = Offset(star.x * size.width, star.y * size.height),
             )
         }
