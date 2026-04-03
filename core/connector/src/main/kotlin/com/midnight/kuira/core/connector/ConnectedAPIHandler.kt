@@ -36,9 +36,15 @@ interface BalanceProvider {
 
 class ConnectedAPIHandler(
     private val networkConfig: NetworkConfig,
-    private val walletAddresses: WalletAddresses,
+    val walletAddresses: WalletAddresses,
     private val balanceProvider: BalanceProvider? = null,
-    // More dependencies added as methods are implemented
+    private val signDataFn: (suspend (String, SignDataOptions) -> SignatureResult)? = null,
+    private val submitTransactionFn: (suspend (String) -> Unit)? = null,
+    private val makeTransferFn: (suspend (List<DesiredOutput>, Boolean) -> String)? = null,
+    private val balanceUnsealedFn: (suspend (String, Boolean) -> String)? = null,
+    private val balanceSealedFn: (suspend (String, Boolean) -> String)? = null,
+    private val makeIntentFn: (suspend (List<DesiredInput>, List<DesiredOutput>, IntentOptions) -> String)? = null,
+    private val getTxHistoryFn: (suspend (Int, Int) -> List<HistoryEntry>)? = null,
 ) {
     companion object {
         private const val TAG = "ConnectedAPI"
@@ -98,7 +104,7 @@ class ConnectedAPIHandler(
     }
 
     suspend fun getTxHistory(pageNumber: Int, pageSize: Int): List<HistoryEntry> {
-        TODO("Implement with Room DB")
+        return getTxHistoryFn?.invoke(pageNumber, pageSize) ?: emptyList()
     }
 
     // ── Write Methods (require approval) ──
@@ -107,25 +113,37 @@ class ConnectedAPIHandler(
         desiredOutputs: List<DesiredOutput>,
         payFees: Boolean = true,
     ): String {
-        TODO("Implement with ZswapTransferBuilder + TransactionSubmitter")
+        val fn = makeTransferFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Transfer not configured"
+        )
+        return fn(desiredOutputs, payFees)
     }
 
     suspend fun submitTransaction(tx: String) {
-        TODO("Implement with TransactionSubmitter")
+        val fn = submitTransactionFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Transaction submission not configured"
+        )
+        fn(tx)
     }
 
     suspend fun balanceUnsealedTransaction(
         tx: String,
         payFees: Boolean = true,
     ): String {
-        TODO("Implement with Composable FFI (ADR-001)")
+        val fn = balanceUnsealedFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Balance unsealed not configured"
+        )
+        return fn(tx, payFees)
     }
 
     suspend fun balanceSealedTransaction(
         tx: String,
         payFees: Boolean = true,
     ): String {
-        TODO("Implement with Composable FFI (ADR-001)")
+        val fn = balanceSealedFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Balance sealed not configured"
+        )
+        return fn(tx, payFees)
     }
 
     suspend fun makeIntent(
@@ -133,15 +151,22 @@ class ConnectedAPIHandler(
         desiredOutputs: List<DesiredOutput>,
         options: IntentOptions,
     ): String {
-        TODO("Implement with Composable FFI (ADR-001)")
+        val fn = makeIntentFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Intent creation not configured"
+        )
+        return fn(desiredInputs, desiredOutputs, options)
     }
 
     suspend fun signData(data: String, options: SignDataOptions): SignatureResult {
-        TODO("Implement with TransactionSigner")
+        val fn = signDataFn ?: throw ConnectorApiError(
+            ErrorCodes.INTERNAL_ERROR, "Signing not configured"
+        )
+        return fn(data, options)
     }
 
     fun getProvingProvider(): ProvingProviderResult {
-        TODO("Implement with LocalProver (Phase 4C)")
+        // Local proving (Phase 4C) — no external prover server needed
+        return ProvingProviderResult(proverServerUri = null)
     }
 }
 
