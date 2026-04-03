@@ -1,5 +1,8 @@
 package com.midnight.kuira.core.connector
 
+import com.midnight.kuira.core.connector.model.SignDataOptions
+import com.midnight.kuira.core.connector.model.SignEncoding
+import com.midnight.kuira.core.connector.model.SignatureResult
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.CoroutineScope
@@ -20,20 +23,36 @@ class ConnectorWebSocketServerTest {
     private var server: ConnectorWebSocketServer? = null
     private val clients = mutableListOf<WebSocketClient>()
 
-    private fun createServer(port: Int = 0): ConnectorWebSocketServer {
-        val handler = ConnectedAPIHandler(
+    private val testAddresses = WalletAddresses(
+        unshieldedAddress = "mn_addr_test",
+        shieldedAddress = "mn_shield_test",
+        shieldedCoinPublicKey = "aa".repeat(32),
+        shieldedEncryptionPublicKey = "bb".repeat(32),
+        dustAddress = "mn_dust_test",
+    )
+
+    private fun createServer(
+        port: Int = 0,
+        handler: ConnectedAPIHandler? = null,
+    ): ConnectorWebSocketServer {
+        val h = handler ?: ConnectedAPIHandler(
             networkConfig = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),
-            walletAddresses = WalletAddresses(
-                unshieldedAddress = "mn_addr_test",
-                shieldedAddress = "mn_shield_test",
-                shieldedCoinPublicKey = "aa".repeat(32),
-                shieldedEncryptionPublicKey = "bb".repeat(32),
-                dustAddress = "mn_dust_test",
-            ),
+            walletAddresses = testAddresses,
         )
-        val router = JsonRpcRouter(handler)
+        val router = JsonRpcRouter(h)
         val scope = CoroutineScope(Dispatchers.Default)
         return ConnectorWebSocketServer(router, scope, port).also { server = it }
+    }
+
+    private fun startAndConnect(
+        handler: ConnectedAPIHandler? = null,
+    ): Triple<ConnectorWebSocketServer, WebSocketClient, LinkedBlockingQueue<String>> {
+        val s = createServer(handler = handler)
+        s.start()
+        Thread.sleep(300)
+        val (client, messages) = createClient(s.port)
+        client.connectBlocking(2, TimeUnit.SECONDS)
+        return Triple(s, client, messages)
     }
 
     private fun createClient(port: Int): Pair<WebSocketClient, LinkedBlockingQueue<String>> {
@@ -136,7 +155,7 @@ class ConnectorWebSocketServerTest {
     }
 
     @Test
-    fun `server handles multiple messages on same connection`() {
+    fun `server handles multiple messages on same connection with correct content`() {
         val s = createServer()
         s.start()
         Thread.sleep(300)
@@ -146,9 +165,109 @@ class ConnectorWebSocketServerTest {
         client.send("""{"jsonrpc":"2.0","id":1,"method":"getConnectionStatus","params":{}}""")
         client.send("""{"jsonrpc":"2.0","id":2,"method":"getDustAddress","params":{}}""")
 
-        val resp1 = messages.poll(2, TimeUnit.SECONDS)
-        val resp2 = messages.poll(2, TimeUnit.SECONDS)
-        assertNotNull("Should get first response", resp1)
-        assertNotNull("Should get second response", resp2)
+        val responses = mutableListOf<JsonObject>()
+        repeat(2) {
+            val raw = messages.poll(2, TimeUnit.SECONDS)
+            assertNotNull("Should get response ${it + 1}", raw)
+            responses.add(json.parseToJsonElement(raw!!).jsonObject)
+        }
+        // Responses may arrive out of order — find by id
+        val byId = responses.associateBy { it["id"]?.jsonPrimitive?.int }
+        assertNotNull("Should have response for id=1", byId[1])
+        assertNotNull("Should have response for id=2", byId[2])
+        assertEquals("connected", byId[1]!!["result"]!!.jsonObject["status"]?.jsonPrimitive?.content)
+        assertEquals("mn_dust_test", byId[2]!!["result"]!!.jsonObject["dustAddress"]?.jsonPrimitive?.content)
+    }
+
+    // ── Write method through WebSocket ──
+
+    @Test
+    fun `write method routes through WebSocket end-to-end`() {
+        val handler = ConnectedAPIHandler(
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),
+            walletAddresses = testAddresses,
+            signDataFn = { data, _ ->
+                SignatureResult(data = data, signature = "sig_$data", verifyingKey = "vk_test")
+            },
+        )
+        val (_, client, messages) = startAndConnect(handler)
+
+        client.send("""{"jsonrpc":"2.0","id":5,"method":"signData","params":{"data":"cafe","options":{"encoding":"hex"}}}""")
+
+        val response = messages.poll(2, TimeUnit.SECONDS)
+        assertNotNull("Should receive signData response", response)
+        val result = json.parseToJsonElement(response!!).jsonObject["result"]!!.jsonObject
+        assertEquals("cafe", result["data"]?.jsonPrimitive?.content)
+        assertEquals("sig_cafe", result["signature"]?.jsonPrimitive?.content)
+        assertEquals("vk_test", result["verifyingKey"]?.jsonPrimitive?.content)
+    }
+
+    // ── Error routing through WebSocket ──
+
+    @Test
+    fun `unknown method returns -32601 through WebSocket`() {
+        val (_, client, messages) = startAndConnect()
+
+        client.send("""{"jsonrpc":"2.0","id":10,"method":"doesNotExist","params":{}}""")
+
+        val response = messages.poll(2, TimeUnit.SECONDS)
+        assertNotNull(response)
+        val error = json.parseToJsonElement(response!!).jsonObject["error"]!!.jsonObject
+        assertEquals(-32601, error["code"]?.jsonPrimitive?.int)
+        assertTrue(error["message"]!!.jsonPrimitive.content.contains("doesNotExist"))
+    }
+
+    @Test
+    fun `unconfigured write method returns -32603 through WebSocket`() {
+        val (_, client, messages) = startAndConnect()
+
+        client.send("""{"jsonrpc":"2.0","id":11,"method":"signData","params":{"data":"abc","options":{"encoding":"hex"}}}""")
+
+        val response = messages.poll(2, TimeUnit.SECONDS)
+        assertNotNull(response)
+        val error = json.parseToJsonElement(response!!).jsonObject["error"]!!.jsonObject
+        assertEquals(-32603, error["code"]?.jsonPrimitive?.int)
+        assertTrue(error["message"]!!.jsonPrimitive.content.contains("InternalError"))
+    }
+
+    // ── Resilience ──
+
+    @Test
+    fun `client disconnect does not crash server`() {
+        val s = createServer()
+        s.start()
+        Thread.sleep(300)
+
+        // Connect and disconnect first client
+        val (client1, _) = createClient(s.port)
+        client1.connectBlocking(2, TimeUnit.SECONDS)
+        client1.closeBlocking()
+        Thread.sleep(100)
+
+        // Second client should still be able to connect and get responses
+        val (client2, messages2) = createClient(s.port)
+        assertTrue("Client 2 should connect after client 1 disconnect", client2.connectBlocking(2, TimeUnit.SECONDS))
+        client2.send("""{"jsonrpc":"2.0","id":1,"method":"getConnectionStatus","params":{}}""")
+        val response = messages2.poll(2, TimeUnit.SECONDS)
+        assertNotNull("Should receive response after peer disconnect", response)
+    }
+
+    @Test
+    fun `empty message returns parse error`() {
+        val (_, client, messages) = startAndConnect()
+
+        client.send("")
+
+        val response = messages.poll(2, TimeUnit.SECONDS)
+        assertNotNull(response)
+        val obj = json.parseToJsonElement(response!!).jsonObject
+        assertNotNull("Should return an error", obj["error"])
+    }
+
+    // ── Constants ──
+
+    @Test
+    fun `default port is 9932`() {
+        assertEquals(9932, ConnectorWebSocketServer.DEFAULT_PORT)
     }
 }
