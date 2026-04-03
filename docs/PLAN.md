@@ -1,72 +1,71 @@
 # Kuira Wallet - Implementation Plan
 
-**Project:** Midnight Wallet for Android
-**Estimate:** 139-188 hours across 8 phases (revised: +19h from Phase 5 expansion, March 2026)
-**Status:** Phase 1 ✅ | Phase 4A-Full ✅ | Phase 4B (Unshielded) ✅ | **Phase 2 ✅** | **Phase 2F.1 (Dust Tank) ✅**
+**Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
+**Total Invested:** ~250h across completed phases
+**Status:** Phase 1-4C ✅ | **Phase 5 (DApp Connector) → Next**
 
-**⚠️ Major Revisions:**
-- Shielded balance tracking (Phase 4B-Shielded) NOT implemented: +8-12h
-- Contract transactions (Phase 5) more complex than estimated: +10-15h
+**Last Updated:** April 2, 2026
 
-See **PROGRESS.md** for current status and hours invested.
+## Implementation Strategy
 
-## Implementation Strategy (REVISED - Jan 2026)
+**Completed infrastructure:**
+1. ✅ **Phase 1**: Crypto foundation (41h)
+2. ✅ **Phase 4A**: Sync engine (21h)
+3. ✅ **Phase 4B**: WebSocket + UTXO tracking (23.5h)
+4. ✅ **Phase 2**: Unshielded transactions (81h)
+5. ✅ **Phase 2F.1**: Dust tank (~12h)
+6. ✅ **Phase 4B-Shielded**: Shielded balance tracking (~14h)
+7. ✅ **Phase 3**: Shielded transactions (~22h) — E2E working on localnet
+8. ✅ **Phase 4C**: Local ZK proving (~20h) — 1.7s proof on emulator, no proof server needed
 
-**Critical Discovery:** Midnight's indexer does NOT provide simple balance query APIs. Light wallets must:
-- Subscribe to transaction events via WebSocket
-- Track UTXOs locally in database
-- Calculate balances by summing unspent UTXOs
-
-**Current Structure:**
-1. ✅ **Phase 1 Complete**: Crypto/keys working (41h)
-2. ✅ **Phase 4A-Full Complete**: GraphQL HTTP client + sync engine (21h)
-3. ✅ **Phase 4B Complete**: WebSocket subscriptions + **UNSHIELDED** UTXO tracking (23.5h)
-4. ✅ **Phase 4B-UI Complete**: **UNSHIELDED** balance display (7h)
-5. ✅ **Phase 2 Complete**: Unshielded transactions (81h) - Test UI working
-6. ✅ **Phase 2F.1 Complete**: Dust tank display + registration (~12h) - Status check, balance display, full registration flow
-7. ⚠️ **Dust Sync Optimization NEEDED**: Block-by-block HTTP → WebSocket subscription (see `DUST_SYNC_OPTIMIZATION.md`)
-8. ⚠️ **Phase 4B-Shielded MISSING**: Shielded balance tracking NOT implemented (est: 8-12h)
-9. ⏭️ **Phase 3 Next**: Shielded transactions (requires Phase 4B-Shielded first)
-10. ⏭️ **Phase 5 REVISED (March 2026)**: Full ConnectedAPI with ALL transaction types (44-59h), adapted from CLI `mn serve`
-
-**Why This Order?**
-1. **Phase 1 first**: Must have keys before anything else ✅
-2. **Phase 4B (unshielded) before Phase 2**: Need balance viewing to test transactions ✅
-3. **Phase 2 before Phase 3**: Simpler transactions first (no ZK proofs), build confidence 🔄
-4. **⚠️ Phase 4B-Shielded before Phase 3**: MUST implement shielded balance tracking before shielded transactions
-5. **No "lite" option**: Midnight architecture requires WebSocket + local UTXO tracking ✅
+**Next:**
+9. ⏭️ **Phase 5**: DApp Connector — ConnectedAPI (18 methods) as Android Service
+10. ⏭️ **Phase 6**: UI & Polish
+11. ⏭️ **Phase 7+**: Agent Runtime, MOS Client, Game SDK (see KUIRA_VISION_V1.md)
 
 ---
 
-## Phase Structure (CURRENT ORDER)
+## Phase Structure
 
-| Phase | Goal | Estimate | Actual | Status |
-|-------|------|----------|--------|--------|
-| **Phase 1: Crypto Foundation** | Key derivation & addresses | 30-35h | 41h | ✅ Complete |
-| **Phase 4A-Full: Full Sync Engine** | Event cache, reorg, balance calc | 8-11h | 21h | ✅ Complete |
-| **Phase 4B: WebSocket + UTXO Tracking** | Subscriptions, local UTXO database | 25-35h | 23.5h | ✅ Complete |
-| ↳ 4B-1: WebSocket Client | GraphQL-WS protocol | ~8h | 8h | ✅ Complete |
-| ↳ 4B-2: UTXO Database | Room database + subscriptions | ~10h | 2.5h | ✅ Complete |
-| ↳ 4B-3: Balance Repository | Repository layer + ViewModels | ~3h | 6h | ✅ Complete |
-| ↳ 4B-4: UI Integration | Display balances (Compose) | ~5-8h | 7h | ✅ Complete |
-| **Phase 2: Unshielded Transactions** | Send/receive transparent tokens | 89-109h | 81h | ✅ Complete |
-| ↳ 2A-2E: Transaction Infrastructure | Models, signing, DUST, submission | 72-93h | 81h | ✅ Complete |
-| ↳ 2F: Send UI (Test) | Test send form | 6-8h | incl | ✅ Complete |
-| ↳ 2F.1: Dust Tank Display | Dust status + registration UI | 11-15h | ~12h | ✅ Complete |
-| **Phase 4B-Shielded: Shielded Balances** | ⚠️ **MISSING** - Shielded UTXO tracking | 8-12h | 0h | ⏸️ Not Started |
-| **Phase 3: Shielded Transactions** | Private ZK transactions | 20-25h | 0h | ⏸️ Not Started |
-| **Phase 5: DApp Connector & All Tx Types** | Full ConnectedAPI (18 methods) | 44-59h | 0h | ⏸️ Not Started |
-| ↳ 5A: Transaction Serde FFI | Deserialize/serialize all tx formats | 8-10h | 0h | ⏸️ Not Started |
-| ↳ 5B: Connector + Read + makeTransfer | JSON-RPC server, read methods, transfers | 12-15h | 0h | ⏸️ Not Started |
-| ↳ 5C: Contract Tx Balancing | balanceUnsealed/Sealed, pending tracking | 10-14h | 0h | ⏸️ Not Started |
-| ↳ 5D: Swaps, Signing, Proving | makeIntent, signData, getProvingProvider | 8-12h | 0h | ⏸️ Not Started |
-| ↳ 5E: Approval UI & DApp Mgmt | Biometric approval, tx inspection, DApp mgmt | 6-8h | 0h | ⏸️ Not Started |
-| **Phase 6: UI & Polish** | Production-ready app | 15-20h | 0h | ⏸️ Not Started |
+| Phase | Goal | Actual | Status |
+|-------|------|--------|--------|
+| **Phase 1: Crypto Foundation** | Key derivation & addresses | 41h | ✅ Complete |
+| **Phase 4A: Full Sync Engine** | Event cache, reorg, balance calc | 21h | ✅ Complete |
+| **Phase 4B: WebSocket + UTXO** | Subscriptions, local UTXO database | 23.5h | ✅ Complete |
+| **Phase 2: Unshielded Tx** | Send/receive transparent tokens | 81h | ✅ Complete |
+| **Phase 2F.1: Dust Tank** | Dust registration + display | ~12h | ✅ Complete |
+| **Phase 4B-Shielded** | Shielded balance tracking (zswap events) | ~14h | ✅ Complete |
+| **Phase 3: Shielded Tx** | Private ZK transactions E2E | ~22h | ✅ Complete |
+| **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
+| **Phase 5: DApp Connector** | ConnectedAPI (18 methods) + SDK | est 25-35h | ⏭️ Next |
+| **Phase 6: UI & Polish** | Production-ready app | est 15-20h | ⏸️ Planned |
 
-**Progress:** ~185.5h invested / ~259-285h total (Phase 2 + Dust Tank done, remaining: Phase 4B-Shielded, Phase 3, Phase 5A-E, Phase 6)
-**Remaining:** ~73-100h to full DApp support
+**Invested:** ~250h | **Remaining:** ~40-55h to DApp connector + polish
 
-**⚠️ Known Performance Issue:** Dust sync takes 10+ minutes due to block-by-block HTTP scanning. Fix planned — switch to WebSocket subscription (see `docs/planning/DUST_SYNC_OPTIMIZATION.md`).
+### Phase 5 Sub-Steps (see `docs/planning/DAPP_CONNECTOR_PLAN.md`)
+
+| Step | Goal | Estimate |
+|------|------|----------|
+| 5A | ConnectedAPIHandler — 18 methods as Kotlin class | 8-10h |
+| 5B | JSON-RPC message router | 3-4h |
+| 5C | WebSocket server (Android Service, port 9932) | 4-5h |
+| 5D | Approval flow (dialogs for write ops) | 4-5h |
+| 5E | Service lifecycle + Hilt DI | 3-4h |
+| 5F | Integration testing (dApp client tests) | 3-5h |
+
+### Key Architecture Decisions
+
+- **ADR-001**: Composable FFI primitives (enables `balanceUnsealedTransaction`, `makeIntent`)
+- **ADR-002**: Local ZK proving (enables `getProvingProvider` without proof server)
+- **Phase 5 investigation**: `docs/planning/PHASE_5_CONTRACT_TRANSACTIONS_INVESTIGATION.md`
+
+### SDK Strategy (Multi-Platform)
+
+The connector serves multiple client types:
+- **Agents (TS)**: WebSocket JSON-RPC — same as CLI `mn serve`
+- **Android native**: Direct Kotlin API (in-process)
+- **iOS (future)**: Swift SDK
+- **React Native (future)**: TS/JS with native modules — shares code with agents
 
 ---
 
