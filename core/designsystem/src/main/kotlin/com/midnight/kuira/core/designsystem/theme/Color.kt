@@ -1,4 +1,4 @@
-package com.midnight.kuira.ui.theme
+package com.midnight.kuira.core.designsystem.theme
 
 import androidx.compose.ui.graphics.Color
 

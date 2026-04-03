@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":feature:balance"))
     implementation(project(":feature:send"))
     implementation(project(":feature:dust"))
+    implementation(project(":core:designsystem"))
     implementation(project(":core:indexer"))
     implementation(project(":core:network"))
 

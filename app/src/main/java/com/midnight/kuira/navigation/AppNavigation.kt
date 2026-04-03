@@ -25,7 +25,7 @@ import androidx.navigation.navArgument
 import com.midnight.kuira.feature.balance.BalanceScreen
 import com.midnight.kuira.feature.dust.DustScreen
 import com.midnight.kuira.feature.send.SendScreen
-import com.midnight.kuira.ui.prototype.MidnightEntrance
+import com.midnight.kuira.core.designsystem.effect.MidnightEntrance
 
 /**
  * App navigation routes.

@@ -19,7 +19,7 @@ import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.navigation.AppNavigation
 import com.midnight.kuira.ui.components.NetworkSelectorBar
-import com.midnight.kuira.ui.theme.KuiraTheme
+import com.midnight.kuira.core.designsystem.theme.KuiraTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject

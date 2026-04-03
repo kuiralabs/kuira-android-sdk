@@ -1,4 +1,4 @@
-package com.midnight.kuira.ui.prototype
+package com.midnight.kuira.core.designsystem.effect
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -24,39 +24,25 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.midnight.kuira.ui.theme.MidnightColors
+import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import kotlin.math.sin
 import kotlin.random.Random
 
-/**
- * The midnight entrance — light fading into void.
- *
- * Not a colorful gradient. A grayscale fade from dim gray to black.
- * The only visual feature: stars emerging from the darkness.
- */
 @Composable
 fun DuskTransitionBackground(
     modifier: Modifier = Modifier,
-    /** 0f = dim light, 1f = void black */
     progress: Float = 1f,
 ) {
     val p = progress.coerceIn(0f, 1f)
-
-    // Start: faint gray at top, dark at bottom
-    // End: pure black everywhere
     val topColor = lerp(Color(0xFF1A1A1A), MidnightColors.Void, p)
-    val bottomColor = MidnightColors.Void
 
     Box(
         modifier = modifier.background(
-            Brush.verticalGradient(listOf(topColor, bottomColor))
+            Brush.verticalGradient(listOf(topColor, MidnightColors.Void))
         )
     )
 }
 
-/**
- * Animated entrance — light drains away, stars appear.
- */
 @Composable
 fun AnimatedDuskBackground(
     modifier: Modifier = Modifier,
@@ -65,35 +51,22 @@ fun AnimatedDuskBackground(
     val progress = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        progress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMs, easing = FastOutSlowInEasing),
-        )
+        progress.animateTo(1f, tween(durationMs, easing = FastOutSlowInEasing))
     }
 
     Box(modifier = modifier) {
-        DuskTransitionBackground(
-            modifier = Modifier.fillMaxSize(),
-            progress = progress.value,
-        )
-
+        DuskTransitionBackground(modifier = Modifier.fillMaxSize(), progress = progress.value)
         if (progress.value > 0.5f) {
-            val starAlpha = ((progress.value - 0.5f) / 0.5f).coerceIn(0f, 1f)
             StarField(
                 modifier = Modifier.fillMaxSize(),
-                alpha = starAlpha,
+                alpha = ((progress.value - 0.5f) / 0.5f).coerceIn(0f, 1f),
             )
         }
     }
 }
 
-/**
- * Faint breathing glow at the top edge — last trace of light.
- */
 @Composable
-fun HorizonGlow(
-    modifier: Modifier = Modifier,
-) {
+fun HorizonGlow(modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "horizon")
     val glowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.03f,
@@ -116,9 +89,6 @@ fun HorizonGlow(
     )
 }
 
-/**
- * White points of light against the void.
- */
 @Composable
 fun StarField(
     modifier: Modifier = Modifier,
@@ -143,28 +113,21 @@ fun StarField(
         stars.forEach { star ->
             val twinkle = (sin(time * (6.28f / (star.twinkleSpeed / 1000f))).toFloat() + 1f) / 2f
             val starAlpha = star.baseAlpha * alpha * (0.4f + twinkle * 0.6f)
-
             drawCircle(
                 color = Color.White.copy(alpha = starAlpha),
                 radius = star.size.dp.toPx(),
-                center = Offset(
-                    x = star.x * size.width,
-                    y = star.y * size.height,
-                ),
+                center = Offset(star.x * size.width, star.y * size.height),
             )
         }
     }
 }
 
 private data class StarData(
-    val x: Float,
-    val y: Float,
-    val size: Float,
-    val baseAlpha: Float,
-    val twinkleSpeed: Float,
+    val x: Float, val y: Float, val size: Float,
+    val baseAlpha: Float, val twinkleSpeed: Float,
 )
 
-private fun lerp(a: Color, b: Color, fraction: Float): Color {
+internal fun lerp(a: Color, b: Color, fraction: Float): Color {
     val f = fraction.coerceIn(0f, 1f)
     return Color(
         red = a.red + (b.red - a.red) * f,
@@ -172,29 +135,4 @@ private fun lerp(a: Color, b: Color, fraction: Float): Color {
         blue = a.blue + (b.blue - a.blue) * f,
         alpha = 1f,
     )
-}
-
-// ── Previews ──
-
-@Preview(showBackground = true, widthDp = 360, heightDp = 400, backgroundColor = 0xFF000000)
-@Composable
-private fun VoidPreview() {
-    Box(modifier = Modifier.fillMaxSize().background(MidnightColors.Void)) {
-        StarField(modifier = Modifier.fillMaxSize(), alpha = 1f)
-        HorizonGlow(modifier = Modifier.fillMaxWidth().height(60.dp))
-    }
-}
-
-@Preview(showBackground = true, widthDp = 360, heightDp = 400, backgroundColor = 0xFF000000)
-@Composable
-private fun DuskFadingPreview() {
-    DuskTransitionBackground(modifier = Modifier.fillMaxSize(), progress = 0.3f)
-}
-
-@Preview(showBackground = true, widthDp = 360, heightDp = 400, backgroundColor = 0xFF000000)
-@Composable
-private fun MidnightSettledPreview() {
-    Box(modifier = Modifier.fillMaxSize().background(MidnightColors.Void)) {
-        StarField(modifier = Modifier.fillMaxSize(), alpha = 0.8f)
-    }
 }

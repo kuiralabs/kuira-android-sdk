@@ -1,5 +1,8 @@
 package com.midnight.kuira.ui.prototype
 
+import com.midnight.kuira.core.designsystem.effect.DuskTransitionBackground
+import com.midnight.kuira.core.designsystem.effect.HorizonGlow
+import com.midnight.kuira.core.designsystem.effect.StarField
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -31,7 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.midnight.kuira.ui.theme.MidnightColors
+import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 /**
  * Black and white approval experience.
