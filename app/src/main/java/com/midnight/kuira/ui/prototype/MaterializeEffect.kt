@@ -1,6 +1,7 @@
 package com.midnight.kuira.ui.prototype
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,13 +10,14 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,68 +28,40 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.ui.theme.MidnightColors
 import kotlinx.coroutines.delay
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
-/**
- * Materialize effect — ported from CLI's art.ts
- *
- * Characters start as noise (░▒▓█·) and resolve into the final text.
- * Each character has a threshold — it resolves when progress passes it.
- * The effect is deterministic (same progress = same frame).
- */
+private val KUIRA_LETTERS = listOf('K', 'U', 'I', 'R', 'A')
 
-private val NOISE_CHARS = charArrayOf('░', '▒', '▓', '█', '·', '∗', '✦', ' ')
+// Center-out stagger: I first, then U/R, then K/A
+private val LETTER_THRESHOLDS = listOf(0.35f, 0.22f, 0.10f, 0.28f, 0.40f)
 
-private fun noiseChar(row: Int, col: Int, seed: Int): Char {
-    val hash = ((row * 131 + col * 997 + seed * 7919) % 65537).toFloat() / 65537f
-    return NOISE_CHARS[(hash * NOISE_CHARS.size).toInt().coerceIn(0, NOISE_CHARS.size - 1)]
-}
-
-private fun materializeText(text: String, progress: Float, row: Int = 0): String {
-    if (progress >= 1f) return text
-    if (progress <= 0f) return text.map { ch ->
-        if (ch == ' ') ' ' else noiseChar(row, text.indexOf(ch), 0)
-    }.joinToString("")
-
-    val seed = (progress * 100).toInt()
-    return text.mapIndexed { col, ch ->
-        if (ch == ' ') ' '
-        else {
-            val threshold = ((row * 131 + col * 997) % 100) / 100f
-            if (progress >= threshold) ch else noiseChar(row, col, seed)
-        }
-    }.joinToString("")
-}
-
-/**
- * "KUIRA" materializing from noise — the brand entrance.
- *
- * Phases:
- * 1. Pure noise field (0.0 - 0.1)
- * 2. Characters begin resolving from noise (0.1 - 0.7)
- * 3. Fully resolved + glow pulse (0.7 - 1.0)
- */
 @Composable
 fun KuiraMaterialize(
     modifier: Modifier = Modifier,
-    durationMs: Int = 2000,
+    durationMs: Int = 2500,
 ) {
     val progress = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
         progress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMs, easing = LinearEasing),
+            animationSpec = tween(durationMs, easing = FastOutSlowInEasing),
         )
     }
 
@@ -104,71 +78,188 @@ fun KuiraMaterializeFrame(
 ) {
     val p = progress.coerceIn(0f, 1f)
 
-    // The resolved text glow (appears after 0.7)
-    val glowAlpha = if (p > 0.7f) ((p - 0.7f) / 0.3f).coerceIn(0f, 1f) else 0f
-
-    // Ambient twinkle after fully resolved
+    // Breathing after settled
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
     val breathe by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.8f,
+        initialValue = 0.15f,
+        targetValue = 0.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = LinearEasing),
+            animation = tween(3000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "breathe",
     )
 
-    val effectiveGlow = if (p >= 1f) breathe else glowAlpha
-
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        // Noise/resolved text
-        val displayText = materializeText("K U I R A", p, row = 0)
+        // Sparkle layer — Canvas behind the text
+        Canvas(modifier = Modifier.size(320.dp, 80.dp)) {
+            val letterSpacing = size.width / 5f
 
-        // Glow layer (behind text)
-        if (effectiveGlow > 0f) {
-            Text(
-                text = "K U I R A",
-                style = TextStyle(
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.W200,
-                    letterSpacing = 8.sp,
-                    color = Color.White.copy(alpha = effectiveGlow * 0.15f),
-                    shadow = Shadow(
-                        color = Color.White.copy(alpha = effectiveGlow * 0.4f),
-                        offset = Offset.Zero,
-                        blurRadius = 40f,
-                    ),
-                ),
-                textAlign = TextAlign.Center,
-            )
+            KUIRA_LETTERS.forEachIndexed { index, _ ->
+                val threshold = LETTER_THRESHOLDS[index]
+                val letterProgress = if (p <= threshold) 0f
+                else ((p - threshold) / (0.5f)).coerceIn(0f, 1f)
+
+                val cx = letterSpacing * index + letterSpacing / 2f
+                val cy = size.height / 2f
+
+                // Sparkle burst when letter appears (0.0 to 0.5 of letterProgress)
+                if (letterProgress in 0.01f..0.99f) {
+                    drawSparkle(
+                        center = Offset(cx, cy),
+                        progress = letterProgress,
+                    )
+                }
+
+                // Ambient twinkle after settled
+                if (p >= 1f) {
+                    drawAmbientGlow(
+                        center = Offset(cx, cy),
+                        intensity = breathe,
+                    )
+                }
+            }
         }
 
-        // Main text
-        Text(
-            text = displayText,
-            style = TextStyle(
-                fontSize = 32.sp,
-                fontWeight = FontWeight.W200,
-                letterSpacing = 8.sp,
-                color = Color.White.copy(alpha = 0.4f + (p * 0.6f)),
-                shadow = if (effectiveGlow > 0.2f) Shadow(
-                    color = Color.White.copy(alpha = effectiveGlow * 0.3f),
-                    offset = Offset.Zero,
-                    blurRadius = 20f,
-                ) else null,
-            ),
-            textAlign = TextAlign.Center,
+        // Text layer
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            KUIRA_LETTERS.forEachIndexed { index, letter ->
+                val threshold = LETTER_THRESHOLDS[index]
+                val letterProgress = if (p <= threshold) 0f
+                else ((p - threshold) / (0.5f)).coerceIn(0f, 1f)
+
+                val alpha = letterProgress
+                val glowAlpha = when {
+                    p >= 1f -> breathe * 0.4f
+                    letterProgress in 0.01f..0.7f -> {
+                        val pulse = 1f - kotlin.math.abs(letterProgress / 0.7f - 0.5f) * 2f
+                        pulse * 0.9f
+                    }
+                    letterProgress > 0.7f -> (1f - letterProgress) / 0.3f * 0.3f
+                    else -> 0f
+                }
+
+                Text(
+                    text = letter.toString(),
+                    style = TextStyle(
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.W300,
+                        color = Color.White.copy(alpha = alpha),
+                        shadow = Shadow(
+                            color = Color.White.copy(alpha = glowAlpha),
+                            offset = Offset.Zero,
+                            blurRadius = 24f + glowAlpha * 30f,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sparkle burst — a 4-point star cross with radiating rays.
+ * Flashes bright then fades, rays extend then retract.
+ */
+private fun DrawScope.drawSparkle(center: Offset, progress: Float) {
+    // Sparkle lifecycle: 0-0.3 expand, 0.3-1.0 fade
+    val expandPhase = (progress / 0.3f).coerceIn(0f, 1f)
+    val fadeFactor = if (progress > 0.3f) 1f - ((progress - 0.3f) / 0.7f) else 1f
+    val alpha = fadeFactor.coerceIn(0f, 1f)
+
+    if (alpha < 0.01f) return
+
+    // Central bright point
+    drawCircle(
+        color = Color.White.copy(alpha = alpha * 0.9f),
+        radius = 3.dp.toPx() * expandPhase,
+        center = center,
+    )
+
+    // Soft glow circle
+    drawCircle(
+        color = Color.White.copy(alpha = alpha * 0.2f),
+        radius = 20.dp.toPx() * expandPhase,
+        center = center,
+    )
+
+    // Cross rays (4 directions)
+    val rayLength = 18.dp.toPx() * expandPhase
+    val rayAlpha = alpha * 0.7f
+    val strokeWidth = 1.2.dp.toPx()
+
+    // Vertical
+    drawLine(
+        color = Color.White.copy(alpha = rayAlpha),
+        start = Offset(center.x, center.y - rayLength),
+        end = Offset(center.x, center.y + rayLength),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round,
+    )
+    // Horizontal
+    drawLine(
+        color = Color.White.copy(alpha = rayAlpha),
+        start = Offset(center.x - rayLength, center.y),
+        end = Offset(center.x + rayLength, center.y),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round,
+    )
+
+    // Diagonal rays (shorter, thinner)
+    val diagLength = 10.dp.toPx() * expandPhase
+    val diagAlpha = alpha * 0.4f
+    val diagStroke = 0.8.dp.toPx()
+    val diag = diagLength * 0.707f // cos(45°)
+
+    drawLine(
+        color = Color.White.copy(alpha = diagAlpha),
+        start = Offset(center.x - diag, center.y - diag),
+        end = Offset(center.x + diag, center.y + diag),
+        strokeWidth = diagStroke,
+        cap = StrokeCap.Round,
+    )
+    drawLine(
+        color = Color.White.copy(alpha = diagAlpha),
+        start = Offset(center.x + diag, center.y - diag),
+        end = Offset(center.x - diag, center.y + diag),
+        strokeWidth = diagStroke,
+        cap = StrokeCap.Round,
+    )
+
+    // Tiny scatter particles flying outward
+    val particleCount = 6
+    for (i in 0..particleCount) {
+        val angle = (i.toFloat() / particleCount) * 6.28f + 0.5f
+        val dist = 12.dp.toPx() * expandPhase + 5.dp.toPx() * expandPhase * (i % 3)
+        val px = center.x + cos(angle) * dist
+        val py = center.y + sin(angle) * dist
+        val particleAlpha = alpha * 0.5f * (1f - expandPhase * 0.5f)
+        drawCircle(
+            color = Color.White.copy(alpha = particleAlpha),
+            radius = 1.dp.toPx(),
+            center = Offset(px, py),
         )
     }
 }
 
 /**
- * Noise particle field — ambient static behind the text.
- * Sparse, subtle, always moving.
+ * Ambient glow — soft breathing light around settled letters.
+ */
+private fun DrawScope.drawAmbientGlow(center: Offset, intensity: Float) {
+    drawCircle(
+        color = Color.White.copy(alpha = intensity * 0.08f),
+        radius = 16.dp.toPx(),
+        center = center,
+    )
+}
+
+/**
+ * Ambient particle drift — soft dots floating upward.
  */
 @Composable
 fun NoiseField(
@@ -180,7 +271,7 @@ fun NoiseField(
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(100)
+            delay(50)
             tick += 1f
         }
     }
@@ -188,12 +279,12 @@ fun NoiseField(
     val particles = remember {
         val rng = Random(99)
         List(density) {
-            NoiseParticle(
+            Particle(
                 x = rng.nextFloat(),
                 y = rng.nextFloat(),
-                char = NOISE_CHARS[rng.nextInt(NOISE_CHARS.size)],
-                driftSpeed = rng.nextFloat() * 0.002f + 0.001f,
-                flickerRate = rng.nextFloat() * 0.3f + 0.1f,
+                size = rng.nextFloat() * 1.5f + 0.5f,
+                driftSpeed = rng.nextFloat() * 0.003f + 0.001f,
+                flickerRate = rng.nextFloat() * 0.2f + 0.05f,
             )
         }
     }
@@ -202,12 +293,12 @@ fun NoiseField(
         particles.forEach { p ->
             val drift = (p.y + tick * p.driftSpeed) % 1f
             val flicker = kotlin.math.sin(tick * p.flickerRate * 6.28f).toFloat()
-            val visible = flicker > 0.2f
+            val visible = flicker > 0f
             if (visible) {
-                val dotAlpha = (0.15f + flicker * 0.15f) * alpha
+                val dotAlpha = (0.08f + flicker * 0.12f) * alpha
                 drawCircle(
                     color = Color.White.copy(alpha = dotAlpha),
-                    radius = 1.5.dp.toPx(),
+                    radius = p.size.dp.toPx(),
                     center = Offset(p.x * size.width, drift * size.height),
                 )
             }
@@ -215,16 +306,16 @@ fun NoiseField(
     }
 }
 
-private data class NoiseParticle(
+private data class Particle(
     val x: Float,
     val y: Float,
-    val char: Char,
+    val size: Float,
     val driftSpeed: Float,
     val flickerRate: Float,
 )
 
 /**
- * Full entrance: void → noise field → KUIRA materializes → stars appear
+ * Full entrance: void → particles → sparkle burst per letter → stars settle
  */
 @Composable
 fun MidnightEntrance(
@@ -233,38 +324,35 @@ fun MidnightEntrance(
     val phase = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // 0.0-0.3: noise field intensifies
-        // 0.3-0.8: KUIRA materializes
-        // 0.8-1.0: stars fade in, noise fades out
-        phase.animateTo(1f, tween(3000, easing = LinearEasing))
+        phase.animateTo(1f, tween(3500, easing = FastOutSlowInEasing))
     }
 
     val p = phase.value
 
     Box(modifier = modifier.fillMaxSize().background(MidnightColors.Void)) {
-        // Noise field — present throughout, fades after materialize
-        val noiseAlpha = when {
-            p < 0.3f -> p / 0.3f            // fade in
-            p < 0.8f -> 1f                   // full
-            else -> 1f - ((p - 0.8f) / 0.2f) // fade out
+        // Drifting particles
+        val particleAlpha = when {
+            p < 0.1f -> p / 0.1f
+            p < 0.7f -> 1f
+            else -> 1f - ((p - 0.7f) / 0.3f)
         }
         NoiseField(
             modifier = Modifier.fillMaxSize(),
-            alpha = noiseAlpha.coerceIn(0f, 1f),
+            alpha = particleAlpha.coerceIn(0f, 1f),
         )
 
-        // Stars — emerge as noise fades
-        if (p > 0.7f) {
+        // Stars emerge late
+        if (p > 0.55f) {
             StarField(
                 modifier = Modifier.fillMaxSize(),
-                alpha = ((p - 0.7f) / 0.3f).coerceIn(0f, 1f),
+                alpha = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f),
                 starCount = 30,
             )
         }
 
-        // KUIRA materializes
-        if (p > 0.15f) {
-            val materializeProgress = ((p - 0.15f) / 0.65f).coerceIn(0f, 1f)
+        // KUIRA with sparkle bursts
+        if (p > 0.08f) {
+            val materializeProgress = ((p - 0.08f) / 0.6f).coerceIn(0f, 1f)
             KuiraMaterializeFrame(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -273,8 +361,8 @@ fun MidnightEntrance(
             )
         }
 
-        // Subtle horizon glow at top after settling
-        if (p > 0.8f) {
+        // Horizon glow
+        if (p > 0.65f) {
             HorizonGlow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -288,33 +376,33 @@ fun MidnightEntrance(
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 640, backgroundColor = 0xFF000000)
 @Composable
-private fun MaterializeNoise() {
+private fun SparkleAppearing() {
     Box(modifier = Modifier.fillMaxSize().background(MidnightColors.Void)) {
-        NoiseField(modifier = Modifier.fillMaxSize())
+        NoiseField(modifier = Modifier.fillMaxSize(), alpha = 0.8f)
         KuiraMaterializeFrame(
             modifier = Modifier.align(Alignment.Center),
-            progress = 0.0f,
+            progress = 0.35f,
         )
     }
 }
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 640, backgroundColor = 0xFF000000)
 @Composable
-private fun MaterializeHalf() {
+private fun SparklePeak() {
     Box(modifier = Modifier.fillMaxSize().background(MidnightColors.Void)) {
-        NoiseField(modifier = Modifier.fillMaxSize())
+        NoiseField(modifier = Modifier.fillMaxSize(), alpha = 0.5f)
         KuiraMaterializeFrame(
             modifier = Modifier.align(Alignment.Center),
-            progress = 0.5f,
+            progress = 0.55f,
         )
     }
 }
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 640, backgroundColor = 0xFF000000)
 @Composable
-private fun MaterializeComplete() {
+private fun Settled() {
     Box(modifier = Modifier.fillMaxSize().background(MidnightColors.Void)) {
-        StarField(modifier = Modifier.fillMaxSize(), alpha = 0.8f)
+        StarField(modifier = Modifier.fillMaxSize(), alpha = 0.7f)
         KuiraMaterializeFrame(
             modifier = Modifier.align(Alignment.Center),
             progress = 1f,
