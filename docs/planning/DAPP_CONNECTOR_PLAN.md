@@ -277,13 +277,98 @@ Steps 1 and 2 can be done in parallel. Critical path: ~22-28 hours.
 
 ---
 
+## Transport Model — Local vs Remote
+
+### Phase 5: Local Transport (same device)
+
+All communication happens ON the phone. No relay server, no tunnel, no internet needed
+for the wallet↔dApp connection (the dApp still needs internet for blockchain access).
+
+```
+DApp (WebView or co-installed app)
+  │
+  │ localhost:9932 WebSocket (on-device)
+  ▼
+Kuira Connector Service (Android Service)
+  │
+  │ internet (any network)
+  ▼
+Midnight blockchain (localnet / preprod / mainnet)
+```
+
+**Use cases:**
+- WebView inside Kuira — load any dApp webpage, auto-connects via `window.midnight`
+- Co-installed Android apps — bind to Kuira's Android Service
+- midnight-starship running in mobile browser — connects to localhost:9932
+- Development/testing — any network, dApp runs on same device
+
+**"Local" = transport, not network.** A dApp in Kuira's WebView can transact on mainnet.
+The wallet connects locally on the phone, the blockchain connection goes to any network.
+
+### Phase 8: Remote Agent Transport (different devices)
+
+Agents running on cloud servers (AWS, Vercel, etc.) need a fundamentally different model.
+A relay server is the WRONG approach for Midnight — it creates unnecessary trust
+requirements and data exposure.
+
+**The correct model: on-chain agent authorization via Compact smart contracts.**
+
+```
+SETUP (one-time, from Kuira app):
+  1. Deploy AgentPolicy contract on Midnight
+  2. Authorize agent's public key with spending policy
+  3. Fund the contract — transfer tokens INTO it
+     → tokens are now in the contract's custody
+     → agent can only spend what's in the contract
+     → agent CANNOT touch the main wallet balance
+
+AGENT OPERATING (autonomous, no wallet connection):
+  Agent signs transactions with its OWN key
+  → submits directly to Midnight node
+  → contract verifies: authorized PK? within policy? sufficient funds?
+  → ZK proof: agent proves authorization WITHOUT revealing wallet identity
+
+OWNER CONTROLS (from Kuira app):
+  → Monitor: subscribe to contract events ("Agent spent 3 NIGHT")
+  → Refill: send more tokens to contract
+  → Revoke: remove agent PK → remaining tokens return to wallet
+```
+
+**Why on-chain, not relay:**
+
+| Concern | Relay Model | On-Chain Model |
+|---|---|---|
+| Confidential data | Flows through tunnel (even encrypted) | Never leaves the chain |
+| Funding | Agent has access to wallet | Agent has prepaid contract (like a prepaid card) |
+| Policy enforcement | Wallet app enforces (can be bypassed) | Smart contract enforces (can't cheat) |
+| Uptime | Relay server must be running | Blockchain is always on |
+| Revocation | Wallet must be online | On-chain, immediate, permanent |
+| Trust | Trust relay + encryption | Trustless (ZK proofs) |
+
+**The agent never "connects to the wallet."** It has its own keys, its own funded
+contract, and submits transactions directly to the blockchain. The only connection
+to the wallet is: (1) you funded the contract, (2) you authorized the agent's PK.
+
+This is Phase 8 work. The Compact contract design should be planned during Phase 5
+but implemented after the local connector ships.
+
+See also: `docs/planning/AGENT_STORE_VISION.md` for the broader agent marketplace vision.
+
+---
+
 ## What This Unlocks
 
-1. **DApp ecosystem** — any Midnight dApp connects to Kuira
+**Phase 5 (Local Connector):**
+1. **DApp ecosystem** — any Midnight dApp connects to Kuira on-device
 2. **midnight-starship** — game connects to phone wallet instead of CLI
 3. **WebView dApps** — load dApps inside Kuira's WebView, auto-connect
-4. **Phase 8 (Agent Runtime)** — agents connect via same WebSocket
-5. **Phase 10 (Game SDK)** — games discover Kuira via localhost:9932
+4. **Development** — test dApps against real wallet on any network
+
+**Phase 8 (Remote Agents — future):**
+5. **Autonomous agents** — cloud agents spend within on-chain policy bounds
+6. **No relay needed** — agents submit directly to blockchain
+7. **Prepaid funding** — agents can only spend what you deposit
+8. **ZK authorization** — agent proves it's authorized without revealing wallet
 
 ---
 
