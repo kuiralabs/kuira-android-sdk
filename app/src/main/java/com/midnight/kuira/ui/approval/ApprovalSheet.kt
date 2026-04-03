@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.connector.ApprovalCategory
 import com.midnight.kuira.core.connector.ApprovalRequest
+import com.midnight.kuira.core.designsystem.effect.KuiraMaterializeFrame
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import kotlinx.serialization.json.jsonArray
@@ -51,25 +52,27 @@ fun ApprovalSheetScreen(
     // Entrance animations
     val bgAlpha = remember { Animatable(0f) }
     val starAlpha = remember { Animatable(0f) }
+    val brandAlpha = remember { Animatable(0f) }
     val sheetOffset = remember { Animatable(400f) }
     val contentAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // Background fades in
         bgAlpha.animateTo(1f, tween(300, easing = FastOutSlowInEasing))
     }
     LaunchedEffect(Unit) {
-        // Stars appear slightly delayed
         kotlinx.coroutines.delay(150)
         starAlpha.animateTo(0.7f, tween(600))
     }
     LaunchedEffect(Unit) {
-        // Sheet slides up
+        // KUIRA appears in the void before sheet arrives
+        kotlinx.coroutines.delay(200)
+        brandAlpha.animateTo(1f, tween(500))
+    }
+    LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100)
         sheetOffset.animateTo(0f, tween(400, easing = FastOutSlowInEasing))
     }
     LaunchedEffect(Unit) {
-        // Content fades in after sheet lands
         kotlinx.coroutines.delay(350)
         contentAlpha.animateTo(1f, tween(300))
     }
@@ -84,6 +87,16 @@ fun ApprovalSheetScreen(
             modifier = Modifier.fillMaxSize(),
             alpha = starAlpha.value,
         )
+
+        // KUIRA in the void — settled state with breathing glow
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 80.dp)
+                .alpha(brandAlpha.value),
+        ) {
+            KuiraMaterializeFrame(progress = 1f)
+        }
 
         Column(
             modifier = Modifier
