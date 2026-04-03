@@ -47,11 +47,8 @@ class KuiraWalletClient(private val context: Context) {
         val deferred = CompletableDeferred<Boolean>()
         bindDeferred = deferred
 
-        val intent = Intent().apply {
-            setClassName(
-                "com.midnight.kuira",
-                "com.midnight.kuira.service.ConnectorService",
-            )
+        val intent = Intent("com.midnight.kuira.CONNECTOR").apply {
+            setPackage("com.midnight.kuira")
         }
         val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         if (!bound) return false

@@ -3,6 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Declare visibility to Kuira wallet for cross-app binding -->
+    <queries>
+        <package android:name="com.midnight.kuira" />
+        <intent>
+            <action android:name="com.midnight.kuira.CONNECTOR" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:label="@string/app_name"

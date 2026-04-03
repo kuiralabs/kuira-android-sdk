@@ -10,20 +10,22 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.midnight.kuira.R
 import com.midnight.kuira.core.connector.ConnectorManager
 import com.midnight.kuira.core.connector.WalletAddresses
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * Foreground service that keeps the DApp Connector WebSocket server alive.
+ * DApp Connector Service.
  *
- * Starts the WebSocket server on localhost:9932 so dApps can connect.
- * Shows a persistent notification while running.
+ * Two modes of operation:
+ * 1. **Foreground** — started via startForegroundService() from MainActivity.
+ *    Keeps WebSocket server alive with a notification.
+ * 2. **Bound** — external apps bind via intent action "com.midnight.kuira.CONNECTOR".
+ *    Returns ConnectorBinder for direct Kotlin API access.
  *
- * Start with: `startForegroundService(Intent(context, ConnectorService::class.java))`
- * Stop with: `stopService(Intent(context, ConnectorService::class.java))`
+ * The connector stack (handler + router + server) starts once in onCreate()
+ * and serves both modes.
  */
 @AndroidEntryPoint
 class ConnectorService : Service() {
@@ -48,31 +50,50 @@ class ConnectorService : Service() {
     }
 
     @Inject lateinit var connectorManager: ConnectorManager
+    private var isForeground = false
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        ensureConnectorStarted()
+        Log.d(TAG, "Connector service created")
+    }
 
-        // MVP: start with test addresses — real addresses wired when wallet is loaded
-        val testAddresses = WalletAddresses(
-            unshieldedAddress = "mn_addr_undeployed1test",
-            shieldedAddress = "mn_shield-addr_undeployed1test",
-            shieldedCoinPublicKey = "aa".repeat(32),
-            shieldedEncryptionPublicKey = "bb".repeat(32),
-            dustAddress = "mn_dust_undeployed1test",
-        )
-        connectorManager.start(testAddresses)
-        Log.d(TAG, "Connector service started")
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Called when started as foreground service (from MainActivity)
+        if (!isForeground) {
+            createNotificationChannel()
+            startForeground(NOTIFICATION_ID, buildNotification())
+            isForeground = true
+            Log.d(TAG, "Connector running as foreground service")
+        }
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        // Called when external app binds (IPC)
+        ensureConnectorStarted()
+        Log.d(TAG, "Client bound: ${intent?.action}")
+        return connectorManager.binder
     }
 
     override fun onDestroy() {
         connectorManager.stop()
-        Log.d(TAG, "Connector service stopped")
+        Log.d(TAG, "Connector service destroyed")
         super.onDestroy()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = connectorManager.binder
+    private fun ensureConnectorStarted() {
+        if (!connectorManager.isRunning) {
+            val testAddresses = WalletAddresses(
+                unshieldedAddress = "mn_addr_undeployed1test",
+                shieldedAddress = "mn_shield-addr_undeployed1test",
+                shieldedCoinPublicKey = "aa".repeat(32),
+                shieldedEncryptionPublicKey = "bb".repeat(32),
+                dustAddress = "mn_dust_undeployed1test",
+            )
+            connectorManager.start(testAddresses)
+        }
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -84,8 +105,7 @@ class ConnectorService : Service() {
                 description = "Keeps the DApp connector active for wallet connections"
                 setShowBadge(false)
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
@@ -93,7 +113,7 @@ class ConnectorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Kuira Connector")
             .setContentText("Active — ready for dApp connections")
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // placeholder — use Kuira icon
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setSilent(true)

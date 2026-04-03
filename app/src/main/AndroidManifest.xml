@@ -37,6 +37,9 @@
             android:name=".service.ConnectorService"
             android:exported="true"
             android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="com.midnight.kuira.CONNECTOR" />
+            </intent-filter>
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="localhost_websocket_server" />

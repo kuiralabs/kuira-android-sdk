@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.navigation.AppNavigation
+import com.midnight.kuira.service.ConnectorService
 import com.midnight.kuira.ui.components.NetworkSelectorBar
 import com.midnight.kuira.core.designsystem.theme.KuiraTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ConnectorService.start(this)
         setContent {
             val selectedNetwork by networkRepository.selectedNetworkFlow.collectAsState(
                 initial = MidnightNetwork.DEFAULT
