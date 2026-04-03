@@ -168,7 +168,7 @@ pluggable transport layers on top.
 │                          │                          │
 │ ┌────────────────────────▼──────────────────────┐   │
 │ │ ConnectedAPIHandler                           │   │
-│ │ - 17 methods (read + write)                   │   │
+│ │ - 16 ConnectedAPI methods (read + write)        │   │
 │ │ - Delegates to existing Kuira services:       │   │
 │ │   BalanceRepository, ShieldedRepository,       │   │
 │ │   ZswapTransferBuilder, TransactionSubmitter,  │   │
@@ -207,12 +207,22 @@ then communicates via WebSocket or Bound Service for all subsequent calls.
 
 ## Implementation Steps
 
-### Step 1: ConnectedAPIHandler — Core Logic (8-10h)
+### Step 1: SDK Core — InitialAPI + ConnectedAPIHandler (8-10h)
 
-Implement all 18 methods as a Kotlin class that delegates to existing services.
-No networking yet — just the business logic.
+Implement `InitialAPI` (connection handshake) and all 16 `ConnectedAPI` methods
+as Kotlin classes. No networking — pure business logic delegating to existing services.
 
 ```kotlin
+// InitialAPI — connection entry point
+class KuiraInitialAPI(private val networkConfig: NetworkConfig) {
+    val rdns = "com.kuira.wallet"
+    val name = "Kuira"
+    val apiVersion = "4.0.1"
+
+    suspend fun connect(networkId: String): ConnectedAPIHandler
+}
+
+// ConnectedAPIHandler — all 16 methods (15 WalletConnectedAPI + hintUsage)
 class ConnectedAPIHandler(
     private val balanceRepository: BalanceRepository,
     private val shieldedRepository: ShieldedRepository,
@@ -225,7 +235,7 @@ class ConnectedAPIHandler(
     suspend fun getUnshieldedBalances(): Map<String, BigInteger>
     suspend fun getShieldedBalances(): Map<String, BigInteger>
     suspend fun makeTransfer(outputs: List<DesiredOutput>): String
-    // ... all 18 methods
+    // ... all 16 methods
 }
 ```
 
@@ -310,7 +320,7 @@ class ApprovalManager(private val context: Context) {
 ### Step 6: Integration Testing (3-5h)
 
 - Write a test dApp client (Kotlin WebSocket client in androidTest)
-- Test all 18 methods via WebSocket JSON-RPC
+- Test connect + all 16 ConnectedAPI methods via WebSocket JSON-RPC
 - Test approval flow (auto-approve in test mode)
 - Test with `midnight-starship` or `midnight-wallet-connector` npm package
 - Test concurrent connections
