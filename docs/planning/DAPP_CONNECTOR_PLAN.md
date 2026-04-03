@@ -127,31 +127,48 @@ as `@deprecated` in favor of `getProvingProvider` — Kuira is ahead of this cur
 
 ## Architecture
 
+The connector is built as **two layers**: an SDK (pure Kotlin logic) and
+pluggable transport layers on top.
+
 ```
 ┌─────────────────────────────────────────────────────┐
-│ DApp (WebView, or external app)                     │
-│                                                     │
-│ const wallet = createWalletClient({                 │
-│   url: 'ws://localhost:9932'  // same as CLI         │
-│ });                                                 │
-│ await wallet.makeTransfer([...]);                   │
+│ DApp (native Android, WebView, RN, Flutter, etc.)   │
 └──────────────┬──────────────────────────────────────┘
-               │ WebSocket JSON-RPC 2.0
+               │
+    ┌──────────┼──────────────────────────────┐
+    │          │ Connection Layer              │
+    │          │ (pluggable — one of:)         │
+    │  ┌───────▼───────┐  ┌───────────────┐   │
+    │  │ WebSocket     │  │ Android Bound │   │
+    │  │ localhost:9932│  │ Service (IPC) │   │
+    │  │ JSON-RPC 2.0  │  │ direct call   │   │
+    │  └───────┬───────┘  └──────┬────────┘   │
+    │          │                 │             │
+    │  ┌───────▼─────────────────▼──────────┐ │
+    │  │ WebView JS Bridge                  │ │
+    │  │ window.midnight injection          │ │
+    │  └───────┬────────────────────────────┘ │
+    │          │                              │
+    │  ┌───────▼────────────────────────────┐ │
+    │  │ Deep Link Handler                  │ │
+    │  │ midnight://connect?...             │ │
+    │  │ (initial pairing only)             │ │
+    │  └───────┬────────────────────────────┘ │
+    └──────────┼──────────────────────────────┘
+               │
                ▼
 ┌─────────────────────────────────────────────────────┐
-│ Kuira DApp Connector Service (Android Service)      │
+│ core:connector SDK (pure Kotlin — no transport)     │
 │                                                     │
 │ ┌───────────────────────────────────────────────┐   │
-│ │ ConnectorServer                               │   │
-│ │ - WebSocket server on localhost:9932           │   │
-│ │ - JSON-RPC message routing                    │   │
-│ │ - Read methods: auto-respond                  │   │
-│ │ - Write methods: show approval dialog         │   │
+│ │ InitialAPI                                    │   │
+│ │ - rdns, name, icon, apiVersion                │   │
+│ │ - connect(networkId) → ConnectedAPI           │   │
 │ └────────────────────────┬──────────────────────┘   │
 │                          │                          │
 │ ┌────────────────────────▼──────────────────────┐   │
 │ │ ConnectedAPIHandler                           │   │
-│ │ - Implements all 18 methods                   │   │
+│ │ - 17 methods (read + write)                   │   │
 │ │ - Delegates to existing Kuira services:       │   │
 │ │   BalanceRepository, ShieldedRepository,       │   │
 │ │   ZswapTransferBuilder, TransactionSubmitter,  │   │
@@ -166,6 +183,25 @@ as `@deprecated` in favor of `getProvingProvider` — Kuira is ahead of this cur
 │ └───────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
+
+### Connection Layer Options
+
+The SDK is transport-agnostic. Multiple connection layers can be added
+independently. Each has different trade-offs:
+
+| Transport | Best For | Pros | Cons |
+|---|---|---|---|
+| **WebSocket (localhost:9932)** | Any app type, development | Universal, matches CLI pattern, no app switching | Requires server running |
+| **Android Bound Service** | Native Android apps | Fastest (IPC, no network), type-safe | Android-only |
+| **WebView JS Bridge** | In-app dApp browser | `window.midnight` injection, seamless UX | Only for WebView dApps |
+| **Deep Link** | Initial pairing/connect | Works across any app | Slow for operations (app switching) |
+
+**Phase 5 builds:** SDK + WebSocket transport (first transport, matches CLI).
+Other transports added when we have real dApp clients to test with.
+
+**Deep links are for connection only**, not ongoing operations. A dApp deep links
+to Kuira once for approval (`midnight://connect?networkId=...&callback=myapp://`),
+then communicates via WebSocket or Bound Service for all subsequent calls.
 
 ---
 
