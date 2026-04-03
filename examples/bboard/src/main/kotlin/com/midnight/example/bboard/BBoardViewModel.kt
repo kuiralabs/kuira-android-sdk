@@ -32,6 +32,12 @@ class BBoardViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Clean up before retrying */
+    fun prepareForReconnect() {
+        try { wallet.unbind() } catch (_: Exception) {}
+        _state.value = BBoardState.Disconnected
+    }
+
     private fun bindAndLoadWallet() {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting

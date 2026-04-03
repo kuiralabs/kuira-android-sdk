@@ -1,6 +1,12 @@
 package com.midnight.kuira.core.connector
 
 import android.util.Log
+import com.midnight.kuira.core.connector.model.DesiredInput
+import com.midnight.kuira.core.connector.model.DesiredOutput
+import com.midnight.kuira.core.connector.model.HistoryEntry
+import com.midnight.kuira.core.connector.model.IntentOptions
+import com.midnight.kuira.core.connector.model.SignDataOptions
+import com.midnight.kuira.core.connector.model.SignatureResult
 import com.midnight.kuira.core.connector.transport.ConnectorBinder
 import com.midnight.kuira.core.connector.transport.ConnectorJsBridge
 import com.midnight.kuira.core.network.NetworkConfig
@@ -43,6 +49,9 @@ class ConnectorManager(
     fun start(
         walletAddresses: WalletAddresses,
         balanceProvider: BalanceProvider? = null,
+        signDataFn: (suspend (String, SignDataOptions) -> SignatureResult)? = null,
+        submitTransactionFn: (suspend (String) -> Unit)? = null,
+        makeTransferFn: (suspend (List<DesiredOutput>, Boolean) -> String)? = null,
         serverPort: Int = ConnectorWebSocketServer.DEFAULT_PORT,
     ) {
         if (isRunning) {
@@ -54,6 +63,9 @@ class ConnectorManager(
             networkConfig = networkConfig,
             walletAddresses = walletAddresses,
             balanceProvider = balanceProvider,
+            signDataFn = signDataFn,
+            submitTransactionFn = submitTransactionFn,
+            makeTransferFn = makeTransferFn,
         )
         val router = JsonRpcRouter(handler, approvalManager)
         val serverScope = CoroutineScope(Dispatchers.Default + SupervisorJob())

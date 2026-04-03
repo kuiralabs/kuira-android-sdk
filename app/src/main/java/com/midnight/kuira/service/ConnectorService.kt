@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.midnight.kuira.core.connector.ConnectorManager
 import com.midnight.kuira.core.connector.WalletAddresses
+import com.midnight.kuira.core.connector.model.SignatureResult
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -104,7 +105,21 @@ class ConnectorService : Service() {
                 shieldedEncryptionPublicKey = "bb".repeat(32),
                 dustAddress = "mn_dust_undeployed1test",
             )
-            connectorManager.start(testAddresses)
+            connectorManager.start(
+                walletAddresses = testAddresses,
+                signDataFn = { data, options ->
+                    // MVP: sign with a test signature
+                    // Real implementation would use the crypto module
+                    SignatureResult(
+                        data = data,
+                        signature = "test_sig_${data.take(8)}",
+                        verifyingKey = "test_vk",
+                    )
+                },
+                submitTransactionFn = { tx ->
+                    Log.d(TAG, "Transaction submitted: ${tx.take(20)}...")
+                },
+            )
         }
     }
 

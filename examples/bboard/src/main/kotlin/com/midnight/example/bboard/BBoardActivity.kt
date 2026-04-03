@@ -114,7 +114,10 @@ fun BBoardApp(
             when (val s = state) {
                 is BBoardState.Disconnected -> DisconnectedView(onRequestConnect)
                 is BBoardState.Connecting -> ConnectingView()
-                is BBoardState.Error -> ErrorView(s.message, onRequestConnect)
+                is BBoardState.Error -> ErrorView(s.message) {
+                    viewModel.prepareForReconnect()
+                    onRequestConnect()
+                }
                 is BBoardState.Connected -> ConnectedView(
                     state = s,
                     onPost = { viewModel.postMessage(it) },
