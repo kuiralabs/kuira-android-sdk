@@ -58,7 +58,11 @@ class ConnectorManager(
     }
 
     fun stop() {
-        server?.stop(0)
+        try {
+            server?.stop(1000) // give 1s for graceful shutdown
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping server", e)
+        }
         scope?.cancel()
         server = null
         scope = null

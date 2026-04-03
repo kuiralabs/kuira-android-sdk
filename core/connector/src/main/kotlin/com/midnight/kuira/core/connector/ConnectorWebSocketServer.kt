@@ -27,6 +27,10 @@ class ConnectorWebSocketServer(
     port: Int = DEFAULT_PORT,
 ) : WebSocketServer(InetSocketAddress("127.0.0.1", port)) {
 
+    init {
+        isReuseAddr = true
+    }
+
     companion object {
         const val DEFAULT_PORT = 9932
         private const val TAG = "ConnectorWS"
