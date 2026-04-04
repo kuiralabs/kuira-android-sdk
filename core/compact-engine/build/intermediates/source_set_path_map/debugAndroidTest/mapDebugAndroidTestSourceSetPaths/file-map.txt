@@ -1,8 +1,0 @@
-com.midnight.kuira.core.compact.test.compact-engine-tracing-1.1.0-0 /Users/norman/.gradle/caches/8.13/transforms/6a3322d54fafeea1d4cd1492fa21564d/transformed/tracing-1.1.0/res
-com.midnight.kuira.core.compact.test.compact-engine-core-1.7.0-1 /Users/norman/.gradle/caches/8.13/transforms/d9e8bfaf6f2e4cca52ee7c7cf81c7c10/transformed/core-1.7.0/res
-com.midnight.kuira.core.compact.test.compact-engine-androidTest-2 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/generated/res/resValues/androidTest/debug
-com.midnight.kuira.core.compact.test.compact-engine-updated_navigation_xml-3 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/generated/updated_navigation_xml/debugAndroidTest
-com.midnight.kuira.core.compact.test.compact-engine-mergeDebugAndroidTestResources-4 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/merged.dir
-com.midnight.kuira.core.compact.test.compact-engine-mergeDebugAndroidTestResources-5 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/stripped.dir
-com.midnight.kuira.core.compact.test.compact-engine-debugAndroidTest-6 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/intermediates/merged_res/debugAndroidTest/mergeDebugAndroidTestResources
-com.midnight.kuira.core.compact.test.compact-engine-debug-7 /Users/norman/Development/android/projects/kuira-android-wallet/core/compact-engine/build/intermediates/packaged_res/debug/packageDebugResources
