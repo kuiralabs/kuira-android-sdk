@@ -46,21 +46,36 @@ Important: the wallet receives a **proven** transaction (step 3), not an unprove
 
 ## Architecture
 
-**Fully native Rust → ARM64.** No WebView, no JS, no WASM runtime.
+### What the investigation found
 
-Investigation revealed that the Rust `onchain-vm` has two execution modes:
+**The Rust VM can execute contracts dApp-side.** The `onchain-vm` crate has two modes:
 - `ResultModeVerify` — node-side, verifies proofs on-chain
-- `ResultModeGather` — **dApp-side, gathers proof preimages** (exactly what a dApp needs)
+- `ResultModeGather` — dApp-side, gathers proof preimages
 
-The JS `compact-runtime` is a TypeScript reimplementation of the Rust VM. We don't need it — the Rust crate already supports dApp-side execution. The `onchain-runtime` crate explicitly uses `ResultModeGather` for off-chain circuit execution.
+All required Rust crates (`onchain-runtime`, `onchain-vm`, `ledger`, `onchain-state`) have zero WASM dependencies. They compile for ARM64.
 
-All required Rust crates (`onchain-runtime`, `onchain-vm`, `ledger`, `onchain-state`) have **zero WASM dependencies**. Same crates the Midnight node runs on Linux x86. Will compile cleanly for ARM64 Android — same approach we already use for zswap and zkir.
+**But there's a gap.** The Compact compiler (`compactc`) only outputs JavaScript — not binary opcodes. The compiled contract (`index.js`) is generated JS code that contains VM opcodes (dup, idx, popeq, push) embedded as JSON structures, interleaved with witness function calls and proof data collection.
 
-**Why not WebView/WASM:**
+The opcodes in the JS match the Rust VM's `Op` enum exactly. The Rust VM CAN execute them — but we need a way to feed them in without running JS.
+
+### Options to bridge the gap
+
+| Approach | Description | Effort | Risk |
+|----------|------------|--------|------|
+| **A. Embedded lightweight JS** | Run compiled contract JS in QuickJS (~700KB, not a WebView) | Medium | Low — uses existing compiler output as-is |
+| **B. Binary opcode format** | Ask/contribute to Midnight to add a binary output to the Compact compiler | Medium | Depends on upstream acceptance |
+| **C. JS-to-opcode extractor** | Parse the compiled JS to extract opcode sequences, feed to Rust VM | Large | Fragile — breaks if compiler output format changes |
+| **D. Compact-to-Rust transpiler** | Convert compiler output to Rust Op sequences at build time | Large | Must track compiler changes |
+
+**Recommendation:** Start with A (QuickJS). It's 700KB, runs the existing compiled contracts unchanged, and doesn't depend on upstream changes. The JS execution is only for circuit logic — the heavy crypto (hashing, ZK proving, transaction building) stays in native Rust via FFI.
+
+Long-term, propose B to the Midnight team — a binary opcode format would enable fully native execution on any platform.
+
+### Why not WebView/WASM
+
+- No standalone WASM runtime can load `ledger-wasm` — it uses `wasm-bindgen` with 733 JS-specific bindings
 - WebView adds 50-100MB RAM, larger attack surface, battery drain
-- No standalone WASM runtime can load `ledger-wasm` (it uses wasm-bindgen with 733 JS-specific bindings)
-- Every mobile wallet using WebView for WASM (SubWallet, 1AM) does it as a workaround, not by choice
-- We already have the native Rust FFI pipeline proven and shipping
+- QuickJS is 700KB, embeddable, no browser dependencies
 
 ---
 
@@ -85,32 +100,36 @@ The critical piece. Compile `onchain-runtime` + `onchain-vm` for ARM64 and expos
 
 ## Steps
 
-- [ ] **6A: Compile onchain-runtime for ARM64** — add `onchain-runtime`, `onchain-vm`, `onchain-state` to `kuira-crypto-ffi` Cargo.toml and cross-compile. Validate it links and runs on emulator. This is the highest-risk step.
-- [ ] **6B: Contract FFI** — expose circuit execution (`run_program` with `ResultModeGather`) and contract transaction building (`ContractCallPrototype`) via JNI
-- [ ] **6C: Provider interfaces** — define Kotlin contracts, wrap existing modules with matching implementations
-- [ ] **6D: Private state** — encrypted dApp state storage on device
-- [ ] **6E: ZK config** — circuit key download and caching for arbitrary contracts
-- [ ] **6F: Contract runtime Kotlin wrapper** — deploy, call, find contracts via the FFI layer
-- [ ] **6G: BBoard integration** — wire everything together, complete the Android bboard example end-to-end: deploy → post → see on chain
-- [ ] **6H: Testing** — unit tests for each library, integration test with real contract on localnet
+- [ ] **6A: Compile onchain-runtime for ARM64** — add `onchain-runtime`, `onchain-vm`, `onchain-state` to `kuira-crypto-ffi` Cargo.toml and cross-compile. Validate it links and runs on emulator.
+- [ ] **6B: Embed QuickJS** — integrate QuickJS (~700KB) into the Android build. Verify it can load and execute a compiled Compact contract (`index.js`) with `compact-runtime` dependencies.
+- [ ] **6C: Contract execution bridge** — Kotlin wrapper that loads compiled contract JS in QuickJS, provides witness callbacks from Kotlin, and extracts proof preimages from the result.
+- [ ] **6D: Transaction builder FFI** — expose `ContractCallPrototype`, `ContractDeploy`, and transaction serialization via JNI using the Rust `midnight-ledger` crate.
+- [ ] **6E: Provider interfaces** — define Kotlin contracts, wrap existing modules with matching implementations.
+- [ ] **6F: Private state** — encrypted dApp state storage on device.
+- [ ] **6G: ZK config** — circuit key download and caching for arbitrary contracts.
+- [ ] **6H: BBoard integration** — wire everything together, complete the Android bboard example end-to-end: deploy → post → see on chain.
+- [ ] **6I: Testing** — unit tests for each library, integration test with real contract on localnet.
 
-6A is the critical path — do it first. If the crates compile (they should — zero WASM deps), everything else follows. 6C-6E can run in parallel after 6A.
+6A and 6B can run in parallel (independent). 6C depends on both. 6D-6G can run in parallel after 6A. 6H ties everything together.
 
 ---
 
 ## Risks
 
-### Transitive dependencies during ARM64 compilation
-The top-level crates have zero WASM deps, but transitive dependencies might introduce platform-specific code. We already handle this for zswap and zkir — same mitigation applies (feature-gating, patching).
+### Compact compiler only outputs JavaScript
+The compiled contract is JS — not a binary format the Rust VM can directly consume. Our bridge (QuickJS + Kotlin callbacks) adds a layer. If the Compact compiler ever adds a binary output, we can eliminate QuickJS entirely and go fully native.
 
-### Staying in sync with upstream
-The `onchain-runtime` and `onchain-vm` crates evolve with each Midnight release. Our FFI layer must track version updates. Since we compile from source (same approach as zswap), we update by bumping the crate path — straightforward.
+### QuickJS + compact-runtime compatibility
+The compiled contract imports `@midnight-ntwrk/compact-runtime`. We need this JS library to run inside QuickJS. It should work (QuickJS is ES2020 compliant) but needs testing with the specific runtime APIs used.
+
+### Witness function bridging
+Witnesses are JavaScript callbacks (e.g., `localSecretKey(witnessContext)`). In our architecture, the witness logic runs in Kotlin — QuickJS needs to call back into Kotlin to get private inputs. This JS↔Kotlin bridge is the most complex part of 6C.
+
+### Transitive dependencies during ARM64 compilation
+The top-level crates have zero WASM deps, but transitive dependencies might introduce platform-specific code. We already handle this for zswap and zkir.
 
 ### Transaction structure versioning
-The `midnight-ledger` crate is versioned (currently v8). The JS SDK uses `@midnight-ntwrk/ledger-v8`. Our FFI must match the same version. Already handled in our zswap FFI.
-
-### Witness function integration
-The JS SDK uses TypeScript witness functions to provide private inputs to circuits. In the Rust path, witnesses are handled differently — need to understand how `ResultModeGather` integrates with dApp-provided witnesses. This is the main unknown in step 6B.
+The `midnight-ledger` crate is versioned (currently v8). Our FFI must match. Already handled in our zswap FFI.
 
 ---
 
