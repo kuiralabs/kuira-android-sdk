@@ -1,10 +1,10 @@
 # Kuira Wallet - Implementation Plan
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
-**Total Invested:** ~250h across completed phases
-**Status:** Phase 1-4C ✅ | **Phase 5 (DApp Connector) → Next**
+**Total Invested:** ~280h across completed phases
+**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) → Next**
 
-**Last Updated:** April 2, 2026
+**Last Updated:** April 4, 2026
 
 ## Implementation Strategy
 
@@ -18,10 +18,11 @@
 7. ✅ **Phase 3**: Shielded transactions (~22h) — E2E working on localnet
 8. ✅ **Phase 4C**: Local ZK proving (~20h) — 1.7s proof on emulator, no proof server needed
 
+9. ✅ **Phase 5**: DApp Connector (~30h) — ConnectedAPI, WebSocket, IPC, approval UI, 4 transport layers, bboard example
 **Next:**
-9. ⏭️ **Phase 5**: DApp Connector — ConnectedAPI (18 methods) as Android Service
-10. ⏭️ **Phase 6**: UI & Polish
-11. ⏭️ **Phase 7+**: Agent Runtime, MOS Client, Game SDK (see KUIRA_VISION_V1.md)
+10. ⏭️ **Phase 6**: Android DApp SDK — QuickJS + Rust FFI for contract execution on mobile
+11. ⏭️ **Phase 7**: Agent Runtime — on-chain agent authorization via Compact contracts
+12. ⏭️ **Phase 8**: Production Polish — onboarding, settings, app store readiness
 
 ---
 
@@ -37,21 +38,42 @@
 | **Phase 4B-Shielded** | Shielded balance tracking (zswap events) | ~14h | ✅ Complete |
 | **Phase 3: Shielded Tx** | Private ZK transactions E2E | ~22h | ✅ Complete |
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
-| **Phase 5: DApp Connector** | ConnectedAPI (18 methods) + SDK | est 25-35h | ⏭️ Next |
-| **Phase 6: UI & Polish** | Production-ready app | est 15-20h | ⏸️ Planned |
+| **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
+| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | ⏭️ Next |
+| **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
+| **Phase 8: Production Polish** | Onboarding, settings, app store | est 15-20h | ⏸️ Planned |
 
-**Invested:** ~250h | **Remaining:** ~40-55h to DApp connector + polish
+**Invested:** ~280h | **Remaining:** ~75-110h to full production
 
-### Phase 5 Sub-Steps (see `docs/planning/DAPP_CONNECTOR_PLAN.md`)
+### Phase 5 Summary (Complete)
 
-| Step | Goal | Estimate |
-|------|------|----------|
-| 5A | ConnectedAPIHandler — 18 methods as Kotlin class | 8-10h |
-| 5B | JSON-RPC message router | 3-4h |
-| 5C | WebSocket server (Android Service, port 9932) | 4-5h |
-| 5D | Approval flow (dialogs for write ops) | 4-5h |
-| 5E | Service lifecycle + Hilt DI | 3-4h |
-| 5F | Integration testing (dApp client tests) | 3-5h |
+98 unit tests + 32 device tests. See `docs/planning/DAPP_CONNECTOR_PLAN.md`.
+
+**Delivered:**
+- ConnectedAPIHandler — all 17 ConnectedAPI methods
+- JSON-RPC 2.0 router with approval gate
+- WebSocket server on localhost:9932
+- 4 transport layers: WebSocket, Bound Service, WebView JS Bridge, Deep Link
+- B&W approval UI with animated entrance (stars, KUIRA materialize)
+- Cross-app IPC via Android Messenger (dApp-initiated approval)
+- Foreground service with notification
+- `core:designsystem` module (theme + effects)
+- BBoard Android example (IPC-based dApp scaffold)
+
+### Phase 6 Sub-Steps (see `docs/planning/ANDROID_DAPP_SDK_PLAN.md`)
+
+| Step | Goal |
+|------|------|
+| 6A | Extend Rust FFI — expose onchain-runtime types (StateValue, QueryContext, runProgram) via JNI |
+| 6B | Embed QuickJS in Android |
+| 6C | Build onchain-runtime shim — JS module replacing WASM with native Rust FFI calls |
+| 6D | Run compiled contract in QuickJS on Android (bboard proof of concept) |
+| 6E | Witness bridge — Kotlin↔JS callbacks for private inputs |
+| 6F | Proof preimage → UnprovenTransaction pipeline (QuickJS→Rust glue) |
+| 6G | Provider interfaces (Kotlin, wrapping existing modules) |
+| 6H | Private state + ZK config |
+| 6I | BBoard end-to-end: deploy → post → see on chain |
+| 6J | Testing |
 
 ### Key Architecture Decisions
 
