@@ -1,0 +1,2 @@
+04-04 09:57:52.717 24981 24995 I TestRunner: started: quickjs_evaluatesBasicJs(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)
+04-04 09:57:52.721 24981 24995 I TestRunner: finished: quickjs_evaluatesBasicJs(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)

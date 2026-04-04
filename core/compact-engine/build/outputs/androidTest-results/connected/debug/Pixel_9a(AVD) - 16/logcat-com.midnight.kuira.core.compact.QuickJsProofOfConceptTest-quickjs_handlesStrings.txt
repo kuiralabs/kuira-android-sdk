@@ -1,0 +1,3 @@
+04-04 09:57:52.684 24981 24995 I TestRunner: started: quickjs_handlesStrings(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)
+04-04 09:57:52.694 24981 24995 D nativeloader: Load /data/app/~~Sw63vTycQq6CokQXk5Dk1Q==/com.midnight.kuira.core.compact.test-YcxrOaqP8Zd2Q4Kc3kKJeQ==/base.apk!/lib/arm64-v8a/libquickjs.so using class loader ns clns-11 (caller=/data/app/~~Sw63vTycQq6CokQXk5Dk1Q==/com.midnight.kuira.core.compact.test-YcxrOaqP8Zd2Q4Kc3kKJeQ==/base.apk): ok
+04-04 09:57:52.701 24981 24995 I TestRunner: finished: quickjs_handlesStrings(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)

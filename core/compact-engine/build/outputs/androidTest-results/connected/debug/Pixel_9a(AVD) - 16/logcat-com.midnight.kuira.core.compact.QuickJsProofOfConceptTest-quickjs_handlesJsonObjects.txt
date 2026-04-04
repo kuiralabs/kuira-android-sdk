@@ -1,0 +1,2 @@
+04-04 09:57:52.715 24981 24995 I TestRunner: started: quickjs_handlesJsonObjects(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)
+04-04 09:57:52.716 24981 24995 I TestRunner: finished: quickjs_handlesJsonObjects(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)

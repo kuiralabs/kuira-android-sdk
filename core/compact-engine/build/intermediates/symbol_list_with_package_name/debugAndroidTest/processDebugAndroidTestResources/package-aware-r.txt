@@ -1,0 +1,3 @@
+com.midnight.kuira.core.compact.test
+style WhiteBackgroundDialogTheme
+style WhiteBackgroundTheme

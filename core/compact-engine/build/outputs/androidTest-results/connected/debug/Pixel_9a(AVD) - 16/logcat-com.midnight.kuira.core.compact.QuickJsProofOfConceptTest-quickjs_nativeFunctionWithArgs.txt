@@ -1,0 +1,2 @@
+04-04 09:57:52.707 24981 24995 I TestRunner: started: quickjs_nativeFunctionWithArgs(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)
+04-04 09:57:52.709 24981 24995 I TestRunner: finished: quickjs_nativeFunctionWithArgs(com.midnight.kuira.core.compact.QuickJsProofOfConceptTest)
