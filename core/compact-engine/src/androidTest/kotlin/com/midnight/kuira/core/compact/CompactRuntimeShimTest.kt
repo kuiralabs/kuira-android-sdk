@@ -24,11 +24,11 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("onchain-shim", loadAsset("runtime/onchain-runtime-shim.js"))
+                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
 
                 evaluate<Any?>("""
-                    import { StateValue } from 'onchain-shim';
+                    import { StateValue } from 'compact-runtime';
                     const sv = StateValue.newNull();
                     const arr = StateValue.newArray();
                     const pushed = arr.arrayPush(sv);
@@ -46,11 +46,11 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("onchain-shim", loadAsset("runtime/onchain-runtime-shim.js"))
+                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
 
                 evaluate<Any?>("""
-                    import { ContractState, ContractOperation, ChargedState, StateValue } from 'onchain-shim';
+                    import { ContractState, ContractOperation, ChargedState, StateValue } from 'compact-runtime';
                     const state = new ContractState();
                     state.setOperation('post', new ContractOperation());
                     const sv = StateValue.newArray();
@@ -71,11 +71,11 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("onchain-shim", loadAsset("runtime/onchain-runtime-shim.js"))
+                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
 
                 evaluate<Any?>("""
-                    import { dummyContractAddress } from 'onchain-shim';
+                    import { dummyContractAddress } from 'compact-runtime';
                     capture(dummyContractAddress());
                 """.trimIndent(), asModule = true)
             }
@@ -89,11 +89,11 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("onchain-shim", loadAsset("runtime/onchain-runtime-shim.js"))
+                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
 
                 evaluate<Any?>("""
-                    import { valueToBigInt } from 'onchain-shim';
+                    import { valueToBigInt } from 'compact-runtime';
                     const v = valueToBigInt(42);
                     capture(v.toString());
                 """.trimIndent(), asModule = true)

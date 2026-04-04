@@ -275,10 +275,13 @@ export function bigIntToValue(n) {
 }
 
 export function maxAlignedSize() { return 32; }
-export function maxField() { return (1n << 254n) - 1n; }
+export function maxField() {
+  // BLS12-381 scalar field order (Fr) — must match Midnight's onchain-runtime
+  return 52435875175126190479447740508185965837690552500527637822603658699938581184512n;
+}
 
 export function bigIntModFr(n) {
-  const FR_MODULUS = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001n;
+  const FR_MODULUS = 52435875175126190479447740508185965837690552500527637822603658699938581184512n;
   return ((n % FR_MODULUS) + FR_MODULUS) % FR_MODULUS;
 }
 
