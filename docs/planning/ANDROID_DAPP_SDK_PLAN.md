@@ -46,26 +46,21 @@ Important: the wallet receives a **proven** transaction (step 3), not an unprove
 
 ## Architecture
 
-Two layers to build:
+**Fully native Rust → ARM64.** No WebView, no JS, no WASM runtime.
 
-**Layer 1 — Transaction structure and proving (Rust → ARM64)**
-The `midnight-ledger` Rust crates handle transaction construction, serialization, and proving. We already compile parts of these (zswap, zkir) for ARM64. We need to extend to cover contract-related transaction types.
+Investigation revealed that the Rust `onchain-vm` has two execution modes:
+- `ResultModeVerify` — node-side, verifies proofs on-chain
+- `ResultModeGather` — **dApp-side, gathers proof preimages** (exactly what a dApp needs)
 
-**Layer 2 — Circuit execution (the hard part)**
-In the JS SDK, Compact circuits are executed by `compact-js` and `compact-runtime` — these are **pure TypeScript/JavaScript**, not Rust. The `midnight-onchain-runtime` Rust crate is for node-side on-chain validation, not dApp-side circuit execution.
+The JS `compact-runtime` is a TypeScript reimplementation of the Rust VM. We don't need it — the Rust crate already supports dApp-side execution. The `onchain-runtime` crate explicitly uses `ResultModeGather` for off-chain circuit execution.
 
-This means we cannot simply "compile the Rust crate for ARM64" to get circuit execution. We need one of:
+All required Rust crates (`onchain-runtime`, `onchain-vm`, `ledger`, `onchain-state`) have **zero WASM dependencies**. Same crates the Midnight node runs on Linux x86. Will compile cleanly for ARM64 Android — same approach we already use for zswap and zkir.
 
-| Approach | Description | Tradeoff |
-|----------|------------|---------|
-| **A. Embedded JS runtime** | Run `compact-runtime` in an embedded V8/QuickJS/Hermes engine on Android | Fastest path — reuses existing JS code. Adds ~5-10MB. Some performance overhead. |
-| **B. Port compact-runtime to Kotlin** | Rewrite the Compact VM in Kotlin | Clean native solution. Large effort. Must stay in sync with upstream. |
-| **C. Port compact-runtime to Rust** | Rewrite in Rust, compile for ARM64 via FFI | Best performance. Largest effort. Could upstream to Midnight. |
-| **D. WASM runtime on Android** | Run the existing `ledger-wasm` WASM binary via a WASM runtime (Wasmer/Wasmtime) | Uses the exact same code path as web. Adds ~2-5MB. Proven correct. |
-
-**Recommendation:** Investigate D first (WASM runtime). It uses the same compiled output as the JS SDK, guaranteeing correctness. Wasmer and Wasmtime both support ARM64 Android. If performance is acceptable, this is the safest path.
-
-Fallback to A (embedded JS) if WASM runtime has issues.
+**Why not WebView/WASM:**
+- WebView adds 50-100MB RAM, larger attack surface, battery drain
+- No standalone WASM runtime can load `ledger-wasm` (it uses wasm-bindgen with 733 JS-specific bindings)
+- Every mobile wallet using WebView for WASM (SubWallet, 1AM) does it as a workaround, not by choice
+- We already have the native Rust FFI pipeline proven and shipping
 
 ---
 
@@ -83,39 +78,39 @@ Download and cache ZKIR + prover/verifier keys for arbitrary contract circuits. 
 ### 4. Transaction Builder (`core:contract-tx`)
 Extends the Rust FFI layer to handle contract-related transaction types (deploy, call). Uses the `midnight-ledger` Rust crate which we already partially compile. This handles transaction construction and serialization, NOT circuit execution.
 
-### 5. Contract Runtime (`core:compact-runtime`)
-The critical piece. Executes Compact circuit code on Android. Approach depends on investigation results (WASM runtime vs embedded JS vs native port).
+### 5. Contract Runtime (`core:contract`)
+The critical piece. Compile `onchain-runtime` + `onchain-vm` for ARM64 and expose circuit execution via JNI. Uses `ResultModeGather` for dApp-side proof preimage generation — the same mode the Rust crate already supports.
 
 ---
 
 ## Steps
 
-- [ ] **6A: Investigate circuit execution approach** — try compiling `ledger-wasm` WASM binary and running it via Wasmer/Wasmtime on ARM64 Android. Measure performance. This determines the entire strategy. Do it first.
-- [ ] **6B: Provider interfaces** — define Kotlin contracts, wrap existing modules with matching implementations
-- [ ] **6C: Private state** — encrypted dApp state storage on device
-- [ ] **6D: ZK config** — circuit key download and caching for arbitrary contracts
-- [ ] **6E: Transaction builder FFI** — extend Rust FFI for contract transaction types (deploy, call) using midnight-ledger crate
-- [ ] **6F: Contract runtime** — integrate the chosen circuit execution approach (WASM/JS/native) into a Kotlin-friendly API
+- [ ] **6A: Compile onchain-runtime for ARM64** — add `onchain-runtime`, `onchain-vm`, `onchain-state` to `kuira-crypto-ffi` Cargo.toml and cross-compile. Validate it links and runs on emulator. This is the highest-risk step.
+- [ ] **6B: Contract FFI** — expose circuit execution (`run_program` with `ResultModeGather`) and contract transaction building (`ContractCallPrototype`) via JNI
+- [ ] **6C: Provider interfaces** — define Kotlin contracts, wrap existing modules with matching implementations
+- [ ] **6D: Private state** — encrypted dApp state storage on device
+- [ ] **6E: ZK config** — circuit key download and caching for arbitrary contracts
+- [ ] **6F: Contract runtime Kotlin wrapper** — deploy, call, find contracts via the FFI layer
 - [ ] **6G: BBoard integration** — wire everything together, complete the Android bboard example end-to-end: deploy → post → see on chain
 - [ ] **6H: Testing** — unit tests for each library, integration test with real contract on localnet
 
-6A is the critical decision point — do it before anything else. 6B-6D can run in parallel after 6A. 6E-6F depend on 6A's outcome.
+6A is the critical path — do it first. If the crates compile (they should — zero WASM deps), everything else follows. 6C-6E can run in parallel after 6A.
 
 ---
 
 ## Risks
 
-### Circuit execution is pure JS, not Rust
-The Compact runtime (`compact-js`, `compact-runtime`) is TypeScript/JavaScript. The Rust `midnight-onchain-runtime` crate is for node-side on-chain validation only. This means we can't just compile a Rust crate — we need a JS or WASM runtime on Android, or a port.
-
-### WASM runtime performance on mobile
-If we go with approach D (WASM runtime), we need to verify that Wasmer/Wasmtime on ARM64 Android provides acceptable performance for circuit execution. The WASM binary was designed for browser V8, which is highly optimized — a standalone WASM runtime may be slower.
+### Transitive dependencies during ARM64 compilation
+The top-level crates have zero WASM deps, but transitive dependencies might introduce platform-specific code. We already handle this for zswap and zkir — same mitigation applies (feature-gating, patching).
 
 ### Staying in sync with upstream
-The Compact runtime evolves with each Midnight release. Whatever approach we choose must be maintainable as the protocol changes. WASM or embedded JS approaches are easier to update than a native port.
+The `onchain-runtime` and `onchain-vm` crates evolve with each Midnight release. Our FFI layer must track version updates. Since we compile from source (same approach as zswap), we update by bumping the crate path — straightforward.
 
 ### Transaction structure versioning
-The `midnight-ledger` crate is versioned (currently v8). The JS SDK uses `@midnight-ntwrk/ledger-v8`. Our FFI must match the same version. This is already handled in our zswap FFI but needs attention for contract transaction types.
+The `midnight-ledger` crate is versioned (currently v8). The JS SDK uses `@midnight-ntwrk/ledger-v8`. Our FFI must match the same version. Already handled in our zswap FFI.
+
+### Witness function integration
+The JS SDK uses TypeScript witness functions to provide private inputs to circuits. In the Rust path, witnesses are handled differently — need to understand how `ResultModeGather` integrates with dApp-provided witnesses. This is the main unknown in step 6B.
 
 ---
 
