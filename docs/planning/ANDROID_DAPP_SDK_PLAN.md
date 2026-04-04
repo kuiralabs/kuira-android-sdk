@@ -48,28 +48,23 @@ Steps 4-5 are done (Phase 5). Steps 1-3 need the Android DApp SDK. Step 1 runs i
 ### Decision: QuickJS for circuit execution, Rust FFI for everything else
 
 **Investigation summary:**
-- The Rust `onchain-vm` has `ResultModeGather` for dApp-side execution — the VM itself is capable
-- But the Compact compiler only outputs JavaScript — no binary opcode format exists
-- The compiled JS interleaves VM opcodes with witness calls and control flow — opcodes can't be extracted without the orchestration logic
-- No standalone WASM runtime can load `ledger-wasm` (733 wasm-bindgen JS bindings)
-- WebView is 50-100MB RAM, wrong tool for a wallet
+- The Compact compiler outputs JavaScript — the compiled contract is JS code with embedded VM opcodes
+- `compact-runtime` (the JS library compiled contracts import) is a thin JS glue layer (~1400 lines) on top of `@midnight-ntwrk/onchain-runtime-v2` — which is the Rust `onchain-runtime` compiled to **WASM**
+- The heavy operations (state management, hashing, VM execution) are in the WASM, not in JS
+- We already compile the same Rust `onchain-runtime` crate for ARM64 natively
+- No standalone WASM runtime can load the WASM module (it uses wasm-bindgen with JS-specific bindings)
 
-**The split:**
+**The approach:**
 
-QuickJS handles circuit orchestration (~700KB, light computation):
-- Runs the compiled contract JS unchanged
-- Calls witness functions (bridges to Kotlin for private inputs)
-- Collects proof preimages (publicTranscript, privateTranscriptOutputs)
+QuickJS (~700KB) runs the compiled contract JS + compact-runtime glue. But the `onchain-runtime-v2` WASM import gets replaced with a **shim that calls our native Rust FFI**. The JS handles orchestration; all heavy computation runs native ARM64.
 
-Native Rust FFI handles heavy crypto (existing 10MB .so):
-- ZK proof generation (LocalProver)
-- Transaction building and serialization
-- Hashing, signatures, coin selection
-- Balance and submit via wallet IPC
+This means:
+- Compiled contracts run unchanged (same JS the Compact compiler outputs)
+- The ~1400 lines of compact-runtime JS glue runs in QuickJS
+- Every call compact-runtime makes to the WASM module (`StateValue`, `QueryContext`, `runProgram`, etc.) is redirected to our existing Rust FFI
+- ZK proving, transaction building, hashing — all native Rust
 
-This is not a compromise. The JS portion is trivial computation (~1ms). All the expensive work (proving ~1.7s, hashing, crypto) runs native. QuickJS is 700KB — smaller than a single proving key file.
-
-**No lock-in:** if the Compact compiler ever adds a binary opcode output, we drop QuickJS and feed opcodes directly to the Rust VM. Zero architecture change — just swap the circuit executor.
+**No lock-in:** if the Compact compiler ever adds a binary opcode output, we drop QuickJS and go fully native.
 
 ---
 
@@ -88,33 +83,37 @@ Download and cache ZKIR + prover/verifier keys for arbitrary contract circuits. 
 Extends the Rust FFI layer to handle contract-related transaction types (deploy, call). Uses the `midnight-ledger` Rust crate. Handles transaction construction and serialization.
 
 ### 5. Circuit Executor (`core:compact-engine`)
-QuickJS embedded in Android, loaded with `compact-runtime` and compiled contract JS. Provides Kotlin API to execute circuits, bridge witness callbacks, and extract proof preimages.
+QuickJS embedded in Android, loaded with `compact-runtime` JS glue and compiled contract JS. The `@midnight-ntwrk/onchain-runtime-v2` WASM import is replaced with a native shim that calls our Rust FFI (`StateValue`, `QueryContext`, `runProgram`, etc.). Provides Kotlin API to execute circuits, bridge witness callbacks, and extract proof preimages.
 
 ---
 
 ## Steps
 
 - [ ] **6A: Extend Rust FFI for contract transactions** — add contract-related types from `midnight-ledger` to `kuira-crypto-ffi` (ContractCallPrototype, Intent, ContractDeploy). Cross-compile for ARM64. The `onchain-runtime` comes along as a transitive dependency of `midnight-ledger` — we don't call it directly.
-- [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Bundle `@midnight-ntwrk/compact-runtime` JS alongside it. Verify it can execute basic JS and load the compact-runtime module.
-- [ ] **6C: Run a compiled contract in QuickJS** — load bboard's `index.js` in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages (publicTranscript, privateTranscriptOutputs, input, output) from the result.
-- [ ] **6D: Witness bridge** — implement Kotlin↔JS callback bridge so QuickJS can call Kotlin for witness data (private inputs like secret keys). Test with bboard's `localSecretKey` witness.
-- [ ] **6E: Proof preimage → UnprovenTransaction** — bridge QuickJS output to Rust FFI. Pass proof preimages from JS to the Rust `ContractCallPrototype` → `Intent` → `UnprovenTransaction` pipeline. This is the critical glue between the two runtimes.
-- [ ] **6F: Provider interfaces** — define Kotlin interfaces, implement using existing modules.
-- [ ] **6G: Private state + ZK config** — encrypted storage and circuit key management.
-- [ ] **6H: BBoard end-to-end** — deploy board → post message → see on chain. All on Android.
-- [ ] **6I: Testing** — unit tests per library, integration test on localnet.
+- [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Verify it can execute basic JS.
+- [ ] **6C: Build onchain-runtime shim** — create a JS module that implements the `@midnight-ntwrk/onchain-runtime-v2` API (StateValue, QueryContext, runProgram, etc.) by calling our Rust FFI through QuickJS's C API. Bundle compact-runtime JS glue (~1400 lines) with this shim replacing the WASM import.
+- [ ] **6D: Run a compiled contract** — load bboard's `index.js` + shimmed compact-runtime in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages from the result.
+- [ ] **6E: Witness bridge** — implement Kotlin↔JS callback bridge so QuickJS can call Kotlin for witness data (private inputs like secret keys). Test with bboard's `localSecretKey` witness.
+- [ ] **6F: Proof preimage → UnprovenTransaction** — bridge QuickJS circuit output to Rust FFI. Pass proof preimages from JS to the Rust `ContractCallPrototype` → `Intent` → `UnprovenTransaction` pipeline. This is the critical glue between the two runtimes.
+- [ ] **6G: Provider interfaces** — define Kotlin interfaces, implement using existing modules.
+- [ ] **6H: Private state + ZK config** — encrypted storage and circuit key management.
+- [ ] **6I: BBoard end-to-end** — deploy board → post message → see on chain. All on Android.
+- [ ] **6J: Testing** — unit tests per library, integration test on localnet.
 
-6A and 6B are independent — run in parallel. 6C-6D depend on 6B. 6E depends on 6A + 6C. 6F-6G can run anytime. 6H ties everything together.
+6A and 6B are independent — run in parallel. 6C depends on 6A (needs the Rust FFI for the shim). 6D-6E depend on 6B + 6C. 6F depends on 6A + 6D. 6G-6H can run anytime. 6I ties everything together.
 
 ---
 
 ## Risks
 
+### Onchain-runtime shim completeness
+The `compact-runtime` uses ~30 functions from `onchain-runtime-v2` (StateValue, QueryContext, runProgram, ContractState, CostModel, etc.). Each one needs a matching Rust FFI call exposed through the QuickJS shim. If we miss any, compiled contracts will fail at runtime. Step 6C mitigates this by testing with a real contract (bboard).
+
 ### QuickJS + compact-runtime compatibility
-The compiled contract imports `@midnight-ntwrk/compact-runtime`. This JS library must run inside QuickJS (ES2020 compliant). Needs testing — step 6B validates this early.
+The ~1400 lines of compact-runtime JS glue must run inside QuickJS (ES2020). Most of it is type handling and re-exports. The main concern is any use of Node.js or browser-specific APIs (`Buffer`, `crypto`, `fetch`).
 
 ### Witness function bridging
-Witnesses are JS callbacks that need Kotlin data. The JS↔Kotlin bridge through QuickJS's C API is the most complex integration point. Step 6D is dedicated to solving this.
+Witnesses are JS callbacks that need Kotlin data. The JS↔Kotlin bridge through QuickJS's C API is the most complex integration point. Step 6E is dedicated to solving this.
 
 ### Transitive dependencies during ARM64 compilation
 The Rust crates have zero WASM deps at the top level, but transitive deps might introduce platform-specific code. Already handled for zswap and zkir — same mitigation.
