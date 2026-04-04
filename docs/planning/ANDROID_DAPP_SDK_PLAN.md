@@ -46,36 +46,31 @@ Important: the wallet receives a **proven** transaction (step 3), not an unprove
 
 ## Architecture
 
-### What the investigation found
+### Decision: QuickJS for circuit execution, Rust FFI for everything else
 
-**The Rust VM can execute contracts dApp-side.** The `onchain-vm` crate has two modes:
-- `ResultModeVerify` — node-side, verifies proofs on-chain
-- `ResultModeGather` — dApp-side, gathers proof preimages
+**Investigation summary:**
+- The Rust `onchain-vm` has `ResultModeGather` for dApp-side execution — the VM itself is capable
+- But the Compact compiler only outputs JavaScript — no binary opcode format exists
+- The compiled JS interleaves VM opcodes with witness calls and control flow — opcodes can't be extracted without the orchestration logic
+- No standalone WASM runtime can load `ledger-wasm` (733 wasm-bindgen JS bindings)
+- WebView is 50-100MB RAM, wrong tool for a wallet
 
-All required Rust crates (`onchain-runtime`, `onchain-vm`, `ledger`, `onchain-state`) have zero WASM dependencies. They compile for ARM64.
+**The split:**
 
-**But there's a gap.** The Compact compiler (`compactc`) only outputs JavaScript — not binary opcodes. The compiled contract (`index.js`) is generated JS code that contains VM opcodes (dup, idx, popeq, push) embedded as JSON structures, interleaved with witness function calls and proof data collection.
+QuickJS handles circuit orchestration (~700KB, light computation):
+- Runs the compiled contract JS unchanged
+- Calls witness functions (bridges to Kotlin for private inputs)
+- Collects proof preimages (publicTranscript, privateTranscriptOutputs)
 
-The opcodes in the JS match the Rust VM's `Op` enum exactly. The Rust VM CAN execute them — but we need a way to feed them in without running JS.
+Native Rust FFI handles heavy crypto (existing 10MB .so):
+- ZK proof generation (LocalProver)
+- Transaction building and serialization
+- Hashing, signatures, coin selection
+- Balance and submit via wallet IPC
 
-### Options to bridge the gap
+This is not a compromise. The JS portion is trivial computation (~1ms). All the expensive work (proving ~1.7s, hashing, crypto) runs native. QuickJS is 700KB — smaller than a single proving key file.
 
-| Approach | Description | Effort | Risk |
-|----------|------------|--------|------|
-| **A. Embedded lightweight JS** | Run compiled contract JS in QuickJS (~700KB, not a WebView) | Medium | Low — uses existing compiler output as-is |
-| **B. Binary opcode format** | Ask/contribute to Midnight to add a binary output to the Compact compiler | Medium | Depends on upstream acceptance |
-| **C. JS-to-opcode extractor** | Parse the compiled JS to extract opcode sequences, feed to Rust VM | Large | Fragile — breaks if compiler output format changes |
-| **D. Compact-to-Rust transpiler** | Convert compiler output to Rust Op sequences at build time | Large | Must track compiler changes |
-
-**Recommendation:** Start with A (QuickJS). It's 700KB, runs the existing compiled contracts unchanged, and doesn't depend on upstream changes. The JS execution is only for circuit logic — the heavy crypto (hashing, ZK proving, transaction building) stays in native Rust via FFI.
-
-Long-term, propose B to the Midnight team — a binary opcode format would enable fully native execution on any platform.
-
-### Why not WebView/WASM
-
-- No standalone WASM runtime can load `ledger-wasm` — it uses `wasm-bindgen` with 733 JS-specific bindings
-- WebView adds 50-100MB RAM, larger attack surface, battery drain
-- QuickJS is 700KB, embeddable, no browser dependencies
+**No lock-in:** if the Compact compiler ever adds a binary opcode output, we drop QuickJS and feed opcodes directly to the Rust VM. Zero architecture change — just swap the circuit executor.
 
 ---
 
@@ -90,43 +85,40 @@ Encrypted on-device storage for dApp-specific secrets (e.g., bboard's secret key
 ### 3. ZK Config Manager (`core:zk-config`)
 Download and cache ZKIR + prover/verifier keys for arbitrary contract circuits. Extends the existing ProvingKeyManager pattern beyond wallet-specific keys.
 
-### 4. Transaction Builder (`core:contract-tx`)
-Extends the Rust FFI layer to handle contract-related transaction types (deploy, call). Uses the `midnight-ledger` Rust crate which we already partially compile. This handles transaction construction and serialization, NOT circuit execution.
+### 4. Transaction Builder FFI (`core:contract-tx`)
+Extends the Rust FFI layer to handle contract-related transaction types (deploy, call). Uses the `midnight-ledger` Rust crate. Handles transaction construction and serialization.
 
-### 5. Contract Runtime (`core:contract`)
-The critical piece. Compile `onchain-runtime` + `onchain-vm` for ARM64 and expose circuit execution via JNI. Uses `ResultModeGather` for dApp-side proof preimage generation — the same mode the Rust crate already supports.
+### 5. Circuit Executor (`core:compact-engine`)
+QuickJS embedded in Android, loaded with `compact-runtime` and compiled contract JS. Provides Kotlin API to execute circuits, bridge witness callbacks, and extract proof preimages.
 
 ---
 
 ## Steps
 
 - [ ] **6A: Compile onchain-runtime for ARM64** — add `onchain-runtime`, `onchain-vm`, `onchain-state` to `kuira-crypto-ffi` Cargo.toml and cross-compile. Validate it links and runs on emulator.
-- [ ] **6B: Embed QuickJS** — integrate QuickJS (~700KB) into the Android build. Verify it can load and execute a compiled Compact contract (`index.js`) with `compact-runtime` dependencies.
-- [ ] **6C: Contract execution bridge** — Kotlin wrapper that loads compiled contract JS in QuickJS, provides witness callbacks from Kotlin, and extracts proof preimages from the result.
-- [ ] **6D: Transaction builder FFI** — expose `ContractCallPrototype`, `ContractDeploy`, and transaction serialization via JNI using the Rust `midnight-ledger` crate.
-- [ ] **6E: Provider interfaces** — define Kotlin contracts, wrap existing modules with matching implementations.
-- [ ] **6F: Private state** — encrypted dApp state storage on device.
-- [ ] **6G: ZK config** — circuit key download and caching for arbitrary contracts.
-- [ ] **6H: BBoard integration** — wire everything together, complete the Android bboard example end-to-end: deploy → post → see on chain.
-- [ ] **6I: Testing** — unit tests for each library, integration test with real contract on localnet.
+- [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Verify it can execute basic JS. Test loading `compact-runtime` module.
+- [ ] **6C: Run a compiled contract in QuickJS** — load bboard's `index.js` + `compact-runtime` in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages from the result.
+- [ ] **6D: Witness bridge** — implement Kotlin↔JS callback bridge so QuickJS can call Kotlin functions for witness data (private inputs). Test with bboard's `localSecretKey` witness.
+- [ ] **6E: Transaction builder FFI** — expose contract transaction building via JNI using `midnight-ledger` Rust crate. Package proof preimages from QuickJS into an unproven transaction.
+- [ ] **6F: Provider interfaces** — define Kotlin interfaces, implement using existing modules.
+- [ ] **6G: Private state + ZK config** — encrypted storage and circuit key management.
+- [ ] **6H: BBoard end-to-end** — deploy board → post message → see on chain. All on Android.
+- [ ] **6I: Testing** — unit tests per library, integration test on localnet.
 
-6A and 6B can run in parallel (independent). 6C depends on both. 6D-6G can run in parallel after 6A. 6H ties everything together.
+6A and 6B are independent — run in parallel. 6C-6D depend on 6B. 6E depends on 6A. 6F-6G can run anytime. 6H ties everything together.
 
 ---
 
 ## Risks
 
-### Compact compiler only outputs JavaScript
-The compiled contract is JS — not a binary format the Rust VM can directly consume. Our bridge (QuickJS + Kotlin callbacks) adds a layer. If the Compact compiler ever adds a binary output, we can eliminate QuickJS entirely and go fully native.
-
 ### QuickJS + compact-runtime compatibility
-The compiled contract imports `@midnight-ntwrk/compact-runtime`. We need this JS library to run inside QuickJS. It should work (QuickJS is ES2020 compliant) but needs testing with the specific runtime APIs used.
+The compiled contract imports `@midnight-ntwrk/compact-runtime`. This JS library must run inside QuickJS (ES2020 compliant). Needs testing — step 6B validates this early.
 
 ### Witness function bridging
-Witnesses are JavaScript callbacks (e.g., `localSecretKey(witnessContext)`). In our architecture, the witness logic runs in Kotlin — QuickJS needs to call back into Kotlin to get private inputs. This JS↔Kotlin bridge is the most complex part of 6C.
+Witnesses are JS callbacks that need Kotlin data. The JS↔Kotlin bridge through QuickJS's C API is the most complex integration point. Step 6D is dedicated to solving this.
 
 ### Transitive dependencies during ARM64 compilation
-The top-level crates have zero WASM deps, but transitive dependencies might introduce platform-specific code. We already handle this for zswap and zkir.
+The Rust crates have zero WASM deps at the top level, but transitive deps might introduce platform-specific code. Already handled for zswap and zkir — same mitigation.
 
 ### Transaction structure versioning
 The `midnight-ledger` crate is versioned (currently v8). Our FFI must match. Already handled in our zswap FFI.
@@ -135,7 +127,7 @@ The `midnight-ledger` crate is versioned (currently v8). Our FFI must match. Alr
 
 ## End State
 
-An Android dApp developer can execute Compact contract circuits, generate ZK proofs, and submit transactions — all on the phone. No browser, no WebView. The bboard example works end-to-end as proof.
+An Android dApp developer can execute Compact contract circuits, generate ZK proofs, and submit transactions — all on the phone. No browser, no WebView. QuickJS (700KB) handles circuit orchestration. Rust (native) handles all crypto. The bboard example works end-to-end as proof.
 
 ---
 
@@ -143,9 +135,10 @@ An Android dApp developer can execute Compact contract circuits, generate ZK pro
 
 - JS SDK: `midnight-libraries/midnight-js/packages/`
 - Compact runtime (JS): `@midnight-ntwrk/compact-js`, `@midnight-ntwrk/compact-runtime`
-- Ledger WASM (Rust→WASM): `midnight-libraries/midnight-ledger/ledger-wasm/`
-- Onchain runtime (Rust, node-side only): `midnight-libraries/midnight-ledger/onchain-runtime/`
+- Compiled contract example: `example-bboard/contract/src/managed/bboard/contract/index.js`
+- Onchain VM (Rust): `midnight-ledger/onchain-vm/` — `run_program`, `ResultModeGather`, `Op` enum
 - Transaction flow: `midnight-js/packages/contracts/src/submit-tx.ts` — `proveTx → balanceTx → submitTx`
+- QuickJS: https://bellard.org/quickjs/
 - Existing FFI: `kuira-crypto-ffi/src/` (zswap_ffi.rs, prove_ffi.rs)
-- BBoard contract: `midnight-libraries/example-bboard/contract/src/bboard.compact`
-- BBoard API: `midnight-libraries/example-bboard/api/src/index.ts`
+- BBoard contract: `example-bboard/contract/src/bboard.compact`
+- BBoard API: `example-bboard/api/src/index.ts`
