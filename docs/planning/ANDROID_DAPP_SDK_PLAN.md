@@ -14,14 +14,13 @@ A dApp needs to build a contract transaction before the wallet can balance and s
 
 ## How a Contract Transaction Flows
 
-1. **dApp executes circuit locally** — runs the Compact contract logic with private inputs, produces an unproven transaction
-2. **dApp proves the transaction** — generates a ZK proof, producing a proven transaction
-3. **Wallet balances the proven transaction** — adds coins, pays fees, signs (we have `ConnectedAPI.balanceUnsealedTransaction`)
-4. **Wallet submits to network** — relays the finalized transaction to blockchain (we have `ConnectedAPI.submitTransaction`)
+1. **dApp executes circuit** — runs Compact contract logic with private inputs (witnesses), produces proof preimages + state changes
+2. **dApp assembles unproven transaction** — packages proof preimages into a `ContractCallPrototype` → `Intent` → `UnprovenTransaction` using ledger types
+3. **dApp proves the transaction** — generates a ZK proof, producing a proven transaction
+4. **Wallet balances the proven transaction** — adds coins, pays fees, signs (we have `ConnectedAPI.balanceUnsealedTransaction`)
+5. **Wallet submits to network** — relays the finalized transaction to blockchain (we have `ConnectedAPI.submitTransaction`)
 
-Steps 3-4 are done (Phase 5). Steps 1-2 need the Android DApp SDK.
-
-Important: the wallet receives a **proven** transaction (step 3), not an unproven one. The dApp must prove first, then send to the wallet for balancing.
+Steps 4-5 are done (Phase 5). Steps 1-3 need the Android DApp SDK. Step 1 runs in QuickJS. Steps 2-3 run in native Rust FFI.
 
 ---
 
@@ -95,17 +94,17 @@ QuickJS embedded in Android, loaded with `compact-runtime` and compiled contract
 
 ## Steps
 
-- [ ] **6A: Compile onchain-runtime for ARM64** — add `onchain-runtime`, `onchain-vm`, `onchain-state` to `kuira-crypto-ffi` Cargo.toml and cross-compile. Validate it links and runs on emulator.
-- [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Verify it can execute basic JS. Test loading `compact-runtime` module.
-- [ ] **6C: Run a compiled contract in QuickJS** — load bboard's `index.js` + `compact-runtime` in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages from the result.
-- [ ] **6D: Witness bridge** — implement Kotlin↔JS callback bridge so QuickJS can call Kotlin functions for witness data (private inputs). Test with bboard's `localSecretKey` witness.
-- [ ] **6E: Transaction builder FFI** — expose contract transaction building via JNI using `midnight-ledger` Rust crate. Package proof preimages from QuickJS into an unproven transaction.
+- [ ] **6A: Extend Rust FFI for contract transactions** — add contract-related types from `midnight-ledger` to `kuira-crypto-ffi` (ContractCallPrototype, Intent, ContractDeploy). Cross-compile for ARM64. The `onchain-runtime` comes along as a transitive dependency of `midnight-ledger` — we don't call it directly.
+- [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Bundle `@midnight-ntwrk/compact-runtime` JS alongside it. Verify it can execute basic JS and load the compact-runtime module.
+- [ ] **6C: Run a compiled contract in QuickJS** — load bboard's `index.js` in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages (publicTranscript, privateTranscriptOutputs, input, output) from the result.
+- [ ] **6D: Witness bridge** — implement Kotlin↔JS callback bridge so QuickJS can call Kotlin for witness data (private inputs like secret keys). Test with bboard's `localSecretKey` witness.
+- [ ] **6E: Proof preimage → UnprovenTransaction** — bridge QuickJS output to Rust FFI. Pass proof preimages from JS to the Rust `ContractCallPrototype` → `Intent` → `UnprovenTransaction` pipeline. This is the critical glue between the two runtimes.
 - [ ] **6F: Provider interfaces** — define Kotlin interfaces, implement using existing modules.
 - [ ] **6G: Private state + ZK config** — encrypted storage and circuit key management.
 - [ ] **6H: BBoard end-to-end** — deploy board → post message → see on chain. All on Android.
 - [ ] **6I: Testing** — unit tests per library, integration test on localnet.
 
-6A and 6B are independent — run in parallel. 6C-6D depend on 6B. 6E depends on 6A. 6F-6G can run anytime. 6H ties everything together.
+6A and 6B are independent — run in parallel. 6C-6D depend on 6B. 6E depends on 6A + 6C. 6F-6G can run anytime. 6H ties everything together.
 
 ---
 
