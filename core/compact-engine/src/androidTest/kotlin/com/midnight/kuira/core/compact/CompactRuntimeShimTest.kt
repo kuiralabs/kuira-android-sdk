@@ -24,16 +24,14 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
                 evaluate<Any?>("""
-                    import { StateValue } from 'compact-runtime';
-                    const sv = StateValue.newNull();
-                    const arr = StateValue.newArray();
+                    const sv = __compactRuntime.StateValue.newNull();
+                    const arr = __compactRuntime.StateValue.newArray();
                     const pushed = arr.arrayPush(sv);
                     capture(JSON.stringify({ nullType: sv._data.type, arrLength: pushed._data.items.length }));
-                """.trimIndent(), asModule = true)
+                """.trimIndent())
             }
         }
         assertNotNull("Should capture result", result)
@@ -46,20 +44,18 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
                 evaluate<Any?>("""
-                    import { ContractState, ContractOperation, ChargedState, StateValue } from 'compact-runtime';
-                    const state = new ContractState();
-                    state.setOperation('post', new ContractOperation());
-                    const sv = StateValue.newArray();
-                    state.data = new ChargedState(sv);
+                    const state = new __compactRuntime.ContractState();
+                    state.setOperation('post', new __compactRuntime.ContractOperation());
+                    const sv = __compactRuntime.StateValue.newArray();
+                    state.data = new __compactRuntime.ChargedState(sv);
                     capture(JSON.stringify({
                         hasPost: state.operation('post') !== null,
                         hasData: state.data !== null,
                     }));
-                """.trimIndent(), asModule = true)
+                """.trimIndent())
             }
         }
         assertNotNull(result)
@@ -71,13 +67,9 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
-                evaluate<Any?>("""
-                    import { dummyContractAddress } from 'compact-runtime';
-                    capture(dummyContractAddress());
-                """.trimIndent(), asModule = true)
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
+                evaluate<Any?>("capture(__compactRuntime.dummyContractAddress())")
             }
         }
         assertNotNull(result)
@@ -89,14 +81,12 @@ class CompactRuntimeShimTest {
         var result: String? = null
         runBlocking {
             quickJs {
-                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
                 evaluate<Any?>("""
-                    import { valueToBigInt } from 'compact-runtime';
-                    const v = valueToBigInt(42);
+                    const v = __compactRuntime.valueToBigInt(42);
                     capture(v.toString());
-                """.trimIndent(), asModule = true)
+                """.trimIndent())
             }
         }
         assertNotNull(result)

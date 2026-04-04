@@ -13,8 +13,9 @@ import org.junit.runner.RunWith
 /**
  * Step 6D: Load the real bboard compiled contract in QuickJS.
  *
- * Uses the bundled compact-runtime (single file, no cross-imports)
- * with the onchain-runtime shim replacing WASM.
+ * Uses IIFE format (not ES modules) because QuickJS's cross-module
+ * import crashes in the native layer. IIFE loads compact-runtime as
+ * a global, then the bboard contract runs as a script.
  */
 @RunWith(AndroidJUnit4::class)
 class BBoardContractTest {
@@ -26,35 +27,12 @@ class BBoardContractTest {
     }
 
     @Test
-    fun bundle_loadsAlone() {
-        var result: String? = null
-        runBlocking {
-            quickJs {
-                addModule("compact-runtime", loadAsset("runtime/compact-runtime-bundle.js"))
-                function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
-                evaluate<Any?>("""
-                    import { StateValue, dummyContractAddress } from 'compact-runtime';
-                    const sv = StateValue.newNull();
-                    capture(dummyContractAddress());
-                """.trimIndent(), asModule = true)
-            }
-        }
-        assertNotNull(result)
-        assertEquals(64, result!!.length)
-    }
-
-    @Test
     fun iife_bundle_works() {
         var result: String? = null
         runBlocking {
             quickJs {
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
-                // Load compact-runtime as IIFE — assigns to __compactRuntime global
                 evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
-
-                // Verify types are accessible
                 evaluate<Any?>("""
                     const sv = __compactRuntime.StateValue.newNull();
                     const addr = __compactRuntime.dummyContractAddress();
@@ -72,17 +50,34 @@ class BBoardContractTest {
         runBlocking {
             quickJs {
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
-
-                // 1. Load compact-runtime as IIFE (global __compactRuntime)
                 evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
-
-                // 2. Load bboard contract as script (uses __compactRuntime global)
                 evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
-
-                // 3. Verify the Contract class is available
                 evaluate<Any?>("capture(typeof Contract === 'function' ? 'yes' : 'no')")
             }
         }
         assertEquals("Contract should load", "yes", result)
+    }
+
+    @Test
+    fun bboard_contractCanInstantiate() {
+        var result: String? = null
+        runBlocking {
+            quickJs {
+                function("capture") { args: Array<Any?> -> result = args[0] as? String }
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
+                evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
+                // Verify the Contract class has the expected circuits
+                evaluate<Any?>("""
+                    const witnesses = { localSecretKey: function() { return [null, new Uint8Array(32)]; } };
+                    const contract = new Contract(witnesses);
+                    capture(JSON.stringify({
+                        hasPost: typeof contract.impureCircuits.post === 'function',
+                        hasTakeDown: typeof contract.impureCircuits.takeDown === 'function',
+                    }));
+                """.trimIndent())
+            }
+        }
+        assertNotNull(result)
+        assertTrue("Should have post", result!!.contains("true"))
     }
 }
