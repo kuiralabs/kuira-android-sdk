@@ -74,20 +74,29 @@ class ConnectorService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? {
         ensureConnectorStarted()
-        Log.d(TAG, "Client bound: ${intent?.action}")
+        val action = intent?.action
+        Log.d(TAG, "Client bound: action=$action")
 
-        if (messenger == null) {
-            val binder = connectorManager.binder ?: return null
-            val router = com.midnight.kuira.core.connector.JsonRpcRouter(binder.handler)
-            messenger = Messenger(
-                ConnectorMessengerHandler(
-                    router,
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
-                    applicationContext,
+        // Same-process: return ConnectorBinder (direct Kotlin API)
+        // Cross-process: return Messenger (JSON-RPC over IPC)
+        return if (action == "com.midnight.kuira.CONNECTOR") {
+            // Cross-process bind from external app
+            if (messenger == null) {
+                val binder = connectorManager.binder ?: return null
+                val router = com.midnight.kuira.core.connector.JsonRpcRouter(binder.handler)
+                messenger = Messenger(
+                    ConnectorMessengerHandler(
+                        router,
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
+                        applicationContext,
+                    )
                 )
-            )
+            }
+            messenger!!.binder
+        } else {
+            // Same-process bind (tests, in-app usage)
+            connectorManager.binder
         }
-        return messenger!!.binder
     }
 
     override fun onDestroy() {
