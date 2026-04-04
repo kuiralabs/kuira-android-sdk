@@ -89,7 +89,7 @@ QuickJS embedded in Android, loaded with `compact-runtime` JS glue and compiled 
 
 ## Steps
 
-- [ ] **6A: Extend Rust FFI for contract transactions** — add contract-related types from `midnight-ledger` to `kuira-crypto-ffi` (ContractCallPrototype, Intent, ContractDeploy). Cross-compile for ARM64. The `onchain-runtime` comes along as a transitive dependency of `midnight-ledger` — we don't call it directly.
+- [ ] **6A: Extend Rust FFI for contract operations** — expose `onchain-runtime` types via JNI: `StateValue`, `QueryContext`, `ContractState`, `ChargedState`, `CostModel`, `runProgram`, `persistentHash`, plus transaction types `ContractCallPrototype`, `Intent`, `ContractDeploy`. These crates already compile for ARM64 as transitive deps of `midnight-ledger` (confirmed in build artifacts) — step is to expose them through JNI, not compile them for the first time.
 - [ ] **6B: Embed QuickJS in Android** — integrate QuickJS into the build. Verify it can execute basic JS.
 - [ ] **6C: Build onchain-runtime shim** — create a JS module that implements the `@midnight-ntwrk/onchain-runtime-v2` API (StateValue, QueryContext, runProgram, etc.) by calling our Rust FFI through QuickJS's C API. Bundle compact-runtime JS glue (~1400 lines) with this shim replacing the WASM import.
 - [ ] **6D: Run a compiled contract** — load bboard's `index.js` + shimmed compact-runtime in QuickJS on Android. Execute the `post` circuit with hardcoded inputs. Extract proof preimages from the result.
@@ -107,7 +107,10 @@ QuickJS embedded in Android, loaded with `compact-runtime` JS glue and compiled 
 ## Risks
 
 ### Onchain-runtime shim completeness
-The `compact-runtime` uses ~30 functions from `onchain-runtime-v2` (StateValue, QueryContext, runProgram, ContractState, CostModel, etc.). Each one needs a matching Rust FFI call exposed through the QuickJS shim. If we miss any, compiled contracts will fail at runtime. Step 6C mitigates this by testing with a real contract (bboard).
+`compact-runtime` re-exports 47 functions/types from `onchain-runtime-v2`. For bboard, ~12 are actively used including `StateValue`, `QueryContext`, `ContractState`, `ChargedState`, `CostModel`, `persistentHash`, `dummyContractAddress`, and `valueToBigInt`. Each needs a matching Rust FFI call in the QuickJS shim. Step 6D tests with a real contract to catch any gaps.
+
+### queryLedgerState complexity
+`queryLedgerState` (in compact-runtime JS) calls `QueryContext.query()` which runs VM opcodes via the Rust `runProgram`. It then processes the results to build the `publicTranscript` for the proof. This orchestration between JS and Rust is the most intricate part of the shim — the JS collects `read` events from the VM results and splices them into the opcode stream.
 
 ### QuickJS + compact-runtime compatibility
 The ~1400 lines of compact-runtime JS glue must run inside QuickJS (ES2020). Most of it is type handling and re-exports. The main concern is any use of Node.js or browser-specific APIs (`Buffer`, `crypto`, `fetch`).
