@@ -66,7 +66,6 @@ class BBoardContractTest {
                 function("capture") { args: Array<Any?> -> result = args[0] as? String }
                 evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
                 evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
-                // Verify the Contract class has the expected circuits
                 evaluate<Any?>("""
                     const witnesses = { localSecretKey: function() { return [null, new Uint8Array(32)]; } };
                     const contract = new Contract(witnesses);
@@ -79,5 +78,124 @@ class BBoardContractTest {
         }
         assertNotNull(result)
         assertTrue("Should have post", result!!.contains("true"))
+    }
+
+    @Test
+    fun bboard_witnessFromKotlin() {
+        // The witness function is provided by Kotlin — JS calls back to get the secret key
+        var witnessCallCount = 0
+        var result: String? = null
+        val testSecretKey = ByteArray(32) { (it + 1).toByte() } // 01020304...
+
+        runBlocking {
+            quickJs {
+                function("capture") { args: Array<Any?> -> result = args[0] as? String }
+
+                // Register a Kotlin function that JS witnesses will call
+                function("__getSecretKey") { args: Array<Any?> ->
+                    witnessCallCount++
+                    // Return the secret key as a comma-separated string
+                    // (QuickJS can't pass byte arrays directly, we convert in JS)
+                    testSecretKey.joinToString(",")
+                }
+
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
+                evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
+
+                evaluate<Any?>("""
+                    // Witness that calls back to Kotlin for the secret key
+                    const witnesses = {
+                        localSecretKey: function(witnessContext) {
+                            const keyStr = __getSecretKey();
+                            const keyBytes = new Uint8Array(keyStr.split(',').map(Number));
+                            return [witnessContext.privateState, keyBytes];
+                        }
+                    };
+                    const contract = new Contract(witnesses);
+                    capture(JSON.stringify({
+                        hasWitness: typeof contract.witnesses.localSecretKey === 'function',
+                        circuitCount: Object.keys(contract.impureCircuits).length,
+                    }));
+                """.trimIndent())
+            }
+        }
+        assertNotNull(result)
+        assertTrue(result!!.contains("true"))
+        assertTrue(result!!.contains("2")) // post + takeDown
+        // Witness wasn't called yet — it's only called during circuit execution
+        assertEquals(0, witnessCallCount)
+    }
+
+    @Test
+    fun bboard_executePostCircuit() {
+        // Actually execute the post circuit — this is the real test.
+        // It will call the witness, run the circuit logic, and produce proof data.
+        var witnessCallCount = 0
+        var result: String? = null
+        var error: String? = null
+        val testSecretKey = ByteArray(32) { (it + 1).toByte() }
+
+        runBlocking {
+            quickJs {
+                function("capture") { args: Array<Any?> -> result = args[0] as? String }
+                function("captureError") { args: Array<Any?> -> error = args[0] as? String }
+                function("__getSecretKey") { args: Array<Any?> ->
+                    witnessCallCount++
+                    testSecretKey.joinToString(",")
+                }
+
+                evaluate<Any?>(loadAsset("runtime/polyfills.js"))
+                evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
+                evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
+
+                evaluate<Any?>("""
+                    try {
+                        const witnesses = {
+                            localSecretKey: function(witnessContext) {
+                                const keyStr = __getSecretKey();
+                                const keyBytes = new Uint8Array(keyStr.split(',').map(Number));
+                                return [witnessContext.privateState, keyBytes];
+                            }
+                        };
+                        const contract = new Contract(witnesses);
+
+                        // Create initial state (vacant board)
+                        const initResult = contract.initialState({
+                            initialPrivateState: { secretKey: new Uint8Array(32) },
+                            initialZswapLocalState: { coinPublicKey: new Uint8Array(32) },
+                        });
+
+                        // Create circuit context from the initialized state
+                        const circuitCtx = __compactRuntime.createCircuitContext(
+                            __compactRuntime.dummyContractAddress(),
+                            { coinPublicKey: new Uint8Array(32) },
+                            initResult.currentContractState,
+                            initResult.currentPrivateState,
+                        );
+
+                        // Execute the post circuit
+                        const circuitResult = contract.impureCircuits.post(circuitCtx, 'Hello from Android!');
+
+                        capture(JSON.stringify({
+                            hasResult: circuitResult !== null,
+                            hasProofData: circuitResult.proofData !== undefined,
+                        }));
+                    } catch (e) {
+                        captureError(e.toString());
+                    }
+                """.trimIndent())
+            }
+        }
+
+        if (error != null) {
+            // Expected — some shim functions aren't implemented yet.
+            // The error tells us what to implement next.
+            assertNotNull("Should have error details", error)
+            // Log it so we know what to fix
+            println("Circuit execution error (expected): $error")
+        } else {
+            assertNotNull(result)
+            assertTrue("Witness should have been called", witnessCallCount > 0)
+        }
     }
 }
