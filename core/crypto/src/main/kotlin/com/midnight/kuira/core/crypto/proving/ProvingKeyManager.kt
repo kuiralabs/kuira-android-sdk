@@ -135,6 +135,180 @@ class ProvingKeyManager(private val context: Context) {
         }
     }
 
+    // ── Contract-Specific Keys ──
+
+    /**
+     * Directory for a specific contract's proving keys.
+     * Keys are stored at: proving_keys/contracts/{contractName}/{circuit}.{prover,verifier,bzkir}
+     */
+    fun contractKeysDir(contractName: String): File {
+        validatePathSegment(contractName, "contractName")
+        return File(keysDir, "contracts/$contractName")
+    }
+
+    /**
+     * Whether all required circuit keys are cached for a contract.
+     *
+     * @param contractName Short name (e.g., "bboard")
+     * @param circuitNames List of circuit names (e.g., ["post", "takeDown"])
+     */
+    fun hasContractKeys(contractName: String, circuitNames: List<String>): Boolean {
+        circuitNames.forEach { validatePathSegment(it, "circuitName") }
+        val dir = contractKeysDir(contractName)
+        if (!dir.exists()) return false
+        return circuitNames.all { circuit ->
+            CIRCUIT_KEY_EXTENSIONS.all { ext ->
+                File(dir, "$circuit.$ext").exists()
+            }
+        }
+    }
+
+    /**
+     * Copy contract proving keys from a source directory into the cache.
+     *
+     * Used during development/testing to install keys from the local filesystem
+     * or from bundled assets.
+     *
+     * @param contractName Short name (e.g., "bboard")
+     * @param circuitNames Circuit names to copy (e.g., ["post", "takeDown"])
+     * @param keysSourceDir Directory containing {circuit}.prover, .verifier files
+     * @param zkirSourceDir Directory containing {circuit}.bzkir files
+     * @param overwrite If true, replaces existing keys (for version upgrades)
+     */
+    fun installContractKeys(
+        contractName: String,
+        circuitNames: List<String>,
+        keysSourceDir: File,
+        zkirSourceDir: File,
+        overwrite: Boolean = false,
+    ) {
+        circuitNames.forEach { validatePathSegment(it, "circuitName") }
+        val destDir = contractKeysDir(contractName)
+        destDir.mkdirs()
+
+        for (circuit in circuitNames) {
+            for (ext in CIRCUIT_KEY_EXTENSIONS) {
+                val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
+                val source = File(sourceDir, "$circuit.$ext")
+                val dest = File(destDir, "$circuit.$ext")
+                if (source.exists() && (overwrite || !dest.exists())) {
+                    source.copyTo(dest, overwrite = true)
+                    Log.d(TAG, "Installed $contractName/$circuit.$ext (${dest.length()} bytes)")
+                }
+            }
+        }
+    }
+
+    /**
+     * Remove all cached keys for a contract.
+     */
+    fun removeContractKeys(contractName: String) {
+        validatePathSegment(contractName, "contractName")
+        val dir = contractKeysDir(contractName)
+        if (dir.exists()) {
+            dir.deleteRecursively()
+            Log.d(TAG, "Removed contract keys for $contractName")
+        }
+    }
+
+    /**
+     * Download contract proving keys from a remote URL.
+     *
+     * Downloads {circuit}.prover, .verifier, .bzkir for each circuit.
+     * The base URL should point to a directory containing these files.
+     *
+     * @param contractName Short name for local storage (e.g., "bboard")
+     * @param circuitNames Circuit names to download (e.g., ["post", "takeDown"])
+     * @param baseUrl URL prefix where keys are hosted (e.g., "https://example.com/keys/bboard")
+     * @param onProgress Callback with progress 0.0 to 1.0
+     */
+    suspend fun downloadContractKeys(
+        contractName: String,
+        circuitNames: List<String>,
+        baseUrl: String,
+        onProgress: (Float) -> Unit = {},
+    ) = withContext(Dispatchers.IO) {
+        circuitNames.forEach { validatePathSegment(it, "circuitName") }
+        val destDir = contractKeysDir(contractName)
+        destDir.mkdirs()
+
+        val totalFiles = circuitNames.size * CIRCUIT_KEY_EXTENSIONS.size
+        var completed = 0
+
+        for (circuit in circuitNames) {
+            for (ext in CIRCUIT_KEY_EXTENSIONS) {
+                val dest = File(destDir, "$circuit.$ext")
+                if (!dest.exists()) {
+                    val url = "$baseUrl/$circuit.$ext"
+                    Log.d(TAG, "Downloading $contractName/$circuit.$ext")
+                    downloadFile(url, dest)
+                }
+                completed++
+                onProgress(completed.toFloat() / totalFiles)
+            }
+        }
+
+        Log.d(TAG, "Contract keys for $contractName downloaded")
+    }
+
+    /**
+     * Whether BLS parameters are available (needed for all proving).
+     *
+     * BLS params are shared between wallet and contract circuits.
+     * Downloaded as part of [downloadWalletKeys].
+     */
+    fun hasBLSParams(): Boolean {
+        return BLS_PARAM_FILES.all { File(keysDir, it).exists() }
+    }
+
+    /**
+     * Whether the prover can find circuit keys at the root keys directory.
+     *
+     * The Rust prover resolves keys by: `keysDir/{circuitName}.{prover,verifier,bzkir}`.
+     * Contract keys must be in the root keysDir (not a subdirectory) for the prover to find them.
+     */
+    fun hasProvableCircuitKeys(circuitNames: List<String>): Boolean {
+        circuitNames.forEach { validatePathSegment(it, "circuitName") }
+        return circuitNames.all { circuit ->
+            CIRCUIT_KEY_EXTENSIONS.all { ext ->
+                File(keysDir, "$circuit.$ext").exists()
+            }
+        } && hasBLSParams()
+    }
+
+    /**
+     * Install circuit keys to the root keys directory for the prover.
+     *
+     * The Rust prover resolves by flat path: `keysDir/{name}.prover`.
+     * This copies circuit keys from a source directory directly to keysDir root.
+     *
+     * @param circuitNames Circuit names (e.g., ["post", "takeDown"])
+     * @param keysSourceDir Directory containing {circuit}.prover, .verifier files
+     * @param zkirSourceDir Directory containing {circuit}.bzkir files
+     * @param overwrite If true, replaces existing keys
+     */
+    fun installCircuitKeysForProving(
+        circuitNames: List<String>,
+        keysSourceDir: File,
+        zkirSourceDir: File,
+        overwrite: Boolean = false,
+    ) {
+        circuitNames.forEach { validatePathSegment(it, "circuitName") }
+        keysDir.mkdirs()
+
+        for (circuit in circuitNames) {
+            for (ext in CIRCUIT_KEY_EXTENSIONS) {
+                val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
+                val source = File(sourceDir, "$circuit.$ext")
+                val dest = File(keysDir, "$circuit.$ext")
+                if (source.exists() && (overwrite || !dest.exists())) {
+                    source.copyTo(dest, overwrite = true)
+                    Log.d(TAG, "Installed $circuit.$ext to keysDir (${dest.length()} bytes)")
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "ProvingKeyManager"
         private const val KEYS_DIR_NAME = "proving_keys"
@@ -145,6 +319,24 @@ class ProvingKeyManager(private val context: Context) {
         /** S3 bucket URL (same as SDK's WasmProver). */
         private const val S3_BASE_URL =
             "https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com"
+
+        private val SAFE_NAME_REGEX = Regex("^[a-zA-Z0-9_-]+$")
+
+        private fun validatePathSegment(value: String, name: String) {
+            require(value.isNotEmpty() && SAFE_NAME_REGEX.matches(value)) {
+                "$name must be alphanumeric/underscore/hyphen, got: ${value.take(20)}"
+            }
+        }
+
+        /** BLS parameter files needed for any proving (wallet or contract). */
+        private val BLS_PARAM_FILES = listOf(
+            "bls_midnight_2p13",
+            "bls_midnight_2p14",
+            "bls_midnight_2p15",
+        )
+
+        /** File extensions required per circuit. */
+        private val CIRCUIT_KEY_EXTENSIONS = listOf("prover", "verifier", "bzkir")
 
         /** All files needed for wallet transactions (zswap + dust). */
         private val WALLET_KEY_FILES = listOf(

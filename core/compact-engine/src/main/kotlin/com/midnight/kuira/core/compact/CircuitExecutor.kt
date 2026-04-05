@@ -125,7 +125,7 @@ class CircuitExecutor(private val context: Context) {
             throw CircuitExecutionException("Transaction assembly failed: $txHex")
         }
 
-        freeStateHandle(txParamsJson)
+        freeStateHandles(txParamsJson)
 
         return ExecutionResult(
             unprovenTxHex = txHex,
@@ -133,12 +133,13 @@ class CircuitExecutor(private val context: Context) {
         )
     }
 
-    private fun freeStateHandle(txParamsJson: String) {
+    private fun freeStateHandles(txParamsJson: String) {
         try {
-            val handle = JSONObject(txParamsJson).getLong("state_handle")
-            ContractRuntime.stateFree(handle)
+            val json = JSONObject(txParamsJson)
+            ContractRuntime.stateFree(json.getLong("state_handle"))
+            ContractRuntime.stateFree(json.getLong("initial_state_handle"))
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to free state handle: ${e.message}")
+            Log.w(TAG, "Failed to free state handles: ${e.message}")
         }
     }
 
@@ -206,6 +207,14 @@ class CircuitExecutor(private val context: Context) {
                     initResult.currentPrivateState,
                 );
 
+                // Clone the initial state BEFORE circuit execution modifies it.
+                // The assembler re-executes against this to compute correct gas.
+                const initialStateHandle = Number(
+                    globalThis.__native_stateClone(
+                        circuitCtx.currentQueryContext._rustHandle.toString()
+                    )
+                );
+
                 const circuitResult = contract.impureCircuits['$circuitName'](circuitCtx$argsStr);
 
                 const rustTranscript = __compactRuntime.transformPublicTranscript(
@@ -217,6 +226,7 @@ class CircuitExecutor(private val context: Context) {
                     contract_address: '$contractAddress',
                     entry_point: '$circuitName',
                     state_handle: circuitResult.context.currentQueryContext._rustHandle,
+                    initial_state_handle: initialStateHandle,
                     proof_data: {
                         input: deepConvertArrays(circuitResult.proofData.input),
                         output: deepConvertArrays(circuitResult.proofData.output),
@@ -267,6 +277,10 @@ class CircuitExecutor(private val context: Context) {
                 val opcodesJson = args[1] as String
                 ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
             }
+            js.function("__nativeStateClone") { args: Array<Any?> ->
+                val handle = (args[0] as String).toLong()
+                ContractRuntime.stateClone(handle).toString()
+            }
             js.evaluate<Any?>("""
                 globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
                 globalThis.__native_bigIntToValue = __nativeBigIntToValue;
@@ -274,6 +288,7 @@ class CircuitExecutor(private val context: Context) {
                 globalThis.__native_stateCreateWithNulls = __nativeStateCreateWithNulls;
                 globalThis.__native_stateSetOperation = __nativeStateSetOperation;
                 globalThis.__native_contractQuery = __nativeContractQuery;
+            globalThis.__native_stateClone = __nativeStateClone;
             """.trimIndent())
         }
 

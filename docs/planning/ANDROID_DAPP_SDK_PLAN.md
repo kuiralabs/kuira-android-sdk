@@ -111,16 +111,35 @@ Download and cache proving/verifier keys for arbitrary contract circuits.
   - SCALE serialized `(Transaction, ProvingKeys)` tuple output
   - E2E test: circuit → extract → transform → assemble → serialized UnprovenTransaction ✅
 
+- [x] **6H: Provider interfaces + CircuitExecutor** — Clean Kotlin API:
+  - `CircuitExecutor` — wraps QuickJS lifecycle into single `executeCircuit()` call
+  - `ProofProvider` interface + `LocalProofProvider` wrapping `LocalProver`
+  - `WitnessProvider` / `WitnessResult` with secure zeroization
+  - Input validation, state handle cleanup, `Dispatchers.IO` for blocking JNI
+  - 5 device tests (happy path, error path, witness, different inputs, pipeline)
+- [x] **6I: Private state + ZK config** — encrypted storage + contract key support:
+  - `PrivateStateProvider` interface + `KeyStorePrivateStateProvider` (AES-256-GCM via Android KeyStore)
+  - Moved to `core:crypto:state` (security primitive, not compact-engine concern)
+  - `clearContract()`, `isKeyStoreHealthy()`, size guard, collision-safe keys
+  - `ProvingKeyManager` extended: `hasContractKeys()`, `installContractKeys(overwrite)`,
+    `removeContractKeys()`, `downloadContractKeys()`, `hasBLSParams()`
+  - Path traversal validation on all filesystem inputs
+  - 13 device tests (round-trip, isolation, corruption, size limit, clear, keystore health)
+
 ### Remaining:
-- [ ] **6H: Provider interfaces + CircuitExecutor** — Clean Kotlin API for dApp developers:
-  - `CircuitExecutor` — wraps QuickJS lifecycle, FFI registration, circuit execution, result extraction
-  - `ProofProvider` interface — wraps local prover (`zkir_prove_transaction_local`)
-  - `ContractDeployer` — deploy contract transactions (initial state → deploy tx)
-  - Wire: `CircuitExecutor.executeCircuit()` → `assembleContractCallTx()` → `ProofProvider.prove()` → ready for wallet
-- [ ] **6I: Private state + ZK config** — encrypted storage for dApp secrets, circuit key download/caching
-- [ ] **6J: BBoard end-to-end** — deploy → post → prove → balance → submit → verify on chain
-  - Fix `Transcript` gas/effects (currently zeroed — need PreTranscript flow for node acceptance)
-  - Fix TTL (currently `MAX` — need parameterized reasonable TTL)
+- [ ] **6J: BBoard end-to-end** — two phases:
+  - **6J-offline: Execute → assemble → prove (on device, no network)**
+    - Install bboard proving keys (post/takeDown) into proving_keys dir
+    - Execute post circuit → assemble UnprovenTransaction → prove locally
+    - Verify ProvenTransaction hex is valid
+    - Blocker: prover looks for keys in flat keys_dir, not contracts/ subdirectory
+    - Solution: copy contract keys to root keys_dir, or embed in tx tuple HashMap
+  - **6J-online: Deploy → post → balance → submit → verify (requires devnet)**
+    - Fix Transcript gas/effects (zeroed → PreTranscript flow for node acceptance)
+    - Fix TTL (MAX → parameterized from current time + duration)
+    - Contract deployment transaction (ContractDeploy, not ContractCall)
+    - Wire to ConnectedAPI: balanceUnsealedTransaction → submitTransaction
+    - Requires running Midnight node (standalone testkit or devnet)
 - [ ] **6K: Testing** — unit tests per library, integration test on localnet
 
 ---

@@ -67,6 +67,12 @@ object ContractRuntime {
         return nativeStateCreateWithNulls(numSlots)
     }
 
+    /** Clone a state handle (saves initial state before circuit queries). */
+    fun stateClone(handle: Long): Long {
+        ensureLoaded()
+        return nativeStateClone(handle)
+    }
+
     /** Set an operation on a state handle. */
     fun stateSetOperation(handle: Long, operationName: String) {
         ensureLoaded()
@@ -96,6 +102,7 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStateCreateWithNulls(numSlots: Int): Long
     @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
     @JvmStatic private external fun nativeStateFree(handle: Long)
+    @JvmStatic private external fun nativeStateClone(handle: Long): Long
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
 }

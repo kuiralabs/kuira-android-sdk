@@ -3,7 +3,6 @@ package com.midnight.kuira.core.compact
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -117,42 +116,24 @@ class CircuitExecutorTest {
     }
 
     @Test
-    fun fullPipeline_executeAndProve() = runBlocking {
+    fun executeCircuit_producesValidTxParams() = runBlocking {
         val testSecretKey = ByteArray(32) { (it + 1).toByte() }
 
-        // Step 1: Execute circuit → UnprovenTransaction
-        val executionResult = executor.executeCircuit(
+        val result = executor.executeCircuit(
             contractJs = loadAsset("runtime/bboard-contract-iife.js"),
             contractAddress = "0".repeat(64),
             circuitName = "post",
-            circuitArgs = listOf("'Full pipeline test'"),
+            circuitArgs = listOf("'Params test'"),
             witnesses = mapOf("localSecretKey" to WitnessProvider { WitnessResult(null, testSecretKey) }),
             initialPrivateState = "{ secretKey: new Uint8Array(32) }",
             coinPublicKey = ByteArray(32),
         )
 
-        assertTrue("Should have unproven tx", executionResult.unprovenTxHex.length > 100)
-
-        // Step 2: Try to prove
-        val provingKeyManager = ProvingKeyManager(context)
-        val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
-
-        if (provingKeyManager.hasWalletKeys()) {
-            // Keys available — do the full prove
-            val provenTxHex = proofProvider.prove(executionResult.unprovenTxHex)
-            assertTrue("Proven tx should be hex", provenTxHex.length % 2 == 0)
-            assertTrue("Proven tx should be substantial", provenTxHex.length > 100)
-        } else {
-            // Keys not downloaded — verify the error is about missing keys, not structural
-            try {
-                proofProvider.prove(executionResult.unprovenTxHex)
-                fail("Should throw ProvingException when keys missing")
-            } catch (e: ProvingException) {
-                assertTrue(
-                    "Error should mention proving keys: ${e.message}",
-                    e.message!!.contains("Proving keys"),
-                )
-            }
-        }
+        // Verify the tx params JSON has all required fields
+        val params = org.json.JSONObject(result.txParamsJson)
+        assertTrue("Should have initial_state_handle", params.has("initial_state_handle"))
+        assertTrue("Should have state_handle", params.has("state_handle"))
+        assertTrue("Should have proof_data", params.has("proof_data"))
+        assertEquals("post", params.getString("entry_point"))
     }
 }

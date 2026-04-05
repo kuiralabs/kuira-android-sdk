@@ -406,19 +406,25 @@ class CircuitResultExtractionTest {
                             initResult.currentPrivateState,
                         );
 
+                        // Clone state before circuit modifies it
+                        const initialStateHandle = Number(
+                            globalThis.__native_stateClone(
+                                circuitCtx.currentQueryContext._rustHandle.toString()
+                            )
+                        );
+
                         const circuitResult = contract.impureCircuits.post(circuitCtx, 'Hello from Android!');
 
-                        // Transform transcript to Rust serde format (padded AlignedValues)
                         const rustTranscript = __compactRuntime.transformPublicTranscript(
                             circuitResult.proofData.publicTranscript
                         );
 
-                        // Build the JSON payload for Rust tx assembly
                         capture(JSON.stringify({
                             network_id: 'undeployed',
                             contract_address: __compactRuntime.dummyContractAddress(),
                             entry_point: 'post',
                             state_handle: circuitResult.context.currentQueryContext._rustHandle,
+                            initial_state_handle: initialStateHandle,
                             proof_data: {
                                 input: deepConvertArrays(circuitResult.proofData.input),
                                 output: deepConvertArrays(circuitResult.proofData.output),

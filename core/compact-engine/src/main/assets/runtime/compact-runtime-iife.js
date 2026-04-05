@@ -459,7 +459,14 @@ var __compactRuntime = (() => {
           newState._rustHandle = result.handle;
           const newCtx = new _QueryContext(newState, this.address);
           newCtx._rustHandle = result.handle;
-          return { context: newCtx, events, gasCost: { value: 0n } };
+          const gas = result.gas || {};
+          const gasCost = {
+            readTime: BigInt(gas.readTime || 0),
+            computeTime: BigInt(gas.computeTime || 0),
+            bytesWritten: BigInt(gas.bytesWritten || 0),
+            bytesDeleted: BigInt(gas.bytesDeleted || 0)
+          };
+          return { context: newCtx, events, gasCost };
         } catch (e) {
           throw new Error("Rust VM query failed: " + e.toString());
         }

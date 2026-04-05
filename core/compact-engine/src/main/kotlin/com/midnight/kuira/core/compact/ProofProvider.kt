@@ -36,9 +36,9 @@ class LocalProofProvider(
 ) : ProofProvider {
 
     override suspend fun prove(unprovenTxHex: String): String {
-        if (!provingKeyManager.hasWalletKeys()) {
+        if (!provingKeyManager.keysDir.exists()) {
             throw ProvingException(
-                "Proving keys not available. Call ProvingKeyManager.downloadWalletKeys() first.",
+                "Proving keys directory does not exist. Download keys first.",
             )
         }
 
