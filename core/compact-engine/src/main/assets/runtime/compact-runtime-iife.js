@@ -416,6 +416,82 @@ var __compactRuntime = (() => {
     }
     return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
   }
+  function transformOpForRust(op) {
+    if (typeof op === "string") return op;
+    if (typeof op !== "object" || op === null) return op;
+    if ("push" in op) {
+      return {
+        push: {
+          storage: op.push.storage,
+          value: transformStateValue(op.push.value)
+        }
+      };
+    }
+    if ("idx" in op) {
+      return {
+        idx: {
+          cached: op.idx.cached,
+          pushPath: op.idx.pushPath || false,
+          path: (op.idx.path || []).map((key) => {
+            if (key.tag === "value") {
+              return { tag: "value", value: transformAlignedValue(key.value) };
+            }
+            return key;
+          })
+        }
+      };
+    }
+    if ("popeq" in op) {
+      return { popeq: { cached: op.popeq.cached, result: null } };
+    }
+    return op;
+  }
+  function transformStateValue(sv) {
+    if (sv === null || sv === void 0) return { tag: "null" };
+    if (typeof sv === "string") {
+      try {
+        const parsed = JSON.parse(sv);
+        return transformStateValueObj(parsed);
+      } catch (e) {
+        return { tag: "null" };
+      }
+    }
+    if (typeof sv === "object") {
+      if (sv._data) return transformStateValueObj(sv._data);
+      return transformStateValueObj(sv);
+    }
+    return { tag: "null" };
+  }
+  function transformStateValueObj(obj) {
+    if (!obj || obj.type === "null") return { tag: "null" };
+    if (obj.type === "cell") {
+      return { tag: "cell", content: transformAlignedValue(obj.value) };
+    }
+    if (obj.type === "array") {
+      return {
+        tag: "array",
+        content: (obj.items || []).map((item) => transformStateValue(item))
+      };
+    }
+    return obj;
+  }
+  function transformAlignedValue(av) {
+    if (!av) return { value: [[]], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    const value = (av.value || [[]]).map((v) => {
+      if (v instanceof Uint8Array) return Array.from(v);
+      if (Array.isArray(v)) return v;
+      if (typeof v === "object" && v !== null) {
+        const keys = Object.keys(v).filter((k) => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
+        if (keys.length === 0) return [];
+        return keys.map((k) => v[k]);
+      }
+      return [];
+    });
+    return {
+      value,
+      alignment: av.alignment || [{ tag: "atom", value: { tag: "field" } }]
+    };
+  }
   var QueryContext = class _QueryContext {
     constructor(chargedState, contractAddress) {
       this.state = chargedState;
@@ -431,15 +507,18 @@ var __compactRuntime = (() => {
     }
     query(program, costModel, gasLimit) {
       if (typeof globalThis.log === "function") {
-        globalThis.log("QueryContext.query: _rustHandle=" + this._rustHandle + " hasNative=" + (typeof globalThis.__native_contractQuery === "function"));
+        globalThis.log("QueryContext.query: _rustHandle=" + this._rustHandle);
+        if (program.length > 0) {
+          globalThis.log("First opcode: " + JSON.stringify(program[0], (k, v) => v instanceof Uint8Array ? Array.from(v) : v));
+        }
+        if (program.length > 1) {
+          globalThis.log("Second opcode: " + JSON.stringify(program[1], (k, v) => v instanceof Uint8Array ? Array.from(v) : v).substring(0, 200));
+        }
       }
       if (typeof globalThis.__native_contractQuery === "function" && this._rustHandle) {
         try {
-          const opcodesJson = JSON.stringify(program, (key, value) => {
-            if (value === void 0) return null;
-            if (value instanceof Uint8Array) return Array.from(value);
-            return value;
-          });
+          const transformed = program.map((op) => transformOpForRust(op));
+          const opcodesJson = JSON.stringify(transformed);
           const resultJson = globalThis.__native_contractQuery(
             this._rustHandle.toString(),
             opcodesJson
