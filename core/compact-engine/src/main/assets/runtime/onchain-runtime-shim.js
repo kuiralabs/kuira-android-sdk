@@ -121,35 +121,128 @@ export class QueryContext {
   }
 
   query(program, costModel, gasLimit) {
-    // This is where VM opcodes execute.
-    // For now: process opcodes in JS. Later: delegate to Rust run_program.
+    // Stack-based VM execution of opcodes against contract state.
+    // The state is a tree of StateValue nodes.
+    const stack = [this.state.get_ref()]; // stack starts with root state
     const events = [];
-    let state = this.state;
 
     for (const op of program) {
-      if (typeof op === 'object') {
-        if ('dup' in op) {
-          // dup: duplicate stack value — handled by context
-        } else if ('idx' in op) {
-          // idx: index into state value
-          const path = op.idx.path;
-          let current = state.get_ref();
-          // Navigate the path
-          events.push({ tag: 'read', content: current });
-        } else if ('popeq' in op) {
-          // popeq: pop and compare
-          const lastRead = events.length > 0 ? events[events.length - 1] : null;
-          if (lastRead && lastRead.tag === 'read') {
-            op.popeq.result = lastRead.content;
-          }
-        } else if ('push' in op) {
-          // push: push value onto state
+      if (typeof op !== 'object') continue;
+
+      if ('dup' in op) {
+        // Duplicate the n-th item from top of stack
+        const n = op.dup.n;
+        const idx = stack.length - 1 - n;
+        if (idx >= 0) {
+          stack.push(stack[idx]);
         }
+      } else if ('idx' in op) {
+        // Index into the top-of-stack value using path
+        const top = stack[stack.length - 1];
+        let current = top;
+
+        for (const key of op.idx.path) {
+          if (key.tag === 'value') {
+            // Navigate by encoded index
+            const indexVal = key.value;
+            if (current && current._data && current._data.type === 'array') {
+              // Decode the index from the value
+              let index;
+              if (indexVal && indexVal.value !== undefined) {
+                // The value is encoded — extract the numeric index
+                const encoded = indexVal.value;
+                if (Array.isArray(encoded) && encoded.length > 0) {
+                  index = encoded[0];
+                } else if (typeof encoded === 'string') {
+                  // Try to decode from encoded bytes
+                  try {
+                    const decoded = JSON.parse(encoded);
+                    if (decoded && decoded.type === 'cell' && decoded.value !== undefined) {
+                      index = Number(decoded.value);
+                    }
+                  } catch(e) { index = 0; }
+                } else if (typeof encoded === 'number' || typeof encoded === 'bigint') {
+                  index = Number(encoded);
+                } else {
+                  index = 0;
+                }
+              } else {
+                index = 0;
+              }
+
+              if (index !== undefined && current._data.items && current._data.items[index]) {
+                current = current._data.items[index];
+              } else {
+                current = StateValue.newNull();
+              }
+            }
+          }
+        }
+
+        if (op.idx.cached) {
+          // Read and report — pop the top, push the result
+          stack.pop();
+          stack.push(current);
+          events.push({ tag: 'read', content: current });
+        } else {
+          // Just navigate, keep original on stack too
+          stack.push(current);
+          events.push({ tag: 'read', content: current });
+        }
+      } else if ('popeq' in op) {
+        // Pop top of stack, record as read result
+        const val = stack.pop();
+        events.push({ tag: 'read', content: val });
+      } else if ('push' in op) {
+        // Push a new value onto the stack/state
+        const pushOp = op.push;
+        let val;
+        if (pushOp.value !== undefined) {
+          if (typeof pushOp.value === 'string') {
+            try {
+              val = StateValue.decode(pushOp.value);
+            } catch(e) {
+              val = new StateValue({ type: 'cell', value: pushOp.value });
+            }
+          } else {
+            val = new StateValue({ type: 'cell', value: pushOp.value });
+          }
+        } else {
+          val = StateValue.newNull();
+        }
+
+        if (pushOp.storage) {
+          // Storage push — modifies the state
+          stack.push(val);
+        } else {
+          stack.push(val);
+        }
+      } else if ('ins' in op) {
+        // Insert: take top values and insert into state
+        const n = op.ins.n;
+        const values = [];
+        for (let i = 0; i < n; i++) {
+          values.unshift(stack.pop());
+        }
+        const target = stack.pop();
+        // Rebuild state with inserted values
+        if (target && target._data && target._data.type === 'array') {
+          const newItems = [...target._data.items, ...values];
+          stack.push(new StateValue({ type: 'array', items: newItems }));
+        } else {
+          stack.push(target);
+        }
+      } else if ('pop' in op) {
+        stack.pop();
       }
     }
 
+    // The state after execution is the remaining stack
+    const finalState = stack.length > 0 ? stack[stack.length - 1] : this.state.get_ref();
+    const newChargedState = new ChargedState(finalState);
+
     return {
-      context: new QueryContext(state, this.address),
+      context: new QueryContext(newChargedState, this.address),
       events,
       gasCost: { value: 0n },
     };

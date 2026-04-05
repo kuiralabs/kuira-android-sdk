@@ -241,26 +241,106 @@ var __compactRuntime = (() => {
       this.callContext = {};
     }
     query(program, costModel, gasLimit) {
+      const stack = [this.state.get_ref()];
       const events = [];
-      let state = this.state;
       for (const op of program) {
-        if (typeof op === "object") {
-          if ("dup" in op) {
-          } else if ("idx" in op) {
-            const path = op.idx.path;
-            let current = state.get_ref();
-            events.push({ tag: "read", content: current });
-          } else if ("popeq" in op) {
-            const lastRead = events.length > 0 ? events[events.length - 1] : null;
-            if (lastRead && lastRead.tag === "read") {
-              op.popeq.result = lastRead.content;
-            }
-          } else if ("push" in op) {
+        if (typeof op !== "object") continue;
+        if ("dup" in op) {
+          const n = op.dup.n;
+          const idx = stack.length - 1 - n;
+          if (idx >= 0) {
+            stack.push(stack[idx]);
           }
+        } else if ("idx" in op) {
+          const top = stack[stack.length - 1];
+          let current = top;
+          for (const key of op.idx.path) {
+            if (key.tag === "value") {
+              const indexVal = key.value;
+              if (current && current._data && current._data.type === "array") {
+                let index;
+                if (indexVal && indexVal.value !== void 0) {
+                  const encoded = indexVal.value;
+                  if (Array.isArray(encoded) && encoded.length > 0) {
+                    index = encoded[0];
+                  } else if (typeof encoded === "string") {
+                    try {
+                      const decoded = JSON.parse(encoded);
+                      if (decoded && decoded.type === "cell" && decoded.value !== void 0) {
+                        index = Number(decoded.value);
+                      }
+                    } catch (e) {
+                      index = 0;
+                    }
+                  } else if (typeof encoded === "number" || typeof encoded === "bigint") {
+                    index = Number(encoded);
+                  } else {
+                    index = 0;
+                  }
+                } else {
+                  index = 0;
+                }
+                if (index !== void 0 && current._data.items && current._data.items[index]) {
+                  current = current._data.items[index];
+                } else {
+                  current = StateValue.newNull();
+                }
+              }
+            }
+          }
+          if (op.idx.cached) {
+            stack.pop();
+            stack.push(current);
+            events.push({ tag: "read", content: current });
+          } else {
+            stack.push(current);
+            events.push({ tag: "read", content: current });
+          }
+        } else if ("popeq" in op) {
+          const val = stack.pop();
+          events.push({ tag: "read", content: val });
+        } else if ("push" in op) {
+          const pushOp = op.push;
+          let val;
+          if (pushOp.value !== void 0) {
+            if (typeof pushOp.value === "string") {
+              try {
+                val = StateValue.decode(pushOp.value);
+              } catch (e) {
+                val = new StateValue({ type: "cell", value: pushOp.value });
+              }
+            } else {
+              val = new StateValue({ type: "cell", value: pushOp.value });
+            }
+          } else {
+            val = StateValue.newNull();
+          }
+          if (pushOp.storage) {
+            stack.push(val);
+          } else {
+            stack.push(val);
+          }
+        } else if ("ins" in op) {
+          const n = op.ins.n;
+          const values = [];
+          for (let i = 0; i < n; i++) {
+            values.unshift(stack.pop());
+          }
+          const target = stack.pop();
+          if (target && target._data && target._data.type === "array") {
+            const newItems = [...target._data.items, ...values];
+            stack.push(new StateValue({ type: "array", items: newItems }));
+          } else {
+            stack.push(target);
+          }
+        } else if ("pop" in op) {
+          stack.pop();
         }
       }
+      const finalState = stack.length > 0 ? stack[stack.length - 1] : this.state.get_ref();
+      const newChargedState = new ChargedState(finalState);
       return {
-        context: new _QueryContext(state, this.address),
+        context: new _QueryContext(newChargedState, this.address),
         events,
         gasCost: { value: 0n }
       };
