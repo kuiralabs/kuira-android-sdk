@@ -144,6 +144,9 @@ class BBoardContractTest {
                     testSecretKey.joinToString(",")
                 }
 
+                // No native lib needed — the shim has a JS SHA-256 fallback
+                function("log") { args: Array<Any?> -> println("JS_LOG: ${args[0]}") }
+
                 evaluate<Any?>(loadAsset("runtime/polyfills.js"))
                 evaluate<Any?>(loadAsset("runtime/compact-runtime-iife.js"))
                 evaluate<Any?>(loadAsset("runtime/bboard-contract-iife.js"))
@@ -172,6 +175,15 @@ class BBoardContractTest {
                             initResult.currentContractState,
                             initResult.currentPrivateState,
                         );
+
+                        // Test queryLedgerState directly before running the circuit
+                        const testResult = __compactRuntime.queryLedgerState(circuitCtx,
+                            { publicTranscript: [], privateTranscriptOutputs: [] },
+                            [{ dup: { n: 0 } },
+                             { idx: { cached: false, pushPath: false, path: [{ tag: 'value', value: __compactRuntime.bigIntToValue(0n) }] } },
+                             { popeq: { cached: false, result: undefined } }]);
+                        log('queryLedgerState result type: ' + typeof testResult);
+                        log('queryLedgerState result: ' + JSON.stringify(testResult, (k,v) => v instanceof Uint8Array ? Array.from(v) : v));
 
                         // Execute the post circuit
                         const circuitResult = contract.impureCircuits.post(circuitCtx, 'Hello from Android!');

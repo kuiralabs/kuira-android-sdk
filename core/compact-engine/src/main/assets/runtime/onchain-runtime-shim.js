@@ -11,6 +11,64 @@
  * so compact-runtime's imports resolve to it.
  */
 
+// ── SHA-256 (pure JS fallback when native FFI unavailable) ──
+
+function jsSha256(data) {
+  // Minimal SHA-256 implementation
+  const K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ]);
+
+  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+
+  let h0=0x6a09e667, h1=0xbb67ae85, h2=0x3c6ef372, h3=0xa54ff53a;
+  let h4=0x510e527f, h5=0x9b05688c, h6=0x1f83d9ab, h7=0x5be0cd19;
+
+  // Pre-processing: pad message
+  const msgLen = data.length;
+  const bitLen = msgLen * 8;
+  const padded = new Uint8Array(((msgLen + 9 + 63) & ~63));
+  padded.set(data);
+  padded[msgLen] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 4, bitLen, false);
+
+  const w = new Uint32Array(64);
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15]>>>3);
+      const s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2]>>>10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
+      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0;
+    h4=(h4+e)|0; h5=(h5+f)|0; h6=(h6+g)|0; h7=(h7+h)|0;
+  }
+
+  const result = new Uint8Array(32);
+  const rv = new DataView(result.buffer);
+  rv.setUint32(0,h0,false); rv.setUint32(4,h1,false); rv.setUint32(8,h2,false); rv.setUint32(12,h3,false);
+  rv.setUint32(16,h4,false); rv.setUint32(20,h5,false); rv.setUint32(24,h6,false); rv.setUint32(28,h7,false);
+  return result;
+}
+
 // ── StateValue ──
 
 export class StateValue {
@@ -105,6 +163,35 @@ export class ContractMaintenanceAuthority {
   constructor() {}
 }
 
+// ── StateValue → AlignedValue conversion ──
+
+function stateValueToAligned(sv) {
+  if (!sv || !sv._data) {
+    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
+  }
+  if (sv._data.type === 'null') {
+    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
+  }
+  if (sv._data.type === 'cell') {
+    const cellVal = sv._data.value;
+    if (cellVal && typeof cellVal === 'object' && cellVal.value && Array.isArray(cellVal.value)) {
+      return cellVal; // Already AlignedValue
+    }
+    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
+  }
+  if (sv._data.type === 'array') {
+    const values = [];
+    const aligns = [];
+    for (const item of (sv._data.items || [])) {
+      const a = stateValueToAligned(item);
+      values.push(...a.value);
+      aligns.push(...a.alignment);
+    }
+    return { value: values, alignment: aligns };
+  }
+  return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
+}
+
 // ── QueryContext ──
 
 export class QueryContext {
@@ -143,34 +230,17 @@ export class QueryContext {
 
         for (const key of op.idx.path) {
           if (key.tag === 'value') {
-            // Navigate by encoded index
             const indexVal = key.value;
             if (current && current._data && current._data.type === 'array') {
-              // Decode the index from the value
-              let index;
-              if (indexVal && indexVal.value !== undefined) {
-                // The value is encoded — extract the numeric index
-                const encoded = indexVal.value;
-                if (Array.isArray(encoded) && encoded.length > 0) {
-                  index = encoded[0];
-                } else if (typeof encoded === 'string') {
-                  // Try to decode from encoded bytes
-                  try {
-                    const decoded = JSON.parse(encoded);
-                    if (decoded && decoded.type === 'cell' && decoded.value !== undefined) {
-                      index = Number(decoded.value);
-                    }
-                  } catch(e) { index = 0; }
-                } else if (typeof encoded === 'number' || typeof encoded === 'bigint') {
-                  index = Number(encoded);
-                } else {
-                  index = 0;
-                }
-              } else {
-                index = 0;
+              // Decode index from AlignedValue
+              let index = 0;
+              if (indexVal && indexVal.value && Array.isArray(indexVal.value) && indexVal.value[0] instanceof Uint8Array) {
+                index = Number(valueToBigInt(indexVal.value));
+              } else if (indexVal && typeof indexVal.value === 'number') {
+                index = indexVal.value;
               }
 
-              if (index !== undefined && current._data.items && current._data.items[index]) {
+              if (current._data.items && current._data.items[index]) {
                 current = current._data.items[index];
               } else {
                 current = StateValue.newNull();
@@ -179,20 +249,21 @@ export class QueryContext {
           }
         }
 
+        // Convert StateValue to AlignedValue for the event content
+        const aligned = stateValueToAligned(current);
+
         if (op.idx.cached) {
-          // Read and report — pop the top, push the result
+          // Cached idx: pop top, push result, emit read event
           stack.pop();
           stack.push(current);
-          events.push({ tag: 'read', content: current });
+          events.push({ tag: 'read', content: aligned });
         } else {
-          // Just navigate, keep original on stack too
+          // Non-cached idx: just push result, NO read event
           stack.push(current);
-          events.push({ tag: 'read', content: current });
         }
       } else if ('popeq' in op) {
-        // Pop top of stack, record as read result
         const val = stack.pop();
-        events.push({ tag: 'read', content: val });
+        events.push({ tag: 'read', content: stateValueToAligned(val) });
       } else if ('push' in op) {
         // Push a new value onto the stack/state
         const pushOp = op.push;
@@ -277,12 +348,37 @@ export class StateMap {}
 // ── Crypto functions ──
 
 export function persistentHash(alignment, value) {
-  // Delegates to native Rust via __native_persistentHash
-  if (typeof __native_persistentHash === 'function') {
-    return __native_persistentHash(alignment, value);
+  // The WASM persistentHash takes (alignment, value) where value is Array<Uint8Array>
+  // and returns [Uint8Array(32)] — the hash as an AlignedValue.value
+  //
+  // We concatenate all Uint8Arrays in value, hash them via native if available,
+  // or via JS fallback.
+  const allBytes = [];
+  if (Array.isArray(value)) {
+    for (const chunk of value) {
+      if (chunk instanceof Uint8Array) {
+        for (let i = 0; i < chunk.length; i++) allBytes.push(chunk[i]);
+      }
+    }
   }
-  // Fallback: JS SHA-256 (for testing without native)
-  throw new Error('persistentHash: native function not bound');
+
+  if (typeof globalThis.__native_persistentHash === 'function') {
+    // Convert to hex, call native, get hex back
+    const hexInput = allBytes.map(b => b.toString(16).padStart(2, '0')).join('');
+    const hexResult = globalThis.__native_persistentHash(hexInput);
+    // Convert hex result back to Uint8Array
+    const result = new Uint8Array(hexResult.length / 2);
+    for (let i = 0; i < result.length; i++) {
+      result[i] = parseInt(hexResult.substr(i * 2, 2), 16);
+    }
+    return [result];
+  }
+
+  // Fallback: pure JS SHA-256 (no native library available)
+  // Simple implementation for testing — production should use native
+  const data = new Uint8Array(allBytes);
+  const hash = jsSha256(data);
+  return [hash];
 }
 
 export function persistentCommit(value, opening) {
@@ -354,17 +450,35 @@ export function decodeQualifiedShieldedCoinInfo(info) { return info; }
 // ── Value conversion ──
 
 export function valueToBigInt(value) {
+  // value is an Array<Uint8Array> — the Value type
+  // Take the first Uint8Array and decode as little-endian BigInt
+  if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
+    const bytes = value[0];
+    let result = 0n;
+    for (let i = bytes.length - 1; i >= 0; i--) {
+      result = (result << 8n) | BigInt(bytes[i]);
+    }
+    return result;
+  }
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(value);
   if (typeof value === 'string') return BigInt(value);
-  if (value && value._data && value._data.type === 'cell') {
-    return BigInt(0); // TODO: proper cell-to-bigint conversion
-  }
   return 0n;
 }
 
 export function bigIntToValue(n) {
-  return new StateValue({ type: 'cell', value: n.toString() });
+  // Returns AlignedValue: { value: Array<Uint8Array>, alignment: Alignment[] }
+  // Encode BigInt as 32-byte little-endian Uint8Array
+  const bytes = new Uint8Array(32);
+  let val = BigInt(n);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = Number(val & 0xFFn);
+    val >>= 8n;
+  }
+  return {
+    value: [bytes],
+    alignment: [{ tag: 'atom', value: { tag: 'field' } }],
+  };
 }
 
 export function maxAlignedSize() { return 32; }

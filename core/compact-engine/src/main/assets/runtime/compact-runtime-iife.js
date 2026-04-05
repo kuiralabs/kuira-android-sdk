@@ -161,6 +161,131 @@ var __compactRuntime = (() => {
   }
 
   // onchain-runtime-v2.js
+  function jsSha256(data) {
+    const K = new Uint32Array([
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ]);
+    function rotr(x, n) {
+      return x >>> n | x << 32 - n;
+    }
+    let h0 = 1779033703, h1 = 3144134277, h2 = 1013904242, h3 = 2773480762;
+    let h4 = 1359893119, h5 = 2600822924, h6 = 528734635, h7 = 1541459225;
+    const msgLen = data.length;
+    const bitLen = msgLen * 8;
+    const padded = new Uint8Array(msgLen + 9 + 63 & ~63);
+    padded.set(data);
+    padded[msgLen] = 128;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 4, bitLen, false);
+    const w = new Uint32Array(64);
+    for (let offset = 0; offset < padded.length; offset += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ w[i - 15] >>> 3;
+        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ w[i - 2] >>> 10;
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1 | 0;
+      }
+      let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const ch = e & f ^ ~e & g;
+        const t1 = h + S1 + ch + K[i] + w[i] | 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const maj = a & b ^ a & c ^ b & c;
+        const t2 = S0 + maj | 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1 | 0;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2 | 0;
+      }
+      h0 = h0 + a | 0;
+      h1 = h1 + b | 0;
+      h2 = h2 + c | 0;
+      h3 = h3 + d | 0;
+      h4 = h4 + e | 0;
+      h5 = h5 + f | 0;
+      h6 = h6 + g | 0;
+      h7 = h7 + h | 0;
+    }
+    const result = new Uint8Array(32);
+    const rv = new DataView(result.buffer);
+    rv.setUint32(0, h0, false);
+    rv.setUint32(4, h1, false);
+    rv.setUint32(8, h2, false);
+    rv.setUint32(12, h3, false);
+    rv.setUint32(16, h4, false);
+    rv.setUint32(20, h5, false);
+    rv.setUint32(24, h6, false);
+    rv.setUint32(28, h7, false);
+    return result;
+  }
   var StateValue = class _StateValue {
     constructor(data) {
       this._data = data || null;
@@ -228,6 +353,32 @@ var __compactRuntime = (() => {
     constructor() {
     }
   };
+  function stateValueToAligned(sv) {
+    if (!sv || !sv._data) {
+      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    }
+    if (sv._data.type === "null") {
+      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    }
+    if (sv._data.type === "cell") {
+      const cellVal = sv._data.value;
+      if (cellVal && typeof cellVal === "object" && cellVal.value && Array.isArray(cellVal.value)) {
+        return cellVal;
+      }
+      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    }
+    if (sv._data.type === "array") {
+      const values = [];
+      const aligns = [];
+      for (const item of sv._data.items || []) {
+        const a = stateValueToAligned(item);
+        values.push(...a.value);
+        aligns.push(...a.alignment);
+      }
+      return { value: values, alignment: aligns };
+    }
+    return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+  }
   var QueryContext = class _QueryContext {
     constructor(chargedState, contractAddress) {
       this.state = chargedState;
@@ -258,29 +409,13 @@ var __compactRuntime = (() => {
             if (key.tag === "value") {
               const indexVal = key.value;
               if (current && current._data && current._data.type === "array") {
-                let index;
-                if (indexVal && indexVal.value !== void 0) {
-                  const encoded = indexVal.value;
-                  if (Array.isArray(encoded) && encoded.length > 0) {
-                    index = encoded[0];
-                  } else if (typeof encoded === "string") {
-                    try {
-                      const decoded = JSON.parse(encoded);
-                      if (decoded && decoded.type === "cell" && decoded.value !== void 0) {
-                        index = Number(decoded.value);
-                      }
-                    } catch (e) {
-                      index = 0;
-                    }
-                  } else if (typeof encoded === "number" || typeof encoded === "bigint") {
-                    index = Number(encoded);
-                  } else {
-                    index = 0;
-                  }
-                } else {
-                  index = 0;
+                let index = 0;
+                if (indexVal && indexVal.value && Array.isArray(indexVal.value) && indexVal.value[0] instanceof Uint8Array) {
+                  index = Number(valueToBigInt(indexVal.value));
+                } else if (indexVal && typeof indexVal.value === "number") {
+                  index = indexVal.value;
                 }
-                if (index !== void 0 && current._data.items && current._data.items[index]) {
+                if (current._data.items && current._data.items[index]) {
                   current = current._data.items[index];
                 } else {
                   current = StateValue.newNull();
@@ -288,17 +423,17 @@ var __compactRuntime = (() => {
               }
             }
           }
+          const aligned = stateValueToAligned(current);
           if (op.idx.cached) {
             stack.pop();
             stack.push(current);
-            events.push({ tag: "read", content: current });
+            events.push({ tag: "read", content: aligned });
           } else {
             stack.push(current);
-            events.push({ tag: "read", content: current });
           }
         } else if ("popeq" in op) {
           const val = stack.pop();
-          events.push({ tag: "read", content: val });
+          events.push({ tag: "read", content: stateValueToAligned(val) });
         } else if ("push" in op) {
           const pushOp = op.push;
           let val;
@@ -366,10 +501,26 @@ var __compactRuntime = (() => {
   var StateMap = class {
   };
   function persistentHash(alignment, value) {
-    if (typeof __native_persistentHash === "function") {
-      return __native_persistentHash(alignment, value);
+    const allBytes = [];
+    if (Array.isArray(value)) {
+      for (const chunk of value) {
+        if (chunk instanceof Uint8Array) {
+          for (let i = 0; i < chunk.length; i++) allBytes.push(chunk[i]);
+        }
+      }
     }
-    throw new Error("persistentHash: native function not bound");
+    if (typeof globalThis.__native_persistentHash === "function") {
+      const hexInput = allBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+      const hexResult = globalThis.__native_persistentHash(hexInput);
+      const result = new Uint8Array(hexResult.length / 2);
+      for (let i = 0; i < result.length; i++) {
+        result[i] = parseInt(hexResult.substr(i * 2, 2), 16);
+      }
+      return [result];
+    }
+    const data = new Uint8Array(allBytes);
+    const hash = jsSha256(data);
+    return [hash];
   }
   function persistentCommit(value, opening) {
     if (typeof __native_persistentCommit === "function") {
@@ -447,16 +598,30 @@ var __compactRuntime = (() => {
     return info;
   }
   function valueToBigInt(value) {
+    if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
+      const bytes = value[0];
+      let result = 0n;
+      for (let i = bytes.length - 1; i >= 0; i--) {
+        result = result << 8n | BigInt(bytes[i]);
+      }
+      return result;
+    }
     if (typeof value === "bigint") return value;
     if (typeof value === "number") return BigInt(value);
     if (typeof value === "string") return BigInt(value);
-    if (value && value._data && value._data.type === "cell") {
-      return BigInt(0);
-    }
     return 0n;
   }
   function bigIntToValue(n) {
-    return new StateValue({ type: "cell", value: n.toString() });
+    const bytes = new Uint8Array(32);
+    let val = BigInt(n);
+    for (let i = 0; i < 32; i++) {
+      bytes[i] = Number(val & 0xFFn);
+      val >>= 8n;
+    }
+    return {
+      value: [bytes],
+      alignment: [{ tag: "atom", value: { tag: "field" } }]
+    };
   }
   function maxAlignedSize() {
     return 32;
