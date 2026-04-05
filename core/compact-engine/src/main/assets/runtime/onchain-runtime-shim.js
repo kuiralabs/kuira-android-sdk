@@ -7,8 +7,7 @@
  * Functions prefixed with __native_ are provided by Kotlin/Rust
  * and registered before this module is loaded.
  *
- * This module is registered as '@midnight-ntwrk/onchain-runtime-v2'
- * so compact-runtime's imports resolve to it.
+ * Bundled into compact-runtime IIFE via esbuild, replacing the WASM module.
  */
 
 // ── SHA-256 (pure JS fallback when native FFI unavailable) ──
@@ -353,17 +352,6 @@ export class QueryContext {
   }
 
   query(program, costModel, gasLimit) {
-    // Try native Rust VM first
-    if (typeof globalThis.log === 'function') {
-      globalThis.log('QueryContext.query: _rustHandle=' + this._rustHandle);
-      // Log first opcode to see format
-      if (program.length > 0) {
-        globalThis.log('First opcode: ' + JSON.stringify(program[0], (k,v) => v instanceof Uint8Array ? Array.from(v) : v));
-      }
-      if (program.length > 1) {
-        globalThis.log('Second opcode: ' + JSON.stringify(program[1], (k,v) => v instanceof Uint8Array ? Array.from(v) : v).substring(0, 200));
-      }
-    }
     if (typeof globalThis.__native_contractQuery === 'function' && this._rustHandle) {
       try {
         // Transform opcodes from JS format to Rust serde format
@@ -681,7 +669,8 @@ export function bigIntToValue(n) {
   // Try native Rust FFI first
   if (typeof globalThis.__native_bigIntToValue === 'function') {
     try {
-      const json = globalThis.__native_bigIntToValue(n.toString());
+      const hex = BigInt(n).toString(16);
+      const json = globalThis.__native_bigIntToValue(hex);
       // Parse Rust Value JSON back to Array<Uint8Array>
       const parsed = JSON.parse(json);
       return parsed.map(arr => new Uint8Array(arr));

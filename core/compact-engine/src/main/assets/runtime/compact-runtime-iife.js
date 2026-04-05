@@ -506,15 +506,6 @@ var __compactRuntime = (() => {
       this._rustHandle = chargedState && chargedState._rustHandle || 0;
     }
     query(program, costModel, gasLimit) {
-      if (typeof globalThis.log === "function") {
-        globalThis.log("QueryContext.query: _rustHandle=" + this._rustHandle);
-        if (program.length > 0) {
-          globalThis.log("First opcode: " + JSON.stringify(program[0], (k, v) => v instanceof Uint8Array ? Array.from(v) : v));
-        }
-        if (program.length > 1) {
-          globalThis.log("Second opcode: " + JSON.stringify(program[1], (k, v) => v instanceof Uint8Array ? Array.from(v) : v).substring(0, 200));
-        }
-      }
       if (typeof globalThis.__native_contractQuery === "function" && this._rustHandle) {
         try {
           const transformed = program.map((op) => transformOpForRust(op));
@@ -788,7 +779,8 @@ var __compactRuntime = (() => {
   function bigIntToValue(n) {
     if (typeof globalThis.__native_bigIntToValue === "function") {
       try {
-        const json = globalThis.__native_bigIntToValue(n.toString());
+        const hex = BigInt(n).toString(16);
+        const json = globalThis.__native_bigIntToValue(hex);
         const parsed = JSON.parse(json);
         return parsed.map((arr) => new Uint8Array(arr));
       } catch (e) {
