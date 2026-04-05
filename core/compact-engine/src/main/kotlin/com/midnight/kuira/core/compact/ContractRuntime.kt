@@ -25,7 +25,7 @@ object ContractRuntime {
         return nativePersistentHashAligned(alignedValueJson)
     }
 
-    /** Convert BigInt (decimal string) to Value (JSON). */
+    /** Convert BigInt (hex string) to Value (JSON). */
     fun bigIntToValue(bigintStr: String): String? {
         ensureLoaded()
         return nativeBigIntToValue(bigintStr)
@@ -73,6 +73,21 @@ object ContractRuntime {
         nativeStateSetOperation(handle, operationName)
     }
 
+    /**
+     * Assemble a contract call transaction from circuit execution output.
+     *
+     * Takes JSON containing proof data (input, output, publicTranscript,
+     * privateTranscriptOutputs) plus metadata (networkId, contractAddress,
+     * entryPoint, stateHandle).
+     *
+     * Returns hex-encoded SCALE serialized UnprovenTransaction,
+     * or JSON error: {"error": "..."}
+     */
+    fun assembleContractCallTx(paramsJson: String): String? {
+        ensureLoaded()
+        return nativeAssembleContractCallTx(paramsJson)
+    }
+
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
@@ -82,4 +97,5 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
     @JvmStatic private external fun nativeStateFree(handle: Long)
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
+    @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
 }

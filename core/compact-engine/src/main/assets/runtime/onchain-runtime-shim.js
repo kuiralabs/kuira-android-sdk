@@ -10,64 +10,6 @@
  * Bundled into compact-runtime IIFE via esbuild, replacing the WASM module.
  */
 
-// ── SHA-256 (pure JS fallback when native FFI unavailable) ──
-
-function jsSha256(data) {
-  // Minimal SHA-256 implementation
-  const K = new Uint32Array([
-    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-  ]);
-
-  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
-
-  let h0=0x6a09e667, h1=0xbb67ae85, h2=0x3c6ef372, h3=0xa54ff53a;
-  let h4=0x510e527f, h5=0x9b05688c, h6=0x1f83d9ab, h7=0x5be0cd19;
-
-  // Pre-processing: pad message
-  const msgLen = data.length;
-  const bitLen = msgLen * 8;
-  const padded = new Uint8Array(((msgLen + 9 + 63) & ~63));
-  padded.set(data);
-  padded[msgLen] = 0x80;
-  const view = new DataView(padded.buffer);
-  view.setUint32(padded.length - 4, bitLen, false);
-
-  const w = new Uint32Array(64);
-  for (let offset = 0; offset < padded.length; offset += 64) {
-    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
-    for (let i = 16; i < 64; i++) {
-      const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15]>>>3);
-      const s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2]>>>10);
-      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
-    }
-    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
-    for (let i = 0; i < 64; i++) {
-      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
-      const ch = (e & f) ^ (~e & g);
-      const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
-      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (S0 + maj) | 0;
-      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
-    }
-    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0;
-    h4=(h4+e)|0; h5=(h5+f)|0; h6=(h6+g)|0; h7=(h7+h)|0;
-  }
-
-  const result = new Uint8Array(32);
-  const rv = new DataView(result.buffer);
-  rv.setUint32(0,h0,false); rv.setUint32(4,h1,false); rv.setUint32(8,h2,false); rv.setUint32(12,h3,false);
-  rv.setUint32(16,h4,false); rv.setUint32(20,h5,false); rv.setUint32(24,h6,false); rv.setUint32(28,h7,false);
-  return result;
-}
-
 // ── StateValue ──
 
 export class StateValue {
@@ -207,35 +149,6 @@ export class ContractMaintenanceAuthority {
   constructor() {}
 }
 
-// ── StateValue → AlignedValue conversion ──
-
-function stateValueToAligned(sv) {
-  if (!sv || !sv._data) {
-    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
-  }
-  if (sv._data.type === 'null') {
-    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
-  }
-  if (sv._data.type === 'cell') {
-    const cellVal = sv._data.value;
-    if (cellVal && typeof cellVal === 'object' && cellVal.value && Array.isArray(cellVal.value)) {
-      return cellVal; // Already AlignedValue
-    }
-    return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
-  }
-  if (sv._data.type === 'array') {
-    const values = [];
-    const aligns = [];
-    for (const item of (sv._data.items || [])) {
-      const a = stateValueToAligned(item);
-      values.push(...a.value);
-      aligns.push(...a.alignment);
-    }
-    return { value: values, alignment: aligns };
-  }
-  return { value: [new Uint8Array(32)], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
-}
-
 // ── Opcode transformer: JS format → Rust serde format ──
 
 function transformOpForRust(op) {
@@ -320,9 +233,8 @@ function transformAlignedValue(av) {
     if (v instanceof Uint8Array) return Array.from(v);
     if (Array.isArray(v)) return v;
     if (typeof v === 'object' && v !== null) {
-      // Convert {0: 1, 1: 2, ...} format to plain array
       const keys = Object.keys(v).filter(k => !isNaN(k)).sort((a,b) => Number(a) - Number(b));
-      if (keys.length === 0) return []; // empty Uint8Array → []
+      if (keys.length === 0) return [];
       return keys.map(k => v[k]);
     }
     return [];
@@ -332,6 +244,111 @@ function transformAlignedValue(av) {
     value: value,
     alignment: av.alignment || [{ tag: 'atom', value: { tag: 'field' } }],
   };
+}
+
+/**
+ * Like transformAlignedValue, but pads empty value slots to match their
+ * alignment dimensions. Required for Rust's AlignedValue serde validation
+ * which checks that value dimensions match alignment.
+ *
+ * Only used for transcript/proof data extraction — NOT for VM execution.
+ */
+function transformAlignedValuePadded(av) {
+  if (!av) return { value: [[]], alignment: [{ tag: 'atom', value: { tag: 'field' } }] };
+
+  const alignment = av.alignment || [{ tag: 'atom', value: { tag: 'field' } }];
+
+  let value = (av.value || [[]]).map(v => {
+    if (v instanceof Uint8Array) return Array.from(v);
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'object' && v !== null) {
+      const keys = Object.keys(v).filter(k => !isNaN(k)).sort((a,b) => Number(a) - Number(b));
+      if (keys.length === 0) return [];
+      return keys.map(k => v[k]);
+    }
+    return [];
+  });
+
+  // Pad empty value slots to match alignment dimensions
+  if (alignment.length > 0 && value.length > 0) {
+    value = value.map((slot, i) => {
+      if (slot.length > 0) return slot;
+      const align = alignment[i];
+      if (!align) return slot;
+      if (align.tag === 'atom' && align.value) {
+        if (align.value.tag === 'field' || align.value.tag === 'compress') {
+          return new Array(32).fill(0);
+        }
+        if (align.value.tag === 'bytes' && align.value.length) {
+          return new Array(align.value.length).fill(0);
+        }
+      }
+      return slot;
+    });
+  }
+
+  // If value is completely empty but alignment is not, create zero-filled slots
+  if (value.length === 0 && alignment.length > 0) {
+    value = alignment.map(align => {
+      if (align.tag === 'atom' && align.value) {
+        if (align.value.tag === 'field' || align.value.tag === 'compress') {
+          return new Array(32).fill(0);
+        }
+        if (align.value.tag === 'bytes' && align.value.length) {
+          return new Array(align.value.length).fill(0);
+        }
+      }
+      return [];
+    });
+  }
+
+  return { value: value, alignment: alignment };
+}
+
+// ── Public Transcript transformer (for transaction assembly) ──
+
+/**
+ * Transform the publicTranscript from circuit execution to Rust serde format
+ * for Op<ResultModeVerify, InMemoryDB>.
+ *
+ * The key difference from transformOpForRust (used for VM execution):
+ * - popeq.result is preserved as AlignedValue (Verify mode)
+ *   instead of being nulled (Gather mode)
+ */
+export function transformPublicTranscript(transcript) {
+  return transcript.map(op => {
+    if (typeof op === 'string') return op;
+    if (typeof op !== 'object' || op === null) return op;
+
+    // For popeq, preserve the result AlignedValue (Verify mode) with padding
+    if ('popeq' in op) {
+      return {
+        popeq: {
+          cached: op.popeq.cached,
+          result: transformAlignedValuePadded(op.popeq.result),
+        }
+      };
+    }
+
+    // For idx, use padded AlignedValues in path keys
+    if ('idx' in op) {
+      return {
+        idx: {
+          cached: op.idx.cached,
+          pushPath: op.idx.pushPath || false,
+          path: (op.idx.path || []).map(key => {
+            if (key.tag === 'value') {
+              return { tag: 'value', value: transformAlignedValuePadded(key.value) };
+            }
+            return key;
+          }),
+        }
+      };
+    }
+
+    // For push and other ops, use the VM transformer (no padding needed)
+    return transformOpForRust(op);
+  });
 }
 
 // ── QueryContext ──
@@ -394,120 +411,12 @@ export class QueryContext {
         newCtx._rustHandle = result.handle;
 
         return { context: newCtx, events, gasCost: { value: 0n } };
-      } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
-        // Fall through to JS implementation
+      } catch(e) {
+        throw new Error('Rust VM query failed: ' + e.toString());
       }
     }
 
-    // JS fallback: Stack-based VM execution of opcodes against contract state.
-    // The state is a tree of StateValue nodes.
-    const stack = [this.state.get_ref()]; // stack starts with root state
-    const events = [];
-
-    for (const op of program) {
-      if (typeof op !== 'object') continue;
-
-      if ('dup' in op) {
-        // Duplicate the n-th item from top of stack
-        const n = op.dup.n;
-        const idx = stack.length - 1 - n;
-        if (idx >= 0) {
-          stack.push(stack[idx]);
-        }
-      } else if ('idx' in op) {
-        // Index into the top-of-stack value using path
-        const top = stack[stack.length - 1];
-        let current = top;
-
-        for (const key of op.idx.path) {
-          if (key.tag === 'value') {
-            const indexVal = key.value;
-            if (current && current._data && current._data.type === 'array') {
-              // Decode index from AlignedValue
-              let index = 0;
-              if (indexVal && indexVal.value && Array.isArray(indexVal.value) && indexVal.value[0] instanceof Uint8Array) {
-                index = Number(valueToBigInt(indexVal.value));
-              } else if (indexVal && typeof indexVal.value === 'number') {
-                index = indexVal.value;
-              }
-
-              if (current._data.items && current._data.items[index]) {
-                current = current._data.items[index];
-              } else {
-                current = StateValue.newNull();
-              }
-            }
-          }
-        }
-
-        // Convert StateValue to AlignedValue for the event content
-        const aligned = stateValueToAligned(current);
-
-        if (op.idx.cached) {
-          // Cached idx: pop top, push result, emit read event
-          stack.pop();
-          stack.push(current);
-          events.push({ tag: 'read', content: aligned });
-        } else {
-          // Non-cached idx: just push result, NO read event
-          stack.push(current);
-        }
-      } else if ('popeq' in op) {
-        const val = stack.pop();
-        events.push({ tag: 'read', content: stateValueToAligned(val) });
-      } else if ('push' in op) {
-        // Push a new value onto the stack/state
-        const pushOp = op.push;
-        let val;
-        if (pushOp.value !== undefined) {
-          if (typeof pushOp.value === 'string') {
-            try {
-              val = StateValue.decode(pushOp.value);
-            } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
-              val = new StateValue({ type: 'cell', value: pushOp.value });
-            }
-          } else {
-            val = new StateValue({ type: 'cell', value: pushOp.value });
-          }
-        } else {
-          val = StateValue.newNull();
-        }
-
-        if (pushOp.storage) {
-          // Storage push — modifies the state
-          stack.push(val);
-        } else {
-          stack.push(val);
-        }
-      } else if ('ins' in op) {
-        // Insert: take top values and insert into state
-        const n = op.ins.n;
-        const values = [];
-        for (let i = 0; i < n; i++) {
-          values.unshift(stack.pop());
-        }
-        const target = stack.pop();
-        // Rebuild state with inserted values
-        if (target && target._data && target._data.type === 'array') {
-          const newItems = [...target._data.items, ...values];
-          stack.push(new StateValue({ type: 'array', items: newItems }));
-        } else {
-          stack.push(target);
-        }
-      } else if ('pop' in op) {
-        stack.pop();
-      }
-    }
-
-    // The state after execution is the remaining stack
-    const finalState = stack.length > 0 ? stack[stack.length - 1] : this.state.get_ref();
-    const newChargedState = new ChargedState(finalState);
-
-    return {
-      context: new QueryContext(newChargedState, this.address),
-      events,
-      gasCost: { value: 0n },
-    };
+    throw new Error('QueryContext.query: no Rust handle available and no native FFI registered');
   }
 }
 
@@ -539,7 +448,7 @@ export class StateMap {}
 // ── Crypto functions ──
 
 export function persistentHash(alignment, value) {
-  // Try native Rust FFI with proper AlignedValue encoding (binary_repr + SHA-256)
+  // Delegate to native Rust FFI — proper AlignedValue binary_repr + SHA-256
   if (typeof globalThis.__native_persistentHash_aligned === 'function') {
     try {
       const aligned = {
@@ -552,35 +461,24 @@ export function persistentHash(alignment, value) {
       if (parsed.error) throw new Error(parsed.error);
       // Result is a Value = Array<Array<number>> — convert to Array<Uint8Array>
       return parsed.map(arr => new Uint8Array(arr));
-    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
-      // Fall through to JS fallback
+    } catch(e) {
+      throw new Error('persistentHash native call failed: ' + e.toString());
     }
   }
 
-  // JS fallback: concatenate bytes and SHA-256 (NOT production-correct)
-  const allBytes = [];
-  if (Array.isArray(value)) {
-    for (const chunk of value) {
-      if (chunk instanceof Uint8Array) {
-        for (let i = 0; i < chunk.length; i++) allBytes.push(chunk[i]);
-      }
-    }
-  }
-  const data = new Uint8Array(allBytes);
-  const hash = jsSha256(data);
-  return [hash];
+  throw new Error('persistentHash: native FFI not available');
 }
 
 export function persistentCommit(value, opening) {
-  if (typeof __native_persistentCommit === 'function') {
-    return __native_persistentCommit(value, opening);
+  if (typeof globalThis.__native_persistentCommit === 'function') {
+    return globalThis.__native_persistentCommit(value, opening);
   }
   throw new Error('persistentCommit: native function not bound');
 }
 
 export function transientHash(input) {
-  if (typeof __native_transientHash === 'function') {
-    return __native_transientHash(input);
+  if (typeof globalThis.__native_transientHash === 'function') {
+    return globalThis.__native_transientHash(input);
   }
   throw new Error('transientHash: native function not bound');
 }
@@ -640,51 +538,38 @@ export function decodeQualifiedShieldedCoinInfo(info) { return info; }
 // ── Value conversion ──
 
 export function valueToBigInt(value) {
-  // Try native Rust FFI first
-  if (typeof globalThis.__native_valueToBigInt === 'function') {
-    try {
-      // Serialize Value to JSON, call Rust, parse result
-      const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
-      const result = globalThis.__native_valueToBigInt(json);
-      return BigInt(result);
-    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString()); /* fall through to JS */ }
-  }
-
-  // JS fallback
-  if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
-    const bytes = value[0];
-    let result = 0n;
-    for (let i = bytes.length - 1; i >= 0; i--) {
-      result = (result << 8n) | BigInt(bytes[i]);
-    }
-    return result;
-  }
+  // Primitive types — direct conversion
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(value);
   if (typeof value === 'string') return BigInt(value);
-  return 0n;
+
+  // Value (Array<Uint8Array>) — delegate to native Rust FFI
+  if (typeof globalThis.__native_valueToBigInt === 'function') {
+    try {
+      const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
+      const result = globalThis.__native_valueToBigInt(json);
+      return BigInt(result);
+    } catch(e) {
+      throw new Error('valueToBigInt native call failed: ' + e.toString());
+    }
+  }
+
+  throw new Error('valueToBigInt: native FFI not available');
 }
 
 export function bigIntToValue(n) {
-  // Try native Rust FFI first
   if (typeof globalThis.__native_bigIntToValue === 'function') {
     try {
       const hex = BigInt(n).toString(16);
       const json = globalThis.__native_bigIntToValue(hex);
-      // Parse Rust Value JSON back to Array<Uint8Array>
       const parsed = JSON.parse(json);
       return parsed.map(arr => new Uint8Array(arr));
-    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString()); /* fall through to JS */ }
+    } catch(e) {
+      throw new Error('bigIntToValue native call failed: ' + e.toString());
+    }
   }
 
-  // JS fallback
-  const bytes = new Uint8Array(32);
-  let val = BigInt(n);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = Number(val & 0xFFn);
-    val >>= 8n;
-  }
-  return [bytes];
+  throw new Error('bigIntToValue: native FFI not available');
 }
 
 export function maxAlignedSize() { return 32; }

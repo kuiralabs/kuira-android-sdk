@@ -123,6 +123,7 @@ var __compactRuntime = (() => {
     signingKeyFromBip340: () => signingKeyFromBip340,
     subField: () => subField,
     toHex: () => toHex,
+    transformPublicTranscript: () => transformPublicTranscript,
     transientCommit: () => transientCommit2,
     transientHash: () => transientHash2,
     typeError: () => typeError,
@@ -161,131 +162,6 @@ var __compactRuntime = (() => {
   }
 
   // onchain-runtime-v2.js
-  function jsSha256(data) {
-    const K = new Uint32Array([
-      1116352408,
-      1899447441,
-      3049323471,
-      3921009573,
-      961987163,
-      1508970993,
-      2453635748,
-      2870763221,
-      3624381080,
-      310598401,
-      607225278,
-      1426881987,
-      1925078388,
-      2162078206,
-      2614888103,
-      3248222580,
-      3835390401,
-      4022224774,
-      264347078,
-      604807628,
-      770255983,
-      1249150122,
-      1555081692,
-      1996064986,
-      2554220882,
-      2821834349,
-      2952996808,
-      3210313671,
-      3336571891,
-      3584528711,
-      113926993,
-      338241895,
-      666307205,
-      773529912,
-      1294757372,
-      1396182291,
-      1695183700,
-      1986661051,
-      2177026350,
-      2456956037,
-      2730485921,
-      2820302411,
-      3259730800,
-      3345764771,
-      3516065817,
-      3600352804,
-      4094571909,
-      275423344,
-      430227734,
-      506948616,
-      659060556,
-      883997877,
-      958139571,
-      1322822218,
-      1537002063,
-      1747873779,
-      1955562222,
-      2024104815,
-      2227730452,
-      2361852424,
-      2428436474,
-      2756734187,
-      3204031479,
-      3329325298
-    ]);
-    function rotr(x, n) {
-      return x >>> n | x << 32 - n;
-    }
-    let h0 = 1779033703, h1 = 3144134277, h2 = 1013904242, h3 = 2773480762;
-    let h4 = 1359893119, h5 = 2600822924, h6 = 528734635, h7 = 1541459225;
-    const msgLen = data.length;
-    const bitLen = msgLen * 8;
-    const padded = new Uint8Array(msgLen + 9 + 63 & ~63);
-    padded.set(data);
-    padded[msgLen] = 128;
-    const view = new DataView(padded.buffer);
-    view.setUint32(padded.length - 4, bitLen, false);
-    const w = new Uint32Array(64);
-    for (let offset = 0; offset < padded.length; offset += 64) {
-      for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
-      for (let i = 16; i < 64; i++) {
-        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ w[i - 15] >>> 3;
-        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ w[i - 2] >>> 10;
-        w[i] = w[i - 16] + s0 + w[i - 7] + s1 | 0;
-      }
-      let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
-      for (let i = 0; i < 64; i++) {
-        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-        const ch = e & f ^ ~e & g;
-        const t1 = h + S1 + ch + K[i] + w[i] | 0;
-        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-        const maj = a & b ^ a & c ^ b & c;
-        const t2 = S0 + maj | 0;
-        h = g;
-        g = f;
-        f = e;
-        e = d + t1 | 0;
-        d = c;
-        c = b;
-        b = a;
-        a = t1 + t2 | 0;
-      }
-      h0 = h0 + a | 0;
-      h1 = h1 + b | 0;
-      h2 = h2 + c | 0;
-      h3 = h3 + d | 0;
-      h4 = h4 + e | 0;
-      h5 = h5 + f | 0;
-      h6 = h6 + g | 0;
-      h7 = h7 + h | 0;
-    }
-    const result = new Uint8Array(32);
-    const rv = new DataView(result.buffer);
-    rv.setUint32(0, h0, false);
-    rv.setUint32(4, h1, false);
-    rv.setUint32(8, h2, false);
-    rv.setUint32(12, h3, false);
-    rv.setUint32(16, h4, false);
-    rv.setUint32(20, h5, false);
-    rv.setUint32(24, h6, false);
-    rv.setUint32(28, h7, false);
-    return result;
-  }
   var StateValue = class _StateValue {
     constructor(data) {
       this._data = data || null;
@@ -390,32 +266,6 @@ var __compactRuntime = (() => {
     constructor() {
     }
   };
-  function stateValueToAligned(sv) {
-    if (!sv || !sv._data) {
-      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
-    }
-    if (sv._data.type === "null") {
-      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
-    }
-    if (sv._data.type === "cell") {
-      const cellVal = sv._data.value;
-      if (cellVal && typeof cellVal === "object" && cellVal.value && Array.isArray(cellVal.value)) {
-        return cellVal;
-      }
-      return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
-    }
-    if (sv._data.type === "array") {
-      const values = [];
-      const aligns = [];
-      for (const item of sv._data.items || []) {
-        const a = stateValueToAligned(item);
-        values.push(...a.value);
-        aligns.push(...a.alignment);
-      }
-      return { value: values, alignment: aligns };
-    }
-    return { value: [new Uint8Array(32)], alignment: [{ tag: "atom", value: { tag: "field" } }] };
-  }
   function transformOpForRust(op) {
     if (typeof op === "string") return op;
     if (typeof op !== "object" || op === null) return op;
@@ -492,6 +342,79 @@ var __compactRuntime = (() => {
       alignment: av.alignment || [{ tag: "atom", value: { tag: "field" } }]
     };
   }
+  function transformAlignedValuePadded(av) {
+    if (!av) return { value: [[]], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    const alignment = av.alignment || [{ tag: "atom", value: { tag: "field" } }];
+    let value = (av.value || [[]]).map((v) => {
+      if (v instanceof Uint8Array) return Array.from(v);
+      if (Array.isArray(v)) return v;
+      if (typeof v === "object" && v !== null) {
+        const keys = Object.keys(v).filter((k) => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
+        if (keys.length === 0) return [];
+        return keys.map((k) => v[k]);
+      }
+      return [];
+    });
+    if (alignment.length > 0 && value.length > 0) {
+      value = value.map((slot, i) => {
+        if (slot.length > 0) return slot;
+        const align = alignment[i];
+        if (!align) return slot;
+        if (align.tag === "atom" && align.value) {
+          if (align.value.tag === "field" || align.value.tag === "compress") {
+            return new Array(32).fill(0);
+          }
+          if (align.value.tag === "bytes" && align.value.length) {
+            return new Array(align.value.length).fill(0);
+          }
+        }
+        return slot;
+      });
+    }
+    if (value.length === 0 && alignment.length > 0) {
+      value = alignment.map((align) => {
+        if (align.tag === "atom" && align.value) {
+          if (align.value.tag === "field" || align.value.tag === "compress") {
+            return new Array(32).fill(0);
+          }
+          if (align.value.tag === "bytes" && align.value.length) {
+            return new Array(align.value.length).fill(0);
+          }
+        }
+        return [];
+      });
+    }
+    return { value, alignment };
+  }
+  function transformPublicTranscript(transcript) {
+    return transcript.map((op) => {
+      if (typeof op === "string") return op;
+      if (typeof op !== "object" || op === null) return op;
+      if ("popeq" in op) {
+        return {
+          popeq: {
+            cached: op.popeq.cached,
+            result: transformAlignedValuePadded(op.popeq.result)
+          }
+        };
+      }
+      if ("idx" in op) {
+        return {
+          idx: {
+            cached: op.idx.cached,
+            pushPath: op.idx.pushPath || false,
+            path: (op.idx.path || []).map((key) => {
+              if (key.tag === "value") {
+                return { tag: "value", value: transformAlignedValuePadded(key.value) };
+              }
+              return key;
+            })
+          }
+        };
+      }
+      return transformOpForRust(op);
+    });
+  }
   var QueryContext = class _QueryContext {
     constructor(chargedState, contractAddress) {
       this.state = chargedState;
@@ -519,7 +442,7 @@ var __compactRuntime = (() => {
             throw new Error(result.error);
           }
           this._rustHandle = result.handle;
-          const events2 = (result.events || []).map((ev) => {
+          const events = (result.events || []).map((ev) => {
             if (ev.Read !== void 0) {
               const content = {
                 value: ev.Read.value.map((arr) => new Uint8Array(arr)),
@@ -536,99 +459,12 @@ var __compactRuntime = (() => {
           newState._rustHandle = result.handle;
           const newCtx = new _QueryContext(newState, this.address);
           newCtx._rustHandle = result.handle;
-          return { context: newCtx, events: events2, gasCost: { value: 0n } };
+          return { context: newCtx, events, gasCost: { value: 0n } };
         } catch (e) {
-          if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
+          throw new Error("Rust VM query failed: " + e.toString());
         }
       }
-      const stack = [this.state.get_ref()];
-      const events = [];
-      for (const op of program) {
-        if (typeof op !== "object") continue;
-        if ("dup" in op) {
-          const n = op.dup.n;
-          const idx = stack.length - 1 - n;
-          if (idx >= 0) {
-            stack.push(stack[idx]);
-          }
-        } else if ("idx" in op) {
-          const top = stack[stack.length - 1];
-          let current = top;
-          for (const key of op.idx.path) {
-            if (key.tag === "value") {
-              const indexVal = key.value;
-              if (current && current._data && current._data.type === "array") {
-                let index = 0;
-                if (indexVal && indexVal.value && Array.isArray(indexVal.value) && indexVal.value[0] instanceof Uint8Array) {
-                  index = Number(valueToBigInt(indexVal.value));
-                } else if (indexVal && typeof indexVal.value === "number") {
-                  index = indexVal.value;
-                }
-                if (current._data.items && current._data.items[index]) {
-                  current = current._data.items[index];
-                } else {
-                  current = StateValue.newNull();
-                }
-              }
-            }
-          }
-          const aligned = stateValueToAligned(current);
-          if (op.idx.cached) {
-            stack.pop();
-            stack.push(current);
-            events.push({ tag: "read", content: aligned });
-          } else {
-            stack.push(current);
-          }
-        } else if ("popeq" in op) {
-          const val = stack.pop();
-          events.push({ tag: "read", content: stateValueToAligned(val) });
-        } else if ("push" in op) {
-          const pushOp = op.push;
-          let val;
-          if (pushOp.value !== void 0) {
-            if (typeof pushOp.value === "string") {
-              try {
-                val = StateValue.decode(pushOp.value);
-              } catch (e) {
-                if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
-                val = new StateValue({ type: "cell", value: pushOp.value });
-              }
-            } else {
-              val = new StateValue({ type: "cell", value: pushOp.value });
-            }
-          } else {
-            val = StateValue.newNull();
-          }
-          if (pushOp.storage) {
-            stack.push(val);
-          } else {
-            stack.push(val);
-          }
-        } else if ("ins" in op) {
-          const n = op.ins.n;
-          const values = [];
-          for (let i = 0; i < n; i++) {
-            values.unshift(stack.pop());
-          }
-          const target = stack.pop();
-          if (target && target._data && target._data.type === "array") {
-            const newItems = [...target._data.items, ...values];
-            stack.push(new StateValue({ type: "array", items: newItems }));
-          } else {
-            stack.push(target);
-          }
-        } else if ("pop" in op) {
-          stack.pop();
-        }
-      }
-      const finalState = stack.length > 0 ? stack[stack.length - 1] : this.state.get_ref();
-      const newChargedState = new ChargedState(finalState);
-      return {
-        context: new _QueryContext(newChargedState, this.address),
-        events,
-        gasCost: { value: 0n }
-      };
+      throw new Error("QueryContext.query: no Rust handle available and no native FFI registered");
     }
   };
   var CostModel = class _CostModel {
@@ -663,30 +499,20 @@ var __compactRuntime = (() => {
         if (parsed.error) throw new Error(parsed.error);
         return parsed.map((arr) => new Uint8Array(arr));
       } catch (e) {
-        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
+        throw new Error("persistentHash native call failed: " + e.toString());
       }
     }
-    const allBytes = [];
-    if (Array.isArray(value)) {
-      for (const chunk of value) {
-        if (chunk instanceof Uint8Array) {
-          for (let i = 0; i < chunk.length; i++) allBytes.push(chunk[i]);
-        }
-      }
-    }
-    const data = new Uint8Array(allBytes);
-    const hash = jsSha256(data);
-    return [hash];
+    throw new Error("persistentHash: native FFI not available");
   }
   function persistentCommit(value, opening) {
-    if (typeof __native_persistentCommit === "function") {
-      return __native_persistentCommit(value, opening);
+    if (typeof globalThis.__native_persistentCommit === "function") {
+      return globalThis.__native_persistentCommit(value, opening);
     }
     throw new Error("persistentCommit: native function not bound");
   }
   function transientHash(input) {
-    if (typeof __native_transientHash === "function") {
-      return __native_transientHash(input);
+    if (typeof globalThis.__native_transientHash === "function") {
+      return globalThis.__native_transientHash(input);
     }
     throw new Error("transientHash: native function not bound");
   }
@@ -754,27 +580,19 @@ var __compactRuntime = (() => {
     return info;
   }
   function valueToBigInt(value) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number") return BigInt(value);
+    if (typeof value === "string") return BigInt(value);
     if (typeof globalThis.__native_valueToBigInt === "function") {
       try {
         const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
         const result = globalThis.__native_valueToBigInt(json);
         return BigInt(result);
       } catch (e) {
-        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
+        throw new Error("valueToBigInt native call failed: " + e.toString());
       }
     }
-    if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
-      const bytes = value[0];
-      let result = 0n;
-      for (let i = bytes.length - 1; i >= 0; i--) {
-        result = result << 8n | BigInt(bytes[i]);
-      }
-      return result;
-    }
-    if (typeof value === "bigint") return value;
-    if (typeof value === "number") return BigInt(value);
-    if (typeof value === "string") return BigInt(value);
-    return 0n;
+    throw new Error("valueToBigInt: native FFI not available");
   }
   function bigIntToValue(n) {
     if (typeof globalThis.__native_bigIntToValue === "function") {
@@ -784,16 +602,10 @@ var __compactRuntime = (() => {
         const parsed = JSON.parse(json);
         return parsed.map((arr) => new Uint8Array(arr));
       } catch (e) {
-        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
+        throw new Error("bigIntToValue native call failed: " + e.toString());
       }
     }
-    const bytes = new Uint8Array(32);
-    let val = BigInt(n);
-    for (let i = 0; i < 32; i++) {
-      bytes[i] = Number(val & 0xFFn);
-      val >>= 8n;
-    }
-    return [bytes];
+    throw new Error("bigIntToValue: native FFI not available");
   }
   function maxAlignedSize() {
     return 32;

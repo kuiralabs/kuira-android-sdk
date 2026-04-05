@@ -145,43 +145,7 @@ class BBoardContractTest {
                 }
 
                 // Register native Rust FFI functions for the shim
-                try {
-                    ContractRuntime.ensureLoaded()
-                    function("__nativePersistentHashAligned") { args: Array<Any?> ->
-                        ContractRuntime.persistentHashAligned(args[0] as String) ?: ""
-                    }
-                    function("__nativeBigIntToValue") { args: Array<Any?> ->
-                        ContractRuntime.bigIntToValue(args[0] as String) ?: ""
-                    }
-                    function("__nativeValueToBigInt") { args: Array<Any?> ->
-                        ContractRuntime.valueToBigInt(args[0] as String) ?: ""
-                    }
-                    function("__nativeStateCreateWithNulls") { args: Array<Any?> ->
-                        val n = (args[0] as String).toInt()
-                        ContractRuntime.stateCreateWithNulls(n).toString()
-                    }
-                    function("__nativeStateSetOperation") { args: Array<Any?> ->
-                        val handle = (args[0] as String).toLong()
-                        val name = args[1] as String
-                        ContractRuntime.stateSetOperation(handle, name)
-                        ""
-                    }
-                    function("__nativeContractQuery") { args: Array<Any?> ->
-                        val handle = (args[0] as String).toLong()
-                        val opcodesJson = args[1] as String
-                        ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
-                    }
-                    evaluate<Any?>("""
-                        globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
-                        globalThis.__native_bigIntToValue = __nativeBigIntToValue;
-                        globalThis.__native_valueToBigInt = __nativeValueToBigInt;
-                        globalThis.__native_stateCreateWithNulls = __nativeStateCreateWithNulls;
-                        globalThis.__native_stateSetOperation = __nativeStateSetOperation;
-                        globalThis.__native_contractQuery = __nativeContractQuery;
-                    """.trimIndent())
-                } catch (e: Exception) {
-                    println("Native FFI not available: ${e.message} — using JS fallbacks")
-                }
+                CircuitExecutor.registerNativeFfi(this)
 
                 function("log") { args: Array<Any?> -> println("JS_LOG: ${args[0]}") }
 
@@ -237,15 +201,9 @@ class BBoardContractTest {
             }
         }
 
-        if (error != null) {
-            println("CIRCUIT ERROR: $error")
-            // For now, don't fail — log what needs fixing
-        }
-        if (result != null) {
-            println("CIRCUIT SUCCESS: $result")
-            println("Witness called $witnessCallCount times")
-        }
-        // At least one must be set
-        assertTrue("Should have result or error", result != null || error != null)
+        assertNull("Circuit should not error: $error", error)
+        assertNotNull("Should have result", result)
+        assertTrue("Should report success", result!!.contains("true"))
+        assertTrue("Witness should have been called", witnessCallCount > 0)
     }
 }
