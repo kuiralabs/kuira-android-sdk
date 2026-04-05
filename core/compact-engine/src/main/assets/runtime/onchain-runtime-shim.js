@@ -111,6 +111,7 @@ export class StateValue {
 export class ChargedState {
   constructor(stateValue) {
     this._state = stateValue;
+    this._rustHandle = 0;
   }
 
   get() {
@@ -122,8 +123,9 @@ export class ChargedState {
   }
 
   update(path, value) {
-    // State update — delegates to native for real implementation
-    return new ChargedState(value);
+    const cs = new ChargedState(value);
+    cs._rustHandle = this._rustHandle;
+    return cs;
   }
 }
 
@@ -131,15 +133,27 @@ export class ChargedState {
 
 export class ContractState {
   constructor() {
-    this.data = null;
+    this._data = null;
     this._operations = {};
     this.balance = new Map();
-    this._rustHandle = 0; // 0 = no Rust handle yet
+    this._rustHandle = 0;
+  }
+
+  get data() { return this._data; }
+
+  set data(chargedState) {
+    this._data = chargedState;
+    // Create Rust handle now that data structure is known
+    if (chargedState && !this._rustHandle && typeof globalThis.__native_stateCreateWithNulls === 'function') {
+      this._ensureRustHandle();
+    }
+    if (chargedState && this._rustHandle) {
+      chargedState._rustHandle = this._rustHandle;
+    }
   }
 
   setOperation(name, op) {
     this._operations[name] = op;
-    // Also set on Rust side if handle exists
     if (this._rustHandle && typeof globalThis.__native_stateSetOperation === 'function') {
       globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
     }
@@ -149,25 +163,27 @@ export class ContractState {
     return this._operations[name] || null;
   }
 
-  // Create a Rust-side state handle from the JS data
   _ensureRustHandle() {
     if (this._rustHandle) return this._rustHandle;
     if (typeof globalThis.__native_stateCreateWithNulls !== 'function') return 0;
 
-    // Count null slots in the data array
     let numSlots = 0;
-    if (this.data && this.data._state && this.data._state._data &&
-        this.data._state._data.type === 'array') {
-      numSlots = this.data._state._data.items.length;
+    if (this._data && this._data._state && this._data._state._data &&
+        this._data._state._data.type === 'array') {
+      numSlots = this._data._state._data.items.length;
     }
 
     this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
 
-    // Set operations on Rust side
     for (const name of Object.keys(this._operations)) {
       if (typeof globalThis.__native_stateSetOperation === 'function') {
         globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
       }
+    }
+
+    // Propagate to ChargedState
+    if (this._data) {
+      this._data._rustHandle = this._rustHandle;
     }
 
     return this._rustHandle;
@@ -234,10 +250,16 @@ export class QueryContext {
     };
     this.effects = [];
     this.callContext = {};
+    // Inherit Rust handle from ChargedState
+    this._rustHandle = (chargedState && chargedState._rustHandle) || 0;
   }
 
   query(program, costModel, gasLimit) {
     // Try native Rust VM first
+    if (typeof globalThis.log === 'function') {
+      globalThis.log('QueryContext.query: _rustHandle=' + this._rustHandle +
+        ' hasNative=' + (typeof globalThis.__native_contractQuery === 'function'));
+    }
     if (typeof globalThis.__native_contractQuery === 'function' && this._rustHandle) {
       try {
         // Serialize opcodes to JSON, replacing undefined with null
@@ -283,7 +305,7 @@ export class QueryContext {
         newCtx._rustHandle = result.handle;
 
         return { context: newCtx, events, gasCost: { value: 0n } };
-      } catch(e) {
+      } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
         // Fall through to JS implementation
       }
     }
@@ -352,7 +374,7 @@ export class QueryContext {
           if (typeof pushOp.value === 'string') {
             try {
               val = StateValue.decode(pushOp.value);
-            } catch(e) {
+            } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
               val = new StateValue({ type: 'cell', value: pushOp.value });
             }
           } else {
@@ -441,7 +463,7 @@ export function persistentHash(alignment, value) {
       if (parsed.error) throw new Error(parsed.error);
       // Result is a Value = Array<Array<number>> — convert to Array<Uint8Array>
       return parsed.map(arr => new Uint8Array(arr));
-    } catch(e) {
+    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
       // Fall through to JS fallback
     }
   }
@@ -536,7 +558,7 @@ export function valueToBigInt(value) {
       const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
       const result = globalThis.__native_valueToBigInt(json);
       return BigInt(result);
-    } catch(e) { /* fall through to JS */ }
+    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString()); /* fall through to JS */ }
   }
 
   // JS fallback
@@ -562,7 +584,7 @@ export function bigIntToValue(n) {
       // Parse Rust Value JSON back to Array<Uint8Array>
       const parsed = JSON.parse(json);
       return parsed.map(arr => new Uint8Array(arr));
-    } catch(e) { /* fall through to JS */ }
+    } catch(e) { if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString()); /* fall through to JS */ }
   }
 
   // JS fallback

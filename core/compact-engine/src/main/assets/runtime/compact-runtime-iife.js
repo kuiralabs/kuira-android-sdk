@@ -317,6 +317,7 @@ var __compactRuntime = (() => {
   var ChargedState = class _ChargedState {
     constructor(stateValue) {
       this._state = stateValue;
+      this._rustHandle = 0;
     }
     get() {
       return this._state;
@@ -325,15 +326,29 @@ var __compactRuntime = (() => {
       return this._state;
     }
     update(path, value) {
-      return new _ChargedState(value);
+      const cs = new _ChargedState(value);
+      cs._rustHandle = this._rustHandle;
+      return cs;
     }
   };
   var ContractState = class {
     constructor() {
-      this.data = null;
+      this._data = null;
       this._operations = {};
       this.balance = /* @__PURE__ */ new Map();
       this._rustHandle = 0;
+    }
+    get data() {
+      return this._data;
+    }
+    set data(chargedState) {
+      this._data = chargedState;
+      if (chargedState && !this._rustHandle && typeof globalThis.__native_stateCreateWithNulls === "function") {
+        this._ensureRustHandle();
+      }
+      if (chargedState && this._rustHandle) {
+        chargedState._rustHandle = this._rustHandle;
+      }
     }
     setOperation(name, op) {
       this._operations[name] = op;
@@ -344,19 +359,21 @@ var __compactRuntime = (() => {
     operation(name) {
       return this._operations[name] || null;
     }
-    // Create a Rust-side state handle from the JS data
     _ensureRustHandle() {
       if (this._rustHandle) return this._rustHandle;
       if (typeof globalThis.__native_stateCreateWithNulls !== "function") return 0;
       let numSlots = 0;
-      if (this.data && this.data._state && this.data._state._data && this.data._state._data.type === "array") {
-        numSlots = this.data._state._data.items.length;
+      if (this._data && this._data._state && this._data._state._data && this._data._state._data.type === "array") {
+        numSlots = this._data._state._data.items.length;
       }
       this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
       for (const name of Object.keys(this._operations)) {
         if (typeof globalThis.__native_stateSetOperation === "function") {
           globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
         }
+      }
+      if (this._data) {
+        this._data._rustHandle = this._rustHandle;
       }
       return this._rustHandle;
     }
@@ -410,8 +427,12 @@ var __compactRuntime = (() => {
       };
       this.effects = [];
       this.callContext = {};
+      this._rustHandle = chargedState && chargedState._rustHandle || 0;
     }
     query(program, costModel, gasLimit) {
+      if (typeof globalThis.log === "function") {
+        globalThis.log("QueryContext.query: _rustHandle=" + this._rustHandle + " hasNative=" + (typeof globalThis.__native_contractQuery === "function"));
+      }
       if (typeof globalThis.__native_contractQuery === "function" && this._rustHandle) {
         try {
           const opcodesJson = JSON.stringify(program, (key, value) => {
@@ -447,6 +468,7 @@ var __compactRuntime = (() => {
           newCtx._rustHandle = result.handle;
           return { context: newCtx, events: events2, gasCost: { value: 0n } };
         } catch (e) {
+          if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
         }
       }
       const stack = [this.state.get_ref()];
@@ -499,6 +521,7 @@ var __compactRuntime = (() => {
               try {
                 val = StateValue.decode(pushOp.value);
               } catch (e) {
+                if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
                 val = new StateValue({ type: "cell", value: pushOp.value });
               }
             } else {
@@ -570,6 +593,7 @@ var __compactRuntime = (() => {
         if (parsed.error) throw new Error(parsed.error);
         return parsed.map((arr) => new Uint8Array(arr));
       } catch (e) {
+        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
       }
     }
     const allBytes = [];
@@ -666,6 +690,7 @@ var __compactRuntime = (() => {
         const result = globalThis.__native_valueToBigInt(json);
         return BigInt(result);
       } catch (e) {
+        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
       }
     }
     if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
@@ -688,6 +713,7 @@ var __compactRuntime = (() => {
         const parsed = JSON.parse(json);
         return parsed.map((arr) => new Uint8Array(arr));
       } catch (e) {
+        if (typeof globalThis.log === "function") globalThis.log("Rust VM error: " + e.toString());
       }
     }
     const bytes = new Uint8Array(32);
