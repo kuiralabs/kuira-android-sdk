@@ -134,14 +134,43 @@ export class ContractState {
     this.data = null;
     this._operations = {};
     this.balance = new Map();
+    this._rustHandle = 0; // 0 = no Rust handle yet
   }
 
   setOperation(name, op) {
     this._operations[name] = op;
+    // Also set on Rust side if handle exists
+    if (this._rustHandle && typeof globalThis.__native_stateSetOperation === 'function') {
+      globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
+    }
   }
 
   operation(name) {
     return this._operations[name] || null;
+  }
+
+  // Create a Rust-side state handle from the JS data
+  _ensureRustHandle() {
+    if (this._rustHandle) return this._rustHandle;
+    if (typeof globalThis.__native_stateCreateWithNulls !== 'function') return 0;
+
+    // Count null slots in the data array
+    let numSlots = 0;
+    if (this.data && this.data._state && this.data._state._data &&
+        this.data._state._data.type === 'array') {
+      numSlots = this.data._state._data.items.length;
+    }
+
+    this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
+
+    // Set operations on Rust side
+    for (const name of Object.keys(this._operations)) {
+      if (typeof globalThis.__native_stateSetOperation === 'function') {
+        globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
+      }
+    }
+
+    return this._rustHandle;
   }
 }
 
@@ -208,7 +237,58 @@ export class QueryContext {
   }
 
   query(program, costModel, gasLimit) {
-    // Stack-based VM execution of opcodes against contract state.
+    // Try native Rust VM first
+    if (typeof globalThis.__native_contractQuery === 'function' && this._rustHandle) {
+      try {
+        // Serialize opcodes to JSON, replacing undefined with null
+        const opcodesJson = JSON.stringify(program, (key, value) => {
+          if (value === undefined) return null;
+          if (value instanceof Uint8Array) return Array.from(value);
+          return value;
+        });
+
+        const resultJson = globalThis.__native_contractQuery(
+          this._rustHandle.toString(),
+          opcodesJson
+        );
+        const result = JSON.parse(resultJson);
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        // Update handle to new state
+        this._rustHandle = result.handle;
+
+        // Convert events: Rust returns GatherEvent serde format
+        // { "Read": { value: [...], alignment: [...] } } or { "Log": ... }
+        const events = (result.events || []).map(ev => {
+          if (ev.Read !== undefined) {
+            // Convert Rust Value arrays back to Uint8Array arrays
+            const content = {
+              value: ev.Read.value.map(arr => new Uint8Array(arr)),
+              alignment: ev.Read.alignment,
+            };
+            return { tag: 'read', content };
+          }
+          if (ev.Log !== undefined) {
+            return { tag: 'log', content: ev.Log };
+          }
+          return ev;
+        });
+
+        const newState = new ChargedState(this.state.get_ref());
+        newState._rustHandle = result.handle;
+        const newCtx = new QueryContext(newState, this.address);
+        newCtx._rustHandle = result.handle;
+
+        return { context: newCtx, events, gasCost: { value: 0n } };
+      } catch(e) {
+        // Fall through to JS implementation
+      }
+    }
+
+    // JS fallback: Stack-based VM execution of opcodes against contract state.
     // The state is a tree of StateValue nodes.
     const stack = [this.state.get_ref()]; // stack starts with root state
     const events = [];

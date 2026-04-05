@@ -156,10 +156,28 @@ class BBoardContractTest {
                     function("__nativeValueToBigInt") { args: Array<Any?> ->
                         ContractRuntime.valueToBigInt(args[0] as String) ?: ""
                     }
+                    function("__nativeStateCreateWithNulls") { args: Array<Any?> ->
+                        val n = (args[0] as String).toInt()
+                        ContractRuntime.stateCreateWithNulls(n).toString()
+                    }
+                    function("__nativeStateSetOperation") { args: Array<Any?> ->
+                        val handle = (args[0] as String).toLong()
+                        val name = args[1] as String
+                        ContractRuntime.stateSetOperation(handle, name)
+                        ""
+                    }
+                    function("__nativeContractQuery") { args: Array<Any?> ->
+                        val handle = (args[0] as String).toLong()
+                        val opcodesJson = args[1] as String
+                        ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
+                    }
                     evaluate<Any?>("""
                         globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
                         globalThis.__native_bigIntToValue = __nativeBigIntToValue;
                         globalThis.__native_valueToBigInt = __nativeValueToBigInt;
+                        globalThis.__native_stateCreateWithNulls = __nativeStateCreateWithNulls;
+                        globalThis.__native_stateSetOperation = __nativeStateSetOperation;
+                        globalThis.__native_contractQuery = __nativeContractQuery;
                     """.trimIndent())
                 } catch (e: Exception) {
                     println("Native FFI not available: ${e.message} — using JS fallbacks")

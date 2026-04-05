@@ -61,11 +61,25 @@ object ContractRuntime {
         return nativeContractQuery(handle, opcodesJson)
     }
 
+    /** Create state with N null slots. */
+    fun stateCreateWithNulls(numSlots: Int): Long {
+        ensureLoaded()
+        return nativeStateCreateWithNulls(numSlots)
+    }
+
+    /** Set an operation on a state handle. */
+    fun stateSetOperation(handle: Long, operationName: String) {
+        ensureLoaded()
+        nativeStateSetOperation(handle, operationName)
+    }
+
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
     @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
     @JvmStatic private external fun nativeStateCreate(stateHex: String): Long
+    @JvmStatic private external fun nativeStateCreateWithNulls(numSlots: Int): Long
+    @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
     @JvmStatic private external fun nativeStateFree(handle: Long)
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
 }

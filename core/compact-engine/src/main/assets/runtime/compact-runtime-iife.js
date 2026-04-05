@@ -333,12 +333,32 @@ var __compactRuntime = (() => {
       this.data = null;
       this._operations = {};
       this.balance = /* @__PURE__ */ new Map();
+      this._rustHandle = 0;
     }
     setOperation(name, op) {
       this._operations[name] = op;
+      if (this._rustHandle && typeof globalThis.__native_stateSetOperation === "function") {
+        globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
+      }
     }
     operation(name) {
       return this._operations[name] || null;
+    }
+    // Create a Rust-side state handle from the JS data
+    _ensureRustHandle() {
+      if (this._rustHandle) return this._rustHandle;
+      if (typeof globalThis.__native_stateCreateWithNulls !== "function") return 0;
+      let numSlots = 0;
+      if (this.data && this.data._state && this.data._state._data && this.data._state._data.type === "array") {
+        numSlots = this.data._state._data.items.length;
+      }
+      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
+      for (const name of Object.keys(this._operations)) {
+        if (typeof globalThis.__native_stateSetOperation === "function") {
+          globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
+        }
+      }
+      return this._rustHandle;
     }
   };
   var ContractOperation = class {
@@ -392,6 +412,43 @@ var __compactRuntime = (() => {
       this.callContext = {};
     }
     query(program, costModel, gasLimit) {
+      if (typeof globalThis.__native_contractQuery === "function" && this._rustHandle) {
+        try {
+          const opcodesJson = JSON.stringify(program, (key, value) => {
+            if (value === void 0) return null;
+            if (value instanceof Uint8Array) return Array.from(value);
+            return value;
+          });
+          const resultJson = globalThis.__native_contractQuery(
+            this._rustHandle.toString(),
+            opcodesJson
+          );
+          const result = JSON.parse(resultJson);
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          this._rustHandle = result.handle;
+          const events2 = (result.events || []).map((ev) => {
+            if (ev.Read !== void 0) {
+              const content = {
+                value: ev.Read.value.map((arr) => new Uint8Array(arr)),
+                alignment: ev.Read.alignment
+              };
+              return { tag: "read", content };
+            }
+            if (ev.Log !== void 0) {
+              return { tag: "log", content: ev.Log };
+            }
+            return ev;
+          });
+          const newState = new ChargedState(this.state.get_ref());
+          newState._rustHandle = result.handle;
+          const newCtx = new _QueryContext(newState, this.address);
+          newCtx._rustHandle = result.handle;
+          return { context: newCtx, events: events2, gasCost: { value: 0n } };
+        } catch (e) {
+        }
+      }
       const stack = [this.state.get_ref()];
       const events = [];
       for (const op of program) {
