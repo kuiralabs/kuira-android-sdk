@@ -3,21 +3,47 @@ package com.midnight.kuira.core.compact
 /**
  * Native bridge to the Rust contract runtime.
  *
- * Manages contract state handles in Rust memory.
- * JS holds integer handles, Rust owns the actual state.
+ * Exposes functions that match the WASM onchain-runtime-v2 exactly:
+ * - persistentHashAligned: binary_repr + SHA-256 (proper field-aligned encoding)
+ * - bigIntToValue / valueToBigInt: field element encoding
+ * - contractQuery: VM opcode execution via state handles
  */
 object ContractRuntime {
 
     private var loaded = false
 
-    private fun ensureLoaded() {
+    fun ensureLoaded() {
         if (!loaded) {
             System.loadLibrary("kuira_crypto_ffi")
             loaded = true
         }
     }
 
-    /** Create a contract state from SCALE hex, return a handle. */
+    /** Persistent hash with proper AlignedValue encoding (matches WASM). */
+    fun persistentHashAligned(alignedValueJson: String): String? {
+        ensureLoaded()
+        return nativePersistentHashAligned(alignedValueJson)
+    }
+
+    /** Convert BigInt (decimal string) to Value (JSON). */
+    fun bigIntToValue(bigintStr: String): String? {
+        ensureLoaded()
+        return nativeBigIntToValue(bigintStr)
+    }
+
+    /** Convert Value (JSON) to BigInt (decimal string). */
+    fun valueToBigInt(valueJson: String): String? {
+        ensureLoaded()
+        return nativeValueToBigInt(valueJson)
+    }
+
+    /** Raw persistent hash (SHA-256) of hex bytes. */
+    fun persistentHash(inputHex: String): String? {
+        ensureLoaded()
+        return nativePersistentHash(inputHex)
+    }
+
+    /** Create a contract state from SCALE hex, return handle. */
     fun stateCreate(stateHex: String): Long {
         ensureLoaded()
         return nativeStateCreate(stateHex)
@@ -29,26 +55,17 @@ object ContractRuntime {
         nativeStateFree(handle)
     }
 
-    /**
-     * Execute opcodes against a contract state.
-     *
-     * @param handle state handle from stateCreate
-     * @param opcodesJson JSON array of opcodes
-     * @return JSON: { "handle": <new>, "events": [...] } or { "error": "..." }
-     */
+    /** Execute opcodes against a contract state handle. */
     fun contractQuery(handle: Long, opcodesJson: String): String? {
         ensureLoaded()
         return nativeContractQuery(handle, opcodesJson)
     }
 
-    /** Compute persistent hash (SHA-256). */
-    fun persistentHash(inputHex: String): String? {
-        ensureLoaded()
-        return nativePersistentHash(inputHex)
-    }
-
+    @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
+    @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
+    @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
+    @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
     @JvmStatic private external fun nativeStateCreate(stateHex: String): Long
     @JvmStatic private external fun nativeStateFree(handle: Long)
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
-    @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
 }

@@ -501,6 +501,20 @@ var __compactRuntime = (() => {
   var StateMap = class {
   };
   function persistentHash(alignment, value) {
+    if (typeof globalThis.__native_persistentHash_aligned === "function") {
+      try {
+        const aligned = {
+          value: value.map((v) => v instanceof Uint8Array ? Array.from(v) : v),
+          alignment
+        };
+        const json = JSON.stringify(aligned);
+        const resultJson = globalThis.__native_persistentHash_aligned(json);
+        const parsed = JSON.parse(resultJson);
+        if (parsed.error) throw new Error(parsed.error);
+        return parsed.map((arr) => new Uint8Array(arr));
+      } catch (e) {
+      }
+    }
     const allBytes = [];
     if (Array.isArray(value)) {
       for (const chunk of value) {
@@ -508,15 +522,6 @@ var __compactRuntime = (() => {
           for (let i = 0; i < chunk.length; i++) allBytes.push(chunk[i]);
         }
       }
-    }
-    if (typeof globalThis.__native_persistentHash === "function") {
-      const hexInput = allBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-      const hexResult = globalThis.__native_persistentHash(hexInput);
-      const result = new Uint8Array(hexResult.length / 2);
-      for (let i = 0; i < result.length; i++) {
-        result[i] = parseInt(hexResult.substr(i * 2, 2), 16);
-      }
-      return [result];
     }
     const data = new Uint8Array(allBytes);
     const hash = jsSha256(data);
@@ -598,6 +603,14 @@ var __compactRuntime = (() => {
     return info;
   }
   function valueToBigInt(value) {
+    if (typeof globalThis.__native_valueToBigInt === "function") {
+      try {
+        const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
+        const result = globalThis.__native_valueToBigInt(json);
+        return BigInt(result);
+      } catch (e) {
+      }
+    }
     if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
       const bytes = value[0];
       let result = 0n;
@@ -612,16 +625,21 @@ var __compactRuntime = (() => {
     return 0n;
   }
   function bigIntToValue(n) {
+    if (typeof globalThis.__native_bigIntToValue === "function") {
+      try {
+        const json = globalThis.__native_bigIntToValue(n.toString());
+        const parsed = JSON.parse(json);
+        return parsed.map((arr) => new Uint8Array(arr));
+      } catch (e) {
+      }
+    }
     const bytes = new Uint8Array(32);
     let val = BigInt(n);
     for (let i = 0; i < 32; i++) {
       bytes[i] = Number(val & 0xFFn);
       val >>= 8n;
     }
-    return {
-      value: [bytes],
-      alignment: [{ tag: "atom", value: { tag: "field" } }]
-    };
+    return [bytes];
   }
   function maxAlignedSize() {
     return 32;

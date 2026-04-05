@@ -348,11 +348,25 @@ export class StateMap {}
 // ── Crypto functions ──
 
 export function persistentHash(alignment, value) {
-  // The WASM persistentHash takes (alignment, value) where value is Array<Uint8Array>
-  // and returns [Uint8Array(32)] — the hash as an AlignedValue.value
-  //
-  // We concatenate all Uint8Arrays in value, hash them via native if available,
-  // or via JS fallback.
+  // Try native Rust FFI with proper AlignedValue encoding (binary_repr + SHA-256)
+  if (typeof globalThis.__native_persistentHash_aligned === 'function') {
+    try {
+      const aligned = {
+        value: value.map(v => v instanceof Uint8Array ? Array.from(v) : v),
+        alignment: alignment,
+      };
+      const json = JSON.stringify(aligned);
+      const resultJson = globalThis.__native_persistentHash_aligned(json);
+      const parsed = JSON.parse(resultJson);
+      if (parsed.error) throw new Error(parsed.error);
+      // Result is a Value = Array<Array<number>> — convert to Array<Uint8Array>
+      return parsed.map(arr => new Uint8Array(arr));
+    } catch(e) {
+      // Fall through to JS fallback
+    }
+  }
+
+  // JS fallback: concatenate bytes and SHA-256 (NOT production-correct)
   const allBytes = [];
   if (Array.isArray(value)) {
     for (const chunk of value) {
@@ -361,21 +375,6 @@ export function persistentHash(alignment, value) {
       }
     }
   }
-
-  if (typeof globalThis.__native_persistentHash === 'function') {
-    // Convert to hex, call native, get hex back
-    const hexInput = allBytes.map(b => b.toString(16).padStart(2, '0')).join('');
-    const hexResult = globalThis.__native_persistentHash(hexInput);
-    // Convert hex result back to Uint8Array
-    const result = new Uint8Array(hexResult.length / 2);
-    for (let i = 0; i < result.length; i++) {
-      result[i] = parseInt(hexResult.substr(i * 2, 2), 16);
-    }
-    return [result];
-  }
-
-  // Fallback: pure JS SHA-256 (no native library available)
-  // Simple implementation for testing — production should use native
   const data = new Uint8Array(allBytes);
   const hash = jsSha256(data);
   return [hash];
@@ -450,8 +449,17 @@ export function decodeQualifiedShieldedCoinInfo(info) { return info; }
 // ── Value conversion ──
 
 export function valueToBigInt(value) {
-  // value is an Array<Uint8Array> — the Value type
-  // Take the first Uint8Array and decode as little-endian BigInt
+  // Try native Rust FFI first
+  if (typeof globalThis.__native_valueToBigInt === 'function') {
+    try {
+      // Serialize Value to JSON, call Rust, parse result
+      const json = JSON.stringify(value, (k, v) => v instanceof Uint8Array ? Array.from(v) : v);
+      const result = globalThis.__native_valueToBigInt(json);
+      return BigInt(result);
+    } catch(e) { /* fall through to JS */ }
+  }
+
+  // JS fallback
   if (Array.isArray(value) && value.length > 0 && value[0] instanceof Uint8Array) {
     const bytes = value[0];
     let result = 0n;
@@ -467,18 +475,24 @@ export function valueToBigInt(value) {
 }
 
 export function bigIntToValue(n) {
-  // Returns AlignedValue: { value: Array<Uint8Array>, alignment: Alignment[] }
-  // Encode BigInt as 32-byte little-endian Uint8Array
+  // Try native Rust FFI first
+  if (typeof globalThis.__native_bigIntToValue === 'function') {
+    try {
+      const json = globalThis.__native_bigIntToValue(n.toString());
+      // Parse Rust Value JSON back to Array<Uint8Array>
+      const parsed = JSON.parse(json);
+      return parsed.map(arr => new Uint8Array(arr));
+    } catch(e) { /* fall through to JS */ }
+  }
+
+  // JS fallback
   const bytes = new Uint8Array(32);
   let val = BigInt(n);
   for (let i = 0; i < 32; i++) {
     bytes[i] = Number(val & 0xFFn);
     val >>= 8n;
   }
-  return {
-    value: [bytes],
-    alignment: [{ tag: 'atom', value: { tag: 'field' } }],
-  };
+  return [bytes];
 }
 
 export function maxAlignedSize() { return 32; }

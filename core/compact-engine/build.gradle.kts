@@ -31,6 +31,9 @@ dependencies {
     // QuickJS engine
     implementation(libs.quickjs.kt)
 
+    // Native crypto FFI (persistentHash, bigIntToValue, etc.)
+    implementation(project(":core:crypto"))
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

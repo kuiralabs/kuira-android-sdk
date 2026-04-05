@@ -15,8 +15,8 @@ android {
 
         // NDK configuration for JNI bridge
         ndk {
-            // Target architectures: ARM64 (primary), ARM32 (legacy), x86/x86_64 (emulators)
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
+            // Target architectures: ARM64 only (Rust FFI only built for aarch64)
+            abiFilters.addAll(listOf("arm64-v8a"))
         }
 
         externalNativeBuild {
