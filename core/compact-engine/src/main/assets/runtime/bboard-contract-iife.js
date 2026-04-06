@@ -1,5 +1,5 @@
 // compact-runtime loaded as global __compactRuntime
-__compactRuntime.checkRuntimeVersion('0.14.0');
+__compactRuntime.checkRuntimeVersion('0.15.0');
 
 var State;
 (function (State) {
@@ -146,6 +146,10 @@ class Contract {
       }
     };
     this.impureCircuits = {
+      post: this.circuits.post,
+      takeDown: this.circuits.takeDown
+    };
+    this.provableCircuits = {
       post: this.circuits.post,
       takeDown: this.circuits.takeDown
     };

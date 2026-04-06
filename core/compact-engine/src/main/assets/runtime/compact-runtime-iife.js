@@ -28,10 +28,10 @@ var __compactRuntime = (() => {
     CompactTypeBytes: () => CompactTypeBytes,
     CompactTypeEnum: () => CompactTypeEnum,
     CompactTypeField: () => CompactTypeField,
+    CompactTypeJubjubPoint: () => CompactTypeJubjubPoint,
     CompactTypeMerkleTreeDigest: () => CompactTypeMerkleTreeDigest,
     CompactTypeMerkleTreePath: () => CompactTypeMerkleTreePath,
     CompactTypeMerkleTreePathEntry: () => CompactTypeMerkleTreePathEntry,
-    CompactTypeNativePoint: () => CompactTypeNativePoint,
     CompactTypeOpaqueString: () => CompactTypeOpaqueString,
     CompactTypeOpaqueUint8Array: () => CompactTypeOpaqueUint8Array,
     CompactTypeUnsignedInteger: () => CompactTypeUnsignedInteger,
@@ -63,6 +63,7 @@ var __compactRuntime = (() => {
     checkRuntimeVersion: () => checkRuntimeVersion,
     communicationCommitment: () => communicationCommitment,
     communicationCommitmentRandomness: () => communicationCommitmentRandomness,
+    constructJubjubPoint: () => constructJubjubPoint,
     contractDependencies: () => contractDependencies,
     convertBytesToField: () => convertBytesToField,
     convertBytesToUint: () => convertBytesToUint,
@@ -102,6 +103,8 @@ var __compactRuntime = (() => {
     hashToCurve: () => hashToCurve2,
     isContractAddress: () => isContractAddress,
     isEncodedContractAddress: () => isEncodedContractAddress,
+    jubjubPointX: () => jubjubPointX,
+    jubjubPointY: () => jubjubPointY,
     leafHash: () => leafHash,
     maxAlignedSize: () => maxAlignedSize,
     maxField: () => maxField,
@@ -161,7 +164,7 @@ var __compactRuntime = (() => {
     throw new CompactError(msg);
   }
 
-  // onchain-runtime-v2.js
+  // onchain-runtime-v3.js
   var StateValue = class _StateValue {
     constructor(data) {
       this._data = data || null;
@@ -678,7 +681,7 @@ var __compactRuntime = (() => {
   var DUMMY_ADDRESS = dummyContractAddress();
 
   // version.js
-  var versionString = "0.14.0";
+  var versionString = "0.15.0";
   var checkRuntimeVersion = (expectedRuntimeVersionString) => {
     const expectedRuntimeVersion = expectedRuntimeVersionString.split("-")[0].split(".").map(Number);
     const actualRuntimeVersion = versionString.split("-")[0].split(".").map(Number);
@@ -692,7 +695,7 @@ var __compactRuntime = (() => {
   };
 
   // compact-types.js
-  var CompactTypeNativePoint = {
+  var CompactTypeJubjubPoint = {
     alignment() {
       return [
         { tag: "atom", value: { tag: "field" } },
@@ -703,7 +706,7 @@ var __compactRuntime = (() => {
       const x = value.shift();
       const y = value.shift();
       if (x == void 0 || y == void 0) {
-        throw new CompactError("expected NativePoint");
+        throw new CompactError("expected JubjubPoint");
       } else {
         return {
           x: valueToBigInt([x]),
@@ -1050,17 +1053,26 @@ var __compactRuntime = (() => {
     res.set(wrapped, 0);
     return res;
   }
+  function jubjubPointX(pt) {
+    return pt.x;
+  }
+  function jubjubPointY(pt) {
+    return pt.y;
+  }
+  function constructJubjubPoint(x, y) {
+    return { x, y };
+  }
   function hashToCurve2(rtType, x) {
-    return CompactTypeNativePoint.fromValue(hashToCurve(rtType.alignment(), rtType.toValue(x)));
+    return CompactTypeJubjubPoint.fromValue(hashToCurve(rtType.alignment(), rtType.toValue(x)));
   }
   function ecAdd2(a, b) {
-    return CompactTypeNativePoint.fromValue(ecAdd(CompactTypeNativePoint.toValue(a), CompactTypeNativePoint.toValue(b)));
+    return CompactTypeJubjubPoint.fromValue(ecAdd(CompactTypeJubjubPoint.toValue(a), CompactTypeJubjubPoint.toValue(b)));
   }
   function ecMul2(a, b) {
-    return CompactTypeNativePoint.fromValue(ecMul(CompactTypeNativePoint.toValue(a), bigIntToValue(b)));
+    return CompactTypeJubjubPoint.fromValue(ecMul(CompactTypeJubjubPoint.toValue(a), bigIntToValue(b)));
   }
   function ecMulGenerator2(b) {
-    return CompactTypeNativePoint.fromValue(ecMulGenerator(bigIntToValue(b)));
+    return CompactTypeJubjubPoint.fromValue(ecMulGenerator(bigIntToValue(b)));
   }
   function alignedConcat(...values) {
     const res = { value: [], alignment: [] };
