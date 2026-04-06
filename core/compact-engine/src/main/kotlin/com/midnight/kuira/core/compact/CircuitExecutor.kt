@@ -275,7 +275,10 @@ class CircuitExecutor(private val context: Context) {
             js.function("__nativeContractQuery") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
                 val opcodesJson = args[1] as String
-                ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
+                val result = ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
+                // Debug: log handle and events for every query
+                Log.d(TAG, "query h=$handle ops=${opcodesJson.take(50)} → ${result.take(100)}")
+                result
             }
             js.function("__nativeStateClone") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
