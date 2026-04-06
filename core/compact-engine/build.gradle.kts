@@ -37,6 +37,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // WebSocket client for DApp Connector (balance + submit)
+    implementation(libs.java.websocket)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
