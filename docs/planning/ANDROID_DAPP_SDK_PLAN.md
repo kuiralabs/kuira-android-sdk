@@ -148,7 +148,12 @@ QuickJS + IIFE-bundled compact-runtime. The shim delegates ALL encoding/crypto t
   - `mn` CLI upgraded: indexer-standalone 4.0.0 → 4.0.1 (per support matrix)
 
 ### Remaining:
-- [ ] **6K: Testing** — unit tests per library, integration test on localnet
+- [ ] **6K-DX: Developer API + Testing** (see `docs/planning/6K_DEVELOPER_API_PLAN.md`)
+    - `MidnightContract` facade: `contract.call("post", "Hello!")` — one-line circuit calls
+    - `MidnightConfig` builder: indexer, wallet, prover wired once
+    - `ArgConverter`: Kotlin values → JS expressions (type-safe, no injection)
+    - Sealed error hierarchy, progress callbacks, offline mode
+    - Integration tests using the new API
 
 ---
 

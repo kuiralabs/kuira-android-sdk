@@ -74,7 +74,7 @@
 | 6H | Provider interfaces + CircuitExecutor clean API | ✅ |
 | 6I | Private state (AES-256-GCM) + ZK config (ProvingKeyManager) | ✅ |
 | 6J | BBoard e2e: execute → prove → balance → submit on localnet | ✅ |
-| 6K | Testing — integration tests, edge cases | ⏭️ |
+| 6K-DX | Developer API (`MidnightContract.call()`) + testing | ⏭️ |
 
 ### Key Architecture Decisions
 
