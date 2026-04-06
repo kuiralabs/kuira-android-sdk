@@ -1,10 +1,12 @@
 package com.midnight.kuira.core.compact
 
 import android.content.Context
+import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -13,6 +15,8 @@ import org.junit.runner.RunWith
 import com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider
 import com.midnight.kuira.core.crypto.state.PrivateStateProvider
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Step 6J: BBoard end-to-end integration test.
@@ -151,7 +155,7 @@ class BboardEndToEndTest {
     }
 
     @Test
-    fun onlinePipeline_executeProveBalanceSubmit() = runBlocking {
+    fun onlinePipeline_executeProveBalanceSubmit(): Unit = runBlocking {
         // Skip if proving keys not installed
         assumeTrue(
             "Bboard proving keys not installed",
@@ -160,9 +164,18 @@ class BboardEndToEndTest {
 
         // The bboard contract must already be deployed on localnet.
         // Deploy via: cd example-bboard && mn contract deploy --network undeployed
-        val contractAddress = "528526395cdcfa28096f50207b20527d5621a0840bb66d4ece334150204e7107"
+        // Update address after each deployment.
+        val contractAddress = readContractAddress()
+            ?: FALLBACK_CONTRACT_ADDRESS
 
-        // Step 1: Execute circuit against the DEPLOYED contract
+        // Step 1: Fetch on-chain contract state and ledger parameters from indexer
+        val onChainStateHex = fetchContractState(contractAddress)
+        val ledgerParamsHex = fetchLedgerParameters()
+        Log.i(TAG, "Fetched on-chain state: ${onChainStateHex.length} hex chars")
+        Log.i(TAG, "Fetched ledger params: ${ledgerParamsHex.length} hex chars")
+
+        // Step 2: Execute circuit against the DEPLOYED contract state
+        // Network ID must be lowercase "undeployed" to match the node's expected format.
         val result = executor.executeCircuit(
             contractJs = loadAsset("runtime/bboard-contract-iife.js"),
             contractAddress = contractAddress,
@@ -171,31 +184,126 @@ class BboardEndToEndTest {
             witnesses = bboardWitnesses(),
             initialPrivateState = "{ secretKey: new Uint8Array(32) }",
             coinPublicKey = ByteArray(32),
+            onChainStateHex = onChainStateHex,
+            ledgerParametersHex = ledgerParamsHex,
         )
 
-        // Step 2: Prove locally
+        // Step 3: Prove locally
         val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
         val provenTxHex = proofProvider.prove(result.unprovenTxHex).trim()
+        Log.i(TAG, "Proven tx: ${provenTxHex.length} hex chars")
         assertTrue("ProvenTx should be substantial", provenTxHex.length > 100)
         assertTrue("ProvenTx should be pure hex", provenTxHex.all { it in '0'..'9' || it in 'a'..'f' })
 
-        // Step 3: Connect to DApp Connector (mn serve on host)
+        // Step 4: Connect to DApp Connector (mn serve on host)
         // Android emulator reaches host at 10.0.2.2
-        val connector = DAppConnectorClient("ws://10.0.2.2:9932")
+        val connector = DAppConnectorClient(DAPP_CONNECTOR_URL)
         try {
             connector.connect()
 
-            // Step 4: Balance the proven transaction (adds dust fees)
+            // Step 5: Balance the proven transaction (adds dust fees)
             val balancedTxHex = connector.balanceTransaction(provenTxHex)
+            Log.i(TAG, "Balanced tx: ${balancedTxHex.length} hex chars")
             assertTrue("BalancedTx should be substantial", balancedTxHex.length > 100)
 
-            // Step 5: Submit to blockchain
+            // Step 6: Submit to blockchain
             connector.submitTransaction(balancedTxHex)
 
-            // If we get here without exception, the transaction was accepted!
+            Log.i(TAG, "Transaction submitted successfully!")
         } finally {
             connector.disconnect()
         }
+    }
+
+    // ── Helpers for on-chain tests ──
+
+    /**
+     * Fetch contract state from the Midnight indexer via GraphQL.
+     * Returns SCALE-encoded hex string.
+     */
+    private fun fetchContractState(address: String): String {
+        val query = """{"query":"query { contractAction(address: \"$address\") { state } }"}"""
+        val url = URL("$INDEXER_BASE_URL/graphql")
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 30_000
+
+            conn.outputStream.use { it.write(query.toByteArray()) }
+
+            val responseCode = conn.responseCode
+            val body = conn.inputStream.bufferedReader().readText()
+
+            check(responseCode == 200) {
+                "Indexer returned HTTP $responseCode: $body"
+            }
+
+            val json = JSONObject(body)
+            val errors = json.optJSONArray("errors")
+            check(errors == null || errors.length() == 0) {
+                "GraphQL errors: $errors"
+            }
+
+            val data = json.getJSONObject("data")
+            val contractAction = data.optJSONObject("contractAction")
+                ?: error("Contract not found at address: $address")
+
+            return contractAction.getString("state")
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /**
+     * Fetch current ledger parameters from the indexer.
+     * Returns SCALE-encoded hex string containing the cost model.
+     */
+    private fun fetchLedgerParameters(): String {
+        val query = """{"query":"query { block { ledgerParameters } }"}"""
+        val url = URL("$INDEXER_BASE_URL/graphql")
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 30_000
+            conn.outputStream.use { it.write(query.toByteArray()) }
+
+            val body = conn.inputStream.bufferedReader().readText()
+            check(conn.responseCode == 200) { "Indexer HTTP ${conn.responseCode}: $body" }
+
+            val json = JSONObject(body)
+            return json.getJSONObject("data").getJSONObject("block").getString("ledgerParameters")
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /**
+     * Read contract address from a file pushed via adb, if available.
+     * Push with: adb push contract_address.txt /data/local/tmp/bboard_keys/contract_address.txt
+     */
+    private fun readContractAddress(): String? {
+        val file = File("/data/local/tmp/bboard_keys/contract_address.txt")
+        if (!file.exists()) return null
+        val address = file.readText().trim()
+        return if (address.length == 64) address else null
+    }
+
+    companion object {
+        private const val TAG = "BboardE2E"
+
+        /** Android emulator reaches host at 10.0.2.2 */
+        private const val INDEXER_BASE_URL = "http://10.0.2.2:8088/api/v3"
+        private const val DAPP_CONNECTOR_URL = "ws://10.0.2.2:9932"
+
+        /** Fallback contract address — update after each `mn contract deploy` */
+        private const val FALLBACK_CONTRACT_ADDRESS =
+            "4b45940479a61bb954f9de4245736d29e2e0e5e4970dba47a18651466cf9ba91"
     }
 
     @Test

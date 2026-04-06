@@ -44,6 +44,14 @@ class CircuitExecutor(private val context: Context) {
      * @param initialPrivateState JS expression for the initial private state object
      * @param coinPublicKey The coin public key bytes (32 bytes)
      * @param networkId Network ID for the transaction (default: "undeployed")
+     * @param onChainStateHex SCALE-encoded on-chain contract state from the indexer.
+     *   When provided, circuit execution uses this state instead of `contract.initialState()`.
+     *   Required for calling already-deployed contracts where the on-chain state
+     *   may differ from the contract's initial state.
+     * @param ledgerParametersHex SCALE-encoded ledger parameters from the indexer.
+     *   Required for correct gas computation — the node uses these parameters' cost model
+     *   to validate the transaction. If omitted, falls back to the initial cost model
+     *   (only correct on a fresh chain with no parameter updates).
      * @return The assembled UnprovenTransaction as hex-encoded SCALE bytes
      * @throws CircuitExecutionException if circuit execution or tx assembly fails
      */
@@ -56,10 +64,18 @@ class CircuitExecutor(private val context: Context) {
         initialPrivateState: String,
         coinPublicKey: ByteArray,
         networkId: String = "undeployed",
+        onChainStateHex: String? = null,
+        ledgerParametersHex: String? = null,
     ): ExecutionResult {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
         validateIdentifier(networkId, "networkId")
+        if (onChainStateHex != null) {
+            validateHex(onChainStateHex, "onChainStateHex")
+        }
+        if (ledgerParametersHex != null) {
+            validateHex(ledgerParametersHex, "ledgerParametersHex")
+        }
 
         val params = executeInQuickJs(
             contractJs = contractJs,
@@ -70,6 +86,8 @@ class CircuitExecutor(private val context: Context) {
             initialPrivateState = initialPrivateState,
             coinPublicKey = coinPublicKey,
             networkId = networkId,
+            onChainStateHex = onChainStateHex,
+            ledgerParametersHex = ledgerParametersHex,
         )
 
         return assembleTransaction(params)
@@ -84,6 +102,8 @@ class CircuitExecutor(private val context: Context) {
         initialPrivateState: String,
         coinPublicKey: ByteArray,
         networkId: String,
+        onChainStateHex: String? = null,
+        ledgerParametersHex: String? = null,
     ): String {
         var txParamsJson: String? = null
         var jsError: String? = null
@@ -104,6 +124,8 @@ class CircuitExecutor(private val context: Context) {
                 initialPrivateState = initialPrivateState,
                 coinPublicKey = coinPublicKey,
                 networkId = networkId,
+                onChainStateHex = onChainStateHex,
+                ledgerParametersHex = ledgerParametersHex,
             )
             evaluate<Any?>(JS_DEEP_CONVERT)
             evaluate<Any?>(circuitJs)
@@ -172,6 +194,8 @@ class CircuitExecutor(private val context: Context) {
         initialPrivateState: String,
         coinPublicKey: ByteArray,
         networkId: String,
+        onChainStateHex: String? = null,
+        ledgerParametersHex: String? = null,
     ): String {
         val witnessEntries = witnesses.keys.joinToString(",\n") { name ->
             """
@@ -190,6 +214,33 @@ class CircuitExecutor(private val context: Context) {
         val argsStr = if (circuitArgs.isNotEmpty()) ", ${circuitArgs.joinToString(", ")}" else ""
         val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
 
+        // When on-chain state is provided, swap the Rust handle after initialState()
+        // so circuit execution reads from the deployed contract state, not a fresh one.
+        // Security: onChainStateHex is validated as hex-only by validateHex() before reaching here,
+        // preventing JS injection through the string interpolation below.
+        val onChainStateSwap = if (onChainStateHex != null) {
+            """
+                // Swap to on-chain state: create handle from indexer SCALE hex,
+                // free the auto-created handle, and propagate to ChargedState.
+                const oldHandle = initResult.currentContractState._rustHandle;
+                const onChainHandle = Number(
+                    globalThis.__native_stateCreate('$onChainStateHex')
+                );
+                if (onChainHandle === 0) {
+                    throw new Error('Failed to create state handle from on-chain hex');
+                }
+                initResult.currentContractState._rustHandle = onChainHandle;
+                if (initResult.currentContractState._data) {
+                    initResult.currentContractState._data._rustHandle = onChainHandle;
+                }
+                if (oldHandle) {
+                    globalThis.__native_stateFree(oldHandle.toString());
+                }
+            """.trimIndent()
+        } else {
+            ""
+        }
+
         return """
             try {
                 const witnesses = { $witnessEntries };
@@ -199,6 +250,8 @@ class CircuitExecutor(private val context: Context) {
                     initialPrivateState: $initialPrivateState,
                     initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
                 });
+
+                $onChainStateSwap
 
                 const circuitCtx = __compactRuntime.createCircuitContext(
                     '$contractAddress',
@@ -224,7 +277,7 @@ class CircuitExecutor(private val context: Context) {
                 __capture(JSON.stringify({
                     network_id: '$networkId',
                     contract_address: '$contractAddress',
-                    entry_point: '$circuitName',
+                    entry_point: '$circuitName',${ledgerParamsJsonEntry(ledgerParametersHex)}
                     state_handle: circuitResult.context.currentQueryContext._rustHandle,
                     initial_state_handle: initialStateHandle,
                     proof_data: {
@@ -281,6 +334,15 @@ class CircuitExecutor(private val context: Context) {
                 val handle = (args[0] as String).toLong()
                 ContractRuntime.stateClone(handle).toString()
             }
+            js.function("__nativeStateCreate") { args: Array<Any?> ->
+                val stateHex = args[0] as String
+                ContractRuntime.stateCreate(stateHex).toString()
+            }
+            js.function("__nativeStateFree") { args: Array<Any?> ->
+                val handle = (args[0] as String).toLong()
+                ContractRuntime.stateFree(handle)
+                ""
+            }
             js.evaluate<Any?>("""
                 globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
                 globalThis.__native_bigIntToValue = __nativeBigIntToValue;
@@ -289,8 +351,14 @@ class CircuitExecutor(private val context: Context) {
                 globalThis.__native_stateSetOperation = __nativeStateSetOperation;
                 globalThis.__native_contractQuery = __nativeContractQuery;
                 globalThis.__native_stateClone = __nativeStateClone;
+                globalThis.__native_stateCreate = __nativeStateCreate;
+                globalThis.__native_stateFree = __nativeStateFree;
             """.trimIndent())
         }
+
+        /** Format ledger_parameters_hex as a JSON field for the capture output, or empty string. */
+        private fun ledgerParamsJsonEntry(hex: String?): String =
+            if (hex != null) "\n                    ledger_parameters_hex: '$hex'," else ""
 
         private fun validateIdentifier(value: String, name: String) {
             require(IDENTIFIER_REGEX.matches(value)) {

@@ -554,6 +554,56 @@ class IndexerClientImpl(
         throw InvalidResponseException("Failed to query zswap events: ${e.message}", e)
     }
 
+    // ==================== CONTRACT STATE (Phase 6J) ====================
+
+    override suspend fun queryContractState(address: String): String {
+        require(address.length == 64 && address.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+            "Contract address must be 64 hex characters, got: ${address.take(20)}..."
+        }
+
+        try {
+            val response = httpClient.post(graphqlEndpoint) {
+                contentType(ContentType.Application.Json)
+                setBody(GraphQLRequest(
+                    query = GraphQLQueries.QUERY_CONTRACT_STATE,
+                    variables = mapOf("address" to address),
+                ))
+            }
+
+            val responseBody = response.bodyAsText()
+            val jsonResponse = json.parseToJsonElement(responseBody).jsonObject
+
+            val errors = jsonResponse["errors"]?.jsonArray
+            if (errors != null && errors.isNotEmpty()) {
+                val errorMessages = errors.map { it.jsonObject["message"]?.jsonPrimitive?.content ?: "Unknown error" }
+                throw GraphQLException(errorMessages, "GraphQL errors: ${errorMessages.joinToString()}")
+            }
+
+            val data = jsonResponse["data"]?.jsonObject
+                ?: throw InvalidResponseException("Missing 'data' field in response")
+
+            val contractAction = data["contractAction"]?.jsonObject
+                ?: throw InvalidResponseException("Contract not found at address: $address")
+
+            return contractAction["state"]?.jsonPrimitive?.content
+                ?: throw InvalidResponseException("Missing 'state' field in contractAction response")
+        } catch (e: ResponseException) {
+            throw HttpException(e.response.status.value, "HTTP error: ${e.message}", e)
+        } catch (e: HttpRequestTimeoutException) {
+            throw TimeoutException("Request timeout while fetching contract state", e)
+        } catch (e: java.net.UnknownHostException) {
+            throw NetworkException("DNS resolution failed for $graphqlEndpoint", e)
+        } catch (e: java.net.ConnectException) {
+            throw NetworkException("Connection failed to $graphqlEndpoint", e)
+        } catch (e: java.io.IOException) {
+            throw NetworkException("Network I/O error: ${e.message}", e)
+        } catch (e: IndexerException) {
+            throw e
+        } catch (e: Exception) {
+            throw InvalidResponseException("Unexpected error: ${e.message}", e)
+        }
+    }
+
     override suspend fun isHealthy(): Boolean {
         return try {
             // Try to get network state with a short timeout

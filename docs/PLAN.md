@@ -2,9 +2,9 @@
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
 **Total Invested:** ~280h across completed phases
-**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) → Next**
+**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) → In Progress (6J-online ✅, 6K remaining)**
 
-**Last Updated:** April 4, 2026
+**Last Updated:** April 6, 2026
 
 ## Implementation Strategy
 
@@ -39,7 +39,7 @@
 | **Phase 3: Shielded Tx** | Private ZK transactions E2E | ~22h | ✅ Complete |
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
-| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | ⏭️ Next |
+| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | 🔄 6K remaining |
 | **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
 | **Phase 8: Production Polish** | Onboarding, settings, app store | est 15-20h | ⏸️ Planned |
 
@@ -62,18 +62,19 @@
 
 ### Phase 6 Sub-Steps (see `docs/planning/ANDROID_DAPP_SDK_PLAN.md`)
 
-| Step | Goal |
-|------|------|
-| 6A | Extend Rust FFI — expose onchain-runtime types (StateValue, QueryContext, runProgram) via JNI |
-| 6B | Embed QuickJS in Android |
-| 6C | Build onchain-runtime shim — JS module replacing WASM with native Rust FFI calls |
-| 6D | Run compiled contract in QuickJS on Android (bboard proof of concept) |
-| 6E | Witness bridge — Kotlin↔JS callbacks for private inputs |
-| 6F | Proof preimage → UnprovenTransaction pipeline (QuickJS→Rust glue) |
-| 6G | Provider interfaces (Kotlin, wrapping existing modules) |
-| 6H | Private state + ZK config |
-| 6I | BBoard end-to-end: deploy → post → see on chain |
-| 6J | Testing |
+| Step | Goal | Status |
+|------|------|--------|
+| 6A | Rust FFI foundation — `persistentHash`, `contract_query` via JNI | ✅ |
+| 6B | Embed QuickJS in Android (quickjs-kt 1.0.3) | ✅ |
+| 6C | Onchain-runtime shim — IIFE bundle replacing WASM with Rust FFI | ✅ |
+| 6D | Run compiled bboard contract in QuickJS | ✅ |
+| 6E | Witness bridge — Kotlin↔JS callbacks for private inputs | ✅ |
+| 6F | Replace JS fallbacks with Rust FFI (all crypto/encoding native) | ✅ |
+| 6G | Proof preimage → UnprovenTransaction pipeline | ✅ |
+| 6H | Provider interfaces + CircuitExecutor clean API | ✅ |
+| 6I | Private state (AES-256-GCM) + ZK config (ProvingKeyManager) | ✅ |
+| 6J | BBoard e2e: execute → prove → balance → submit on localnet | ✅ |
+| 6K | Testing — integration tests, edge cases | ⏭️ |
 
 ### Key Architecture Decisions
 

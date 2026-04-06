@@ -123,7 +123,11 @@ class DAppConnectorClient(private val wsUrl: String) {
     }
 
     private fun handleMessage(message: String) {
-        val json = JSONObject(message)
+        val json = try {
+            JSONObject(message)
+        } catch (e: Exception) {
+            return // Skip malformed messages
+        }
 
         // Skip notifications (progress updates, no id)
         if (!json.has("id")) return
@@ -133,7 +137,9 @@ class DAppConnectorClient(private val wsUrl: String) {
 
         if (json.has("error")) {
             val error = json.getJSONObject("error")
-            callback(Result.failure(Exception("RPC error ${error.optInt("code")}: ${error.optString("message")}")))
+            val data = error.opt("data")
+            val dataStr = if (data != null) " | data: $data" else ""
+            callback(Result.failure(Exception("RPC error ${error.optInt("code")}: ${error.optString("message")}$dataStr")))
         } else {
             callback(Result.success(json))
         }

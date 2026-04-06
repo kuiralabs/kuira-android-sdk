@@ -1,7 +1,7 @@
 # Phase 6: Android DApp SDK
 
-**Date:** 2026-04-03 (updated 2026-04-05)
-**Status:** In Progress — 6G complete, starting 6H
+**Date:** 2026-04-03 (updated 2026-04-06)
+**Status:** In Progress — 6J-online complete, 6K remaining
 **Depends on:** Phase 5 (DApp Connector) ✅
 
 ---
@@ -20,7 +20,7 @@ A dApp needs to build a contract transaction before the wallet can balance and s
 4. **Wallet balances the proven transaction** — adds coins, pays fees, signs (we have `ConnectedAPI.balanceUnsealedTransaction`)
 5. **Wallet submits to network** — relays the finalized transaction to blockchain (we have `ConnectedAPI.submitTransaction`)
 
-Steps 4-5 are done (Phase 5). Steps 1-2 are done (6D-6G). Step 3 needs provider wiring (6H).
+Steps 4-5 are done (Phase 5). Steps 1-3 are done (6D-6J). The full pipeline works end-to-end on Android — circuit execution, ZK proving, balancing, and on-chain submission.
 
 Important: the wallet receives a **proven** transaction (step 3), not an unproven one. The dApp must prove first, then send to the wallet for balancing.
 
@@ -33,10 +33,10 @@ Important: the wallet receives a **proven** transaction (step 3), not an unprove
 | Circuit execution | `compact-runtime` | QuickJS + IIFE shim | ✅ Done (6D-6F) |
 | Proof preimage extraction | `compact-runtime` | `CircuitResult` + `transformPublicTranscript` | ✅ Done (6G) |
 | Transaction assembly | `midnight-js/contracts` | `contract_assemble_call_tx` Rust FFI | ✅ Done (6G) |
-| Provider interfaces | `midnight-js/types` | — | **6H** |
-| Circuit executor API | `midnight-js/contracts` | — | **6H** |
-| Private state storage | `level-private-state-provider` | — | **6I** |
-| ZK config management | `fetch-zk-config-provider` | `ProvingKeyManager` (partial) | **6I** |
+| Provider interfaces | `midnight-js/types` | `CircuitExecutor`, `ProofProvider`, `WitnessProvider` | ✅ Done (6H) |
+| Circuit executor API | `midnight-js/contracts` | `CircuitExecutor.executeCircuit()` | ✅ Done (6H) |
+| Private state storage | `level-private-state-provider` | `KeyStorePrivateStateProvider` (AES-256-GCM) | ✅ Done (6I) |
+| ZK config management | `fetch-zk-config-provider` | `ProvingKeyManager` | ✅ Done (6I) |
 | ZK proof generation | `http-client-proof-provider` | `LocalProver` via `prove_ffi.rs` | Done |
 | Wallet integration | `dapp-connector-api` | `core:connector` | Done |
 | Indexer queries | `indexer-public-data-provider` | `core:indexer` | Done |
@@ -79,14 +79,14 @@ QuickJS + IIFE-bundled compact-runtime. The shim delegates ALL encoding/crypto t
 ### 2. Transaction Builder FFI — ✅ Done
 `contract_assemble_call_tx` in Rust. Manual parsers for `AlignedValue`, `StateValue`, `Op<ResultModeVerify>` to bypass Midnight's broken JSON serde.
 
-### 3. Provider Interfaces (`core:compact-engine`) — 6H
-Kotlin interfaces matching the JS SDK provider pattern. `CircuitExecutor` wraps QuickJS lifecycle. `ProofProvider` wraps local prover. `ContractCallContext` orchestrates the full flow.
+### 3. Provider Interfaces (`core:compact-engine`) — ✅ Done
+`CircuitExecutor` wraps QuickJS lifecycle. `ProofProvider` wraps local prover. `WitnessProvider` for private inputs. Supports on-chain state via `onChainStateHex` and correct gas via `ledgerParametersHex`.
 
-### 4. Private State Storage — 6I
-Encrypted on-device storage for dApp-specific secrets (e.g., bboard secret key).
+### 4. Private State Storage — ✅ Done
+`KeyStorePrivateStateProvider`: AES-256-GCM via Android KeyStore. In `core:crypto:state`.
 
-### 5. ZK Config Manager — 6I
-Download and cache proving/verifier keys for arbitrary contract circuits.
+### 5. ZK Config Manager — ✅ Done
+`ProvingKeyManager`: download, install, validate proving/verifier keys + BLS params.
 
 ---
 
@@ -136,12 +136,18 @@ Download and cache proving/verifier keys for arbitrary contract circuits.
   - Upgraded to compact-runtime 0.15.0, onchain-runtime-v3, ledger-v8
   - BLS params + circuit keys installed via @Before from /data/local/tmp
 
+- [x] **6J-online: Execute → prove → balance → submit on chain** ✅
+  - Fetch on-chain contract state from indexer via GraphQL (`queryContractState`)
+  - `contract_state_create` supports tagged deserialization (indexer SCALE format)
+  - `CircuitExecutor` accepts `onChainStateHex` to execute against deployed state
+  - Fetch ledger parameters for correct gas cost model (`ledgerParametersHex`)
+  - Fixed OutOfGas rejection: node uses different cost model than `INITIAL_COST_MODEL`
+  - TTL parameterized: `Timestamp::from_secs(current_time + 3600)`
+  - BBoard `post` transaction submitted to Midnight localnet from Android ✅
+  - Full pipeline: indexer fetch → circuit execute → local prove → DApp Connector balance → node submit
+  - `mn` CLI upgraded: indexer-standalone 4.0.0 → 4.0.1 (per support matrix)
+
 ### Remaining:
-- [ ] **6J-online: Deploy → post → balance → submit → verify (requires devnet)**
-    - Fix TTL (MAX → parameterized from current time + duration)
-    - Contract deployment transaction (ContractDeploy, not ContractCall)
-    - Wire to ConnectedAPI: balanceUnsealedTransaction → submitTransaction
-    - Requires running Midnight node (standalone testkit or devnet)
 - [ ] **6K: Testing** — unit tests per library, integration test on localnet
 
 ---
@@ -151,11 +157,12 @@ Download and cache proving/verifier keys for arbitrary contract circuits.
 | Limitation | Impact | Fix In |
 |-----------|--------|--------|
 | ~~`Transcript` gas/effects defaulted to zero~~ | ~~Node may reject~~ | ✅ Fixed — QueryContext re-execution computes correct gas |
-| `Timestamp::MAX` as TTL | Never expires, not realistic | 6J-online — parameterize |
+| ~~`Timestamp::MAX` as TTL~~ | ~~Never expires~~ | ✅ Fixed — `current_time + 3600` parameterized |
 | `AlignedValue` JSON serde round-trip broken | Can't use serde_json for Midnight types | ✅ Worked around — manual parsers |
-| No contract deploy support | Can only call existing contracts | 6J-online — `ContractDeploy` |
+| ~~Gas cost model mismatch~~ | ~~Node rejects with OutOfGas~~ | ✅ Fixed — uses ledger parameters cost model, not INITIAL_COST_MODEL |
+| No contract deploy from Android | Can only call existing contracts | Out of scope — deploy via CLI |
 | `ContractOperation` always `None` verifier key | Prover loads keys separately | OK — prover resolves from filesystem |
-| queryLedgerState value mutation | `fromValue().shift()` corrupts transcript | ✅ Fixed — clone in circuit-context.js |
+| ~~queryLedgerState value mutation~~ | ~~`fromValue().shift()` corrupts transcript~~ | ✅ Fixed — clone in circuit-context.js |
 
 ---
 

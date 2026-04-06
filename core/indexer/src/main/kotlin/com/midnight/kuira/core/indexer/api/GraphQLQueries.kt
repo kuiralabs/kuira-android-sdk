@@ -167,4 +167,21 @@ object GraphQLQueries {
           }
         }
     """
+
+    /**
+     * Query the current state of a deployed contract.
+     *
+     * Returns the SCALE-encoded contract state as hex.
+     * Used by dApps to fetch on-chain state before circuit execution.
+     *
+     * Variables:
+     * - address: HexEncoded! (required, 64-char contract address)
+     */
+    const val QUERY_CONTRACT_STATE = """
+        query ContractState(${'$'}address: HexEncoded!) {
+          contractAction(address: ${'$'}address) {
+            state
+          }
+        }
+    """
 }

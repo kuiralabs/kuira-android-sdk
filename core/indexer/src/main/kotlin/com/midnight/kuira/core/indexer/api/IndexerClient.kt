@@ -198,6 +198,29 @@ interface IndexerClient {
      */
     suspend fun queryZswapEvents(): String
 
+    // ==================== CONTRACT STATE (Phase 6J) ====================
+
+    /**
+     * Query the current on-chain state of a deployed contract.
+     *
+     * Returns the SCALE-encoded contract state as a hex string,
+     * suitable for passing to `ContractRuntime.stateCreate()`.
+     *
+     * **GraphQL Query:**
+     * ```graphql
+     * query ContractState($address: HexEncoded!) {
+     *   contractAction(address: $address) {
+     *     state
+     *   }
+     * }
+     * ```
+     *
+     * @param address Hex-encoded contract address (64 chars)
+     * @return SCALE-encoded contract state as hex string
+     * @throws InvalidResponseException if contract not found or response malformed
+     */
+    suspend fun queryContractState(address: String): String
+
     /**
      * Check if indexer is healthy and reachable.
      *
