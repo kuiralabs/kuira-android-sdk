@@ -448,22 +448,11 @@ var __compactRuntime = (() => {
           this._rustHandle = result.handle;
           const events = (result.events || []).map((ev) => {
             if (ev.Read !== void 0) {
-              const rawValues = ev.Read.value.map((arr) => new Uint8Array(arr));
-              const alignment = ev.Read.alignment;
-              const event = {
-                tag: "read",
-                get content() {
-                  return {
-                    value: rawValues.map((v) => {
-                      const copy = new Uint8Array(v.length);
-                      copy.set(v);
-                      return copy;
-                    }),
-                    alignment: JSON.parse(JSON.stringify(alignment))
-                  };
-                }
+              const content = {
+                value: ev.Read.value.map((arr) => new Uint8Array(arr)),
+                alignment: ev.Read.alignment
               };
-              return event;
+              return { tag: "read", content };
             }
             if (ev.Log !== void 0) {
               return { tag: "log", content: ev.Log };

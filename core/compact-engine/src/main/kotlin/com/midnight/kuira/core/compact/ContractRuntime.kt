@@ -3,7 +3,7 @@ package com.midnight.kuira.core.compact
 /**
  * Native bridge to the Rust contract runtime.
  *
- * Exposes functions that match the WASM onchain-runtime-v2 exactly:
+ * Exposes functions that match the WASM onchain-runtime exactly:
  * - persistentHashAligned: binary_repr + SHA-256 (proper field-aligned encoding)
  * - bigIntToValue / valueToBigInt: field element encoding
  * - contractQuery: VM opcode execution via state handles

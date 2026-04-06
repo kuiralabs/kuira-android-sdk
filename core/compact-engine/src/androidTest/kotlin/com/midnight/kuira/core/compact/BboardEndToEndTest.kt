@@ -10,6 +10,8 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider
+import com.midnight.kuira.core.crypto.state.PrivateStateProvider
 import java.io.File
 
 /**
@@ -92,8 +94,6 @@ class BboardEndToEndTest {
 
         assertTrue("UnprovenTx should be hex", result.unprovenTxHex.length % 2 == 0)
         assertTrue("UnprovenTx should be substantial", result.unprovenTxHex.length > 100)
-        val debugOp5 = org.json.JSONObject(result.txParamsJson).optString("__debugOp5", "missing")
-        fail("OP5_FIXED=$debugOp5")
     }
 
     @Test
@@ -152,8 +152,7 @@ class BboardEndToEndTest {
 
     @Test
     fun privateState_storeAndRetrieveSecretKey() {
-        val stateProvider: com.midnight.kuira.core.crypto.state.PrivateStateProvider =
-            com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider(context)
+        val stateProvider: PrivateStateProvider = KeyStorePrivateStateProvider(context)
 
         val contractAddr = "0".repeat(64)
         stateProvider.set(contractAddr, "secretKey", testSecretKey)

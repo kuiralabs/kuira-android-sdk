@@ -221,19 +221,7 @@ class CircuitExecutor(private val context: Context) {
                     circuitResult.proofData.publicTranscript
                 );
 
-                // Debug: check ALL popeq results in the raw transcript
-                const dbg = circuitResult.proofData.publicTranscript.map((op, idx) => {
-                    if (op.popeq) {
-                        const v = op.popeq.result?.value;
-                        const vStr = v ? JSON.stringify(Array.from(v).map(x => x instanceof Uint8Array ? Array.from(x) : x)) : 'null';
-                        return 'op[' + idx + '] popeq val=' + vStr;
-                    }
-                    return null;
-                }).filter(Boolean).join(' | ');
-                globalThis.__debugOp5 = dbg;
-
                 __capture(JSON.stringify({
-                    __debugOp5: globalThis.__debugOp5,
                     network_id: '$networkId',
                     contract_address: '$contractAddress',
                     entry_point: '$circuitName',
@@ -287,10 +275,7 @@ class CircuitExecutor(private val context: Context) {
             js.function("__nativeContractQuery") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
                 val opcodesJson = args[1] as String
-                val result = ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
-                // Debug: log handle and events for every query
-                Log.d(TAG, "query h=$handle ops=${opcodesJson.take(50)} → ${result.take(100)}")
-                result
+                ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
             }
             js.function("__nativeStateClone") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
@@ -303,7 +288,7 @@ class CircuitExecutor(private val context: Context) {
                 globalThis.__native_stateCreateWithNulls = __nativeStateCreateWithNulls;
                 globalThis.__native_stateSetOperation = __nativeStateSetOperation;
                 globalThis.__native_contractQuery = __nativeContractQuery;
-            globalThis.__native_stateClone = __nativeStateClone;
+                globalThis.__native_stateClone = __nativeStateClone;
             """.trimIndent())
         }
 
