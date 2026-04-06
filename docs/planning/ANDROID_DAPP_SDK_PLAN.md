@@ -126,16 +126,18 @@ Download and cache proving/verifier keys for arbitrary contract circuits.
   - Path traversal validation on all filesystem inputs
   - 13 device tests (round-trip, isolation, corruption, size limit, clear, keystore health)
 
+- [x] **6J-offline: Execute → assemble → prove on device** ✅
+  - BBoard post circuit proven locally in 0.93s on ARM64 Android
+  - 920 bytes UnprovenTransaction → 5066 bytes ProvenTransaction
+  - Fixed queryLedgerState value mutation bug (Array.shift() corrupting transcript)
+  - Fixed ChargedState missing `.state` public property (v0.15.0 compatibility)
+  - Fixed persistentHash AlignedValue serde bypass (parse_aligned_value)
+  - Transcript gas computed via QueryContext re-execution against cloned initial state
+  - Upgraded to compact-runtime 0.15.0, onchain-runtime-v3, ledger-v8
+  - BLS params + circuit keys installed via @Before from /data/local/tmp
+
 ### Remaining:
-- [ ] **6J: BBoard end-to-end** — two phases:
-  - **6J-offline: Execute → assemble → prove (on device, no network)**
-    - Install bboard proving keys (post/takeDown) into proving_keys dir
-    - Execute post circuit → assemble UnprovenTransaction → prove locally
-    - Verify ProvenTransaction hex is valid
-    - Blocker: prover looks for keys in flat keys_dir, not contracts/ subdirectory
-    - Solution: copy contract keys to root keys_dir, or embed in tx tuple HashMap
-  - **6J-online: Deploy → post → balance → submit → verify (requires devnet)**
-    - Fix Transcript gas/effects (zeroed → PreTranscript flow for node acceptance)
+- [ ] **6J-online: Deploy → post → balance → submit → verify (requires devnet)**
     - Fix TTL (MAX → parameterized from current time + duration)
     - Contract deployment transaction (ContractDeploy, not ContractCall)
     - Wire to ConnectedAPI: balanceUnsealedTransaction → submitTransaction
@@ -148,11 +150,12 @@ Download and cache proving/verifier keys for arbitrary contract circuits.
 
 | Limitation | Impact | Fix In |
 |-----------|--------|--------|
-| `Transcript` gas/effects defaulted to zero | Node may reject transaction | 6J — implement PreTranscript flow |
-| `Timestamp::MAX` as TTL | Never expires, not realistic | 6H — parameterize in provider |
-| `AlignedValue` JSON serde round-trip broken | Can't use serde_json for Midnight types | Worked around — manual parsers in 6G |
-| No contract deploy support | Can only call existing contracts | 6H — `ContractDeployer` |
-| `ContractOperation` always `None` verifier key | Prover loads keys separately | OK for now, may need for complex contracts |
+| ~~`Transcript` gas/effects defaulted to zero~~ | ~~Node may reject~~ | ✅ Fixed — QueryContext re-execution computes correct gas |
+| `Timestamp::MAX` as TTL | Never expires, not realistic | 6J-online — parameterize |
+| `AlignedValue` JSON serde round-trip broken | Can't use serde_json for Midnight types | ✅ Worked around — manual parsers |
+| No contract deploy support | Can only call existing contracts | 6J-online — `ContractDeploy` |
+| `ContractOperation` always `None` verifier key | Prover loads keys separately | OK — prover resolves from filesystem |
+| queryLedgerState value mutation | `fromValue().shift()` corrupts transcript | ✅ Fixed — clone in circuit-context.js |
 
 ---
 
