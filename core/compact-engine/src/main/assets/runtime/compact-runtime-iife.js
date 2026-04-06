@@ -448,11 +448,22 @@ var __compactRuntime = (() => {
           this._rustHandle = result.handle;
           const events = (result.events || []).map((ev) => {
             if (ev.Read !== void 0) {
-              const content = {
-                value: ev.Read.value.map((arr) => new Uint8Array(arr)),
-                alignment: ev.Read.alignment
+              const rawValues = ev.Read.value.map((arr) => new Uint8Array(arr));
+              const alignment = ev.Read.alignment;
+              const event = {
+                tag: "read",
+                get content() {
+                  return {
+                    value: rawValues.map((v) => {
+                      const copy = new Uint8Array(v.length);
+                      copy.set(v);
+                      return copy;
+                    }),
+                    alignment: JSON.parse(JSON.stringify(alignment))
+                  };
+                }
               };
-              return { tag: "read", content };
+              return event;
             }
             if (ev.Log !== void 0) {
               return { tag: "log", content: ev.Log };
@@ -1271,7 +1282,10 @@ var __compactRuntime = (() => {
       partialProofData.publicTranscript = partialProofData.publicTranscript.concat(program.map((op) => typeof op === "object" && "popeq" in op ? {
         popeq: {
           ...op.popeq,
-          result: reads[i++].content
+          result: (() => {
+            const c = reads[i++].content;
+            return { value: c.value.map((v) => v instanceof Uint8Array ? new Uint8Array(v) : v.slice ? v.slice() : v), alignment: c.alignment };
+          })()
         }
       } : op));
       if (res.events.length === 1) {

@@ -221,7 +221,19 @@ class CircuitExecutor(private val context: Context) {
                     circuitResult.proofData.publicTranscript
                 );
 
+                // Debug: check ALL popeq results in the raw transcript
+                const dbg = circuitResult.proofData.publicTranscript.map((op, idx) => {
+                    if (op.popeq) {
+                        const v = op.popeq.result?.value;
+                        const vStr = v ? JSON.stringify(Array.from(v).map(x => x instanceof Uint8Array ? Array.from(x) : x)) : 'null';
+                        return 'op[' + idx + '] popeq val=' + vStr;
+                    }
+                    return null;
+                }).filter(Boolean).join(' | ');
+                globalThis.__debugOp5 = dbg;
+
                 __capture(JSON.stringify({
+                    __debugOp5: globalThis.__debugOp5,
                     network_id: '$networkId',
                     contract_address: '$contractAddress',
                     entry_point: '$circuitName',

@@ -391,14 +391,30 @@ export class QueryContext {
 
         // Convert events: Rust returns GatherEvent serde format
         // { "Read": { value: [...], alignment: [...] } } or { "Log": ... }
+        // CRITICAL: queryLedgerState stores event.content in the transcript AND
+        // returns it to the caller. The caller's fromValue() calls value.shift()
+        // which MUTATES the value array. To prevent the transcript's copy from
+        // being corrupted, we use a content getter that returns a fresh clone
+        // each time .content is accessed.
         const events = (result.events || []).map(ev => {
           if (ev.Read !== undefined) {
-            // Convert Rust Value arrays back to Uint8Array arrays
-            const content = {
-              value: ev.Read.value.map(arr => new Uint8Array(arr)),
-              alignment: ev.Read.alignment,
+            const rawValues = ev.Read.value.map(arr => new Uint8Array(arr));
+            const alignment = ev.Read.alignment;
+            // Each access to .content returns a FRESH deep clone
+            const event = {
+              tag: 'read',
+              get content() {
+                return {
+                  value: rawValues.map(v => {
+                    const copy = new Uint8Array(v.length);
+                    copy.set(v);
+                    return copy;
+                  }),
+                  alignment: JSON.parse(JSON.stringify(alignment)),
+                };
+              }
             };
-            return { tag: 'read', content };
+            return event;
           }
           if (ev.Log !== undefined) {
             return { tag: 'log', content: ev.Log };
