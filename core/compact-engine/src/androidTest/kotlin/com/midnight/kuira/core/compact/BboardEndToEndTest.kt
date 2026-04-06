@@ -92,6 +92,9 @@ class BboardEndToEndTest {
 
         assertTrue("UnprovenTx should be hex", result.unprovenTxHex.length % 2 == 0)
         assertTrue("UnprovenTx should be substantial", result.unprovenTxHex.length > 100)
+
+        // Dump hex for HOST analysis
+        fail("TX_HEX:" + result.unprovenTxHex)
     }
 
     @Test
