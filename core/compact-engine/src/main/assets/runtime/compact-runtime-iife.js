@@ -196,6 +196,7 @@ var __compactRuntime = (() => {
   var ChargedState = class _ChargedState {
     constructor(stateValue) {
       this._state = stateValue;
+      this.state = stateValue;
       this._rustHandle = 0;
     }
     get() {

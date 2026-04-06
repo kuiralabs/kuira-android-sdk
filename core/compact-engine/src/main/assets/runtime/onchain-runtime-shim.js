@@ -52,6 +52,7 @@ export class StateValue {
 export class ChargedState {
   constructor(stateValue) {
     this._state = stateValue;
+    this.state = stateValue; // Public property — v0.15.0 contract code accesses .state directly
     this._rustHandle = 0;
   }
 
