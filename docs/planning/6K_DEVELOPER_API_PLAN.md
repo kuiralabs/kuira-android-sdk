@@ -226,10 +226,15 @@ All in `core/compact-engine/src/main/kotlin/com/midnight/kuira/core/compact/`:
 - [x] Contract JS bundled as asset
 - [x] App builds, installs, launches on emulator
 
-### Step 8: Open Source (Future)
+### Step 8: SDK Improvements (Future)
+- [ ] **Typed state queries** — use contract's `.d.ts` type definitions to map field indices to named fields automatically. Currently `queryState()` returns raw `[{type:"cell", number:1}, ...]`, should return `{posterCount: 1, message: "Hello", ...}` with field names from the Compact contract schema.
+- [ ] **Contract state subscriptions** — observe state changes via indexer WebSocket (reactive UI updates)
+- [ ] **Automatic proving key download** — `ProvingKeyManager` fetches keys on first circuit call if missing
+
+### Step 9: Open Source (Future)
 - [ ] Extract to standalone `midnight-bboard-android` repo
 - [ ] Self-contained (no internal path dependencies)
-- [ ] Publish SDK as Maven artifact
+- [ ] Publish SDK as Maven artifact (`com.midnight:contract-sdk`)
 - [ ] README with step-by-step guide
 
 ---
