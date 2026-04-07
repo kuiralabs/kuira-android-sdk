@@ -1,6 +1,7 @@
 package com.midnight.example.bboard
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.compact.ContractCallException
@@ -84,6 +85,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     boardState = boardState,
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "Connect failed", e)
                 _state.value = BBoardState.Error(e.message ?: "Connection failed")
             }
         }
@@ -95,20 +97,24 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         val bboard = contract ?: return
 
         viewModelScope.launch {
+            Log.i(TAG, "Posting: $message")
             _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
             try {
                 val receipt = bboard.call("post", message) { stage ->
                     val label = stageLabel(stage)
+                    Log.i(TAG, "Post stage: $label")
                     _state.value = current.copy(boardState = BoardState.Working(label))
                 }
 
                 if (receipt.status == TransactionStatus.SUBMITTED) {
+                    Log.i(TAG, "Post submitted! total=${receipt.timings.totalMs}ms")
                     _state.value = current.copy(
                         boardState = BoardState.Occupied(message = message),
                         lastTimingMs = receipt.timings.totalMs,
                     )
                 }
             } catch (e: ContractCallException) {
+                Log.e(TAG, "Post failed", e)
                 _state.value = current.copy(
                     boardState = BoardState.CallError(e.message ?: "Post failed"),
                 )
@@ -122,14 +128,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         val bboard = contract ?: return
 
         viewModelScope.launch {
+            Log.i(TAG, "Taking down")
             _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
             try {
                 bboard.call("takeDown") { stage ->
                     val label = stageLabel(stage)
+                    Log.i(TAG, "TakeDown stage: $label")
                     _state.value = current.copy(boardState = BoardState.Working(label))
                 }
+                Log.i(TAG, "TakeDown submitted!")
                 _state.value = current.copy(boardState = BoardState.Vacant, lastTimingMs = null)
             } catch (e: ContractCallException) {
+                Log.e(TAG, "TakeDown failed", e)
                 _state.value = current.copy(
                     boardState = BoardState.CallError(e.message ?: "Take down failed"),
                 )
@@ -177,6 +187,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        private const val TAG = "BBoard"
         // Fixed test key — in a real dApp, derive from wallet or secure storage
         private val SECRET_KEY = ByteArray(32) { (it + 1).toByte() }
     }

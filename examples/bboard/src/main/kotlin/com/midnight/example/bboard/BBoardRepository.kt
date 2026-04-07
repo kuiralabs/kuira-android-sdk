@@ -64,33 +64,37 @@ class BBoardRepository(private val indexerUrl: String) {
         }
     }
 
-    /** Extract the longest printable ASCII string from the state bytes. */
+    /** Extract the posted message from state bytes. */
     private fun extractMessage(bytes: ByteArray): String? {
-        var best = ""
-        var current = StringBuilder()
+        // Collect all printable ASCII sequences
+        val sequences = mutableListOf<String>()
+        val current = StringBuilder()
 
         for (b in bytes) {
             val c = b.toInt() and 0xFF
             if (c in 32..126) {
                 current.append(c.toChar())
             } else {
-                if (current.length > best.length) best = current.toString()
-                current = StringBuilder()
+                if (current.length > 3) sequences.add(current.toString())
+                current.clear()
             }
         }
-        if (current.length > best.length) best = current.toString()
+        if (current.length > 3) sequences.add(current.toString())
 
-        // Filter out SCALE tags and known prefixes
-        val filtered = best
-            .removePrefix("midnight:")
-            .trim()
+        // Filter out SCALE infrastructure strings, keep user messages
+        val candidates = sequences
+            .map { it.trimStart('\\', ' ') }
+            .filter { s ->
+                s.length > 3 &&
+                !s.startsWith("midnight:") &&
+                !s.startsWith("contract-state") &&
+                !s.startsWith("takeDown") &&
+                s != "post" &&
+                !s.all { it == ',' }
+            }
 
-        // Only return if it looks like a real message (not a SCALE tag)
-        return if (filtered.length > 3 && !filtered.startsWith("contract-state")) {
-            filtered
-        } else {
-            null
-        }
+        // Return the longest candidate (the posted message)
+        return candidates.maxByOrNull { it.length }
     }
 
     private fun graphqlQuery(query: String): JSONObject {

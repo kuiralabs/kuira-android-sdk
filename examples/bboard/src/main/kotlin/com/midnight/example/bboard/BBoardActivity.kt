@@ -19,8 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -90,32 +88,37 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 private fun SetupScreen(onConnect: (String, NetworkChoice) -> Unit) {
     var address by remember { mutableStateOf("") }
     var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
-    var expanded by remember { mutableStateOf(false) }
 
     DarkCard {
         Text("connect to contract", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
         Spacer(modifier = Modifier.height(16.dp))
 
-        Box {
-            OutlinedTextField(
-                value = network.label,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("network", color = Dim) },
-                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
-                colors = textFieldColors(),
-            )
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                NetworkChoice.entries.forEach { choice ->
-                    DropdownMenuItem(
-                        text = { Text(choice.label) },
-                        onClick = { network = choice; expanded = false },
+        // Network picker
+        Text("network", color = Dim, fontSize = 12.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NetworkChoice.entries.forEach { choice ->
+                val selected = choice == network
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (selected) Color.White else Color.White.copy(alpha = 0.06f))
+                        .clickable { network = choice },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        choice.label,
+                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.5f),
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = address,
