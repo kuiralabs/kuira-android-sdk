@@ -158,10 +158,22 @@ QuickJS + IIFE-bundled compact-runtime. The shim delegates ALL encoding/crypto t
   - Verified on localnet, preview, preprod, mainnet (read-only)
   - Gradle `bboardSetup` task for automated test infrastructure
 
-### Remaining (Future):
-- [ ] Open-source BBoard as standalone repo (`midnight-bboard-android`)
-- [ ] Publish SDK as Maven artifact (`com.midnight:contract-sdk`)
-- [ ] README with step-by-step developer guide
+### Future Improvements:
+
+**SDK Features:**
+- [ ] **Typed state queries** — use contract `.d.ts` type definitions to return named fields (`{posterCount: 1, message: "Hello"}`) instead of raw JSON array indices
+- [ ] **Private state persistence** — persist private state between app sessions using `KeyStorePrivateStateProvider`. Currently the secret key is hardcoded; real dApps need encrypted storage tied to the wallet
+- [ ] **Contract state subscriptions** — observe on-chain state changes via indexer WebSocket for reactive UI updates (e.g., board state changes when someone else posts)
+- [ ] **Auto proving key download** — `ProvingKeyManager` fetches circuit keys + BLS params on first `call()` if missing, instead of requiring manual `adb push` or bundled assets
+- [ ] **Contract deploy from Android** — `MidnightContract.deploy()` for deploying new contracts directly from the phone (currently deploy-only via CLI)
+
+**Distribution:**
+- [ ] **Open-source BBoard** as standalone `midnight-bboard-android` repo (self-contained, no internal dependencies)
+- [ ] **Publish SDK as Maven artifact** (`com.midnight:contract-sdk`) so external dApps can depend on it without cloning the wallet repo
+- [ ] **Developer README** — step-by-step guide from zero to on-chain transaction
+
+**CLI:**
+- [x] **Fixed `mn contract call` takeDown bug** — deterministic secret key derived from wallet (was random per invocation)
 
 ---
 
