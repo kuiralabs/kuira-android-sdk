@@ -49,6 +49,12 @@ object ContractRuntime {
         return nativeStateCreate(stateHex)
     }
 
+    /** Read contract state fields as JSON. */
+    fun stateReadFields(handle: Long): String? {
+        ensureLoaded()
+        return nativeStateReadFields(handle)
+    }
+
     /** Free a contract state handle. */
     fun stateFree(handle: Long) {
         ensureLoaded()
@@ -104,5 +110,6 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStateFree(handle: Long)
     @JvmStatic private external fun nativeStateClone(handle: Long): Long
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
+    @JvmStatic private external fun nativeStateReadFields(handle: Long): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
 }

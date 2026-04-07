@@ -60,7 +60,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 currentAddress = contractAddress
 
                 // 3. Create repository for reading state
-                val repo = BBoardRepository(network.indexerUrl)
+                val repo = BBoardRepository(cfg)
                 repository = repo
 
                 // 4. Fetch current board state

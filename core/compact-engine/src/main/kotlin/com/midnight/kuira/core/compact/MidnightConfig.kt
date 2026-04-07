@@ -64,6 +64,29 @@ class MidnightConfig private constructor(
             .getJSONObject("block")
             .getString("ledgerParameters")
 
+    /**
+     * Read a deployed contract's on-chain state as parsed JSON.
+     *
+     * Returns the state tree with cells decoded as hex, text (if UTF-8), and numbers.
+     * Example for bboard: `[{"type":"cell","hex":"01...","number":1}, {"type":"cell","hex":"...","text":"Hello"}, ...]`
+     *
+     * @param address Contract address (64 hex chars)
+     * @return Parsed state as a JSONArray or JSONObject
+     */
+    suspend fun queryState(address: String): org.json.JSONArray? = withContext(Dispatchers.IO) {
+        val stateHex = fetchContractState(address)
+        val handle = ContractRuntime.stateCreate(stateHex)
+        if (handle == 0L) return@withContext null
+
+        try {
+            val json = ContractRuntime.stateReadFields(handle)
+            if (json == null || json.startsWith("{\"error")) return@withContext null
+            org.json.JSONArray(json)
+        } finally {
+            ContractRuntime.stateFree(handle)
+        }
+    }
+
     /** Submit a previously prepared transaction. */
     suspend fun submit(prepared: PreparedTransaction): TransactionReceipt {
         val connector = getConnector()

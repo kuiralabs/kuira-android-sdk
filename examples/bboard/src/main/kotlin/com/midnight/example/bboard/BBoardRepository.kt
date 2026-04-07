@@ -1,129 +1,75 @@
 package com.midnight.example.bboard
 
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.midnight.kuira.core.compact.MidnightConfig
+import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
- * Reads BBoard contract state from the Midnight indexer.
+ * Reads BBoard contract state using the Midnight Contract SDK.
+ *
+ * Uses [MidnightConfig.queryState] which properly deserializes the SCALE-encoded
+ * state via Rust FFI — no ASCII heuristics or hex parsing.
  */
-class BBoardRepository(private val indexerUrl: String) {
-
-    /** Fetch the current board state from on-chain data. */
-    suspend fun fetchBoardState(contractAddress: String): BoardContent =
-        withContext(Dispatchers.IO) {
-            try {
-                // Query both __typename (deploy vs call) and state hex
-                val query = "query { contractAction(address: \\\"$contractAddress\\\") { __typename state } }"
-                val data = graphqlQuery(query)
-
-                val contractAction = data.optJSONObject("contractAction")
-                    ?: return@withContext BoardContent.NotDeployed
-
-                val typeName = contractAction.optString("__typename", "")
-                val stateHex = contractAction.optString("state", "")
-
-                Log.d(TAG, "Contract type: $typeName, state hex: ${stateHex.length} chars")
-
-                when (typeName) {
-                    // Just deployed, no calls yet → vacant
-                    "ContractDeploy" -> BoardContent.Vacant
-
-                    // Someone called a circuit → check which one
-                    "ContractCall", "ContractUpdate" -> {
-                        val message = extractMessageFromOccupiedState(stateHex)
-                        if (message != null) {
-                            BoardContent.Occupied(message = message)
-                        } else {
-                            // ContractCall could be a takeDown, leaving board vacant
-                            BoardContent.Vacant
-                        }
-                    }
-
-                    else -> BoardContent.Vacant
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch board state", e)
-                BoardContent.Error("Failed to fetch board state: ${e.message}")
-            }
-        }
+class BBoardRepository(private val config: MidnightConfig) {
 
     /**
-     * Extract the posted message from an occupied bboard state.
+     * Fetch the current board state.
      *
-     * Since we know the board is occupied (via __typename), we find
-     * the user message by collecting all printable ASCII runs and
-     * filtering out known SCALE infrastructure strings.
+     * The bboard contract state is an array:
+     * - [0] posterCount (number: 0 = vacant, 1 = occupied)
+     * - [1] poster (32-byte key hash)
+     * - [2] message (the posted text, if any)
      */
-    private fun extractMessageFromOccupiedState(stateHex: String): String? {
-        if (stateHex.isEmpty()) return null
+    suspend fun fetchBoardState(contractAddress: String): BoardContent {
+        return try {
+            val state = config.queryState(contractAddress)
+            if (state == null) return BoardContent.NotDeployed
 
-        val bytes = try {
-            stateHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        } catch (_: Exception) {
-            return null
+            Log.d(TAG, "State: $state")
+            parseBoardState(state)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch board state", e)
+            BoardContent.Error("Failed to fetch board state: ${e.message}")
         }
-
-        // Collect all contiguous printable ASCII sequences
-        val sequences = mutableListOf<String>()
-        val current = StringBuilder()
-        for (b in bytes) {
-            val c = b.toInt() and 0xFF
-            if (c in 32..126) {
-                current.append(c.toChar())
-            } else {
-                if (current.length >= 5) sequences.add(current.toString())
-                current.clear()
-            }
-        }
-        if (current.length >= 5) sequences.add(current.toString())
-
-        // Filter: keep strings that are mostly letters/spaces (actual messages)
-        val candidates = sequences
-            .map { it.trimStart('\\', ' ') }
-            .filter { s ->
-                s.length >= 5 &&
-                !s.contains("midnight:") &&
-                !s.contains("contract-state") &&
-                !s.contains("takeDown") &&
-                s != "post" &&
-                // At least half the chars should be alphanumeric or space
-                s.count { it.isLetterOrDigit() || it == ' ' } > s.length / 2
-            }
-
-        Log.d(TAG, "Found ${candidates.size} candidate messages: $candidates")
-
-        return candidates.maxByOrNull { it.length }
     }
 
-    private fun graphqlQuery(query: String): JSONObject {
-        val url = URL("$indexerUrl/graphql")
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 30_000
-            conn.outputStream.use { it.write("""{"query":"$query"}""".toByteArray()) }
+    private fun parseBoardState(state: JSONArray): BoardContent {
+        if (state.length() == 0) return BoardContent.Vacant
 
-            val responseCode = conn.responseCode
-            val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
-            val body = stream.bufferedReader().readText()
+        // Field 0: posterCount
+        val firstField = state.optJSONObject(0)
+        val posterCount = firstField?.optLong("number", 0) ?: 0
 
-            if (responseCode != 200) throw Exception("Indexer HTTP $responseCode: $body")
+        if (posterCount == 0L) return BoardContent.Vacant
 
-            val json = JSONObject(body)
-            val errors = json.optJSONArray("errors")
-            if (errors != null && errors.length() > 0) throw Exception("GraphQL errors: $errors")
+        // Field 2: message (if present)
+        val messageField = if (state.length() > 2) state.opt(2) else null
+        val message = extractText(messageField)
 
-            return json.getJSONObject("data")
-        } finally {
-            conn.disconnect()
+        return BoardContent.Occupied(message = message ?: "(message)")
+    }
+
+    /** Extract text from a state field — walks nested structures. */
+    private fun extractText(field: Any?): String? {
+        if (field == null) return null
+
+        // Direct cell with text
+        if (field is JSONObject) {
+            val text = field.optString("text", "")
+            if (text.isNotEmpty()) return text
         }
+
+        // Array — check each element
+        if (field is JSONArray) {
+            for (i in 0 until field.length()) {
+                val item = field.opt(i)
+                val text = extractText(item)
+                if (text != null) return text
+            }
+        }
+
+        return null
     }
 
     companion object {
