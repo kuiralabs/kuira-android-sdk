@@ -133,12 +133,19 @@ val bboardSetup by tasks.registering {
             ?: throw GradleException("Deploy failed (exit $deployExit): $deployOutput")
         logger.lifecycle("Deployed bboard at: $contractAddress")
 
-        // 7. Push config to device
+        // 7. Push config to device via temp files (avoids shell quoting issues)
         logger.lifecycle("Pushing config to device...")
         adb("shell", "mkdir", "-p", "/data/local/tmp/bboard_keys")
-        adb("shell", "sh", "-c", "echo -n '$contractAddress' > /data/local/tmp/bboard_keys/contract_address.txt")
-        adb("shell", "sh", "-c", "echo -n 'http://10.0.2.2:8088/api/v3' > /data/local/tmp/bboard_keys/indexer_url.txt")
-        adb("shell", "sh", "-c", "echo -n '$network' > /data/local/tmp/bboard_keys/network_id.txt")
+
+        fun pushConfig(filename: String, content: String) {
+            val tmp = File.createTempFile("bboard_", ".txt")
+            tmp.writeText(content)
+            adb("push", tmp.absolutePath, "/data/local/tmp/bboard_keys/$filename")
+            tmp.delete()
+        }
+        pushConfig("contract_address.txt", contractAddress)
+        pushConfig("indexer_url.txt", "http://10.0.2.2:8088/api/v3")
+        pushConfig("network_id.txt", network)
 
         logger.lifecycle("BBoard e2e setup complete!")
     }
