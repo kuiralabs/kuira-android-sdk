@@ -54,11 +54,9 @@ class BBoardRepository(private val indexerUrl: String) {
     /**
      * Extract the posted message from an occupied bboard state.
      *
-     * The bboard Compact contract stores the message as a length-prefixed
-     * UTF-8 string. In SCALE, this appears as a compact length followed
-     * by the raw bytes. We search for the message by looking for the
-     * length-prefixed string pattern that appears TWICE in the state
-     * (once in the current state, once in the operations metadata).
+     * Since we know the board is occupied (via __typename), we find
+     * the user message by collecting all printable ASCII runs and
+     * filtering out known SCALE infrastructure strings.
      */
     private fun extractMessageFromOccupiedState(stateHex: String): String? {
         if (stateHex.isEmpty()) return null
@@ -69,44 +67,37 @@ class BBoardRepository(private val indexerUrl: String) {
             return null
         }
 
-        // Find all length-prefixed ASCII strings in the SCALE data.
-        // Compact SCALE length encoding: for lengths < 64, the byte is (length << 2).
-        // So a 20-char string has prefix byte 0x50 (20 << 2 = 80 = 0x50).
-        val messages = mutableListOf<String>()
-
-        for (i in bytes.indices) {
-            val lenByte = bytes[i].toInt() and 0xFF
-            // Compact SCALE: low 2 bits = mode. Mode 0 = single-byte, length = byte >> 2
-            if (lenByte and 0x03 != 0) continue // not single-byte mode
-            val strLen = lenByte shr 2
-            if (strLen < 5 || strLen > 200) continue // reasonable message length
-            if (i + 1 + strLen > bytes.size) continue
-
-            // Check if the following bytes are all printable ASCII
-            val candidate = bytes.sliceArray(i + 1..i + strLen)
-            if (candidate.all { (it.toInt() and 0xFF) in 32..126 }) {
-                val text = String(candidate, Charsets.US_ASCII)
-                // Filter out known SCALE infrastructure strings
-                if (!isInfrastructureString(text)) {
-                    messages.add(text)
-                }
+        // Collect all contiguous printable ASCII sequences
+        val sequences = mutableListOf<String>()
+        val current = StringBuilder()
+        for (b in bytes) {
+            val c = b.toInt() and 0xFF
+            if (c in 32..126) {
+                current.append(c.toChar())
+            } else {
+                if (current.length >= 5) sequences.add(current.toString())
+                current.clear()
             }
         }
+        if (current.length >= 5) sequences.add(current.toString())
 
-        Log.d(TAG, "Found ${messages.size} candidate messages: $messages")
+        // Filter: keep strings that are mostly letters/spaces (actual messages)
+        val candidates = sequences
+            .map { it.trimStart('\\', ' ') }
+            .filter { s ->
+                s.length >= 5 &&
+                !s.contains("midnight:") &&
+                !s.contains("contract-state") &&
+                !s.contains("takeDown") &&
+                s != "post" &&
+                // At least half the chars should be alphanumeric or space
+                s.count { it.isLetterOrDigit() || it == ' ' } > s.length / 2
+            }
 
-        // The actual posted message appears in the state data.
-        // Return the longest non-infrastructure string.
-        return messages.maxByOrNull { it.length }
+        Log.d(TAG, "Found ${candidates.size} candidate messages: $candidates")
+
+        return candidates.maxByOrNull { it.length }
     }
-
-    private fun isInfrastructureString(s: String): Boolean =
-        s.startsWith("midnight:") ||
-        s.startsWith("contract-state") ||
-        s == "post" ||
-        s == "takeDown" ||
-        s == "struct" ||
-        s.all { it == ',' || it == ' ' }
 
     private fun graphqlQuery(query: String): JSONObject {
         val url = URL("$indexerUrl/graphql")
