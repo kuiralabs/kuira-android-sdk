@@ -43,8 +43,8 @@ class BBoardRepository(private val config: MidnightConfig) {
 
         if (posterCount == 0L) return BoardContent.Vacant
 
-        // Field 2: message (if present)
-        val messageField = if (state.length() > 2) state.opt(2) else null
+        // Field 1: message (Opaque<String> — text decoded by Rust FFI)
+        val messageField = if (state.length() > 1) state.opt(1) else null
         val message = extractText(messageField)
 
         return BoardContent.Occupied(message = message ?: "(message)")
