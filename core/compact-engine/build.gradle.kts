@@ -27,6 +27,128 @@ android {
     }
 }
 
+// ── BBoard E2E test setup ──
+// Automatically prepares localnet infrastructure before connected tests.
+// Requires: mn CLI installed, Docker running, Android emulator connected.
+
+val bboardSetup by tasks.registering {
+    group = "verification"
+    description = "Set up localnet + deploy bboard contract for e2e tests"
+
+    doLast {
+        fun mn(vararg args: String): String {
+            val proc = ProcessBuilder("mn", *args, "--json")
+                .redirectErrorStream(true)
+                .start()
+            val output = proc.inputStream.bufferedReader().readText().trim()
+            val exit = proc.waitFor()
+            if (exit != 0 && !output.contains("\"error\"")) {
+                throw GradleException("mn ${args.joinToString(" ")} failed (exit $exit): $output")
+            }
+            return output
+        }
+
+        fun adb(vararg args: String): String {
+            val proc = ProcessBuilder("adb", *args)
+                .redirectErrorStream(true)
+                .start()
+            return proc.inputStream.bufferedReader().readText().trim()
+                .also { proc.waitFor() }
+        }
+
+        fun jsonField(json: String, field: String): String? {
+            val regex = """"$field"\s*:\s*"([^"]+)"""".toRegex()
+            return regex.find(json)?.groupValues?.get(1)
+        }
+
+        val network = "undeployed"
+        val home = System.getProperty("user.home")
+        val bboardDir = listOf(
+            file("$home/Development/midnight/midnight-libraries/example-bboard"),
+            file("${rootProject.projectDir}/../../midnight/midnight-libraries/example-bboard"),
+        ).firstOrNull { it.exists() }
+            ?: throw GradleException(
+                "example-bboard not found. Set BBOARD_DIR env or clone to ~/Development/midnight/midnight-libraries/example-bboard"
+            )
+
+        // 1. Check localnet
+        logger.lifecycle("Checking localnet status...")
+        val status = mn("localnet", "status")
+        if (!status.contains("running")) {
+            throw GradleException("Localnet not running. Start with: mn localnet up")
+        }
+
+        // 2. Ensure wallet exists
+        logger.lifecycle("Checking wallet...")
+        try {
+            mn("wallet", "use", "dev")
+        } catch (_: Exception) {
+            logger.lifecycle("Creating dev wallet...")
+            mn("wallet", "generate", "dev", "--network", network)
+        }
+
+        // 3. Check balance, airdrop if needed
+        logger.lifecycle("Checking balance...")
+        val balance = mn("balance", "--network", network)
+        val nightBalance = jsonField(balance, "NIGHT")?.toDoubleOrNull() ?: 0.0
+        if (nightBalance < 1.0) {
+            logger.lifecycle("Airdropping 10000 NIGHT...")
+            mn("airdrop", "10000", "--network", network)
+        }
+
+        // 4. Check dust, register if needed
+        logger.lifecycle("Checking dust...")
+        val dust = mn("dust", "status", "--network", network)
+        val dustAvailable = dust.contains("\"dustAvailable\":true")
+        if (!dustAvailable) {
+            logger.lifecycle("Registering dust (this takes a few minutes)...")
+            mn("dust", "register", "--network", network)
+        }
+
+        // 5. Start mn serve if not running
+        logger.lifecycle("Checking mn serve...")
+        try {
+            val lsof = ProcessBuilder("lsof", "-ti", ":9932")
+                .redirectErrorStream(true).start()
+            val pid = lsof.inputStream.bufferedReader().readText().trim()
+            lsof.waitFor()
+            if (pid.isEmpty()) throw Exception("not running")
+        } catch (_: Exception) {
+            logger.lifecycle("Starting mn serve...")
+            ProcessBuilder("mn", "serve", "--approve-all", "--port", "9932", "--network", network)
+                .redirectErrorStream(true)
+                .start()
+            Thread.sleep(10_000) // Wait for sync
+        }
+
+        // 6. Deploy fresh bboard contract
+        logger.lifecycle("Deploying bboard contract...")
+        val deploy = ProcessBuilder("mn", "contract", "deploy", "--network", network, "--json")
+            .directory(bboardDir)
+            .redirectErrorStream(true)
+            .start()
+        val deployOutput = deploy.inputStream.bufferedReader().readText().trim()
+        val deployExit = deploy.waitFor()
+        val contractAddress = jsonField(deployOutput, "address")
+            ?: throw GradleException("Deploy failed (exit $deployExit): $deployOutput")
+        logger.lifecycle("Deployed bboard at: $contractAddress")
+
+        // 7. Push config to device
+        logger.lifecycle("Pushing config to device...")
+        adb("shell", "mkdir", "-p", "/data/local/tmp/bboard_keys")
+        adb("shell", "sh", "-c", "echo -n '$contractAddress' > /data/local/tmp/bboard_keys/contract_address.txt")
+        adb("shell", "sh", "-c", "echo -n 'http://10.0.2.2:8088/api/v3' > /data/local/tmp/bboard_keys/indexer_url.txt")
+        adb("shell", "sh", "-c", "echo -n '$network' > /data/local/tmp/bboard_keys/network_id.txt")
+
+        logger.lifecycle("BBoard e2e setup complete!")
+    }
+}
+
+// Wire setup to run before connected tests
+tasks.matching { it.name.startsWith("connected") && it.name.contains("AndroidTest") }.configureEach {
+    dependsOn(bboardSetup)
+}
+
 dependencies {
     // QuickJS engine
     implementation(libs.quickjs.kt)
