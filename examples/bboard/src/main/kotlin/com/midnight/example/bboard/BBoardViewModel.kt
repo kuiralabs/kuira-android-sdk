@@ -38,6 +38,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting("Initializing...")
             try {
+                // 0. Install proving keys if available from adb push
+                installProvingKeys()
+
                 // 1. Create SDK config
                 val cfg = MidnightConfig.Builder(getApplication())
                     .indexerUrl(network.indexerUrl)
@@ -184,6 +187,35 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         is ContractCallStage.Proving -> "Generating ZK proof..."
         is ContractCallStage.Balancing -> "Balancing transaction..."
         is ContractCallStage.Submitting -> "Submitting to chain..."
+    }
+
+    /**
+     * Copy proving keys + BLS params from /data/local/tmp/bboard_keys/
+     * (pushed via `./scripts/install-bboard-keys.sh`) to the app's proving_keys dir.
+     */
+    private fun installProvingKeys() {
+        val tempDir = java.io.File("/data/local/tmp/bboard_keys")
+        if (!tempDir.exists()) {
+            Log.w(TAG, "No proving keys at ${tempDir.path} — proving will fail")
+            return
+        }
+
+        val keysDir = java.io.File(getApplication<Application>().filesDir, "proving_keys")
+        keysDir.mkdirs()
+
+        val files = listOf(
+            "post.prover", "post.verifier", "post.bzkir",
+            "takeDown.prover", "takeDown.verifier", "takeDown.bzkir",
+            "bls_midnight_2p13", "bls_midnight_2p14", "bls_midnight_2p15",
+        )
+        for (name in files) {
+            val src = java.io.File(tempDir, name)
+            val dst = java.io.File(keysDir, name)
+            if (src.exists() && !dst.exists()) {
+                src.copyTo(dst)
+                Log.d(TAG, "Installed key: $name")
+            }
+        }
     }
 
     companion object {
