@@ -1,7 +1,7 @@
 # Phase 6: Android DApp SDK
 
 **Date:** 2026-04-03 (updated 2026-04-06)
-**Status:** In Progress — 6J-online complete, 6K remaining
+**Status:** Complete — all steps done, SDK example app functional
 **Depends on:** Phase 5 (DApp Connector) ✅
 
 ---
@@ -147,13 +147,21 @@ QuickJS + IIFE-bundled compact-runtime. The shim delegates ALL encoding/crypto t
   - Full pipeline: indexer fetch → circuit execute → local prove → DApp Connector balance → node submit
   - `mn` CLI upgraded: indexer-standalone 4.0.0 → 4.0.1 (per support matrix)
 
-### Remaining:
-- [ ] **6K-DX: Developer API + Testing** (see `docs/planning/6K_DEVELOPER_API_PLAN.md`)
-    - `MidnightContract` facade: `contract.call("post", "Hello!")` — one-line circuit calls
-    - `MidnightConfig` builder: indexer, wallet, prover wired once
-    - `ArgConverter`: Kotlin values → JS expressions (type-safe, no injection)
-    - Sealed error hierarchy, progress callbacks, offline mode
-    - Integration tests using the new API
+- [x] **6K-DX: Developer API + BBoard Example App** ✅ (see `docs/planning/6K_DEVELOPER_API_PLAN.md`)
+  - `MidnightContract` facade: `contract.call("post", "Hello!")` — one-line circuit calls
+  - `MidnightConfig` builder: indexer, wallet, prover wired once
+  - `ArgConverter`: Kotlin values → JS expressions (type-safe, no injection)
+  - Sealed error hierarchy (`ContractCallException`), progress callbacks (`ContractCallStage`)
+  - `prepare()` for offline mode, `TransactionReceipt` with timing breakdown
+  - 29 ArgConverter unit tests + 3 device integration tests
+  - BBoard Android example app (`examples/bboard`) re-architected to use SDK
+  - Verified on localnet, preview, preprod, mainnet (read-only)
+  - Gradle `bboardSetup` task for automated test infrastructure
+
+### Remaining (Future):
+- [ ] Open-source BBoard as standalone repo (`midnight-bboard-android`)
+- [ ] Publish SDK as Maven artifact (`com.midnight:contract-sdk`)
+- [ ] README with step-by-step developer guide
 
 ---
 

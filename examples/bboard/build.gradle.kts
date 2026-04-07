@@ -30,9 +30,8 @@ android {
 }
 
 dependencies {
-    // Kuira Connector SDK — the only dependency a dApp needs
-    implementation(project(":core:connector"))
-    implementation(project(":core:network"))
+    // Midnight Contract SDK — execute circuits, prove, and submit from Android
+    implementation(project(":core:compact-engine"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -43,9 +42,6 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
-
-    // JSON parsing (only if using JSON-RPC via binder)
-    implementation(libs.kotlinx.serialization.json)
 
     // Testing
     testImplementation(libs.junit)

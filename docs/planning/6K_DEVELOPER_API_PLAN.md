@@ -1,7 +1,7 @@
 # 6K: Developer-Facing Contract API
 
-**Date:** 2026-04-06
-**Status:** Planning Complete, Implementation Starting
+**Date:** 2026-04-06 (updated 2026-04-07)
+**Status:** Complete — SDK API + BBoard example app functional
 **Depends on:** 6A-6J (all complete)
 
 ---
@@ -216,12 +216,21 @@ All in `core/compact-engine/src/main/kotlin/com/midnight/kuira/core/compact/`:
 - [x] Existing offline tests still pass
 - [x] 29 ArgConverter unit tests still pass
 
-### Step 7: SDK Example App + Open Source (Not Started)
-- [ ] Move contract artifacts to `midnight-bboard-android`
-- [ ] Self-contained example app (clone → build → run)
-- [ ] Gradle setup task for automated localnet provisioning
-- [ ] README with step-by-step guide
+### Step 7: BBoard Example App ✅
+- [x] Re-architected `examples/bboard` to use `MidnightContract` SDK
+- [x] `BBoardViewModel` uses `MidnightConfig` + `MidnightContract.call()`
+- [x] `BBoardRepository` reads board state from indexer
+- [x] Setup screen with contract address input + network selector
+- [x] Progress stages shown during circuit execution + proving
+- [x] Deleted `KuiraWalletClient` (replaced by SDK)
+- [x] Contract JS bundled as asset
+- [x] App builds, installs, launches on emulator
+
+### Step 8: Open Source (Future)
+- [ ] Extract to standalone `midnight-bboard-android` repo
+- [ ] Self-contained (no internal path dependencies)
 - [ ] Publish SDK as Maven artifact
+- [ ] README with step-by-step guide
 
 ---
 
@@ -232,7 +241,8 @@ All in `core/compact-engine/src/main/kotlin/com/midnight/kuira/core/compact/`:
 - [x] All existing BBoard offline tests still pass
 - [x] New `MidnightContract.call()` e2e test submits to localnet
 - [x] Code review fixes applied (mutex, InputStream close, coinPublicKey required)
-- [ ] SDK example app ready for open source (Step 7)
+- [x] BBoard example app re-architected to use SDK (Step 7)
+- [ ] Open-source as standalone repo (Step 8 — future)
 
 ---
 

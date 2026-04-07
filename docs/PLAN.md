@@ -2,9 +2,9 @@
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
 **Total Invested:** ~280h across completed phases
-**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) → In Progress (6J-online ✅, 6K remaining)**
+**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) ✅ Complete**
 
-**Last Updated:** April 6, 2026
+**Last Updated:** April 7, 2026
 
 ## Implementation Strategy
 
@@ -39,7 +39,7 @@
 | **Phase 3: Shielded Tx** | Private ZK transactions E2E | ~22h | ✅ Complete |
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
-| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | 🔄 6K remaining |
+| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | ✅ Complete |
 | **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
 | **Phase 8: Production Polish** | Onboarding, settings, app store | est 15-20h | ⏸️ Planned |
 
@@ -74,7 +74,7 @@
 | 6H | Provider interfaces + CircuitExecutor clean API | ✅ |
 | 6I | Private state (AES-256-GCM) + ZK config (ProvingKeyManager) | ✅ |
 | 6J | BBoard e2e: execute → prove → balance → submit on localnet | ✅ |
-| 6K-DX | Developer API (`MidnightContract.call()`) + testing | ⏭️ |
+| 6K-DX | Developer API (`MidnightContract.call()`) + BBoard example app | ✅ |
 
 ### Key Architecture Decisions
 

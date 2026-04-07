@@ -1,66 +1,87 @@
 package com.midnight.example.bboard
 
-import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.compact.ContractCallException
+import com.midnight.kuira.core.compact.ContractCallStage
+import com.midnight.kuira.core.compact.MidnightConfig
+import com.midnight.kuira.core.compact.MidnightContract
+import com.midnight.kuira.core.compact.TransactionStatus
+import com.midnight.kuira.core.compact.WitnessResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /**
- * BBoard ViewModel — two-phase wallet connection.
+ * BBoard ViewModel — demonstrates using the Midnight Contract SDK.
  *
- * Phase 1: Launch Kuira's approval Activity (user sees approval sheet)
- * Phase 2: Bind to ConnectorService via IPC (after approval)
+ * Shows the complete dApp developer flow:
+ * 1. Configure SDK with network endpoints
+ * 2. Create a contract handle with witnesses
+ * 3. Call circuits with one line: `contract.call("post", message)`
+ * 4. Observe progress stages for UI feedback
  */
-class BBoardViewModel(application: Application) : AndroidViewModel(application) {
+class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
-    val wallet = KuiraWalletClient(application)
-
-    private val _state = MutableStateFlow<BBoardState>(BBoardState.Disconnected)
+    private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
 
-    /** Called after the approval Activity returns */
-    fun onApprovalResult(resultCode: Int) {
-        if (wallet.isApproved(resultCode)) {
-            bindAndLoadWallet()
-        } else {
-            _state.value = BBoardState.Error("Connection denied")
-        }
-    }
+    private var config: MidnightConfig? = null
+    private var contract: MidnightContract? = null
+    private var repository: BBoardRepository? = null
+    private var currentAddress: String? = null
 
-    /** Clean up before retrying */
-    fun prepareForReconnect() {
-        try { wallet.unbind() } catch (_: Exception) {}
-        _state.value = BBoardState.Disconnected
-    }
-
-    private fun bindAndLoadWallet() {
+    /** Connect to a deployed bboard contract. */
+    fun connect(contractAddress: String, network: NetworkChoice) {
         viewModelScope.launch {
-            _state.value = BBoardState.Connecting
+            _state.value = BBoardState.Connecting("Initializing...")
             try {
-                val bound = wallet.bind()
-                if (!bound) {
-                    _state.value = BBoardState.Error("Could not bind to Kuira")
-                    return@launch
+                // 1. Create SDK config
+                val cfg = MidnightConfig.Builder(getApplication())
+                    .indexerUrl(network.indexerUrl)
+                    .walletUrl(network.walletUrl)
+                    .networkId(network.networkId)
+                    .build()
+                config = cfg
+
+                // 2. Create contract handle
+                _state.value = BBoardState.Connecting("Loading contract...")
+                val bboard = MidnightContract.create(cfg) {
+                    contractJs = getApplication<Application>().assets
+                        .open("runtime/bboard-contract-iife.js")
+                    address = contractAddress
+                    witness("localSecretKey") { WitnessResult(null, SECRET_KEY) }
+                    initialPrivateState = mapOf("secretKey" to ByteArray(32))
+                    coinPublicKey = ByteArray(32)
+                }
+                contract = bboard
+                currentAddress = contractAddress
+
+                // 3. Create repository for reading state
+                val repo = BBoardRepository(network.indexerUrl)
+                repository = repo
+
+                // 4. Fetch current board state
+                _state.value = BBoardState.Connecting("Fetching board state...")
+                val boardContent = repo.fetchBoardState(contractAddress)
+                val boardState = when (boardContent) {
+                    is BoardContent.Vacant -> BoardState.Vacant
+                    is BoardContent.Occupied -> BoardState.Occupied(boardContent.message)
+                    is BoardContent.NotDeployed -> {
+                        _state.value = BBoardState.Error("Contract not deployed at $contractAddress")
+                        return@launch
+                    }
+                    is BoardContent.Error -> {
+                        _state.value = BBoardState.Error(boardContent.reason)
+                        return@launch
+                    }
                 }
 
-                val status = wallet.getConnectionStatus()
-                val config = wallet.getConfiguration()
-                val shielded = wallet.getShieldedAddresses()
-                val unshielded = wallet.getUnshieldedAddress()
-
                 _state.value = BBoardState.Connected(
-                    networkId = status.networkId ?: "unknown",
-                    indexerUri = config.indexerUri,
-                    nodeUri = config.substrateNodeUri,
-                    unshieldedAddress = unshielded,
-                    shieldedAddress = shielded.shieldedAddress,
-                    coinPublicKey = shielded.coinPublicKey,
-                    boardState = BoardState.Vacant,
+                    networkId = network.networkId,
+                    contractAddress = contractAddress,
+                    boardState = boardState,
                 )
             } catch (e: Exception) {
                 _state.value = BBoardState.Error(e.message ?: "Connection failed")
@@ -68,60 +89,128 @@ class BBoardViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun postMessage(message: String) {
+    /** Post a message to the board. */
+    fun post(message: String) {
         val current = _state.value as? BBoardState.Connected ?: return
+        val bboard = contract ?: return
+
         viewModelScope.launch {
-            _state.value = current.copy(boardState = BoardState.Posting)
+            _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
             try {
-                wallet.signData(message, "text")
-                _state.value = current.copy(
-                    boardState = BoardState.Occupied(message = message, isOwner = true),
-                )
-            } catch (e: WalletError) {
-                if (e.message.contains("PermissionRejected")) {
-                    _state.value = current.copy(boardState = BoardState.Vacant)
-                } else {
-                    _state.value = BBoardState.Error(e.message)
+                val receipt = bboard.call("post", message) { stage ->
+                    val label = stageLabel(stage)
+                    _state.value = current.copy(boardState = BoardState.Working(label))
                 }
-            } catch (e: Exception) {
-                _state.value = BBoardState.Error(e.message ?: "Post failed")
+
+                if (receipt.status == TransactionStatus.SUBMITTED) {
+                    _state.value = current.copy(
+                        boardState = BoardState.Occupied(message = message),
+                        lastTimingMs = receipt.timings.totalMs,
+                    )
+                }
+            } catch (e: ContractCallException) {
+                _state.value = current.copy(
+                    boardState = BoardState.CallError(e.message ?: "Post failed"),
+                )
             }
         }
     }
 
+    /** Take down the current post. */
     fun takeDown() {
         val current = _state.value as? BBoardState.Connected ?: return
-        _state.value = current.copy(boardState = BoardState.Vacant)
+        val bboard = contract ?: return
+
+        viewModelScope.launch {
+            _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
+            try {
+                bboard.call("takeDown") { stage ->
+                    val label = stageLabel(stage)
+                    _state.value = current.copy(boardState = BoardState.Working(label))
+                }
+                _state.value = current.copy(boardState = BoardState.Vacant, lastTimingMs = null)
+            } catch (e: ContractCallException) {
+                _state.value = current.copy(
+                    boardState = BoardState.CallError(e.message ?: "Take down failed"),
+                )
+            }
+        }
     }
 
+    /** Refresh board state from indexer. */
+    fun refresh() {
+        val current = _state.value as? BBoardState.Connected ?: return
+        val repo = repository ?: return
+        val addr = currentAddress ?: return
+
+        viewModelScope.launch {
+            val content = repo.fetchBoardState(addr)
+            val boardState = when (content) {
+                is BoardContent.Vacant -> BoardState.Vacant
+                is BoardContent.Occupied -> BoardState.Occupied(content.message)
+                else -> return@launch
+            }
+            _state.value = current.copy(boardState = boardState)
+        }
+    }
+
+    /** Disconnect and return to setup. */
     fun disconnect() {
-        try { wallet.unbind() } catch (_: Exception) {}
-        _state.value = BBoardState.Disconnected
+        config?.close()
+        config = null
+        contract = null
+        repository = null
+        _state.value = BBoardState.Setup
     }
 
     override fun onCleared() {
-        try { wallet.unbind() } catch (_: Exception) {}
+        config?.close()
         super.onCleared()
+    }
+
+    private fun stageLabel(stage: ContractCallStage): String = when (stage) {
+        is ContractCallStage.FetchingState -> "Fetching state..."
+        is ContractCallStage.Executing -> "Executing circuit..."
+        is ContractCallStage.Proving -> "Generating ZK proof..."
+        is ContractCallStage.Balancing -> "Balancing transaction..."
+        is ContractCallStage.Submitting -> "Submitting to chain..."
+    }
+
+    companion object {
+        // Fixed test key — in a real dApp, derive from wallet or secure storage
+        private val SECRET_KEY = ByteArray(32) { (it + 1).toByte() }
     }
 }
 
+// ── State Model ──
+
 sealed class BBoardState {
-    data object Disconnected : BBoardState()
-    data object Connecting : BBoardState()
-    data class Error(val message: String) : BBoardState()
+    data object Setup : BBoardState()
+    data class Connecting(val stage: String) : BBoardState()
     data class Connected(
         val networkId: String,
-        val indexerUri: String,
-        val nodeUri: String,
-        val unshieldedAddress: String,
-        val shieldedAddress: String,
-        val coinPublicKey: String,
+        val contractAddress: String,
         val boardState: BoardState,
+        val lastTimingMs: Long? = null,
     ) : BBoardState()
+    data class Error(val message: String) : BBoardState()
 }
 
 sealed class BoardState {
     data object Vacant : BoardState()
-    data object Posting : BoardState()
-    data class Occupied(val message: String, val isOwner: Boolean) : BoardState()
+    data class Working(val stage: String) : BoardState()
+    data class Occupied(val message: String) : BoardState()
+    data class CallError(val message: String) : BoardState()
+}
+
+/** Network configuration presets. */
+enum class NetworkChoice(
+    val label: String,
+    val networkId: String,
+    val indexerUrl: String,
+    val walletUrl: String,
+) {
+    LOCALNET("Localnet", "undeployed", "http://10.0.2.2:8088/api/v3", "ws://10.0.2.2:9932"),
+    PREVIEW("Preview", "preview", "https://indexer.preview.midnight.network/api/v3", "ws://10.0.2.2:9932"),
+    PREPROD("PreProd", "preprod", "https://indexer.preprod.midnight.network/api/v3", "ws://10.0.2.2:9932"),
 }
