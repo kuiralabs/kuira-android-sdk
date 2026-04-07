@@ -56,7 +56,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                         .open("runtime/bboard-contract-iife.js")
                     address = contractAddress
                     witness("localSecretKey") { WitnessResult(null, SECRET_KEY) }
-                    initialPrivateState = mapOf("secretKey" to ByteArray(32))
+                    initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
                     coinPublicKey = ByteArray(32)
                 }
                 contract = bboard
