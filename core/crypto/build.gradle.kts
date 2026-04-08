@@ -15,33 +15,28 @@ android {
 
         // NDK configuration for JNI bridge
         ndk {
-            // Target architectures: ARM64 only (Rust FFI only built for aarch64)
             abiFilters.addAll(listOf("arm64-v8a"))
         }
 
         externalNativeBuild {
             cmake {
-                // CMake arguments
                 arguments(
-                    "-DANDROID_STL=c++_shared",  // Use shared C++ standard library
-                    "-DANDROID_PLATFORM=android-24"  // Match minSdk
+                    "-DANDROID_STL=c++_shared",
+                    "-DANDROID_PLATFORM=android-24"
                 )
-                // C++ compiler flags
                 cppFlags("")
             }
         }
     }
 
-    // External native build configuration (CMake)
+    // External native build: CMake links JNI C bridge + Rust static lib into .so
     externalNativeBuild {
         cmake {
-            // Path to CMakeLists.txt in Rust FFI project
             path = file("../../kuira-crypto-ffi/CMakeLists.txt")
-            version = "3.22.1"  // Match CMake version from CMakeLists.txt
+            version = "3.22.1"
         }
     }
 
-    // Configure jniLibs directory for native libraries
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
@@ -67,6 +62,9 @@ android {
 }
 
 dependencies {
+    // Contract SDK — proving + state classes moved there, typealiases here for compat
+    api(project(":core:compact-engine"))
+
     // Core Android
     implementation(libs.androidx.core.ktx)
 

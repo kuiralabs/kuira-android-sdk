@@ -32,6 +32,8 @@ android {
 dependencies {
     // Midnight Contract SDK — execute circuits, prove, and submit from Android
     implementation(project(":core:compact-engine"))
+    // Native FFI library (provides libkuira_crypto_ffi.so via CMake)
+    runtimeOnly(project(":core:crypto"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))

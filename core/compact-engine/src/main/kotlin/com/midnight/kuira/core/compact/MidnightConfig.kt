@@ -1,7 +1,7 @@
 package com.midnight.kuira.core.compact
 
 import android.content.Context
-import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

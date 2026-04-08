@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*

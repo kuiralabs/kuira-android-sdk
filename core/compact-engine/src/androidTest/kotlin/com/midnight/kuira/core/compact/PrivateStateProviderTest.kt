@@ -3,8 +3,8 @@ package com.midnight.kuira.core.compact
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider
-import com.midnight.kuira.core.crypto.state.PrivateStateProvider
+import com.midnight.kuira.core.compact.state.KeyStorePrivateStateProvider
+import com.midnight.kuira.core.compact.state.PrivateStateProvider
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test

@@ -2,7 +2,9 @@
 
 package com.midnight.kuira.core.compact
 
-// Re-export from core:crypto where these types now live.
-// Keeps existing imports working without breaking changes.
-typealias PrivateStateProvider = com.midnight.kuira.core.crypto.state.PrivateStateProvider
-typealias KeyStorePrivateStateProvider = com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider
+import com.midnight.kuira.core.compact.state.KeyStorePrivateStateProvider as KSProvider
+import com.midnight.kuira.core.compact.state.PrivateStateProvider as PSProvider
+
+// Re-export from the state subpackage for backward compatibility.
+typealias PrivateStateProvider = PSProvider
+typealias KeyStorePrivateStateProvider = KSProvider

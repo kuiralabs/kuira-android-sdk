@@ -1,7 +1,7 @@
 package com.midnight.kuira.core.compact
 
-import com.midnight.kuira.core.crypto.proving.LocalProver
-import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.compact.proving.LocalProver
+import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

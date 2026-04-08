@@ -160,8 +160,8 @@ dependencies {
     // QuickJS engine
     implementation(libs.quickjs.kt)
 
-    // Native crypto FFI (persistentHash, bigIntToValue, etc.)
-    implementation(project(":core:crypto"))
+    // Proving + state classes are in this module directly.
+    // Native .so comes from core:crypto's CMake (in-project) or jniLibs (standalone AAR).
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

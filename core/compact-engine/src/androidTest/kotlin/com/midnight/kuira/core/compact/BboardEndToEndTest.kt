@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
+import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -12,8 +12,8 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import com.midnight.kuira.core.crypto.state.KeyStorePrivateStateProvider
-import com.midnight.kuira.core.crypto.state.PrivateStateProvider
+import com.midnight.kuira.core.compact.state.KeyStorePrivateStateProvider
+import com.midnight.kuira.core.compact.state.PrivateStateProvider
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
