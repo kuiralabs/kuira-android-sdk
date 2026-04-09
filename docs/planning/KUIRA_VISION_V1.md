@@ -227,27 +227,36 @@ Kuira has a solid foundation with ~185.5 hours invested:
 | Phase 2F.1: Dust Tank | Complete | ~12h |
 | Phase 4B-Shielded: Shielded Balances | Complete | ~14h |
 | Phase 3: Shielded Transactions | Complete | ~22h |
-| Phase 5: DApp Connector | Not Started | est 25-35h |
-| Phase 6: UI & Polish | Not Started | est 15-20h |
+| Phase 4C: Local Proving | Complete | ~20h |
+| Phase 5: DApp Connector | Complete | ~30h |
+| Phase 6: Android DApp SDK | Complete | ~50h |
+| Phase 7: Agent Runtime | Not Started | est 20-30h |
+| Phase 8: Production Polish | Not Started | est 15-20h |
 
 **What's working:**
 - Unshielded transactions end-to-end (send/receive NIGHT)
-- **Shielded transactions end-to-end (send shielded NIGHT with ZK proofs)**
+- Shielded transactions end-to-end (send shielded NIGHT with ZK proofs)
 - Rust FFI bridge (Kotlin → C → Rust → midnight-zswap)
-- **Composable transfer primitives (7 FFI functions, ADR-001)**
+- Composable transfer primitives (7 FFI functions, ADR-001)
 - UTXO tracking via WebSocket subscriptions + Room database
-- **Shielded balance display with real-time WebSocket updates**
+- Shielded balance display with real-time WebSocket updates
 - Balance display with correct formatting (DUST: 15 decimals, NIGHT: 6 decimals)
 - Dust tank registration and status display
 - Key derivation (BIP-39/32, shielded JubJub keys, dust keys)
-- **Auto-detect shielded vs unshielded from recipient address**
-- **Shielded address validation (mn_shield-addr_* prefix, 64-byte payload)**
+- Auto-detect shielded vs unshielded from recipient address
+- Shielded address validation (mn_shield-addr_* prefix, 64-byte payload)
+- **Local ZK proving on phone (1.7s proof, no proof server needed)**
+- **DApp Connector — 17 ConnectedAPI methods, 4 transports, approval UI**
+- **Android DApp SDK — QuickJS contract execution + Rust FFI**
+- **MidnightContract.call() — one-line circuit calls for dApp devs**
+- **BBoard example app — full end-to-end contract interaction**
+- **Self-contained SDK module (core:compact-engine AAR, no Rust toolchain needed)**
 
 **What's remaining:**
-- **Local ZK Proving (Phase 4C)** — next priority, core infrastructure. Proves on phone, no proof server needed. See `docs/planning/LOCAL_PROVING_PLAN.md`
-- DApp connector (Phase 5) — enables dApp ecosystem
-- UI polish (Phase 6)
-- Agent Store infrastructure (Phases 7-10+)
+- Agent Runtime (Phase 7) — on-chain agent authorization via Compact contracts
+- Production Polish (Phase 8) — onboarding, settings, app store readiness
+- Agent Store infrastructure (Phases 9+)
+- Dust sync optimization (10min → 30s)
 
 ### Alignment: We're on the Right Track
 

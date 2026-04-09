@@ -348,10 +348,11 @@ EXISTING ROADMAP (wallet):
   Phase 4B (WebSocket/UTXO)  ✅ Complete
   Phase 2  (Unshielded Tx)   ✅ Complete
   Phase 2F (Dust)            ✅ Complete
-  Phase 4B-S (Shielded Bal)  → Next
-  Phase 3  (Shielded Tx)     → Next
-  Phase 5  (DApp Connector)  → Next
-  Phase 6  (UI Polish)       → Ongoing
+  Phase 4B-S (Shielded Bal)  ✅ Complete
+  Phase 3  (Shielded Tx)     ✅ Complete
+  Phase 4C (Local Proving)   ✅ Complete
+  Phase 5  (DApp Connector)  ✅ Complete
+  Phase 6  (Android DApp SDK)✅ Complete
 
 VISION PHASES (from KUIRA_VISION_V1.md):
   Phase 7  (Full DApp Connector)   — ConnectedAPI as Android Service

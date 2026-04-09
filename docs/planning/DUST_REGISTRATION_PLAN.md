@@ -1,6 +1,7 @@
 # Dust Registration & Tank Display (feature/dust)
 
-**Status:** Steps 0-4 ✅ Complete | Step 5 ⏳ | Step 6 ⏳
+**Status:** Steps 0-4 ✅ Complete | Step 5 ⏳ (Send flow integration) | Step 6 ⏳ (Dust sync optimization)
+**Last Updated:** 2026-04-08
 **Prerequisite for:** Phase 4B-Shielded (Steps 1-8)
 **Why:** Send flow fails — event version mismatch (v5→v9) + no dust registered. Makes Kuira self-sufficient (no Lace needed).
 

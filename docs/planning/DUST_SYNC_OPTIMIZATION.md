@@ -1,5 +1,8 @@
 # Dust Sync Optimization Strategy
 
+**Status:** Not Started — Phase 1 (WebSocket subscription) is the priority
+**Last Updated:** 2026-04-08
+
 ## Current Problem
 
 **Issue:** First transaction takes 10+ minutes due to inefficient dust event syncing.

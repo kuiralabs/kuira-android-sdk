@@ -1,6 +1,7 @@
 # Midnight Transaction Types — Complete Analysis
 
-**Date:** 2026-03-24
+**Date:** 2026-03-24 (Updated 2026-04-08)
+**Status:** Reference document — most capabilities now implemented via DApp Connector (Phase 5) and Android DApp SDK (Phase 6)
 **Sources:**
 - `midnight-libraries/midnight-dapp-connector-api/src/api.ts` — ConnectedAPI spec (v4.0.1)
 - `midnight-libraries/midnight-wallet/packages/facade/src/index.ts` — WalletFacade implementation
@@ -23,7 +24,7 @@
 | DApp-initiated | `connectedAPI.makeTransfer(desiredOutputs[], { payFees })` |
 | Input type | `DesiredOutput { kind: 'shielded'\|'unshielded', type: TokenType, value: bigint, recipient: string }` |
 | Output | `UnprovenTransactionRecipe` → sign → prove → bind → submit |
-| Kuira status | **Unshielded only** (Phase 2). Shielded missing (Phase 3). |
+| Kuira status | ✅ **Complete** — Unshielded (Phase 2) + Shielded (Phase 3) |
 
 **CLI implementation** (`dapp-connector.ts:432-458`):
 - Parses `DesiredOutput[]` → groups by kind → converts to `CombinedTokenTransfer[]`
@@ -42,7 +43,7 @@
 | Who balances | **Wallet** — adds NIGHT inputs/outputs for fees, adds DUST fee payment |
 | Tx type received | `Transaction<SignatureEnabled, Proof, PreBinding>` (unsealed — proven but not bound) |
 | Tx type returned | `Transaction<SignatureEnabled, Proof, Binding>` (sealed — proven and bound) |
-| Kuira status | **Missing** — needs Rust FFI for tx deserialization/serialization |
+| Kuira status | ✅ **Complete** — via DApp Connector `balanceUnsealedTransaction` (Phase 5) |
 
 **CLI implementation** (`dapp-connector.ts:512-531`):
 ```
@@ -64,7 +65,7 @@
 | Who balances | **Wallet** — creates a separate balancing transaction, merges |
 | Tx type received | `Transaction<SignatureEnabled, Proof, Binding>` (sealed) |
 | When to use | When DApp wants wallet to balance in separate intent, or when tx doesn't have fallible sections |
-| Kuira status | **Missing** |
+| Kuira status | ✅ **Complete** — via DApp Connector `balanceSealedTransaction` (Phase 5) |
 
 **CLI implementation** (`dapp-connector.ts:534-553`): Same pattern as unsealed but uses `facade.balanceFinalizedTransaction()` and `deserializeSealed()`.
 
@@ -79,7 +80,7 @@
 | Inputs | `DesiredInput { kind: 'shielded'\|'unshielded', type: TokenType, value: bigint }` |
 | Outputs | `DesiredOutput[]` (same as transfers) |
 | Intent ID | `number \| 'random'` — controls transaction merging behavior |
-| Kuira status | **Missing** — not in any phase |
+| Kuira status | ✅ **Complete** — via DApp Connector `makeIntent` (Phase 5) |
 
 **CLI implementation** (`dapp-connector.ts:556-591`):
 - Converts `DesiredInput[]` → `CombinedSwapInputs { shielded?: Record, unshielded?: Record }`
@@ -113,7 +114,7 @@
 |--------|--------|
 | Who builds | **DApp** (or wallet via makeTransfer/balanceUnsealed) |
 | Wallet role | Pure relayer — deserializes, submits, tracks status |
-| Kuira status | **Partial** — we submit our own txs, but not arbitrary DApp-built txs |
+| Kuira status | ✅ **Complete** — via DApp Connector `submitTransaction` (Phase 5) |
 
 **CLI implementation** (`dapp-connector.ts:460-509`):
 - Receives hex string, prompts approval
@@ -130,7 +131,7 @@
 | Encodings | `'hex' \| 'base64' \| 'text'` (text = UTF-8 normalized) |
 | Key type | Only `'unshielded'` supported currently |
 | Returns | `{ data, signature, verifyingKey }` |
-| Kuira status | **Missing** |
+| Kuira status | ✅ **Complete** — via DApp Connector `signData` (Phase 5) |
 
 **CLI implementation** (`dapp-connector.ts:593-634`):
 - Decodes data based on encoding
@@ -146,7 +147,7 @@
 | Input | `KeyMaterialProvider { getZKIR, getProverKey, getVerifierKey }` |
 | Returns | `ProvingProvider { check, prove }` + `proverServerUri` |
 | CLI approach | Returns proof server URI — actual bidirectional proving not yet implemented |
-| Kuira status | **Missing** |
+| Kuira status | ✅ **Complete** — via DApp Connector `getProvingProvider` + local proving (Phase 4C + 5) |
 
 ### 10. Fee Estimation (`calculateTransactionFee` / `estimateTransactionFee`)
 
@@ -220,62 +221,21 @@ The CLI's `tx-inspect.ts` extracts human-readable details from serialized transa
 
 ---
 
-## Revised Phase Plan for Kuira
+## Phase Status (Updated 2026-04-08)
 
-### What's Missing (prioritized)
+> **All proposed phases below are now COMPLETE.** Phase 5 was implemented as a single effort (~30h)
+> with all 17 ConnectedAPI methods, 4 transport layers, and approval UI.
+> Phase 6 (Android DApp SDK) added contract execution on mobile.
+> See `docs/planning/archive/` for the completed implementation plans.
 
-| Priority | Capability | Estimated Hours | Dependency |
-|----------|-----------|----------------|------------|
-| **P0** | Phase 4B-Shielded (shielded balance tracking) | 8-12h | None |
-| **P0** | Phase 3 (shielded transfers) | 20-25h | Phase 4B-Shielded |
-| **P1** | Transaction Serialization FFI (deserialize unsealed/sealed/unproven hex) | 8-10h | None |
-| **P1** | DApp Connector Core (ConnectedAPI server — read methods + makeTransfer) | 10-12h | None |
-| **P1** | Transaction Balancing Service (balanceUnsealed + balanceSealed) | 8-10h | Tx Serde FFI |
-| **P2** | Swap/Intent Support (makeIntent / initSwap) | 6-8h | Balancing Service |
-| **P2** | Data Signing (signData) | 2-3h | None |
-| **P2** | Pending Tx Tracking + Auto-Revert | 4-6h | Balancing Service |
-| **P2** | Fee Estimation | 3-4h | Dust integration |
-| **P3** | Proving Provider delegation | 4-6h | Proof server |
-| **P3** | Dust Deregistration | 3-4h | Dust module |
-| **P3** | Tx Inspection (human-readable approval details) | 4-6h | Tx Serde FFI |
+### Remaining Gaps
 
-### Proposed Phase Restructure
-
-**Phase 5A: Transaction Serialization FFI** (8-10h)
-- Rust FFI functions: `deserialize_unsealed(hex)`, `deserialize_sealed(hex)`, `serialize_tx(tx)`
-- JNI bridge for these functions
-- Kotlin wrapper with type safety
-- This is the foundation for ALL connector write methods
-
-**Phase 5B: DApp Connector — Read Methods + Basic Writes** (12-15h)
-- Android Service with JSON-RPC over local WebSocket (same protocol as CLI)
-- All 9 read methods (balances, addresses, config, history, status)
-- `makeTransfer` (builds on existing Phase 2 transfer code)
-- `submitTransaction` (relay pre-built txs)
-- Biometric approval flow for write methods
-- Connection management (connect/disconnect)
-
-**Phase 5C: Contract Transaction Balancing** (10-14h)
-- `balanceUnsealedTransaction` — deserialize DApp tx, call facade equivalent, re-serialize
-- `balanceSealedTransaction` — same for sealed txs
-- Pending tx tracking per connection (with auto-revert)
-- Dust retry logic (same pattern as CLI)
-- This is where contract interactions actually work
-
-**Phase 5D: Swaps, Signing, and Utilities** (8-12h)
-- `makeIntent` / `initSwap` — swap/intent creation
-- `signData` — arbitrary data signing
-- `getProvingProvider` — proof server URI delegation
-- `hintUsage` — permission hints
-- Fee estimation methods
-
-**Phase 5E: DApp Approval UI** (6-8h)
-- Transaction inspection (human-readable details from tx hex)
-- Biometric confirmation dialogs
-- Connected DApps management screen
-- Transaction status notifications
-
-**Total revised Phase 5: 44-59h** (vs original 25-35h estimate)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Dust Deregistration | ❌ Not implemented | Low priority — no phase planned |
+| Fee Estimation | ❌ Not implemented | Internal wallet method, not in ConnectedAPI |
+| Dust Sync Optimization | ❌ Not implemented | See `DUST_SYNC_OPTIMIZATION.md` — 10min → 30s |
+| Send flow dust integration | ❌ Not implemented | "No dust" → redirect to DustScreen |
 
 ---
 

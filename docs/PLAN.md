@@ -4,7 +4,7 @@
 **Total Invested:** ~280h across completed phases
 **Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) ✅ Complete**
 
-**Last Updated:** April 7, 2026
+**Last Updated:** April 8, 2026
 
 ## Implementation Strategy
 
@@ -19,8 +19,9 @@
 8. ✅ **Phase 4C**: Local ZK proving (~20h) — 1.7s proof on emulator, no proof server needed
 
 9. ✅ **Phase 5**: DApp Connector (~30h) — ConnectedAPI, WebSocket, IPC, approval UI, 4 transport layers, bboard example
+10. ✅ **Phase 6**: Android DApp SDK (~50h) — QuickJS + Rust FFI for contract execution, self-contained SDK module
+
 **Next:**
-10. ⏭️ **Phase 6**: Android DApp SDK — QuickJS + Rust FFI for contract execution on mobile
 11. ⏭️ **Phase 7**: Agent Runtime — on-chain agent authorization via Compact contracts
 12. ⏭️ **Phase 8**: Production Polish — onboarding, settings, app store readiness
 
@@ -39,15 +40,15 @@
 | **Phase 3: Shielded Tx** | Private ZK transactions E2E | ~22h | ✅ Complete |
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
-| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | est 40-60h | ✅ Complete |
+| **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | ~50h | ✅ Complete |
 | **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
 | **Phase 8: Production Polish** | Onboarding, settings, app store | est 15-20h | ⏸️ Planned |
 
-**Invested:** ~280h | **Remaining:** ~75-110h to full production
+**Invested:** ~330h | **Remaining:** ~35-50h to full production
 
 ### Phase 5 Summary (Complete)
 
-98 unit tests + 32 device tests. See `docs/planning/DAPP_CONNECTOR_PLAN.md`.
+98 unit tests + 32 device tests. See `docs/planning/archive/DAPP_CONNECTOR_PLAN.md`.
 
 **Delivered:**
 - ConnectedAPIHandler — all 17 ConnectedAPI methods
@@ -60,7 +61,7 @@
 - `core:designsystem` module (theme + effects)
 - BBoard Android example (IPC-based dApp scaffold)
 
-### Phase 6 Sub-Steps (see `docs/planning/ANDROID_DAPP_SDK_PLAN.md`)
+### Phase 6 Sub-Steps (see `docs/planning/archive/ANDROID_DAPP_SDK_PLAN.md`)
 
 | Step | Goal | Status |
 |------|------|--------|
@@ -498,25 +499,10 @@ feature/balance/src/test/kotlin/.../
 
 ---
 
-## ⚠️ Phase 4B-Shielded: Shielded Balance Tracking
+## Phase 4B-Shielded: Shielded Balance Tracking ✅ COMPLETE (~14h)
 
-**Status:** ⏸️ **NOT STARTED** — Dust Registration complete (Phase 2F.1 ✅), ready to start
-**Estimate:** 8-12 hours
-**Priority:** HIGH — Required before Phase 3 (Shielded Transactions)
-
-### What Was Built (Phase 4B)
-✅ **Unshielded balances ONLY:**
-- `subscribeToUnshieldedTransactions(address)` — WebSocket subscription
-- `UnshieldedUtxoEntity` — Room database entity
-- `UnshieldedUtxoDao` — Database operations
-- `UnshieldedBalanceManager` — UTXO tracking
-- `BalanceViewModel` — UI state management
-- Balance display UI (Compose)
-
-### Why This Matters
-**Cannot implement Phase 3 (Shielded Transactions) without this:**
-- Need to track shielded UTXOs before spending them
-- Need to decrypt shielded notes with encryption keys from Phase 1B
+**Status:** ✅ **COMPLETE**
+See `docs/planning/archive/SHIELDED_IMPLEMENTATION_PLAN.md` for full details.
 - Need to display shielded balances to test transactions
 
 ### Dependency Order
