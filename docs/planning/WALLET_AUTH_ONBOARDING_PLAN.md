@@ -165,9 +165,11 @@ Screen 2: Biometric Setup
        - setInvalidatedByBiometricEnrollment(false) — see Biometric Enrollment Tradeoff below
     2. Generate BIP-39 mnemonic (24 words → 256-bit entropy) in memory
     3. Derive secp256k1 keys from mnemonic (BIP-32)
-    4. Cipher.init(ENCRYPT_MODE, masterKey) → wrap in CryptoObject
-    5. BiometricPrompt.authenticate(promptInfo, CryptoObject(cipher))
-       On success: authenticated cipher encrypts mnemonic entropy (32 bytes) → store ciphertext
+    4. Cipher.init(ENCRYPT_MODE, masterKey) — Keystore generates random IV
+       Wrap in CryptoObject(cipher)
+    5. BiometricPrompt.authenticate(promptInfo, cryptoObject)
+       On success: authenticated cipher encrypts mnemonic entropy (32 bytes)
+       Store: [cipher.iv + ciphertext + GCM auth tag] to local storage
     6. Wipe plaintext mnemonic + derived keys from memory
   
 Screen 3: Done
@@ -185,7 +187,7 @@ Screen 3: Done
 User taps "Send"
   → Enters amount, recipient
   → Taps "Confirm"
-  → BEFORE prompt: Cipher.init(DECRYPT_MODE, keystoreKey, ivSpec)
+  → BEFORE prompt: Cipher.init(DECRYPT_MODE, keystoreKey, GCMParameterSpec(128, savedIv))
     This calls KeyMint.beginOperation() which returns a challenge
   → Wrap cipher in CryptoObject(cipher)
   → BiometricPrompt.authenticate(promptInfo, cryptoObject)
@@ -322,8 +324,11 @@ This gives us the strongest possible security (TEE-level per-operation binding) 
 **The code pattern:**
 ```kotlin
 // 1. Init cipher with Keystore key — this calls beginOperation() in KeyMint
+//    For DECRYPT: must provide GCMParameterSpec with IV saved during encryption
+//    For ENCRYPT: Keystore generates random IV automatically (retrieve via cipher.iv after init)
 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-cipher.init(Cipher.DECRYPT_MODE, getKeystoreKey(), ivSpec)
+val gcmSpec = GCMParameterSpec(128, savedIv)  // 128-bit auth tag, IV from encryption
+cipher.init(Cipher.DECRYPT_MODE, getKeystoreKey(), gcmSpec)
 
 // 2. Wrap in CryptoObject and authenticate
 val cryptoObject = BiometricPrompt.CryptoObject(cipher)
@@ -337,6 +342,9 @@ override fun onAuthenticationSucceeded(result: AuthenticationResult) {
 }
 ```
 
+**Storage format for encrypted seed:** `[12-byte IV] + [ciphertext] + [16-byte GCM auth tag]`
+The IV must be saved alongside the ciphertext — it's needed for decryption. GCM IVs should be unique per encryption but are not secret.
+
 **Edge case: `KeyPermanentlyInvalidatedException`** — thrown during `cipher.init()` if the key has been permanently invalidated. With `setInvalidatedByBiometricEnrollment(false)`, new biometrics won't trigger this. Exact remaining triggers are not fully documented but likely include: screen lock removal, device factory reset, or security downgrade. Recovery: decrypt seed from backup (PRF or password), then recreate Keystore key and re-encrypt seed on the device.
 
 **Sources:** AOSP [HardwareAuthToken.aidl](https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android16-release/security/keymint/aidl/android/hardware/security/keymint/HardwareAuthToken.aidl), [Android Developers Blog: Using BiometricPrompt with CryptoObject](https://medium.com/androiddevelopers/using-biometricprompt-with-cryptoobject-how-and-why-aace500ccdb7), AndroidX Biometric [1.1.0-alpha02 release notes](https://developer.android.com/jetpack/androidx/releases/biometric).
@@ -346,20 +354,30 @@ override fun onAuthenticationSucceeded(result: AuthenticationResult) {
 Not all devices have StrongBox. **Fallback is NOT automatic** — must be handled explicitly:
 
 ```kotlin
-try {
-    keyGenerator.initialize(
-        KeyGenParameterSpec.Builder(alias, PURPOSE_ENCRYPT or PURPOSE_DECRYPT)
-            .setIsStrongBoxBacked(true)
-            .build()
-    )
-} catch (e: StrongBoxUnavailableException) {
-    // Explicit fallback to TEE
-    keyGenerator.initialize(
-        KeyGenParameterSpec.Builder(alias, PURPOSE_ENCRYPT or PURPOSE_DECRYPT)
-            // StrongBox not set — uses TEE by default
-            .build()
-    )
+fun generateMasterKey(alias: String): SecretKey {
+    val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+    
+    fun buildSpec(strongBox: Boolean) = KeyGenParameterSpec.Builder(
+        alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+    ).apply {
+        setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+        setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+        setKeySize(256)
+        setUserAuthenticationParameters(0, 
+            KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL)
+        setInvalidatedByBiometricEnrollment(false)
+        if (strongBox) setIsStrongBoxBacked(true)
+    }.build()
+    
+    return try {
+        keyGenerator.init(buildSpec(strongBox = true))
+        keyGenerator.generateKey()
+    } catch (e: StrongBoxUnavailableException) {
+        keyGenerator.init(buildSpec(strongBox = false))  // Fallback to TEE
+        keyGenerator.generateKey()
+    }
 }
+```
 ```
 
 Fallback chain:
@@ -441,7 +459,7 @@ Wallet authentication and key protection layer.
 **Key classes:**
 - `WalletKeyManager` — master key generation + biometric binding via Android Keystore
 - `SeedVault` — two-layer seed storage: (1) local: encrypt with Keystore master key (device-bound), (2) backup: encrypt with PRF or password-derived key (transferable)
-- `BiometricGate` — wraps BiometricPrompt + CryptoObject for per-use auth with PIN fallback (API 30+). Cipher.init() before authenticate(), doFinal() in onAuthenticationSucceeded().
+- `BiometricGate` — wraps BiometricPrompt + CryptoObject for per-use auth with PIN fallback (API 30+). Cipher.init() before authenticate(), doFinal() in onAuthenticationSucceeded(). Callback runs on main thread executor. **⚠️ Implementation note:** BiometricPrompt requires `FragmentActivity`, but our activities extend `ComponentActivity` (which does NOT extend FragmentActivity). Must either: (a) change `MainActivity` to extend `FragmentActivity`, or (b) add `androidx.fragment` dependency and use `FragmentActivity` for auth screens specifically.
 - `SecurityCapabilities` — detect StrongBox, TEE, biometric types available
 
 ### 2. `core:backup` Module (new)
@@ -525,7 +543,7 @@ Root Key (Secure Enclave, biometric-gated)
   │     - W3C Verifiable Credential format
   │     - Scoped: only this contract, 100 tNIGHT limit
   │     - Expires: 7 days
-  │     - Stored in: Google Wallet / credential provider
+  │     - Stored in: Kuira app / credential holder apps (NOT Google Wallet — custom VCs not supported)
   │
   ├── Access Key VC for Employee B
   │     - Scoped: treasury operations only
@@ -546,7 +564,7 @@ Instead of Tempo's proprietary access key format, the CTO envisions using standa
 |----------|------|
 | **W3C Verifiable Credentials Data Model 2.0** | Format for access key credentials — extensible, portable, interoperable |
 | **OpenID4VCI** (OpenID for Verifiable Credential Issuance) | Protocol for issuing credentials — but used locally via Digital Credentials API, NOT over HTTPS |
-| **Digital Credentials API** | Browser/platform API for requesting + issuing credentials — Android routes to wallet app |
+| **Digital Credentials API** | Browser/platform API for credential presentation (holder → verifier). ⚠️ Does NOT support issuance — see corrections below. |
 
 ### Credential Structure (from CTO analysis)
 
@@ -718,7 +736,7 @@ The credential landscape is converging around three format standards and two pro
 | **OpenID4VCI** | Credential *issuance* (issuer → holder) | HTTPS or Digital Credentials API |
 | **OpenID4VP** | Credential *presentation* (holder → verifier) | HTTPS or Digital Credentials API |
 
-Both can be sent over the **Digital Credentials API** instead of HTTPS — this is exactly what the CTO proposes for local secure enclave issuance.
+**OpenID4VP** (presentation) can be sent over the Digital Credentials API instead of HTTPS. **OpenID4VCI** (issuance) is NOT natively supported by the Android DC API — the DC API only handles presentation flows. The CTO's local issuance proposal would need a workaround (see Access Key section above).
 
 ### Platform Support
 
