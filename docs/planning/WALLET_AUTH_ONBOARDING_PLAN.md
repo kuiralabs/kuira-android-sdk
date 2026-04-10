@@ -443,6 +443,46 @@ PRF on Android ONLY works when Google Password Manager is the active provider. I
 
 ---
 
+## Implementation Steps (MVP — Tier 1 Core Auth)
+
+### Step 1: Module Setup + FragmentActivity
+
+Create `core:auth` module with `build.gradle.kts`. Dependencies: AndroidX biometric, security-crypto, Keystore APIs. minSdk 30 (required for `setUserAuthenticationParameters`). Register in `settings.gradle.kts`. Change `MainActivity` (and approval activities) from `ComponentActivity` to `FragmentActivity` — required by BiometricPrompt.
+
+### Step 2: SecurityCapabilities
+
+Detect device hardware security: StrongBox availability (`FEATURE_STRONGBOX_KEYSTORE`), TEE, biometric types (Class 2 vs 3 via `BiometricManager.canAuthenticate()`), whether screen lock is set. This informs all subsequent components about what the device can do.
+
+### Step 3: WalletKeyManager
+
+Master key lifecycle in Android Keystore. Generate AES-256 key with StrongBox (catch `StrongBoxUnavailableException` → TEE fallback). Configure per-use auth (`duration=0`), `AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL`, `setInvalidatedByBiometricEnrollment(false)`. Block modes GCM, padding NONE. Provide key existence check, key deletion, and security level reporting (`KeyInfo`).
+
+### Step 4: BiometricGate
+
+Wraps BiometricPrompt + CryptoObject flow. Encrypt path: `Cipher.init(ENCRYPT)` → CryptoObject → authenticate → `doFinal()` in callback. Decrypt path: `Cipher.init(DECRYPT, GCMParameterSpec)` → CryptoObject → authenticate → `doFinal()` in callback. Handle `KeyPermanentlyInvalidatedException` (key recreate + re-encrypt from backup). Expose as suspend function using `suspendCancellableCoroutine`.
+
+### Step 5: SeedVault
+
+Two-layer encrypted seed storage. Local layer: encrypt mnemonic entropy (32B) + BIP-39 seed (64B) with Keystore master key via BiometricGate. Store as `[12B IV | ciphertext | 16B GCM tag]` in app-private file storage. Provide `storeSeed()` (encrypt + save), `loadSeed()` (biometric → decrypt → return), `hasSeed()` (check existence without decrypting). Wipe plaintext via `MemoryUtils.useAndWipe()`.
+
+### Step 6: Tests
+
+Unit tests: WalletKeyManager (key generation, StrongBox fallback logic, key existence), SeedVault (encrypt/decrypt round-trip, IV storage format, corrupt data handling), SecurityCapabilities (mock PackageManager). Instrumentation tests on device: BiometricGate with real Keystore + biometric (manual test — can't automate biometric in CI). Integration: end-to-end create → store → retrieve → wipe cycle.
+
+### Step 7: Onboarding UI
+
+`feature:onboarding` module. Welcome screen → biometric enrollment check → wallet creation. Orchestrates: generate mnemonic (BIP-39 via `core:crypto`), derive keys, store via SeedVault (triggers first biometric), land on home screen. Optional "View recovery phrase" in settings (triggers biometric → decrypt entropy → reconstruct mnemonic → display). Compose UI following `core:designsystem` patterns.
+
+### Step 8: Wire Into Signing
+
+Integrate `BiometricGate` + `SeedVault` into the existing transaction send flow. Replace any current direct seed/key access with `SeedVault.loadSeed()` (which triggers biometric). Every send: biometric → decrypt → derive signing key → sign via Rust FFI → wipe. Update `feature:send` to depend on `core:auth`.
+
+### Step 9: Verify E2E
+
+Full flow on physical device: create wallet → fund → send transaction (biometric each time) → view recovery phrase → force stop app → reopen → biometric → wallet accessible. Verify StrongBox vs TEE path. Verify PIN fallback when biometric fails.
+
+---
+
 ## Components to Build
 
 ### 1. `core:auth` Module (new)
