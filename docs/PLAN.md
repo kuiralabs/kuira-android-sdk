@@ -2,9 +2,9 @@
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
 **Total Invested:** ~280h across completed phases
-**Status:** Phase 1-5 ✅ | **Phase 6 (Android DApp SDK) ✅ Complete**
+**Status:** Phase 1-6 ✅ | **Phase 8A (Auth & Onboarding) 🔧 Active**
 
-**Last Updated:** April 8, 2026
+**Last Updated:** April 9, 2026
 
 ## Implementation Strategy
 
@@ -22,8 +22,9 @@
 10. ✅ **Phase 6**: Android DApp SDK (~50h) — QuickJS + Rust FFI for contract execution, self-contained SDK module
 
 **Next:**
-11. ⏭️ **Phase 7**: Agent Runtime — on-chain agent authorization via Compact contracts
-12. ⏭️ **Phase 8**: Production Polish — onboarding, settings, app store readiness
+11. 🔧 **Phase 8A**: Wallet Auth & Onboarding — hardware-backed biometric auth, encrypted seed storage, 5-second wallet creation
+12. ⏭️ **Phase 7**: Agent Runtime — on-chain agent authorization via Compact contracts
+13. ⏭️ **Phase 8B**: Production Polish — settings, app store readiness
 
 ---
 
@@ -41,10 +42,11 @@
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
 | **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | ~50h | ✅ Complete |
+| **Phase 8A: Auth & Onboarding** | Hardware biometric auth, encrypted seed, wallet creation | est 15-20h | 🔧 Active |
 | **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
-| **Phase 8: Production Polish** | Onboarding, settings, app store | est 15-20h | ⏸️ Planned |
+| **Phase 8B: Production Polish** | Settings, app store readiness | est 10-15h | ⏸️ Planned |
 
-**Invested:** ~330h | **Remaining:** ~35-50h to full production
+**Invested:** ~330h | **Remaining:** ~45-65h to full production
 
 ### Phase 5 Summary (Complete)
 
@@ -76,6 +78,20 @@
 | 6I | Private state (AES-256-GCM) + ZK config (ProvingKeyManager) | ✅ |
 | 6J | BBoard e2e: execute → prove → balance → submit on localnet | ✅ |
 | 6K-DX | Developer API (`MidnightContract.call()`) + BBoard example app | ✅ |
+
+### Phase 8A Sub-Steps (see `docs/planning/WALLET_AUTH_ONBOARDING_PLAN.md`)
+
+| Step | Goal | Status |
+|------|------|--------|
+| 8A.1 | Module setup (`core:auth`) + change `MainActivity` to `FragmentActivity` | ⏳ |
+| 8A.2 | `SecurityCapabilities` — detect StrongBox, TEE, biometric class | ⏳ |
+| 8A.3 | `WalletKeyManager` — Keystore master key with StrongBox/TEE fallback | ⏳ |
+| 8A.4 | `BiometricGate` — BiometricPrompt + CryptoObject, per-use auth | ⏳ |
+| 8A.5 | `SeedVault` — two-layer encrypted seed storage (local + backup-ready) | ⏳ |
+| 8A.6 | Tests — unit + instrumentation for core:auth | ⏳ |
+| 8A.7 | `feature:onboarding` — wallet creation UI (5-second flow) | ⏳ |
+| 8A.8 | Wire auth into existing signing flow (`feature:send`) | ⏳ |
+| 8A.9 | E2E verification on physical device | ⏳ |
 
 ### Key Architecture Decisions
 
