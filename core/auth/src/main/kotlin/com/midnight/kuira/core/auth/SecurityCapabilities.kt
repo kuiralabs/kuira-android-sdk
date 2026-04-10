@@ -6,15 +6,17 @@ package com.midnight.kuira.core.auth
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Security level of the Keystore key backing.
@@ -35,7 +37,10 @@ enum class KeySecurityLevel {
  * Used by [WalletKeyManager] to determine the best available security level
  * and by the onboarding UI to inform users about their device's protection.
  */
-class SecurityCapabilities(private val context: Context) {
+@Singleton
+class SecurityCapabilities @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     private val biometricManager = BiometricManager.from(context)
 
@@ -80,15 +85,7 @@ class SecurityCapabilities(private val context: Context) {
      * @return The security level, or null if the key doesn't exist
      */
     fun getKeySecurityLevel(alias: String): KeySecurityLevel? {
-        val keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
-
-        val entry = keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry ?: return null
-        val key: SecretKey = entry.secretKey
-
-        val factory = SecretKeyFactory.getInstance(key.algorithm, "AndroidKeyStore")
-        val keyInfo = factory.getKeySpec(key, KeyInfo::class.java) as KeyInfo
-
+        val keyInfo = getKeyInfo(alias) ?: return null
         return when (keyInfo.securityLevel) {
             KeyProperties.SECURITY_LEVEL_STRONGBOX -> KeySecurityLevel.STRONGBOX
             KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> KeySecurityLevel.TEE
@@ -103,6 +100,12 @@ class SecurityCapabilities(private val context: Context) {
      * @return true if hardware-enforced, false if software-only, null if key doesn't exist
      */
     fun isAuthEnforcedByHardware(alias: String): Boolean? {
+        val keyInfo = getKeyInfo(alias) ?: return null
+        @Suppress("DEPRECATION")
+        return keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware
+    }
+
+    private fun getKeyInfo(alias: String): KeyInfo? {
         val keyStore = KeyStore.getInstance("AndroidKeyStore")
         keyStore.load(null)
 
@@ -110,9 +113,6 @@ class SecurityCapabilities(private val context: Context) {
         val key: SecretKey = entry.secretKey
 
         val factory = SecretKeyFactory.getInstance(key.algorithm, "AndroidKeyStore")
-        val keyInfo = factory.getKeySpec(key, KeyInfo::class.java) as KeyInfo
-
-        @Suppress("DEPRECATION")
-        return keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware
+        return factory.getKeySpec(key, KeyInfo::class.java) as KeyInfo
     }
 }

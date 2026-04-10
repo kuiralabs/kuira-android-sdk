@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.google.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -47,6 +49,10 @@ dependencies {
 
     // Fragment (required by BiometricPrompt)
     implementation(libs.androidx.fragment.ktx)
+
+    // Hilt for dependency injection
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

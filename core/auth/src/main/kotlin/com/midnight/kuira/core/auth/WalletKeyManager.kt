@@ -12,6 +12,8 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Manages the AES-256 master key in Android Keystore.
@@ -24,7 +26,8 @@ import javax.crypto.spec.GCMParameterSpec
  * The key supports both BIOMETRIC_STRONG and DEVICE_CREDENTIAL (PIN/pattern),
  * with CryptoObject binding for TEE-level per-operation enforcement (API 30+).
  */
-class WalletKeyManager {
+@Singleton
+class WalletKeyManager @Inject constructor() {
 
     companion object {
         const val MASTER_KEY_ALIAS = "kuira_master_key"
@@ -35,10 +38,10 @@ class WalletKeyManager {
         private const val KEY_SIZE = 256
 
         // AES-GCM standard: 12-byte IV, 128-bit (16-byte) auth tag
-        private const val GCM_IV_LENGTH = 12
+        const val GCM_IV_LENGTH = 12
         const val GCM_TAG_LENGTH = 128 // bits
 
-        private const val TRANSFORMATION = "$KEY_ALGORITHM/$BLOCK_MODE/NoPadding"
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 
     private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -78,10 +81,10 @@ class WalletKeyManager {
      * Creates a Cipher initialized for encryption with the master key.
      *
      * The returned cipher has a Keystore-generated random IV accessible via [Cipher.getIV].
-     * Wrap this in a [BiometricPrompt.CryptoObject] before authenticating.
+     * Wrap this in a `BiometricPrompt.CryptoObject` before authenticating.
      *
      * After successful biometric auth, call [Cipher.doFinal] with the plaintext.
-     * Store the result as: [IV (12 bytes)] + [ciphertext + GCM tag (16 bytes)]
+     * Store the result as: `[IV (12 bytes)] + [ciphertext + GCM tag (16 bytes)]`
      */
     fun cipherForEncrypt(): Cipher {
         val key = getKey()
