@@ -7,6 +7,7 @@ package com.midnight.kuira.core.auth
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -57,18 +58,18 @@ class SeedVaultInstrumentedTest {
     }
 
     @Test
-    fun hasSeed_returnsFalse_whenNoSeedStored() {
+    fun hasSeed_returnsFalse_whenNoSeedStored() = runBlocking {
         assertFalse(seedVault.hasSeed())
     }
 
     @Test
-    fun hasSeed_returnsTrue_whenFileExists() {
+    fun hasSeed_returnsTrue_whenFileExists() = runBlocking {
         seedFile.writeBytes(ByteArray(124))
         assertTrue(seedVault.hasSeed())
     }
 
     @Test
-    fun deleteSeed_removesFile() {
+    fun deleteSeed_removesFile() = runBlocking {
         seedFile.writeBytes(ByteArray(124))
         assertTrue(seedVault.hasSeed())
 
@@ -77,14 +78,14 @@ class SeedVaultInstrumentedTest {
     }
 
     @Test
-    fun deleteSeed_isIdempotent() {
+    fun deleteSeed_isIdempotent() = runBlocking {
         seedVault.deleteSeed()
         seedVault.deleteSeed()
         assertFalse(seedVault.hasSeed())
     }
 
     @Test
-    fun deleteSeed_cleansUpStaleTempFile() {
+    fun deleteSeed_cleansUpStaleTempFile() = runBlocking {
         // Simulate a crashed write: temp file exists but main file doesn't
         tempFile.writeBytes(ByteArray(124))
         assertTrue(tempFile.exists())

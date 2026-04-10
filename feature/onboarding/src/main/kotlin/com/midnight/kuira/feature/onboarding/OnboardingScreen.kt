@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,18 +37,22 @@ import com.midnight.kuira.core.designsystem.theme.MidnightColors
  * Uses [DuskScaffold] + reusable Dusk components so it stays visually
  * consistent with the approval UI and future auth screens.
  *
+ * @param activity The hosting FragmentActivity, required by BiometricPrompt.
+ *   Passed explicitly (rather than dug out of LocalContext) to make the
+ *   host contract visible at the call site.
  * @param onWalletReady Invoked when the wallet is created and the user
  *   should be taken to the home screen.
  */
 @Composable
 fun OnboardingScreen(
+    activity: FragmentActivity,
     onWalletReady: () -> Unit,
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Skip onboarding if a wallet already exists
+    // Skip onboarding if a wallet already exists (suspend to avoid main-thread I/O)
     LaunchedEffect(Unit) {
         if (viewModel.hasExistingWallet()) {
             onWalletReady()
@@ -66,19 +71,13 @@ fun OnboardingScreen(
             Column(modifier = Modifier.alpha(contentAlpha)) {
                 when (val state = uiState) {
                     is OnboardingUiState.Welcome ->
-                        WelcomeContent(
-                            onCreate = {
-                                val activity = context as? FragmentActivity
-                                    ?: error("OnboardingScreen must be hosted in a FragmentActivity")
-                                viewModel.createWallet(activity)
-                            },
-                        )
+                        WelcomeContent(onCreate = { viewModel.createWallet(activity) })
 
                     is OnboardingUiState.CheckingAuth ->
                         StatusContent(
-                            label = "preparing",
-                            headline = "checking device",
-                            detail = "verifying secure hardware is available",
+                            label = stringResource(R.string.onboarding_checking_label),
+                            headline = stringResource(R.string.onboarding_checking_headline),
+                            detail = stringResource(R.string.onboarding_checking_detail),
                         )
 
                     is OnboardingUiState.NeedsAuthSetup ->
@@ -98,21 +97,21 @@ fun OnboardingScreen(
 
                     is OnboardingUiState.CreatingWallet ->
                         StatusContent(
-                            label = "securing",
-                            headline = "creating wallet",
-                            detail = "your keys are being encrypted with hardware-backed security",
+                            label = stringResource(R.string.onboarding_creating_label),
+                            headline = stringResource(R.string.onboarding_creating_headline),
+                            detail = stringResource(R.string.onboarding_creating_detail),
                         )
 
                     is OnboardingUiState.Success ->
                         StatusContent(
-                            label = "ready",
-                            headline = "wallet created",
-                            detail = "opening your wallet…",
+                            label = stringResource(R.string.onboarding_success_label),
+                            headline = stringResource(R.string.onboarding_success_headline),
+                            detail = stringResource(R.string.onboarding_success_detail),
                         )
 
                     is OnboardingUiState.Error ->
                         ErrorContent(
-                            message = state.message,
+                            errorMessage = state.message,
                             onRetry = viewModel::reset,
                         )
                 }
@@ -124,7 +123,7 @@ fun OnboardingScreen(
 @Composable
 private fun WelcomeContent(onCreate: () -> Unit) {
     Text(
-        text = "welcome",
+        text = stringResource(R.string.onboarding_welcome_label),
         color = MidnightColors.LightMuted,
         fontSize = 11.sp,
         letterSpacing = 3.sp,
@@ -132,7 +131,7 @@ private fun WelcomeContent(onCreate: () -> Unit) {
     Spacer(modifier = Modifier.height(20.dp))
 
     Text(
-        text = "your phone is\nyour hardware wallet",
+        text = stringResource(R.string.onboarding_welcome_headline),
         color = MidnightColors.Light,
         fontSize = 22.sp,
         fontWeight = FontWeight.W300,
@@ -140,14 +139,14 @@ private fun WelcomeContent(onCreate: () -> Unit) {
     )
     Spacer(modifier = Modifier.height(24.dp))
 
-    DuskBulletLine("keys encrypted in hardware")
-    DuskBulletLine("biometric-gated every signature")
-    DuskBulletLine("no seed phrase to write down")
+    DuskBulletLine(stringResource(R.string.onboarding_feature_keys))
+    DuskBulletLine(stringResource(R.string.onboarding_feature_biometric))
+    DuskBulletLine(stringResource(R.string.onboarding_feature_no_phrase))
 
     Spacer(modifier = Modifier.height(48.dp))
 
     DuskPrimaryButton(
-        text = "create wallet",
+        text = stringResource(R.string.onboarding_create_wallet),
         onClick = onCreate,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -187,7 +186,7 @@ private fun NeedsAuthSetupContent(
     onBack: () -> Unit,
 ) {
     Text(
-        text = "setup required",
+        text = stringResource(R.string.onboarding_setup_label),
         color = MidnightColors.LightMuted,
         fontSize = 11.sp,
         letterSpacing = 3.sp,
@@ -195,14 +194,14 @@ private fun NeedsAuthSetupContent(
     Spacer(modifier = Modifier.height(20.dp))
 
     Text(
-        text = "enable device security",
+        text = stringResource(R.string.onboarding_setup_headline),
         color = MidnightColors.Light,
         fontSize = 18.sp,
         fontWeight = FontWeight.W300,
     )
     Spacer(modifier = Modifier.height(4.dp))
     Text(
-        text = "kuira needs a biometric or screen lock to encrypt your wallet keys",
+        text = stringResource(R.string.onboarding_setup_detail),
         color = MidnightColors.LightMuted,
         fontSize = 13.sp,
         lineHeight = 18.sp,
@@ -211,17 +210,17 @@ private fun NeedsAuthSetupContent(
     Spacer(modifier = Modifier.height(48.dp))
 
     DuskButtonRow(
-        secondaryText = "back",
-        primaryText = "open settings",
+        secondaryText = stringResource(R.string.onboarding_setup_back),
+        primaryText = stringResource(R.string.onboarding_setup_open_settings),
         onSecondary = onBack,
         onPrimary = onOpenSettings,
     )
 }
 
 @Composable
-private fun ErrorContent(message: String, onRetry: () -> Unit) {
+private fun ErrorContent(errorMessage: OnboardingErrorMessage, onRetry: () -> Unit) {
     Text(
-        text = "something went wrong",
+        text = stringResource(R.string.onboarding_error_label),
         color = MidnightColors.LightMuted,
         fontSize = 11.sp,
         letterSpacing = 3.sp,
@@ -229,7 +228,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
     Spacer(modifier = Modifier.height(20.dp))
 
     Text(
-        text = message,
+        text = stringResource(errorMessage.resId, *errorMessage.formatArgs.toTypedArray()),
         color = MidnightColors.Light,
         fontSize = 16.sp,
         fontWeight = FontWeight.W300,
@@ -239,7 +238,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
     Spacer(modifier = Modifier.height(48.dp))
 
     DuskPrimaryButton(
-        text = "try again",
+        text = stringResource(R.string.onboarding_error_retry),
         onClick = onRetry,
         modifier = Modifier.fillMaxWidth(),
     )

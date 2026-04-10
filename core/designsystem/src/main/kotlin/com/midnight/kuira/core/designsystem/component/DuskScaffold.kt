@@ -57,6 +57,21 @@ private object DuskEntrance {
 }
 
 /**
+ * Layout constants for the Dusk theme. Pulled into one place so all
+ * Dusk-styled screens stay visually consistent without magic numbers.
+ */
+private object DuskLayout {
+    val BrandTopPadding = 80.dp
+    val SheetCornerRadius = 24.dp
+    val SheetHorizontalPadding = 32.dp
+    val SheetTopPadding = 20.dp
+    val SheetBottomPadding = 40.dp
+    val DragHandleWidth = 28.dp
+    val DragHandleHeight = 1.dp
+    val DragHandleSpacing = 32.dp
+}
+
+/**
  * Full-screen Dusk-themed scaffold with animated void + stars + KUIRA brand
  * and an optional bottom sheet for content.
  *
@@ -133,7 +148,7 @@ fun DuskScaffold(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 80.dp)
+                    .padding(top = DuskLayout.BrandTopPadding)
                     .alpha(brandAlpha.value),
             ) {
                 KuiraMaterializeFrame(progress = 1f)
@@ -146,7 +161,12 @@ fun DuskScaffold(
                     .align(Alignment.BottomCenter)
                     .offset(y = sheetOffset.value.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = DuskLayout.SheetCornerRadius,
+                            topEnd = DuskLayout.SheetCornerRadius,
+                        )
+                    )
                     .background(MidnightColors.VoidSoft)
                     // Block tap-through so sheet content doesn't trigger dismiss
                     .clickable(
@@ -155,17 +175,22 @@ fun DuskScaffold(
                         enabled = false,
                         onClick = {},
                     )
-                    .padding(start = 32.dp, end = 32.dp, top = 20.dp, bottom = 40.dp),
+                    .padding(
+                        start = DuskLayout.SheetHorizontalPadding,
+                        end = DuskLayout.SheetHorizontalPadding,
+                        top = DuskLayout.SheetTopPadding,
+                        bottom = DuskLayout.SheetBottomPadding,
+                    ),
             ) {
                 // Drag handle
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .width(28.dp)
-                        .height(1.dp)
+                        .width(DuskLayout.DragHandleWidth)
+                        .height(DuskLayout.DragHandleHeight)
                         .background(MidnightColors.LightFaint),
                 )
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskLayout.DragHandleSpacing))
 
                 sheet(contentAlpha.value)
             }

@@ -13,10 +13,13 @@ import org.junit.Test
  * Unit tests for the [OnboardingUiState] sealed interface.
  *
  * State transitions driven by [OnboardingViewModel] are covered by
- * instrumentation tests because they require a live FragmentActivity
- * for the biometric prompt. These tests verify the state contract only.
+ * [OnboardingViewModelTest].
  */
 class OnboardingUiStateTest {
+
+    private val sampleMessage = OnboardingErrorMessage(
+        resId = R.string.onboarding_error_auth_cancelled,
+    )
 
     @Test
     fun `Welcome is a singleton object`() {
@@ -26,23 +29,37 @@ class OnboardingUiStateTest {
     }
 
     @Test
-    fun `Error carries a message`() {
-        val error = OnboardingUiState.Error("Authentication cancelled")
-        assertEquals("Authentication cancelled", error.message)
+    fun `Error carries a localizable message`() {
+        val error = OnboardingUiState.Error(sampleMessage)
+        assertEquals(R.string.onboarding_error_auth_cancelled, error.message.resId)
     }
 
     @Test
     fun `Error instances with different messages are not equal`() {
-        val a = OnboardingUiState.Error("Cancelled")
-        val b = OnboardingUiState.Error("Locked out")
+        val a = OnboardingUiState.Error(
+            OnboardingErrorMessage(R.string.onboarding_error_auth_cancelled)
+        )
+        val b = OnboardingUiState.Error(
+            OnboardingErrorMessage(R.string.onboarding_error_locked_out)
+        )
         assertNotEquals(a, b)
     }
 
     @Test
     fun `Error instances with same message are equal (data class)`() {
-        val a = OnboardingUiState.Error("Same")
-        val b = OnboardingUiState.Error("Same")
+        val a = OnboardingUiState.Error(sampleMessage)
+        val b = OnboardingUiState.Error(sampleMessage)
         assertEquals(a, b)
+    }
+
+    @Test
+    fun `OnboardingErrorMessage carries format args`() {
+        val msg = OnboardingErrorMessage(
+            resId = R.string.onboarding_error_auth_failed,
+            formatArgs = listOf("hardware failure"),
+        )
+        assertEquals(R.string.onboarding_error_auth_failed, msg.resId)
+        assertEquals(listOf("hardware failure"), msg.formatArgs)
     }
 
     @Test
@@ -55,7 +72,7 @@ class OnboardingUiStateTest {
             OnboardingUiState.NeedsAuthSetup,
             OnboardingUiState.CreatingWallet,
             OnboardingUiState.Success,
-            OnboardingUiState.Error("any"),
+            OnboardingUiState.Error(sampleMessage),
         )
         assertEquals(6, states.size)
     }

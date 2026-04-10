@@ -101,27 +101,41 @@ class SeedVault(
 
     /**
      * Whether an encrypted seed has been persisted.
+     *
+     * Performs file I/O — must be called from a coroutine.
      */
-    fun hasSeed(): Boolean = seedFile.exists()
+    suspend fun hasSeed(): Boolean = withContext(Dispatchers.IO) {
+        seedFile.exists()
+    }
 
     /**
      * Encrypts and stores the wallet seed material.
      *
      * Shows a biometric prompt to unlock the Keystore master key, encrypts
      * the concatenated entropy+seed with AES-256-GCM, and writes the result
-     * atomically to app-private storage. The plaintext is NOT wiped by this
-     * method — the caller is responsible for calling [PlaintextSeed.wipe] after.
+     * atomically to app-private storage.
+     *
+     * **The [seedProducer] lambda is invoked ONLY AFTER biometric auth succeeds**,
+     * which minimizes the time the plaintext seed is resident in memory. If the
+     * user cancels the prompt, [seedProducer] is never called.
+     *
+     * The returned [PlaintextSeed] is wiped automatically after encryption —
+     * callers should NOT hold their own reference to it.
      *
      * **Exception propagation:** [android.security.keystore.KeyPermanentlyInvalidatedException]
      * may be thrown synchronously from the Keystore if the key was invalidated.
      *
      * @param activity The FragmentActivity hosting the biometric prompt
-     * @param seed The plaintext seed to encrypt and store
+     * @param seedProducer Lambda that produces the plaintext seed. Called once,
+     *   immediately after successful biometric authentication.
      * @throws IllegalStateException if a seed already exists (call [deleteSeed] first)
      * @throws AuthenticationCancelledException if the user cancelled the biometric prompt
      * @throws AuthenticationFailedException if biometric authentication failed
      */
-    suspend fun storeSeed(activity: FragmentActivity, seed: PlaintextSeed) {
+    suspend fun storeSeed(
+        activity: FragmentActivity,
+        seedProducer: () -> PlaintextSeed
+    ) {
         check(!hasSeed()) { "Seed already exists. Delete it first." }
 
         val authenticated = biometricGate.authenticateForEncrypt(
@@ -129,6 +143,9 @@ class SeedVault(
             title = "Secure your wallet",
             subtitle = "Authenticate to encrypt your wallet keys"
         )
+
+        // Produce the plaintext ONLY AFTER auth succeeds, minimizing exposure window.
+        val seed = seedProducer()
 
         val plaintext = ByteArray(PlaintextSeed.PLAINTEXT_SIZE)
         try {
@@ -152,6 +169,8 @@ class SeedVault(
             }
         } finally {
             plaintext.fill(0)
+            // Wipe the caller's plaintext too — they should not be holding a reference
+            seed.wipe()
         }
     }
 

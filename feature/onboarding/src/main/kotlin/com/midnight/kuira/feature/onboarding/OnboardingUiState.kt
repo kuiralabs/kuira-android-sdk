@@ -4,6 +4,20 @@
 
 package com.midnight.kuira.feature.onboarding
 
+import androidx.annotation.StringRes
+
+/**
+ * Error message that carries a string resource ID (for localization) plus
+ * optional format args. The UI resolves it via `stringResource(id, *args)`.
+ *
+ * This keeps user-facing copy out of the ViewModel entirely — the ViewModel
+ * references resources by ID only, the UI layer handles the actual text.
+ */
+data class OnboardingErrorMessage(
+    @param:StringRes val resId: Int,
+    val formatArgs: List<String> = emptyList(),
+)
+
 /**
  * State machine for the wallet onboarding flow.
  *
@@ -50,6 +64,7 @@ sealed interface OnboardingUiState {
 
     /**
      * Creation failed. The user should be able to retry.
+     * The [message] references a string resource for localization.
      */
-    data class Error(val message: String) : OnboardingUiState
+    data class Error(val message: OnboardingErrorMessage) : OnboardingUiState
 }

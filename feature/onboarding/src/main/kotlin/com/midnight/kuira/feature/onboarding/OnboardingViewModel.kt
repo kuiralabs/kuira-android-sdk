@@ -17,6 +17,7 @@ import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,19 +30,24 @@ import javax.inject.Inject
  * **Responsibilities:**
  * - Check device auth capabilities before creating a wallet
  * - Orchestrate the wallet creation sequence:
- *   1. Generate BIP-39 mnemonic
- *   2. Derive 64-byte BIP-39 seed (PBKDF2)
- *   3. Generate Keystore master key (StrongBox → TEE fallback)
- *   4. Store encrypted seed via [SeedVault] (triggers biometric prompt)
- *   5. Wipe plaintext from memory
+ *   1. Generate Keystore master key (StrongBox → TEE fallback)
+ *   2. Trigger biometric prompt via [SeedVault.storeSeed]
+ *   3. After auth succeeds: generate BIP-39 mnemonic + derive entropy + seed
+ *   4. Store encrypted seed; plaintext is wiped immediately
  * - Expose a [StateFlow] of [OnboardingUiState] for the UI
  *
+ * **Lifecycle note:**
+ * [createWallet] takes a live [FragmentActivity] captured in the coroutine
+ * closure for the duration of the biometric prompt. Configuration changes
+ * (rotation, backgrounding) during the 1–2 seconds the prompt is visible
+ * will result in the operation failing when the activity is torn down.
+ * This is acceptable for the onboarding flow because it's short-lived and
+ * the user can retry from a clean state via [reset].
+ *
  * **Security notes:**
- * - The plaintext mnemonic only exists as a local `String` inside
- *   [createWallet] for the time it takes to derive entropy + seed.
- *   String immutability makes wiping impossible, so we minimize its lifetime.
- * - Entropy and seed byte arrays are wrapped in [PlaintextSeed] which has
- *   a [PlaintextSeed.wipe] method — called in the `finally` block.
+ * - The plaintext mnemonic is generated LAZILY inside [SeedVault.storeSeed],
+ *   only after biometric auth succeeds. This minimizes memory exposure.
+ * - Plaintext is wiped automatically inside SeedVault's finally block.
  */
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -54,17 +60,16 @@ class OnboardingViewModel @Inject constructor(
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
     /**
-     * Whether a wallet already exists on this device.
+     * Suspend check for whether a wallet already exists on this device.
      * Callers use this to skip onboarding for returning users.
      */
-    fun hasExistingWallet(): Boolean = seedVault.hasSeed()
+    suspend fun hasExistingWallet(): Boolean = seedVault.hasSeed()
 
     /**
      * Orchestrates the full wallet creation flow.
      *
-     * Caller must pass a live [FragmentActivity] so we can show the
-     * biometric prompt. Navigation to the home screen happens via the
-     * [OnboardingUiState.Success] state emission.
+     * Navigation to the home screen happens via the [OnboardingUiState.Success]
+     * state emission.
      */
     fun createWallet(activity: FragmentActivity) {
         viewModelScope.launch {
@@ -79,33 +84,73 @@ class OnboardingViewModel @Inject constructor(
             // Phase 2: create the wallet
             _uiState.value = OnboardingUiState.CreatingWallet
 
-            try {
-                if (!walletKeyManager.hasKey()) {
-                    walletKeyManager.generateKey()
-                }
-
-                val mnemonic = BIP39.generateMnemonic(wordCount = 24)
-                val entropy = BIP39.mnemonicToEntropy(mnemonic)
-                val seed = BIP39.mnemonicToSeed(mnemonic)
-                val plaintextSeed = PlaintextSeed(entropy, seed)
-
+            // Track whether we created the Keystore key this attempt so we can
+            // clean up if storeSeed fails. Prevents orphaning a Keystore key
+            // with no corresponding seed file.
+            val wasKeyCreatedThisAttempt: Boolean = if (!walletKeyManager.hasKey()) {
                 try {
-                    seedVault.storeSeed(activity, plaintextSeed)
-                    _uiState.value = OnboardingUiState.Success
-                } finally {
-                    // Wipe the plaintext as soon as it's persisted.
-                    plaintextSeed.wipe()
+                    walletKeyManager.generateKey()
+                    true
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    _uiState.value = OnboardingUiState.Error(
+                        OnboardingErrorMessage(
+                            resId = R.string.onboarding_error_generic,
+                            formatArgs = listOf(e.message ?: "key generation failed"),
+                        )
+                    )
+                    return@launch
                 }
+            } else {
+                false
+            }
+
+            try {
+                seedVault.storeSeed(activity) {
+                    // Produced ONLY after biometric auth succeeds
+                    val mnemonic = BIP39.generateMnemonic(wordCount = 24)
+                    val entropy = BIP39.mnemonicToEntropy(mnemonic)
+                    val seed = BIP39.mnemonicToSeed(mnemonic)
+                    PlaintextSeed(entropy, seed)
+                }
+                _uiState.value = OnboardingUiState.Success
+            } catch (e: CancellationException) {
+                // Coroutine cancelled (e.g., ViewModel cleared, scope cancelled).
+                // Must rethrow to preserve structured concurrency — do NOT treat
+                // as an error state.
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                throw e
             } catch (e: AuthenticationCancelledException) {
-                _uiState.value = OnboardingUiState.Error("Authentication cancelled")
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                _uiState.value = OnboardingUiState.Error(
+                    OnboardingErrorMessage(R.string.onboarding_error_auth_cancelled)
+                )
             } catch (e: AuthenticationLockedOutException) {
-                _uiState.value = OnboardingUiState.Error("Too many attempts. Try again in a moment.")
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                _uiState.value = OnboardingUiState.Error(
+                    OnboardingErrorMessage(R.string.onboarding_error_locked_out)
+                )
             } catch (e: AuthenticationPermanentlyLockedOutException) {
-                _uiState.value = OnboardingUiState.Error("Biometric locked. Use PIN to unlock.")
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                _uiState.value = OnboardingUiState.Error(
+                    OnboardingErrorMessage(R.string.onboarding_error_permanently_locked)
+                )
             } catch (e: AuthenticationFailedException) {
-                _uiState.value = OnboardingUiState.Error("Authentication failed: ${e.message}")
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                _uiState.value = OnboardingUiState.Error(
+                    OnboardingErrorMessage(
+                        resId = R.string.onboarding_error_auth_failed,
+                        formatArgs = listOf(e.message.orEmpty()),
+                    )
+                )
             } catch (e: Exception) {
-                _uiState.value = OnboardingUiState.Error("Could not create wallet: ${e.message}")
+                if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+                _uiState.value = OnboardingUiState.Error(
+                    OnboardingErrorMessage(
+                        resId = R.string.onboarding_error_generic,
+                        formatArgs = listOf(e.message ?: "unknown error"),
+                    )
+                )
             }
         }
     }
