@@ -45,12 +45,19 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
      * After calling [Cipher.doFinal], store the result as:
      * `[IV (12 bytes)] + [ciphertext + GCM auth tag (16 bytes)]`
      *
+     * **Exception propagation:**
+     * [android.security.keystore.KeyPermanentlyInvalidatedException] is thrown
+     * synchronously from [WalletKeyManager.cipherForEncrypt] BEFORE the biometric
+     * prompt is shown. The caller should catch it at the call site and trigger
+     * the key-recreation recovery flow.
+     *
      * @param activity The FragmentActivity hosting the biometric prompt
      * @param title Prompt title shown to the user
      * @param subtitle Optional subtitle (e.g., "Encrypt wallet seed")
      * @throws AuthenticationCancelledException if the user cancelled
-     * @throws AuthenticationFailedException if authentication failed
-     * @throws KeyPermanentlyInvalidatedException if the key was invalidated
+     * @throws AuthenticationLockedOutException if the device is temporarily locked out
+     * @throws AuthenticationPermanentlyLockedOutException if permanently locked out
+     * @throws AuthenticationFailedException for all other failures
      */
     suspend fun authenticateForEncrypt(
         activity: FragmentActivity,
@@ -64,13 +71,20 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
     /**
      * Authenticates the user and returns a cipher ready for decryption.
      *
+     * **Exception propagation:**
+     * [android.security.keystore.KeyPermanentlyInvalidatedException] is thrown
+     * synchronously from [WalletKeyManager.cipherForDecrypt] BEFORE the biometric
+     * prompt is shown. The caller should catch it at the call site and trigger
+     * the backup-restore recovery flow.
+     *
      * @param activity The FragmentActivity hosting the biometric prompt
      * @param iv The 12-byte IV stored alongside the ciphertext during encryption
      * @param title Prompt title shown to the user
      * @param subtitle Optional subtitle (e.g., "Unlock wallet")
      * @throws AuthenticationCancelledException if the user cancelled
-     * @throws AuthenticationFailedException if authentication failed
-     * @throws KeyPermanentlyInvalidatedException if the key was invalidated
+     * @throws AuthenticationLockedOutException if the device is temporarily locked out
+     * @throws AuthenticationPermanentlyLockedOutException if permanently locked out
+     * @throws AuthenticationFailedException for all other failures
      */
     suspend fun authenticateForDecrypt(
         activity: FragmentActivity,
@@ -105,14 +119,28 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 if (!cont.isActive) return
-                when (errorCode) {
+                val exception = when (errorCode) {
+                    // User-initiated cancellation. ERROR_NEGATIVE_BUTTON typically
+                    // won't fire in our config (DEVICE_CREDENTIAL is allowed, so
+                    // there's no negative button) but we handle it defensively.
                     BiometricPrompt.ERROR_USER_CANCELED,
                     BiometricPrompt.ERROR_NEGATIVE_BUTTON,
                     BiometricPrompt.ERROR_CANCELED ->
-                        cont.resumeWithException(AuthenticationCancelledException(errString.toString()))
+                        AuthenticationCancelledException(errString.toString())
+
+                    // Temporarily locked out after too many failed attempts.
+                    // Typically unlocks after 30 seconds.
+                    BiometricPrompt.ERROR_LOCKOUT ->
+                        AuthenticationLockedOutException(errString.toString())
+
+                    // Permanently locked out — requires device credential to reset.
+                    BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
+                        AuthenticationPermanentlyLockedOutException(errString.toString())
+
                     else ->
-                        cont.resumeWithException(AuthenticationFailedException("[$errorCode] $errString"))
+                        AuthenticationFailedException("[$errorCode] $errString")
                 }
+                cont.resumeWithException(exception)
             }
 
             override fun onAuthenticationFailed() {
@@ -124,7 +152,7 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
-            .apply { if (subtitle != null) setSubtitle(subtitle) }
+            .setSubtitle(subtitle)
             // Allow biometric + device credential (PIN/pattern/password)
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
@@ -149,6 +177,19 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
 class AuthenticationCancelledException(message: String) : Exception(message)
 
 /**
- * Thrown when biometric authentication fails (hardware error, lockout, etc.).
+ * Thrown when biometric authentication is temporarily locked out after too many
+ * failed attempts. Typically unlocks after ~30 seconds.
+ */
+class AuthenticationLockedOutException(message: String) : Exception(message)
+
+/**
+ * Thrown when biometric authentication is permanently locked out.
+ * User must authenticate with device credential (PIN/pattern/password) to reset.
+ */
+class AuthenticationPermanentlyLockedOutException(message: String) : Exception(message)
+
+/**
+ * Thrown when biometric authentication fails for any other reason
+ * (hardware error, no enrollment, etc.).
  */
 class AuthenticationFailedException(message: String) : Exception(message)
