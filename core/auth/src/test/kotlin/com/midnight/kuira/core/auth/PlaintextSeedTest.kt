@@ -5,8 +5,8 @@
 package com.midnight.kuira.core.auth
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -49,23 +49,37 @@ class PlaintextSeedTest {
     }
 
     @Test
-    fun `constructor rejects wrong entropy size`() {
-        try {
+    fun `constructor rejects entropy smaller than 32 bytes`() {
+        // 12-word mnemonic has 16 bytes of entropy — should be rejected
+        // because we standardized on 24-word (32 bytes) for maximum security
+        val exception = assertThrows(IllegalArgumentException::class.java) {
             PlaintextSeed(ByteArray(16), validSeed)
-            fail("Should have thrown IllegalArgumentException")
-        } catch (e: IllegalArgumentException) {
-            assertTrue(e.message.orEmpty().contains("Mnemonic entropy must be 32 bytes"))
         }
+        assertTrue(exception.message.orEmpty().contains("Mnemonic entropy must be 32 bytes"))
     }
 
     @Test
-    fun `constructor rejects wrong seed size`() {
-        try {
-            PlaintextSeed(validEntropy, ByteArray(32))
-            fail("Should have thrown IllegalArgumentException")
-        } catch (e: IllegalArgumentException) {
-            assertTrue(e.message.orEmpty().contains("BIP-39 seed must be 64 bytes"))
+    fun `constructor rejects entropy larger than 32 bytes`() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            PlaintextSeed(ByteArray(64), validSeed)
         }
+        assertTrue(exception.message.orEmpty().contains("Mnemonic entropy must be 32 bytes"))
+    }
+
+    @Test
+    fun `constructor rejects seed smaller than 64 bytes`() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            PlaintextSeed(validEntropy, ByteArray(32))
+        }
+        assertTrue(exception.message.orEmpty().contains("BIP-39 seed must be 64 bytes"))
+    }
+
+    @Test
+    fun `constructor rejects seed larger than 64 bytes`() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            PlaintextSeed(validEntropy, ByteArray(128))
+        }
+        assertTrue(exception.message.orEmpty().contains("BIP-39 seed must be 64 bytes"))
     }
 
     @Test
@@ -76,7 +90,6 @@ class PlaintextSeedTest {
 
         plaintext.wipe()
 
-        // Both arrays should be zeroed
         assertTrue(plaintext.mnemonicEntropy.all { it == 0.toByte() })
         assertTrue(plaintext.bip39Seed.all { it == 0.toByte() })
     }
@@ -94,5 +107,26 @@ class PlaintextSeedTest {
         // The ORIGINAL arrays (not copies) should be zeroed
         assertTrue(entropy.all { it == 0.toByte() })
         assertTrue(seed.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `wipe is idempotent`() {
+        // Wiping an already-wiped seed should be a no-op, not throw
+        val entropy = ByteArray(PlaintextSeed.ENTROPY_SIZE) { 0x11.toByte() }
+        val seed = ByteArray(PlaintextSeed.SEED_SIZE) { 0x22.toByte() }
+        val plaintext = PlaintextSeed(entropy, seed)
+
+        plaintext.wipe()
+        plaintext.wipe() // Second call should not throw
+        plaintext.wipe() // Third call for good measure
+
+        assertTrue(plaintext.mnemonicEntropy.all { it == 0.toByte() })
+        assertTrue(plaintext.bip39Seed.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `CorruptedSeedException carries message`() {
+        val exception = CorruptedSeedException("Wrong size: expected 124, got 50")
+        assertEquals("Wrong size: expected 124, got 50", exception.message)
     }
 }

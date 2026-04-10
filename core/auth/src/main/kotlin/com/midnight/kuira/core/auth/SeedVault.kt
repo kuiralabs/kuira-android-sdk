@@ -6,6 +6,8 @@ package com.midnight.kuira.core.auth
 
 import android.content.Context
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -37,6 +39,8 @@ class PlaintextSeed(
      * Overwrites both byte arrays with zeros. Call this immediately after
      * deriving keys and signing — JVM may not guarantee the wipe is effective
      * (see security notes in plan), but it reduces the window of exposure.
+     *
+     * Idempotent — safe to call multiple times.
      */
     fun wipe() {
         mnemonicEntropy.fill(0)
@@ -49,6 +53,13 @@ class PlaintextSeed(
         const val PLAINTEXT_SIZE = ENTROPY_SIZE + SEED_SIZE
     }
 }
+
+/**
+ * Thrown when the encrypted seed file on disk is corrupted or malformed
+ * (wrong size, invalid IV length, decryption fails). The caller should
+ * trigger a recovery flow from backup.
+ */
+class CorruptedSeedException(message: String) : Exception(message)
 
 /**
  * Encrypted seed storage backed by Android Keystore + biometric authentication.
@@ -68,7 +79,14 @@ class PlaintextSeed(
  * Total: 124 bytes.
  *
  * **File location:** `<app filesDir>/kuira_seed.bin` — app-private storage,
- * not world-readable, excluded from ADB backup by default.
+ * explicitly excluded from Auto Backup via `data_extraction_rules.xml`
+ * in the host app's manifest.
+ *
+ * **Atomicity:** Writes go to a temp file and are renamed in place, so a
+ * crash mid-write leaves either the old seed or the new seed, never a
+ * partial file.
+ *
+ * **Threading:** All file I/O runs on [Dispatchers.IO] via `withContext`.
  */
 class SeedVault(
     private val context: Context,
@@ -77,6 +95,9 @@ class SeedVault(
 
     private val seedFile: File
         get() = File(context.filesDir, SEED_FILE_NAME)
+
+    private val tempFile: File
+        get() = File(context.filesDir, TEMP_FILE_NAME)
 
     /**
      * Whether an encrypted seed has been persisted.
@@ -88,12 +109,17 @@ class SeedVault(
      *
      * Shows a biometric prompt to unlock the Keystore master key, encrypts
      * the concatenated entropy+seed with AES-256-GCM, and writes the result
-     * to app-private storage. The plaintext is NOT wiped by this method —
-     * the caller is responsible for calling [PlaintextSeed.wipe] after.
+     * atomically to app-private storage. The plaintext is NOT wiped by this
+     * method — the caller is responsible for calling [PlaintextSeed.wipe] after.
+     *
+     * **Exception propagation:** [android.security.keystore.KeyPermanentlyInvalidatedException]
+     * may be thrown synchronously from the Keystore if the key was invalidated.
      *
      * @param activity The FragmentActivity hosting the biometric prompt
      * @param seed The plaintext seed to encrypt and store
      * @throws IllegalStateException if a seed already exists (call [deleteSeed] first)
+     * @throws AuthenticationCancelledException if the user cancelled the biometric prompt
+     * @throws AuthenticationFailedException if biometric authentication failed
      */
     suspend fun storeSeed(activity: FragmentActivity, seed: PlaintextSeed) {
         check(!hasSeed()) { "Seed already exists. Delete it first." }
@@ -115,8 +141,15 @@ class SeedVault(
                 "Unexpected IV length: ${iv.size}"
             }
 
-            // Write as [IV | ciphertext]
-            seedFile.writeBytes(iv + ciphertext)
+            // Atomic write: temp file + rename. Prevents partial writes on crash.
+            withContext(Dispatchers.IO) {
+                tempFile.writeBytes(iv + ciphertext)
+                if (!tempFile.renameTo(seedFile)) {
+                    // Rename failed — clean up temp file and fail loudly
+                    tempFile.delete()
+                    throw IllegalStateException("Failed to persist seed: rename failed")
+                }
+            }
         } finally {
             plaintext.fill(0)
         }
@@ -131,14 +164,21 @@ class SeedVault(
      *
      * @param activity The FragmentActivity hosting the biometric prompt
      * @throws IllegalStateException if no seed exists
-     * @throws IllegalStateException if the stored seed is corrupted
+     * @throws CorruptedSeedException if the stored file is malformed
+     * @throws AuthenticationCancelledException if the user cancelled
+     * @throws AuthenticationFailedException if biometric authentication failed
      */
     suspend fun loadSeed(activity: FragmentActivity): PlaintextSeed {
         check(hasSeed()) { "No seed stored. Create a wallet first." }
 
-        val stored = seedFile.readBytes()
-        check(stored.size >= WalletKeyManager.GCM_IV_LENGTH) {
-            "Stored seed is corrupted (size=${stored.size})"
+        val stored = withContext(Dispatchers.IO) { seedFile.readBytes() }
+
+        // Minimum size: IV + at least the GCM auth tag (16 bytes) + plaintext (96 bytes)
+        val minSize = WalletKeyManager.GCM_IV_LENGTH + PlaintextSeed.PLAINTEXT_SIZE + GCM_TAG_BYTES
+        if (stored.size != minSize) {
+            throw CorruptedSeedException(
+                "Stored seed has wrong size: expected $minSize bytes, got ${stored.size}"
+            )
         }
 
         // Extract IV and ciphertext
@@ -152,10 +192,17 @@ class SeedVault(
             subtitle = "Authenticate to access your wallet keys"
         )
 
-        val plaintext = authenticated.cipher.doFinal(ciphertext)
+        val plaintext = try {
+            authenticated.cipher.doFinal(ciphertext)
+        } catch (e: javax.crypto.AEADBadTagException) {
+            throw CorruptedSeedException("Seed decryption failed: invalid auth tag")
+        }
+
         try {
-            check(plaintext.size == PlaintextSeed.PLAINTEXT_SIZE) {
-                "Decrypted seed has unexpected size: ${plaintext.size}"
+            if (plaintext.size != PlaintextSeed.PLAINTEXT_SIZE) {
+                throw CorruptedSeedException(
+                    "Decrypted seed has unexpected size: ${plaintext.size}"
+                )
             }
 
             val entropy = plaintext.copyOfRange(0, PlaintextSeed.ENTROPY_SIZE)
@@ -171,14 +218,24 @@ class SeedVault(
      *
      * **WARNING:** After deletion, the seed is permanently gone unless recovered
      * from backup. Only call this from a recovery flow or user-initiated wallet reset.
+     *
+     * Idempotent — safe to call when no seed exists.
      */
     fun deleteSeed() {
         if (seedFile.exists()) {
             seedFile.delete()
         }
+        // Also clean up any stale temp file from a crashed write
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
     }
 
     companion object {
-        private const val SEED_FILE_NAME = "kuira_seed.bin"
+        internal const val SEED_FILE_NAME = "kuira_seed.bin"
+        internal const val TEMP_FILE_NAME = "kuira_seed.bin.tmp"
+
+        // AES-GCM auth tag size in bytes (derived from WalletKeyManager.GCM_TAG_LENGTH bits)
+        private const val GCM_TAG_BYTES = WalletKeyManager.GCM_TAG_LENGTH / 8
     }
 }

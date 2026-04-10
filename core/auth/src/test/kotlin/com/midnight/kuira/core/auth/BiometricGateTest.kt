@@ -24,28 +24,24 @@ class BiometricGateTest {
     fun `AuthenticationCancelledException carries message`() {
         val exception = AuthenticationCancelledException("User cancelled")
         assertEquals("User cancelled", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test
     fun `AuthenticationFailedException carries message`() {
         val exception = AuthenticationFailedException("[7] Hardware error")
         assertEquals("[7] Hardware error", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test
     fun `AuthenticationLockedOutException carries message`() {
         val exception = AuthenticationLockedOutException("Too many attempts")
         assertEquals("Too many attempts", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test
     fun `AuthenticationPermanentlyLockedOutException carries message`() {
         val exception = AuthenticationPermanentlyLockedOutException("Permanently locked out")
         assertEquals("Permanently locked out", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test

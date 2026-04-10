@@ -4,10 +4,10 @@
 
 package com.midnight.kuira.core.auth
 
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -18,35 +18,42 @@ import java.io.File
 /**
  * Instrumentation tests for [SeedVault] file lifecycle.
  *
- * **Note:** storeSeed() and loadSeed() require biometric authentication,
- * which cannot be automated in CI. Those flows are tested manually on
- * device. These tests cover:
- * - File existence checks (hasSeed)
- * - File deletion (deleteSeed)
- * - Error paths when no seed exists
+ * These tests cover the parts of SeedVault that don't require BiometricPrompt:
+ * - File existence checks ([SeedVault.hasSeed])
+ * - File deletion ([SeedVault.deleteSeed])
+ * - Stale temp file cleanup
+ *
+ * **Not covered here (require manual testing on device with biometrics):**
+ * - [SeedVault.storeSeed] full encrypt flow
+ * - [SeedVault.loadSeed] full decrypt flow
+ * - Round-trip verification
+ * - KeyPermanentlyInvalidatedException recovery
+ *
+ * Those flows are tested during E2E verification (Step 8A.9).
  */
 @RunWith(AndroidJUnit4::class)
 class SeedVaultInstrumentedTest {
 
-    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-    private val keyManager = WalletKeyManager()
-    private val biometricGate = BiometricGate(keyManager)
-    private val seedVault = SeedVault(context, biometricGate)
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // We only exercise non-biometric operations, so we can pass a minimal
+    // BiometricGate wired to a WalletKeyManager that won't actually be used.
+    private val seedVault = SeedVault(context, BiometricGate(WalletKeyManager()))
 
     private val seedFile: File
-        get() = File(context.filesDir, "kuira_seed.bin")
+        get() = File(context.filesDir, SeedVault.SEED_FILE_NAME)
+
+    private val tempFile: File
+        get() = File(context.filesDir, SeedVault.TEMP_FILE_NAME)
 
     @Before
     fun setUp() {
-        // Clean state before each test
         seedVault.deleteSeed()
-        keyManager.deleteKey()
     }
 
     @After
     fun tearDown() {
         seedVault.deleteSeed()
-        keyManager.deleteKey()
     }
 
     @Test
@@ -56,7 +63,6 @@ class SeedVaultInstrumentedTest {
 
     @Test
     fun hasSeed_returnsTrue_whenFileExists() {
-        // Manually create a fake seed file to verify hasSeed() checks the file
         seedFile.writeBytes(ByteArray(124))
         assertTrue(seedVault.hasSeed())
     }
@@ -72,22 +78,32 @@ class SeedVaultInstrumentedTest {
 
     @Test
     fun deleteSeed_isIdempotent() {
-        // Should not throw even if file doesn't exist
         seedVault.deleteSeed()
         seedVault.deleteSeed()
         assertFalse(seedVault.hasSeed())
     }
 
     @Test
-    fun loadSeed_throws_whenNoSeedStored() {
-        // Can't actually call loadSeed() without an Activity — verify hasSeed
-        // is the guard that loadSeed() checks first
+    fun deleteSeed_cleansUpStaleTempFile() {
+        // Simulate a crashed write: temp file exists but main file doesn't
+        tempFile.writeBytes(ByteArray(124))
+        assertTrue(tempFile.exists())
         assertFalse(seedVault.hasSeed())
+
+        seedVault.deleteSeed()
+
+        assertFalse(tempFile.exists())
+        assertFalse(seedFile.exists())
     }
 
-    // NOTE: Full encrypt/decrypt round-trip requires:
-    // 1. A real Activity (for BiometricPrompt)
-    // 2. A device with enrolled biometrics or screen lock
-    // 3. User interaction to approve the biometric prompt
-    // These tests are performed manually during E2E verification (Step 8A.9).
+    @Test
+    fun deleteSeed_cleansUpBothMainAndTempFiles() {
+        seedFile.writeBytes(ByteArray(124))
+        tempFile.writeBytes(ByteArray(124))
+
+        seedVault.deleteSeed()
+
+        assertFalse(seedFile.exists())
+        assertFalse(tempFile.exists())
+    }
 }

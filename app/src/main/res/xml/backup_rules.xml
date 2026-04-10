@@ -1,13 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Auto Backup rules (API 23-30).
+    See https://developer.android.com/guide/topics/data/autobackup
+
+    Excluded from backup:
+    - kuira_seed.bin / .tmp — encrypted seed, but encrypted with a
+      device-bound Keystore key. Backing up would produce an
+      undecryptable blob on restore (key doesn't transfer).
+      Cross-device recovery uses a separate backup layer.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="kuira_seed.bin" />
+    <exclude domain="file" path="kuira_seed.bin.tmp" />
 </full-backup-content>
