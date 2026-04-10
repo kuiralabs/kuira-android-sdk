@@ -5,6 +5,7 @@
 package com.midnight.kuira.core.auth.di
 
 import android.content.Context
+import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.SecurityCapabilities
 import com.midnight.kuira.core.auth.WalletKeyManager
 import dagger.Module
@@ -36,5 +37,13 @@ object AuthModule {
     @Singleton
     fun provideWalletKeyManager(): WalletKeyManager {
         return WalletKeyManager()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBiometricGate(
+        walletKeyManager: WalletKeyManager
+    ): BiometricGate {
+        return BiometricGate(walletKeyManager)
     }
 }
