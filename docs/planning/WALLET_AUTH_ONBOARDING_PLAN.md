@@ -97,7 +97,7 @@ Traditional Wallet:
 Kuira Wallet:
   User taps fingerprint → hardware generates + stores master key
   Seed phrase exists but user never sees it (unless they choose to)
-  Every signing operation requires biometric → hardware decrypts key → sign → wipe
+  Every signing operation requires biometric → hardware-backed key decrypts seed → derive → sign → wipe
   Recovery via cloud backup (encrypted with PRF or backup password)
 ```
 
@@ -163,13 +163,12 @@ Screen 2: Biometric Setup
        - Try StrongBox first (catch StrongBoxUnavailableException → fall back to TEE)
        - setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL)
        - setInvalidatedByBiometricEnrollment(false) — see Biometric Enrollment Tradeoff below
-    2. Cipher.init(ENCRYPT_MODE, masterKey) → wrap in CryptoObject
-    3. BiometricPrompt.authenticate(promptInfo, CryptoObject(cipher))
-       On success: use authenticated cipher to encrypt seed
-    3. App generates BIP-39 seed phrase (in memory)
-    4. Derives secp256k1 keys from seed
-    5. Encrypts seed with master key (AES-256-GCM) → stores ciphertext
-    6. Wipes plaintext seed from memory
+    2. Generate BIP-39 mnemonic (24 words → 256-bit entropy) in memory
+    3. Derive secp256k1 keys from mnemonic (BIP-32)
+    4. Cipher.init(ENCRYPT_MODE, masterKey) → wrap in CryptoObject
+    5. BiometricPrompt.authenticate(promptInfo, CryptoObject(cipher))
+       On success: authenticated cipher encrypts mnemonic entropy (32 bytes) → store ciphertext
+    6. Wipe plaintext mnemonic + derived keys from memory
   
 Screen 3: Done
   "Wallet created. Your keys are hardware-protected."
@@ -193,14 +192,20 @@ User taps "Send"
   → BiometricPrompt shows (biometric or PIN/pattern)
   → On success (onAuthenticationSucceeded callback):
     1. result.cryptoObject.cipher is now authenticated (HAT with matching challenge)
-    2. authenticatedCipher.doFinal(encryptedSeed) → plaintext seed enters app memory
-    3. Derive signing key from seed (BIP-32 derivation)
+    2. authenticatedCipher.doFinal(encryptedData) → plaintext mnemonic entropy (32 bytes) enters app memory
+    3. Derive signing key via BIP-32 (see note below on what to store)
     4. Sign transaction with derived key (Schnorr via Rust FFI)
     5. Wipe seed + derived key from memory (ByteArray.fill(0) — best effort, JVM may not guarantee; consider Rust FFI path for key derivation where Zeroizing<T> is reliable)
     6. Submit transaction
 ```
 
 Every transaction requires authentication. Per-use auth (`duration = 0`) means no session caching — each crypto operation requires a fresh biometric/credential prompt.
+
+**What to store locally (design decision):**
+- **Option A: Store 32-byte mnemonic entropy.** Smaller. But every signing requires entropy → mnemonic reconstruction → PBKDF2 (2048 rounds, ~100-500ms) → BIP-39 seed → BIP-32 derive. Adds latency to every tx.
+- **Option B: Store 64-byte BIP-39 seed.** Slightly larger. Signing skips PBKDF2 — goes directly to BIP-32 derivation. Faster per-transaction.
+- **Option C: Store both.** Entropy for backup/export (user can view mnemonic words), seed for fast signing.
+- **Recommendation:** Option C — encrypt both with the same Keystore key. Total encrypted payload ~100 bytes.
 
 ### Wallet Recovery
 
@@ -245,7 +250,7 @@ Old device → Settings → "Transfer Wallet"
   → Old device encrypts seed with session key → shows as QR / sends via NFC
   → New device decrypts → biometric setup → re-encrypts with new Keystore key
 ```
-Note: Payload is ~100 bytes (64-byte seed + AES-GCM overhead), well within QR/NFC limits.
+Note: Payload is ~80 bytes (32-byte mnemonic entropy + AES-GCM IV/tag overhead), well within QR/NFC limits.
 The ECDH key exchange via QR avoids needing Bluetooth or network connectivity.
 
 ---
@@ -358,7 +363,7 @@ try {
 ```
 
 Fallback chain:
-1. **StrongBox** (Titan M2, Samsung Knox) — dedicated secure element, tamper-resistant
+1. **StrongBox** (Google Titan M2, Samsung eSE, Qualcomm SPU) — dedicated secure element, tamper-resistant
 2. **TEE** (TrustZone) — hardware-backed but shares processor with OS
 3. **Software Keystore** — no hardware backing, last resort
 
@@ -629,19 +634,28 @@ Tier 1 works without access keys. Access keys add delegation capability on top.
 
 **⚠️ Correction:** Digital Credentials use the **Credential Manager Holder API** (`RegistryManager` + `OpenId4VpRegistry`), NOT `CredentialProviderService` (which is for passkeys/passwords only). These are separate Android APIs.
 
-Kuira would:
+**⚠️ Second correction:** Android's DC API only supports credential **presentation** (Holder → Verifier), NOT credential **issuance** (Issuer → Holder). The CTO's architecture proposes wallet-as-issuer (Kuira issues access key VCs to dApps), which is the **inverse** of what the DC API supports.
 
-1. Register credentials with `RegistryManager` (metadata: what credential types Kuira can provide)
-2. Declare an Activity with intent filter `androidx.credentials.registry.provider.action.GET_CREDENTIAL`
-3. When Chrome/apps request credentials, Credential Manager matches and launches Kuira's Activity
+**What actually works with the DC API:**
+- A dApp (Verifier) requests "show me your access key credential"
+- Kuira (Holder) presents an existing credential
+- This is **presentation**, not issuance
+
+**What the CTO wants (issuance) would require:**
+- Kuira generates and signs a new access key VC on demand
+- The "presentation" flow could be repurposed: dApp requests a credential, Kuira mints one on-the-fly and presents it. Semantically it's issuance, mechanically it's presentation.
+- Alternatively: use the DApp Connector (our Phase 5 WebSocket/IPC) for issuance, and DC API for subsequent presentation to other verifiers
+
+**Presentation flow (what DC API supports):**
+
+1. Register existing access key credentials with `RegistryManager`
+2. Declare Activity with intent filter `androidx.credentials.registry.provider.action.GET_CREDENTIAL`
+3. When dApp/browser requests credentials, Credential Manager matches and launches Kuira's Activity
 4. Kuira shows biometric prompt + approval UI
-5. Root key signs the access key credential
-6. Returns `DigitalCredential(responseJson)` via `PendingIntentHandler`
+5. Returns `DigitalCredential(responseJson)` via `PendingIntentHandler`
 
 **API level:** Credential Manager Holder API supports Android 6+ (API 23).
-**Supported formats:** SD-JWT and mdoc (ISO 18013-5). W3C VCDM may require custom handling.
-
-**Important:** The DC API currently supports SD-JWT and mdoc natively. W3C VCDM 2.0 support through the Android Holder API is not confirmed — may need to use the JSON-LD credential inside an SD-JWT wrapper or implement custom credential type handling.
+**Supported formats:** SD-JWT and mdoc (ISO 18013-5). W3C VCDM may require custom handling — potentially wrap in SD-JWT container.
 
 ---
 
