@@ -54,4 +54,35 @@ interface MnemonicService {
      * @return true if valid, false otherwise
      */
     fun validateMnemonic(mnemonic: String): Boolean
+
+    /**
+     * Extracts the raw entropy bytes from a BIP-39 mnemonic phrase.
+     *
+     * This is the inverse of [generateMnemonic] — given the words, it returns
+     * the bit pattern they encode. Used by wallet storage to persist entropy
+     * (smaller than the phrase, reproducible to the phrase on demand).
+     *
+     * - 12 words → 16 bytes
+     * - 15 words → 20 bytes
+     * - 18 words → 24 bytes
+     * - 21 words → 28 bytes
+     * - 24 words → 32 bytes
+     *
+     * @param mnemonic The BIP-39 mnemonic phrase
+     * @return The raw entropy bytes
+     * @throws IllegalArgumentException if mnemonic is invalid
+     */
+    fun mnemonicToEntropy(mnemonic: String): ByteArray
+
+    /**
+     * Reconstructs a BIP-39 mnemonic phrase from raw entropy bytes.
+     *
+     * This is the inverse of [mnemonicToEntropy]. Used by wallet storage
+     * to show the user their recovery phrase from the persisted entropy.
+     *
+     * @param entropy Raw entropy (16, 20, 24, 28, or 32 bytes)
+     * @return Space-separated mnemonic phrase
+     * @throws IllegalArgumentException if entropy size is invalid
+     */
+    fun entropyToMnemonic(entropy: ByteArray): String
 }

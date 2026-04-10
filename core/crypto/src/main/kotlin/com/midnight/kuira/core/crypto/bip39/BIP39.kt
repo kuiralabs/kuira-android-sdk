@@ -115,4 +115,20 @@ object BIP39 {
     fun validateMnemonic(mnemonic: String): Boolean {
         return service.validateMnemonic(mnemonic)
     }
+
+    /**
+     * Extracts raw entropy from a mnemonic phrase.
+     * Inverse of [generateMnemonic]. See [MnemonicService.mnemonicToEntropy].
+     */
+    fun mnemonicToEntropy(mnemonic: String): ByteArray {
+        return service.mnemonicToEntropy(mnemonic)
+    }
+
+    /**
+     * Reconstructs a mnemonic phrase from raw entropy.
+     * Inverse of [mnemonicToEntropy]. See [MnemonicService.entropyToMnemonic].
+     */
+    fun entropyToMnemonic(entropy: ByteArray): String {
+        return service.entropyToMnemonic(entropy)
+    }
 }

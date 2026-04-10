@@ -85,6 +85,20 @@ class BitcoinJMnemonicService : MnemonicService {
         return MnemonicCode.toSeed(words, passphrase)
     }
 
+    override fun mnemonicToEntropy(mnemonic: String): ByteArray {
+        require(validateMnemonic(mnemonic)) {
+            "Invalid mnemonic phrase"
+        }
+        val words = mnemonic.trim().split(WHITESPACE_REGEX)
+        return mnemonicCode.toEntropy(words)
+    }
+
+    override fun entropyToMnemonic(entropy: ByteArray): String {
+        // BitcoinJ validates entropy length internally
+        val words = mnemonicCode.toMnemonic(entropy)
+        return words.joinToString(" ")
+    }
+
     override fun validateMnemonic(mnemonic: String): Boolean {
         return try {
             val words = mnemonic.trim().split(WHITESPACE_REGEX)
