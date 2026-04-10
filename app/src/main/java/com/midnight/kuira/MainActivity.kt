@@ -2,7 +2,7 @@ package com.midnight.kuira
 
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
@@ -41,7 +41,7 @@ import kotlin.system.exitProcess
  * - Network change requires app restart (Hilt singletons are created at startup)
  */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var networkRepository: NetworkRepository

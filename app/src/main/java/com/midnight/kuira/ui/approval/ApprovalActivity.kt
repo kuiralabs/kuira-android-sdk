@@ -1,7 +1,7 @@
 package com.midnight.kuira.ui.approval
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 
 /**
@@ -11,7 +11,7 @@ import androidx.activity.compose.setContent
  * The user sees the B&W approval sheet over a void/star background.
  * Tapping confirm/reject finishes the activity and completes the bridge.
  */
-class ApprovalActivity : ComponentActivity() {
+class ApprovalActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -21,6 +21,7 @@ javaWebsocket = "1.5.7"
 quickjsKt = "1.0.3"
 room = "2.8.4"
 ksp = "2.3.6"
+biometric = "1.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -62,6 +63,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
 # QuickJS engine for Compact contract execution (Phase 6)
 quickjs-kt = { group = "io.github.dokar3", name = "quickjs-kt", version.ref = "quickjsKt" }
+# Biometric + Fragment (Phase 8A — Auth & Onboarding)
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version = "1.8.8" }
 # Room Database (Phase 4B)
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }

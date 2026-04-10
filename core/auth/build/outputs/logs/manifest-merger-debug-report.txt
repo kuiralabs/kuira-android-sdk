@@ -1,0 +1,20 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml:2:1-5:12
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml:2:1-5:12
+	package
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.USE_BIOMETRIC
+ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml:4:5-72
+	android:name
+		ADDED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml:4:22-69
+uses-sdk
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml
+INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/norman/Development/android/projects/kuira-android-wallet/core/auth/src/main/AndroidManifest.xml

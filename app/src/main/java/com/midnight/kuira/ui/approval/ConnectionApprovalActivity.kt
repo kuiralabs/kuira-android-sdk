@@ -2,7 +2,7 @@ package com.midnight.kuira.ui.approval
 
 import android.app.Activity
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -45,7 +45,7 @@ import com.midnight.kuira.core.designsystem.theme.MidnightColors
  * Returns RESULT_OK if approved, RESULT_CANCELED if denied.
  * The dApp then binds to ConnectorService after receiving RESULT_OK.
  */
-class ConnectionApprovalActivity : ComponentActivity() {
+class ConnectionApprovalActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
