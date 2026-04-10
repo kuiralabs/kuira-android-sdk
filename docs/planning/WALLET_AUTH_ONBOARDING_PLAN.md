@@ -45,10 +45,11 @@ Three emerging approaches were studied from Midnight CTO research:
 
 ### 3. Client-Side Hardware Protection (our approach)
 - Standard secp256k1 keys, but hardware-protected with biometric gating
-- Passkey used for authentication (not signing) — unlocks hardware-encrypted keys
-- **Requires:** No protocol changes. Pure client-side.
+- Android Keystore (StrongBox/TEE) + BiometricPrompt for local auth — no passkey needed for daily use
+- Passkey used optionally for backup encryption (PRF extension) — enables zero-friction cloud recovery
+- **Requires:** No protocol changes. Pure client-side. Passkey PRF requires a relying party server.
 - **UX:** Near-passkey UX with full self-custody
-- **Status:** Buildable now with Android APIs
+- **Status:** Core (local auth) buildable now. Cloud backup with PRF requires RP server setup.
 
 **Decision:** Build approach #3 (Tier 1). Advocate for #1 at protocol level as future enhancement.
 
@@ -97,7 +98,7 @@ Kuira Wallet:
   User taps fingerprint → hardware generates + stores master key
   Seed phrase exists but user never sees it (unless they choose to)
   Every signing operation requires biometric → hardware decrypts key → sign → wipe
-  Recovery via passkey-synced encrypted cloud backup
+  Recovery via cloud backup (encrypted with PRF or backup password)
 ```
 
 ### Security Model
@@ -112,11 +113,11 @@ Kuira Wallet:
 │  │  AES-256 Master  │──▶│  Encrypted Seed    │  │
 │  │  Key (non-       │   │  (AES-256-GCM)     │  │
 │  │  extractable)    │   │                    │  │
-│  │                  │   │  Encrypted         │  │
-│  │  Biometric-bound │   │  Private Keys      │  │
-│  │  (unlock only    │   │  (derived on       │  │
-│  │  with face/      │   │   demand, wiped    │  │
-│  │  fingerprint)    │   │   after use)       │  │
+│  │                  │   │  Signing keys      │  │
+│  │  Biometric-bound │   │  derived from seed │  │
+│  │  (per-use auth   │   │  on demand, wiped  │  │
+│  │  with face/      │   │  after each use    │  │
+│  │  finger/PIN)     │   │  (in app memory)   │  │
 │  └──────────────────┘   └────────────────────┘  │
 │                                                  │
 │  ┌──────────────────┐                            │
@@ -124,9 +125,9 @@ Kuira Wallet:
 │  │                  │                            │
 │  │  Passkey (P-256) │  ← syncs via Google        │
 │  │  Used for:       │    Password Manager        │
-│  │  - Re-auth       │                            │
 │  │  - Cloud backup  │                            │
-│  │    encryption    │                            │
+│  │    encryption    │  ⚠️ Requires relying       │
+│  │    (PRF ext)     │    party server             │
 │  └──────────────────┘                            │
 └─────────────────────────────────────────────────┘
 ```
@@ -136,9 +137,11 @@ Kuira Wallet:
 Most wallets use biometrics as a UI check — if biometric passes, app unlocks. The key is in software regardless.
 
 Kuira uses biometrics as a **cryptographic gate**:
-- Master key is bound to `setUserAuthenticationRequired(true)` in Android Keystore
-- The key literally cannot be used without biometric authentication at the hardware level
-- Even if the app is compromised, keys cannot be extracted without the user's biometric
+- Master key is bound to `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL)`
+- Duration `0` = per-use auth (every crypto operation requires fresh authentication)
+- The key literally cannot be used without authentication at the hardware level
+- Even if the app is compromised, keys cannot be extracted without the user's biometric/PIN
+- Verify with `KeyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware()`
 
 ---
 
@@ -153,13 +156,20 @@ Screen 1: Welcome
 
 Screen 2: Biometric Setup
   "Secure your wallet with biometrics"
-  → System BiometricPrompt (fingerprint or face)
-  → On success:
-    1. StrongBox generates AES-256 master key (biometric-bound)
-    2. App generates BIP-39 seed phrase (in memory)
-    3. Derives secp256k1 keys from seed
-    4. Encrypts seed with master key → stores ciphertext
-    5. Wipes plaintext seed from memory
+  → Check BiometricManager.canAuthenticate(BIOMETRIC_STRONG | DEVICE_CREDENTIAL)
+  → If no biometrics enrolled: prompt to enroll via Settings.ACTION_BIOMETRIC_ENROLL
+  → On biometric/credential ready:
+    1. Generate AES-256 master key in Android Keystore:
+       - Try StrongBox first (catch StrongBoxUnavailableException → fall back to TEE)
+       - setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL)
+       - setInvalidatedByBiometricEnrollment(false) — see Biometric Enrollment Tradeoff below
+    2. Cipher.init(ENCRYPT_MODE, masterKey) → wrap in CryptoObject
+    3. BiometricPrompt.authenticate(promptInfo, CryptoObject(cipher))
+       On success: use authenticated cipher to encrypt seed
+    3. App generates BIP-39 seed phrase (in memory)
+    4. Derives secp256k1 keys from seed
+    5. Encrypts seed with master key (AES-256-GCM) → stores ciphertext
+    6. Wipes plaintext seed from memory
   
 Screen 3: Done
   "Wallet created. Your keys are hardware-protected."
@@ -168,7 +178,7 @@ Screen 3: Done
   → User lands on home screen
 ```
 
-**Total time: ~5 seconds.** No seed phrase writing. No PIN creation. One biometric tap.
+**Total time: ~5 seconds.** No seed phrase writing. One biometric tap (or PIN/pattern if no biometrics enrolled).
 
 ### Transaction Signing
 
@@ -176,16 +186,21 @@ Screen 3: Done
 User taps "Send"
   → Enters amount, recipient
   → Taps "Confirm"
-  → BiometricPrompt appears
-  → On success:
-    1. Master key decrypts seed (in TEE)
-    2. Derive signing key for this transaction
-    3. Sign transaction
-    4. Wipe derived key from memory
-    5. Submit transaction
+  → BEFORE prompt: Cipher.init(DECRYPT_MODE, keystoreKey, ivSpec)
+    This calls KeyMint.beginOperation() which returns a challenge
+  → Wrap cipher in CryptoObject(cipher)
+  → BiometricPrompt.authenticate(promptInfo, cryptoObject)
+  → BiometricPrompt shows (biometric or PIN/pattern)
+  → On success (onAuthenticationSucceeded callback):
+    1. result.cryptoObject.cipher is now authenticated (HAT with matching challenge)
+    2. authenticatedCipher.doFinal(encryptedSeed) → plaintext seed enters app memory
+    3. Derive signing key from seed (BIP-32 derivation)
+    4. Sign transaction with derived key (Schnorr via Rust FFI)
+    5. Wipe seed + derived key from memory (ByteArray.fill(0) — best effort, JVM may not guarantee; consider Rust FFI path for key derivation where Zeroizing<T> is reliable)
+    6. Submit transaction
 ```
 
-Every transaction requires biometric. No "remember for 5 minutes" shortcuts.
+Every transaction requires authentication. Per-use auth (`duration = 0`) means no session caching — each crypto operation requires a fresh biometric/credential prompt.
 
 ### Wallet Recovery
 
@@ -194,12 +209,24 @@ Three paths, from easiest to most manual:
 **Path A: Cloud Restore (recommended)**
 ```
 New device → Install Kuira → "Restore Wallet"
-  → Credential Manager offers synced passkey
-  → Biometric authenticates passkey
-  → Passkey PRF derives decryption key
-  → Fetch encrypted seed from Google Drive / backup
-  → Decrypt → derive keys → done
+  → Block Store auto-restores backup blob (encrypted seed)
+  → ⚠️ Old device's Keystore master key is GONE (device-bound, non-transferable)
+  → Backup blob was encrypted with a TRANSFERABLE key, not the Keystore key:
+      IF passkey available (synced via Google Password Manager):
+        → Passkey PRF derives the backup decryption key
+      ELSE:
+        → Prompt for backup password (set during initial backup)
+        → Argon2id(password, salt) derives the backup decryption key
+  → Decrypt seed → create NEW Keystore master key on this device
+  → Re-encrypt seed with new device's Keystore key
+  → Done — wallet operational on new device
 ```
+
+**⚠️ Critical architectural note: Two encryption layers required.**
+- **Local storage:** Seed encrypted with device-bound Keystore master key (biometric-gated, non-exportable). Fast, hardware-protected.
+- **Backup blob:** Seed encrypted with a transferable key (PRF-derived or password-derived). This is what goes into Block Store / cloud backup.
+
+The Keystore master key CANNOT transfer across devices — it's hardware-bound. So backups must use a separate encryption key that the user can reproduce on a new device (passkey PRF or password).
 
 **Path B: Seed Phrase Import**
 ```
@@ -209,19 +236,35 @@ New device → Install Kuira → "Restore with phrase"
   → Re-encrypts with new device's StrongBox key
 ```
 
-**Path C: Device Transfer (NFC/QR)**
+**Path C: Device Transfer (NFC/QR)** — future enhancement, not MVP
 ```
 Old device → Settings → "Transfer Wallet"
-  → Biometric on old device
-  → Generates encrypted transfer payload
-  → NFC tap or QR scan to new device
-  → Biometric on new device
-  → Done
+  → Biometric on old device (decrypt seed)
+  → New device shows QR with ephemeral ECDH public key
+  → Old device scans QR → derives shared session key
+  → Old device encrypts seed with session key → shows as QR / sends via NFC
+  → New device decrypts → biometric setup → re-encrypts with new Keystore key
 ```
+Note: Payload is ~100 bytes (64-byte seed + AES-GCM overhead), well within QR/NFC limits.
+The ECDH key exchange via QR avoids needing Bluetooth or network connectivity.
 
 ---
 
 ## Android APIs & Components
+
+### Minimum API Level Compatibility
+
+**Current project minSdk: 24 (Android 7.0)**
+
+Key auth APIs require higher API levels:
+- `setUserAuthenticationParameters()` → **API 30** (Android 11)
+- `setIsStrongBoxBacked()` → **API 28** (Android 9)
+- `BiometricPrompt` (AndroidX) → **API 28** (though AndroidX backports some behavior)
+- `Settings.ACTION_BIOMETRIC_ENROLL` → **API 30**
+- Block Store E2E encryption → **API 28+** (requires screen lock)
+- Credential Manager (passkey creation) → **API 28+** (via Play Services Jetpack lib)
+
+**Decision needed:** Either raise `core:auth` minSdk to 30, or provide degraded-but-functional behavior on API 24-29 (e.g., use deprecated `setUserAuthenticationValidityDurationSeconds()` on older APIs, skip StrongBox).
 
 ### Core Security APIs
 
@@ -230,37 +273,150 @@ Old device → Settings → "Transfer Wallet"
 | `AndroidKeyStore` provider | Hardware-backed key storage | API 23 (6.0) |
 | `KeyGenParameterSpec.Builder` | Configure key properties (biometric binding, StrongBox) | API 23+ |
 | `setIsStrongBoxBacked(true)` | Use dedicated secure element (Titan M2 etc) | API 28 (9.0) |
-| `setUserAuthenticationRequired(true)` | Biometric-gated key access | API 23+ |
-| `BiometricPrompt` | System biometric authentication | API 28+ |
-| `BiometricPrompt.CryptoObject` | Bind biometric auth to crypto operation | API 28+ |
-| `CredentialManager` | Passkey creation + authentication | API 34 (14) / Jetpack backport |
+| `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` | Per-use biometric-only key access (Class 3 biometric required) | API 30+ |
+| `setUserAuthenticationRequired(true)` | Require user auth (biometric OR device credential — PIN/pattern/password) | API 23+ |
+| `BiometricPrompt` | System biometric authentication | API 28+ (AndroidX backports) |
+| `BiometricPrompt.CryptoObject` | Bind biometric auth to crypto operation (Signature, Cipher, or Mac). ✅ Usable with `BIOMETRIC_STRONG \| DEVICE_CREDENTIAL` on API 30+ (AndroidX biometric 1.1.0 stable, Jan 2021). | API 28+ |
+| `CredentialManager` | Passkey creation + authentication | API 28+ via `credentials-play-services-auth` Jetpack lib |
+| `CredentialProviderService` | Register app as credential provider | API 34 (14) |
 | `Cipher` (AES/GCM/NoPadding) | Encrypt/decrypt seed with master key | API 23+ |
+
+**Important distinctions (verified):**
+- `setUserAuthenticationRequired(true)` alone allows PIN/pattern/password fallback — NOT biometric-only
+- For biometric-only: must use `setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)`
+- Duration `0` = per-use authentication (every operation requires fresh biometric)
+- `AUTH_BIOMETRIC_STRONG` = Class 3 biometric only (highest security). `AUTH_DEVICE_CREDENTIAL` = PIN/pattern/password
+- Keys are invalidated by default when new biometrics are enrolled (`setInvalidatedByBiometricEnrollment(true)` is default)
+- `KeyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware()` — query whether auth is hardware-enforced
+
+### Authentication Strategy Decision (Critical — Verified Against AOSP)
+
+**On API 30+ (Android 11+), CryptoObject works WITH `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`.**
+
+The documentation saying "you can't pass CryptoObject" with device credential fallback is **outdated/misleading** — it applies only to pre-API-30. Since `setUserAuthenticationParameters()` itself requires API 30, we're always on API 30+ when using per-use auth, so CryptoObject is available.
+
+**How it works at the TEE level (HardwareAuthToken):**
+
+| Mode | HAT `challenge` field | Enforcement |
+|------|----------------------|-------------|
+| WITH CryptoObject | Set to operation handle from `beginOperation()` | TEE-level: key unlocks for exactly ONE crypto operation, then re-locks |
+| WITHOUT CryptoObject | Empty (0) | Time-based: `timestamp + AUTH_TIMEOUT > now`. For duration=0, window is ~0 seconds. |
+
+CryptoObject binding is cryptographically stronger: the HAT proves "the user authenticated specifically for THIS cipher operation." Without CryptoObject, the HAT only proves "the user authenticated recently" — a race condition is theoretically possible.
+
+| Mode | CryptoObject | PIN Fallback | Per-use enforcement |
+|------|-------------|-------------|---------------------|
+| `duration=0, BIOMETRIC_STRONG` | ✅ Yes | ❌ No | ✅ TEE-level (HAT challenge) |
+| `duration=0, BIOMETRIC_STRONG \| DEVICE_CREDENTIAL` (API 30+) | ✅ **Yes** | ✅ Yes | ✅ TEE-level (HAT challenge) |
+| Without CryptoObject, `duration=0` | N/A | ✅ Yes | ⚠️ Time-based (~0s window) |
+
+**Recommended approach:** `duration=0` + `AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL` + **CryptoObject** (API 30+).
+
+This gives us the strongest possible security (TEE-level per-operation binding) WITH PIN fallback. Best of both worlds.
+
+**The code pattern:**
+```kotlin
+// 1. Init cipher with Keystore key — this calls beginOperation() in KeyMint
+val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+cipher.init(Cipher.DECRYPT_MODE, getKeystoreKey(), ivSpec)
+
+// 2. Wrap in CryptoObject and authenticate
+val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+biometricPrompt.authenticate(promptInfo, cryptoObject)
+
+// 3. On success, use the authenticated cipher
+override fun onAuthenticationSucceeded(result: AuthenticationResult) {
+    val authenticatedCipher = result.cryptoObject!!.cipher!!
+    val seed = authenticatedCipher.doFinal(encryptedSeed)
+    // ... derive key, sign, wipe
+}
+```
+
+**Edge case: `KeyPermanentlyInvalidatedException`** — thrown during `cipher.init()` if the key has been permanently invalidated. With `setInvalidatedByBiometricEnrollment(false)`, new biometrics won't trigger this. Exact remaining triggers are not fully documented but likely include: screen lock removal, device factory reset, or security downgrade. Recovery: decrypt seed from backup (PRF or password), then recreate Keystore key and re-encrypt seed on the device.
+
+**Sources:** AOSP [HardwareAuthToken.aidl](https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android16-release/security/keymint/aidl/android/hardware/security/keymint/HardwareAuthToken.aidl), [Android Developers Blog: Using BiometricPrompt with CryptoObject](https://medium.com/androiddevelopers/using-biometricprompt-with-cryptoobject-how-and-why-aace500ccdb7), AndroidX Biometric [1.1.0-alpha02 release notes](https://developer.android.com/jetpack/androidx/releases/biometric).
 
 ### StrongBox Fallback Strategy
 
-Not all devices have StrongBox. Fallback chain:
-1. **StrongBox** (Titan M2, Samsung Knox) — dedicated secure element
-2. **TEE** (TrustZone) — hardware-backed but shared with OS
-3. **Software Keystore** — last resort, still better than plaintext
+Not all devices have StrongBox. **Fallback is NOT automatic** — must be handled explicitly:
+
+```kotlin
+try {
+    keyGenerator.initialize(
+        KeyGenParameterSpec.Builder(alias, PURPOSE_ENCRYPT or PURPOSE_DECRYPT)
+            .setIsStrongBoxBacked(true)
+            .build()
+    )
+} catch (e: StrongBoxUnavailableException) {
+    // Explicit fallback to TEE
+    keyGenerator.initialize(
+        KeyGenParameterSpec.Builder(alias, PURPOSE_ENCRYPT or PURPOSE_DECRYPT)
+            // StrongBox not set — uses TEE by default
+            .build()
+    )
+}
+```
+
+Fallback chain:
+1. **StrongBox** (Titan M2, Samsung Knox) — dedicated secure element, tamper-resistant
+2. **TEE** (TrustZone) — hardware-backed but shares processor with OS
+3. **Software Keystore** — no hardware backing, last resort
 
 ```
 // Detection
 val hasStrongBox = packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
 ```
 
+### Biometric Enrollment Tradeoff (Verified)
+
+`setInvalidatedByBiometricEnrollment` controls what happens when the user adds a new fingerprint or face:
+
+| Setting | What Happens | Risk |
+|---------|-------------|------|
+| `true` (default) | Key permanently invalidated. `KeyPermanentlyInvalidatedException` thrown. Encrypted seed becomes inaccessible. | User adds fingerprint → **locked out of wallet**. Must restore from backup. |
+| `false` | Key remains valid after biometric change. | Slightly reduced security — new biometrics can unlock old keys. |
+
+**Decision: Use `false`.** A wallet that locks users out when they add a fingerprint is unacceptable. The security reduction is minimal — the attacker would need physical access to the device AND the ability to enroll a new biometric (which requires the existing screen lock). Banking apps use `false` for the same reason.
+
+**Mitigation:** If biometric enrollment changes are detected, prompt user to re-verify identity (e.g., enter backup password) on next wallet access — but don't invalidate the key.
+
+### Passkey Server Requirement (Verified)
+
+**⚠️ Passkeys require a relying party server.** You cannot create a passkey purely locally. The server must:
+1. Generate cryptographic challenges
+2. Provide credential creation options (rp.id, rp.name, user info)
+3. Verify and store the public key after registration
+4. Digital Asset Links must link the Android app to the server domain
+
+**Implication for Kuira:** If we want passkeys (for PRF-based backup encryption or cross-device recovery), we need to run or use a relying party server. Options:
+- **Host a minimal WebAuthn RP** at e.g. `auth.kuira.app` — just challenge generation + public key storage
+- **Use a managed service** (e.g. Google Identity Platform, Auth0) as the RP
+- **Skip passkeys entirely** for MVP — use Android Keystore biometric for local auth, and backup password for cloud backup encryption
+
+**Local authentication does NOT need passkeys.** Android Keystore + BiometricPrompt handles re-auth entirely on-device. Passkeys are only needed for the cloud backup PRF flow and cross-device credential sync.
+
 ### Passkey PRF Extension
 
-The WebAuthn PRF (Pseudo-Random Function) extension allows deriving deterministic encryption keys from a passkey:
+The WebAuthn PRF (Pseudo-Random Function) extension allows deriving deterministic encryption keys from a passkey. The authenticator evaluates a PRF using a device-stored secret + relying party input, producing a deterministic 32-byte value.
 
-```
-// Passkey creates a hardware-bound 32-byte key
-// Same passkey on any device → same derived key
-// Perfect for encrypting cloud backups
-```
+**Platform support (verified April 2026):**
 
-- Android support: Google Password Manager (2025+)
-- iOS support: iOS 18.4+
-- This means: passkey syncs → backup decryption key syncs automatically
+| Platform | Provider | PRF Support |
+|----------|----------|-------------|
+| Android (Chrome ≥ 130) | Google Password Manager | ✅ Yes |
+| Android (Chrome ≥ 130) | Third-party providers (1Password, etc.) | ❌ No (API limitation) |
+| Android native app | Google Password Manager via CredentialManager | ✅ Yes (via requestJson passthrough) |
+| Android native app | Third-party providers | ❌ No |
+| macOS 15+ | iCloud Keychain | ✅ Yes (Safari 18+, Chrome 132+) |
+| iOS 18.4+ | iCloud Keychain | ✅ Yes |
+| Windows 11 25H2 | Windows Hello | ✅ Yes |
+
+**⚠️ Critical limitation for backup flow:**
+PRF on Android ONLY works when Google Password Manager is the active provider. If the user has switched to a third-party provider (Android 14+ allows this), PRF will silently fail. There is no API to check PRF availability in advance.
+
+**Implication for Kuira:** The cloud backup encryption flow that relies on passkey PRF needs a robust fallback — e.g., a user-chosen backup password when PRF is unavailable. PRF should be the preferred path (zero friction) but cannot be the only path.
+
+**PRF status:** WebAuthn PRF extension is still a W3C Editor's Draft (not yet a Recommendation). It maps to the CTAP2 `hmac-secret` extension at the authenticator level.
 
 ---
 
@@ -279,8 +435,8 @@ Wallet authentication and key protection layer.
 
 **Key classes:**
 - `WalletKeyManager` — master key generation + biometric binding via Android Keystore
-- `SeedVault` — encrypt/decrypt/store seed phrase using master key
-- `BiometricGate` — wraps BiometricPrompt + CryptoObject for signing operations
+- `SeedVault` — two-layer seed storage: (1) local: encrypt with Keystore master key (device-bound), (2) backup: encrypt with PRF or password-derived key (transferable)
+- `BiometricGate` — wraps BiometricPrompt + CryptoObject for per-use auth with PIN fallback (API 30+). Cipher.init() before authenticate(), doFinal() in onAuthenticationSucceeded().
 - `SecurityCapabilities` — detect StrongBox, TEE, biometric types available
 
 ### 2. `core:backup` Module (new)
@@ -288,15 +444,21 @@ Wallet authentication and key protection layer.
 Cloud backup and recovery.
 
 **Responsibilities:**
-- Encrypted seed backup to Google Drive (app-specific folder)
-- Passkey PRF key derivation for backup encryption
-- Backup metadata (creation date, device info, version)
+- Encrypted seed backup via Block Store (preferred) or cloud backup
+- Dual key derivation: passkey PRF (preferred) OR user backup password (fallback)
+- Backup metadata (creation date, device info, version, key derivation method used)
 - Restore flow orchestration
 
 **Key classes:**
 - `BackupManager` — create/restore encrypted backups
-- `PasskeyKeyDeriver` — PRF extension for deterministic encryption keys
-- `CloudStorageProvider` — Google Drive API for backup storage
+- `BackupKeyDeriver` — derives AES-256 backup encryption key via PRF or password
+  - PRF path: zero friction, but only works with Google Password Manager
+  - Password path: universal fallback, uses Argon2id KDF
+  - Backup stores which derivation method was used. Each method produces its own AES-256 key. At backup creation time, the seed is encrypted with BOTH keys (dual-encrypted blob or two separate encrypted copies), so either path can decrypt on restore.
+- `BackupStorageProvider` — abstraction over backup storage options:
+  - **Block Store** (preferred): Google Play Services API, 4KB per entry (plenty for encrypted seed), max 16 entries, no user consent needed, auto-restores on new device setup. E2E encryption is opt-in via `setShouldBackupToCloud(true)` and requires screen lock (PIN/pattern/password). Cloud restore: Pixel Android 9+, other devices Android 12+. Requires Google Play Services.
+  - **Auto Backup** (fallback): Android 6+, automatic Google Drive backup, 25MB limit, but less control over encryption timing.
+  - **Google Drive REST API** (explicit): Full control but requires Google Sign-In consent.
 
 ### 3. `feature:onboarding` Module (new)
 
@@ -322,22 +484,22 @@ First-launch onboarding experience.
 
 | Property | How |
 |----------|-----|
-| **Keys never in software** | Master key lives in StrongBox/TEE, non-extractable |
-| **Biometric-gated signing** | Every tx requires face/fingerprint at hardware level |
+| **Master key never in app process** | Master key lives in StrongBox/TEE. Crypto operations happen in system process, key material never enters app memory. Private signing keys are derived in-app and wiped after use. |
+| **Auth-gated signing** | Every tx requires biometric or PIN/pattern (per-use, `duration=0`). TEE-level per-operation enforcement via CryptoObject + HardwareAuthToken challenge binding (API 30+). |
 | **Seed phrase encrypted at rest** | AES-256-GCM with hardware-backed key |
-| **Memory safety** | Derived keys wiped after each operation |
-| **Cloud backup security** | Backup encrypted with passkey-derived key (hardware-bound) |
-| **Device loss recovery** | Passkey syncs via Google Password Manager → decrypt backup on new device |
-| **No PIN/password** | Biometric is the only factor (hardware enforced) |
+| **Memory safety** | Seed + derived keys wiped after each operation via `ByteArray.fill(0)`. ⚠️ Two caveats: (1) Seed is briefly in app memory during signing (unavoidable — BIP-32 derivation runs in-app, not in TEE). (2) JVM may optimize away `fill(0)` or GC may copy arrays before wiping. No Java equivalent to C's `memset_s`. Best mitigation: minimize time seed is in memory + use Rust FFI for key derivation (Rust has `Zeroizing<T>`). |
+| **Cloud backup security** | Backup encrypted with PRF-derived key or Argon2id(password) — NOT with device-bound Keystore key. Two separate encryption layers (local + backup). |
+| **Device loss recovery** | Block Store restores backup blob → decrypt with PRF (passkey syncs via Google Password Manager) or backup password → re-encrypt with new device's Keystore key |
+| **Biometric-first, PIN fallback** | `AUTH_BIOMETRIC_STRONG \| AUTH_DEVICE_CREDENTIAL` — biometric preferred, device credential as fallback |
 
 ### Threat model
 
 | Threat | Mitigation |
 |--------|------------|
-| App compromise (malware) | Master key is non-extractable from StrongBox. Even with root access, biometric is required. |
-| Device theft (locked) | Biometric required. Key access counter can lock after N failures. |
+| App compromise (malware) | Master key is non-extractable from StrongBox/TEE. Key material never enters app process. However: on a rooted/compromised OS, an attacker could potentially *use* keys on-device (though not extract them). StrongBox is more resistant than TEE here due to separate CPU. |
+| Device theft (locked) | Biometric/PIN required. Android's built-in biometric lockout applies (device-specific — typically 30s lockout after 5 failures, permanent lockout requiring device credential after 15-20 failures). No Keystore-level failure counter. |
 | Device theft (unlocked) | Each crypto operation requires fresh biometric. No session caching. |
-| Cloud backup leak | Encrypted with passkey PRF key. Useless without the passkey. |
+| Cloud backup leak | Encrypted with PRF-derived key or Argon2id(password). Useless without the passkey or backup password. |
 | Passkey phishing | Passkeys are origin-bound by WebAuthn spec. Cannot be phished. |
 | Total loss (device + cloud) | Seed phrase backup (if user exported) is the last resort. Same as any self-custodial wallet. |
 
@@ -410,7 +572,7 @@ The W3C security vocabulary already has `capabilityDelegation`, `capabilityChain
 ```
 DApp in Chrome                    Android Platform                  Kuira Wallet
      │                                  │                                │
-     │ navigator.credentials.get({      │                                │
+     │ navigator.credentials.create({    │                                │
      │   digital: {                     │                                │
      │     protocol: "openid4vci-v1",   │                                │
      │     data: { scope, expiry }      │                                │
@@ -463,17 +625,23 @@ Access Key Layer (extension):
 
 Tier 1 works without access keys. Access keys add delegation capability on top.
 
-### Kuira as Android Credential Provider
+### Kuira as Android Digital Credential Holder
 
-Android's `CredentialProvider` API lets apps register as credential sources. Kuira would:
+**⚠️ Correction:** Digital Credentials use the **Credential Manager Holder API** (`RegistryManager` + `OpenId4VpRegistry`), NOT `CredentialProviderService` (which is for passkeys/passwords only). These are separate Android APIs.
 
-1. Register as a `CredentialProviderService`
-2. When Chrome/apps request credentials via Digital Credentials API, Android routes to Kuira
-3. Kuira shows biometric prompt + approval UI
-4. Root key (in StrongBox) signs the access key credential
-5. Returns W3C VC to the requesting app
+Kuira would:
 
-This is similar to how Google Password Manager provides passkeys — but Kuira provides blockchain access key credentials.
+1. Register credentials with `RegistryManager` (metadata: what credential types Kuira can provide)
+2. Declare an Activity with intent filter `androidx.credentials.registry.provider.action.GET_CREDENTIAL`
+3. When Chrome/apps request credentials, Credential Manager matches and launches Kuira's Activity
+4. Kuira shows biometric prompt + approval UI
+5. Root key signs the access key credential
+6. Returns `DigitalCredential(responseJson)` via `PendingIntentHandler`
+
+**API level:** Credential Manager Holder API supports Android 6+ (API 23).
+**Supported formats:** SD-JWT and mdoc (ISO 18013-5). W3C VCDM may require custom handling.
+
+**Important:** The DC API currently supports SD-JWT and mdoc natively. W3C VCDM 2.0 support through the Android Holder API is not confirmed — may need to use the JSON-LD credential inside an SD-JWT wrapper or implement custom credential type handling.
 
 ---
 
@@ -498,15 +666,20 @@ Tier 1 → Tier 2 migration: If Midnight adds P-256 support, existing users can 
 
 ## Comparison to Other Wallets
 
-| Feature | MetaMask | Phantom | Lace | **Kuira (Tier 1)** |
-|---------|----------|---------|------|---------------------|
+| Feature | MetaMask Mobile | Phantom | Lace (browser ext) | **Kuira (Tier 1)** |
+|---------|----------------|---------|---------------------|---------------------|
 | Seed phrase in onboarding | Yes (required) | Yes (required) | Yes (required) | **No** (hidden) |
-| Hardware-backed keys | No | No | No (browser) | **Yes** (StrongBox/TEE) |
-| Biometric signing | No | UI gate only | No | **Crypto-gated** (hardware) |
-| Cloud backup | Manual only | Manual only | No | **Automatic** (encrypted) |
-| Passkey auth | No | No | No | **Yes** |
-| Recovery without seed phrase | No | No | No | **Yes** (cloud + passkey) |
-| Time to first wallet | ~2 min | ~1 min | ~2 min | **~5 seconds** |
+| Hardware-backed keys | Partial (Keystore for vault password, not signing key) | Unknown (closed-source) | No (browser) | **Yes** (StrongBox/TEE for master key) |
+| Biometric signing | UI gate only (retrieves vault password) | UI gate only (likely) | No | **Crypto-gated** (hardware, per-use) |
+| Cloud backup | Manual (Android). ⚠️ iOS: iCloud auto-includes vault by default | Manual only | No | **Automatic** (Block Store, E2E encrypted) |
+| Passkey auth | No | No | No | **Planned** (requires RP server) |
+| Recovery without seed phrase | No | Social login option (separate from seed wallets) | No | **Yes** (cloud backup + password) |
+| Time to first wallet | ~3-5 min (with seed phrase step) | ~1-2 min | ~2 min | **~5 seconds** |
+
+**Notes on competitor claims (verified April 2026):**
+- MetaMask uses `react-native-keychain` → Android Keystore for vault password only. Private key enters JS heap during signing (confirmed by CertiK audit). Biometric was historically bypassable (GitHub Issue #901).
+- Phantom is closed-source. No evidence of hardware-gated crypto signing. Social login uses distributed key management (not cloud backup of seed).
+- Lace is browser-only. Mobile V2 on roadmap but not confirmed shipped with biometric features.
 
 ---
 
@@ -537,11 +710,11 @@ Both can be sent over the **Digital Credentials API** instead of HTTPS — this 
 
 | Platform | Credential Storage | Digital Credentials API | Notes |
 |----------|-------------------|------------------------|-------|
-| **Android** | Google Wallet, CredentialManager, 3rd party apps | Yes (via `navigator.credentials`) | Full support — Kuira can register as credential provider |
+| **Android** | Google Wallet, CredentialManager, 3rd party apps | Yes (via `navigator.credentials`) | Full support — Kuira registers via Credential Manager Holder API (`RegistryManager`). Natively supports SD-JWT + mdoc formats. |
 | **Apple** | Apple Wallet (closed partners only), 3rd party apps via Identity Document Services | Yes (via Digital Credentials API) | Cannot mint custom IDs into Apple Wallet — need 3rd party app |
 | **Web** | Browser Credential Management API | Yes | Routes to registered credential providers |
 
-**Android advantage:** Google's ecosystem is more open here. Kuira can register as a `CredentialProviderService` and handle credential requests from any app/browser. Apple's ecosystem requires 3rd party wallet apps for non-government credentials.
+**Android advantage:** Google's ecosystem is more open here. Kuira can register as a Digital Credential Holder via `RegistryManager` and handle credential requests from any app/browser. Apple's ecosystem requires 3rd party wallet apps for non-government credentials.
 
 ### EU Digital Identity (EUDI)
 
