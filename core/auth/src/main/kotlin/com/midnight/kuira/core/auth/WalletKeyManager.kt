@@ -12,8 +12,6 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Manages the AES-256 master key in Android Keystore.
@@ -26,8 +24,7 @@ import javax.inject.Singleton
  * The key supports both BIOMETRIC_STRONG and DEVICE_CREDENTIAL (PIN/pattern),
  * with CryptoObject binding for TEE-level per-operation enforcement (API 30+).
  */
-@Singleton
-class WalletKeyManager @Inject constructor() {
+class WalletKeyManager {
 
     companion object {
         const val MASTER_KEY_ALIAS = "kuira_master_key"

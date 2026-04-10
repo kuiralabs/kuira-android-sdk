@@ -64,7 +64,7 @@ class WalletKeyManagerInstrumentedTest {
             keyManager.generateKey()
             fail("Should have thrown IllegalStateException")
         } catch (e: IllegalStateException) {
-            assertTrue(e.message!!.contains("already exists"))
+            assertTrue(e.message.orEmpty().contains("already exists"))
         }
     }
 
@@ -90,7 +90,7 @@ class WalletKeyManagerInstrumentedTest {
             keyManager.cipherForEncrypt()
             fail("Should have thrown IllegalStateException")
         } catch (e: IllegalStateException) {
-            assertTrue(e.message!!.contains("Master key not found"))
+            assertTrue(e.message.orEmpty().contains("Master key not found"))
         }
     }
 
@@ -103,7 +103,7 @@ class WalletKeyManagerInstrumentedTest {
             keyManager.cipherForDecrypt(ByteArray(8))
             fail("Should have thrown IllegalArgumentException for 8-byte IV")
         } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("12 bytes"))
+            assertTrue(e.message.orEmpty().contains("12 bytes"))
         }
 
         // Too long
@@ -111,7 +111,7 @@ class WalletKeyManagerInstrumentedTest {
             keyManager.cipherForDecrypt(ByteArray(16))
             fail("Should have thrown IllegalArgumentException for 16-byte IV")
         } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("12 bytes"))
+            assertTrue(e.message.orEmpty().contains("12 bytes"))
         }
     }
 

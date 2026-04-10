@@ -17,11 +17,8 @@ import javax.inject.Singleton
 /**
  * Hilt module for wallet authentication dependencies.
  *
- * **Provided Dependencies:**
- * - [WalletKeyManager]: Manages the AES-256 master key in Android Keystore
- * - [SecurityCapabilities]: Detects device hardware security (StrongBox, TEE, biometrics)
- *
- * Both are singletons — the Keystore and BiometricManager are device-level resources.
+ * Uses explicit @Provides (not @Inject constructor) to match the project's
+ * DI pattern used in ConnectorModule, IndexerModule, NetworkModule, etc.
  */
 @Module
 @InstallIn(SingletonComponent::class)

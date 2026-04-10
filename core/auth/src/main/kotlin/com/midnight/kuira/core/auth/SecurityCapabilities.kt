@@ -6,17 +6,16 @@ package com.midnight.kuira.core.auth
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
+import androidx.annotation.RequiresApi
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Security level of the Keystore key backing.
@@ -37,10 +36,7 @@ enum class KeySecurityLevel {
  * Used by [WalletKeyManager] to determine the best available security level
  * and by the onboarding UI to inform users about their device's protection.
  */
-@Singleton
-class SecurityCapabilities @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
+class SecurityCapabilities(private val context: Context) {
 
     private val biometricManager = BiometricManager.from(context)
 
@@ -86,6 +82,25 @@ class SecurityCapabilities @Inject constructor(
      */
     fun getKeySecurityLevel(alias: String): KeySecurityLevel? {
         val keyInfo = getKeyInfo(alias) ?: return null
+
+        // KeyInfo.getSecurityLevel() requires API 31+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSecurityLevelApi31(keyInfo)
+        } else {
+            // On API 30, fall back to the deprecated method
+            @Suppress("DEPRECATION")
+            if (keyInfo.isInsideSecureHardware) {
+                // Can't distinguish StrongBox from TEE on API 30 — report TEE
+                // (StrongBox detection via PackageManager is separate)
+                if (hasStrongBox) KeySecurityLevel.STRONGBOX else KeySecurityLevel.TEE
+            } else {
+                KeySecurityLevel.SOFTWARE
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun getSecurityLevelApi31(keyInfo: KeyInfo): KeySecurityLevel {
         return when (keyInfo.securityLevel) {
             KeyProperties.SECURITY_LEVEL_STRONGBOX -> KeySecurityLevel.STRONGBOX
             KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> KeySecurityLevel.TEE
