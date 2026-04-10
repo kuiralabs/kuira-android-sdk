@@ -7,6 +7,7 @@ package com.midnight.kuira.core.auth.di
 import android.content.Context
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.SecurityCapabilities
+import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
 import dagger.Module
 import dagger.Provides
@@ -45,5 +46,14 @@ object AuthModule {
         walletKeyManager: WalletKeyManager
     ): BiometricGate {
         return BiometricGate(walletKeyManager)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSeedVault(
+        @ApplicationContext context: Context,
+        biometricGate: BiometricGate
+    ): SeedVault {
+        return SeedVault(context, biometricGate)
     }
 }
