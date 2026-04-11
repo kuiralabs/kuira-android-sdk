@@ -51,6 +51,7 @@ class SendViewModelTest {
     private lateinit var provingKeyManager: com.midnight.kuira.core.crypto.proving.ProvingKeyManager
     private lateinit var subscriptionManagerFactory: SubscriptionManagerFactory
     private lateinit var syncStateManager: SyncStateManager
+    private lateinit var seedVault: com.midnight.kuira.core.auth.SeedVault
     private lateinit var viewModel: SendViewModel
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -69,6 +70,7 @@ class SendViewModelTest {
         provingKeyManager = mock()
         subscriptionManagerFactory = mock()
         syncStateManager = mock()
+        seedVault = mock()
 
         viewModel = SendViewModel(
             balanceRepository = balanceRepository,
@@ -81,7 +83,8 @@ class SendViewModelTest {
             provingKeyManager = provingKeyManager,
             subscriptionManagerFactory = subscriptionManagerFactory,
             syncStateManager = syncStateManager,
-            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
+            seedVault = seedVault,
         )
     }
 
@@ -200,10 +203,10 @@ class SendViewModelTest {
         val toAddress = com.midnight.kuira.core.crypto.address.Bech32m.encode("mn_addr_preview", toKey)
 
         viewModel.sendTransaction(
+            activity = mock(),
             fromAddress = fromAddress,
             toAddress = toAddress,
             amount = BigInteger.ZERO,
-            seedPhrase = "test seed phrase"
         )
 
         val state = viewModel.state.value
@@ -220,10 +223,10 @@ class SendViewModelTest {
         val toAddress = com.midnight.kuira.core.crypto.address.Bech32m.encode("mn_addr_preview", toKey)
 
         viewModel.sendTransaction(
+            activity = mock(),
             fromAddress = fromAddress,
             toAddress = toAddress,
             amount = BigInteger.valueOf(-100),
-            seedPhrase = "test seed phrase"
         )
 
         val state = viewModel.state.value
@@ -234,10 +237,10 @@ class SendViewModelTest {
     @Test
     fun `sendTransaction with invalid recipient address shows error`() = runTest {
         viewModel.sendTransaction(
+            activity = mock(),
             fromAddress = "mn_addr_preview1test",
             toAddress = "invalid_address",
             amount = BigInteger.valueOf(100),
-            seedPhrase = "test seed phrase"
         )
 
         val state = viewModel.state.value
@@ -279,10 +282,10 @@ class SendViewModelTest {
 
         // Start transaction with invalid input triggers Building then Error
         viewModel.sendTransaction(
+            activity = mock(),
             fromAddress = "mn_addr_preview1test",
             toAddress = "invalid",
             amount = BigInteger.ONE,
-            seedPhrase = "test"
         )
 
         // Should show error

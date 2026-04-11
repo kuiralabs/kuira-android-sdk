@@ -37,9 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
 import java.math.BigDecimal
@@ -92,6 +94,11 @@ fun SendScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val formatter = remember { BalanceFormatter() }
+    val context = LocalContext.current
+    // We require a FragmentActivity host so BiometricPrompt can attach.
+    // MainActivity already extends FragmentActivity (changed in Step 8A.1).
+    val activity = context as? FragmentActivity
+        ?: error("SendScreen must be hosted in a FragmentActivity")
 
     // Auto-load balance when screen mounts
     LaunchedEffect(address) {
@@ -117,7 +124,6 @@ fun SendScreen(
         )
     }
     var amountInput by remember { mutableStateOf("1") }
-    var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
 
     Scaffold(
         topBar = {
@@ -174,18 +180,14 @@ fun SendScreen(
                 onAmountChange = { amountInput = it }
             )
 
-            // Seed Phrase Input (MVP ONLY - not production)
-            SeedPhraseSection(
-                seedPhrase = seedPhrase,
-                onSeedPhraseChange = { seedPhrase = it }
-            )
-
             // Send Button
+            //
+            // The seed is no longer entered in the UI — SendViewModel.send() will
+            // load it from SeedVault via biometric prompt when the user taps Send.
             SendButtonSection(
                 enabled = address.isNotBlank() &&
                         recipientAddress.isNotBlank() &&
                         amountInput.isNotBlank() &&
-                        seedPhrase.isNotBlank() &&
                         state is SendUiState.Idle,
                 onClick = {
                     // Convert NIGHT input to Stars for transaction
@@ -197,10 +199,10 @@ fun SendScreen(
                     }
 
                     viewModel.send(
+                        activity = activity,
                         fromAddress = address,
                         toAddress = recipientAddress,
                         amount = amountInStars,
-                        seedPhrase = seedPhrase
                     )
                 }
             )
@@ -459,47 +461,6 @@ private fun AmountSection(
         }
     }
 }
-
-@Composable
-private fun SeedPhraseSection(
-    seedPhrase: String,
-    onSeedPhraseChange: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "⚠️ Seed Phrase (MVP ONLY)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "WARNING: Never expose seed in production!",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = seedPhrase,
-                onValueChange = onSeedPhraseChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("24-word mnemonic") },
-                minLines = 3
-            )
-        }
-    }
-}
-
 
 @Composable
 private fun SendButtonSection(

@@ -11,7 +11,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 30 // Required by core:auth
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -50,9 +50,11 @@ dependencies {
     implementation(project(":core:ledger"))      // For transaction building/signing/submission
     implementation(project(":core:crypto"))      // For address validation (Bech32m)
     implementation(project(":core:network"))     // For NetworkConfig (default test addresses)
+    implementation(project(":core:auth"))        // SeedVault for biometric-gated key access
 
     // Android Core
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

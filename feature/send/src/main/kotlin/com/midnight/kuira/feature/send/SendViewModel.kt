@@ -3,13 +3,16 @@ package com.midnight.kuira.feature.send
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.crypto.bip32.DerivedKey
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
-import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.indexer.api.IndexerClient
+// BIP39 no longer used — seed comes from SeedVault, not a typed mnemonic
 import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
@@ -93,7 +96,8 @@ class SendViewModel @Inject constructor(
     private val provingKeyManager: ProvingKeyManager,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val syncStateManager: SyncStateManager,
-    private val networkConfig: NetworkConfig
+    private val networkConfig: NetworkConfig,
+    private val seedVault: SeedVault,
 ) : ViewModel() {
 
     /**
@@ -124,24 +128,20 @@ class SendViewModel @Inject constructor(
         Log.d(TAG, "Proving mode changed to: $newMode")
     }
 
-    /**
-     * Default test seed phrase for the currently selected network (MVP only).
-     * Uses Bob's mnemonic (Bob = sender on BalanceScreen, same mnemonic for all networks).
-     */
-    val defaultTestSeedPhrase: String = DEFAULT_TEST_SEED_PHRASES[networkConfig.network] ?: ""
-
     private val _state = MutableStateFlow<SendUiState>(SendUiState.Idle())
 
     // Background sync job for UTXO recovery after error 115
     private var syncJob: Job? = null
     val state: StateFlow<SendUiState> = _state.asStateFlow()
 
-    // Cached transaction parameters for auto-retry after sync
+    // Cached transaction parameters for auto-retry after sync. Activity is held
+    // weakly via FragmentActivity reference — only valid for the duration of a
+    // single send flow (config changes during retry will fail loudly).
     private data class CachedTransactionParams(
+        val activity: FragmentActivity,
         val fromAddress: String,
         val toAddress: String,
         val amount: BigInteger,
-        val seedPhrase: String
     )
     private var cachedParams: CachedTransactionParams? = null
     private var retryAttempt: Int = 0
@@ -160,18 +160,23 @@ class SendViewModel @Inject constructor(
      *
      * Routes to [sendTransaction] for `mn_addr_*` addresses or
      * [sendShieldedTransaction] for `mn_shield-addr_*` addresses.
+     *
+     * The seed is loaded on demand from [SeedVault] via biometric prompt —
+     * the caller no longer passes a mnemonic.
+     *
+     * @param activity The hosting FragmentActivity (required by BiometricPrompt)
      */
     fun send(
+        activity: FragmentActivity,
         fromAddress: String,
         toAddress: String,
         amount: BigInteger,
-        seedPhrase: String,
     ) {
         val validation = AddressValidator.validate(toAddress)
         if (validation is AddressValidator.ValidationResult.Valid && validation.isShielded) {
-            sendShieldedTransaction(fromAddress, toAddress, amount, seedPhrase)
+            sendShieldedTransaction(activity, fromAddress, toAddress, amount)
         } else {
-            sendTransaction(fromAddress, toAddress, amount, seedPhrase)
+            sendTransaction(activity, fromAddress, toAddress, amount)
         }
     }
 
@@ -231,48 +236,56 @@ class SendViewModel @Inject constructor(
      * Send transaction.
      *
      * **Process:**
-     * 1. Validate inputs
-     * 2. Fetch current ledger parameters from indexer
-     * 3. Build unsigned transaction
-     * 4. Sign transaction with user's private key
-     * 5. Submit with automatic dust fee payment
-     * 6. Wait for confirmation
+     * 1. Load seed from SeedVault (triggers biometric prompt)
+     * 2. Validate inputs
+     * 3. Fetch current ledger parameters from indexer
+     * 4. Build unsigned transaction
+     * 5. Sign transaction with user's private key
+     * 6. Submit with automatic dust fee payment
+     * 7. Wait for confirmation
      *
-     * **Parameters:**
+     * @param activity The hosting FragmentActivity (required by BiometricPrompt)
      * @param fromAddress Sender's address
      * @param toAddress Recipient's address
      * @param amount Amount to send (in smallest units - Stars)
-     * @param seedPhrase User's 24-word mnemonic (for signing)
      * @param isRetry If true, skip pre-send sync (we already synced in syncAndRetry).
      *        This preserves UTXOs marked SPENT from error 115.
-     *
-     * **Security Warning:**
-     * This MVP exposes seed phrase in parameters. Production implementation
-     * must use secure storage (Android Keystore) and biometric auth.
-     *
-     * **Note:**
-     * Ledger parameters are fetched automatically from the indexer.
-     * No manual input required!
      */
     fun sendTransaction(
+        activity: FragmentActivity,
         fromAddress: String,
         toAddress: String,
         amount: BigInteger,
-        seedPhrase: String,
-        isRetry: Boolean = false
+        isRetry: Boolean = false,
     ) {
         viewModelScope.launch {
-            // CRITICAL SECURITY: Derive keys once and wipe in finally block
-            var seed: ByteArray? = null
+            var plaintextSeed: PlaintextSeed? = null
             var hdWallet: HDWallet? = null
             var derivedKey: DerivedKey? = null
             var dustKey: DerivedKey? = null
 
             try {
-                // Step 0: Quick sync to ensure UTXOs are fresh (prevents error 115)
+                // Step 0: Validate cheap things FIRST so we don't show a biometric
+                // prompt for an obviously broken request.
+                if (amount <= BigInteger.ZERO) {
+                    _state.value = SendUiState.Error("Amount must be greater than zero")
+                    return@launch
+                }
+
+                val validationResult = AddressValidator.validate(toAddress)
+                if (validationResult is AddressValidator.ValidationResult.Invalid) {
+                    _state.value = SendUiState.Error(validationResult.reason)
+                    return@launch
+                }
+
+                // Step 1: Load encrypted seed via biometric prompt
+                _state.value = SendUiState.Building
+                plaintextSeed = seedVault.loadSeed(activity)
+                hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
+
+                // Step 2: Quick sync to ensure UTXOs are fresh (prevents error 115)
                 // SKIP if this is a retry - we already synced in syncAndRetry() with skipCacheClear=true
                 // to preserve UTXOs marked SPENT from error 115
-                _state.value = SendUiState.Building
                 if (!isRetry) {
                     val syncedOk = quickSyncBeforeSend(fromAddress)
                     if (!syncedOk) {
@@ -282,24 +295,7 @@ class SendViewModel @Inject constructor(
                     Log.d(TAG, "Skipping pre-send sync (retry flow - already synced)")
                 }
 
-                // Step 1: Validate inputs
-
-                // Validate amount
-                if (amount <= BigInteger.ZERO) {
-                    _state.value = SendUiState.Error("Amount must be greater than zero")
-                    return@launch
-                }
-
-                // Validate recipient address
-                val validationResult = AddressValidator.validate(toAddress)
-                if (validationResult is AddressValidator.ValidationResult.Invalid) {
-                    _state.value = SendUiState.Error(validationResult.reason)
-                    return@launch
-                }
-
-                // Step 2: Derive keys from HD wallet (ONCE for all operations)
-                seed = BIP39.mnemonicToSeed(seedPhrase)
-                hdWallet = HDWallet.fromSeed(seed)
+                // Step 3: Derive signing key from HD wallet (already loaded above)
                 derivedKey = hdWallet
                     .selectAccount(0)
                     .selectRole(MidnightKeyRole.NIGHT_EXTERNAL)
@@ -412,11 +408,11 @@ class SendViewModel @Inject constructor(
                 Log.d(TAG, "Submitting transaction to network WITH dust fees")
 
                 // Derive dust seed for fee payment
-                dustKey = hdWallet!!
+                dustKey = hdWallet
                     .selectAccount(0)
                     .selectRole(MidnightKeyRole.DUST)
                     .deriveKeyAt(0)
-                val dustSeed = dustKey!!.privateKeyBytes
+                val dustSeed = dustKey.privateKeyBytes
 
                 val result = transactionSubmitter.submitWithFees(
                     signedIntent = signedIntent,
@@ -470,13 +466,14 @@ class SendViewModel @Inject constructor(
                         utxoManager.markUtxosAsSpentByIntent(utxoIntentPairs, spentByLocalTx = false)
 
                         // Quick sync and auto-retry (Option C UX)
-                        // This will sync fresh UTXOs and automatically retry the transaction
+                        // This will sync fresh UTXOs and automatically retry the transaction.
+                        // Note: this triggers a second biometric prompt for the retry.
                         Log.d(TAG, "Starting auto-recovery: sync + retry...")
                         syncAndRetry(CachedTransactionParams(
+                            activity = activity,
                             fromAddress = fromAddress,
                             toAddress = toAddress,
                             amount = amount,
-                            seedPhrase = seedPhrase
                         ))
                     }
                 }
@@ -514,7 +511,7 @@ class SendViewModel @Inject constructor(
                 }
             } finally {
                 // CRITICAL SECURITY: Wipe all key material from memory
-                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                plaintextSeed?.wipe()
                 derivedKey?.clear()
                 dustKey?.clear()
                 hdWallet?.clear()
@@ -526,28 +523,33 @@ class SendViewModel @Inject constructor(
      * Send a shielded transaction.
      *
      * **Process:**
-     * 1. Load ZswapLocalState (from ShieldedRepository cache)
-     * 2. Derive zswap keys (m/44'/2400'/0'/3/0)
-     * 3. Parse recipient's shielded address into coin_pk + enc_pk
-     * 4. Build transfer via ZswapTransferBuilder
-     * 5. Prove → seal → submit via TransactionSubmitter
+     * 1. Load seed from SeedVault (biometric prompt)
+     * 2. Load ZswapLocalState (from ShieldedRepository cache)
+     * 3. Derive zswap keys (m/44'/2400'/0'/3/0)
+     * 4. Parse recipient's shielded address into coin_pk + enc_pk
+     * 5. Build transfer via ZswapTransferBuilder
+     * 6. Prove → seal → submit via TransactionSubmitter
      *
+     * @param activity The hosting FragmentActivity (required by BiometricPrompt)
      * @param toAddress Recipient's shielded address (mn_shield-addr_...)
      * @param amount Amount to send (micro-units)
-     * @param seedPhrase User's 24-word mnemonic
      */
     fun sendShieldedTransaction(
+        activity: FragmentActivity,
         fromAddress: String,
         toAddress: String,
         amount: BigInteger,
-        seedPhrase: String,
     ) {
         viewModelScope.launch {
-            var seed: ByteArray? = null
+            var plaintextSeed: PlaintextSeed? = null
             var hdWallet: HDWallet? = null
 
             try {
                 _state.value = SendUiState.Building
+
+                // Load encrypted seed via biometric prompt
+                plaintextSeed = seedVault.loadSeed(activity)
+                hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
 
                 // Validate shielded address
                 val validation = AddressValidator.validate(toAddress)
@@ -577,9 +579,7 @@ class SendViewModel @Inject constructor(
                     Log.d(TAG, "Proving keys downloaded")
                 }
 
-                // Derive zswap seed
-                seed = BIP39.mnemonicToSeed(seedPhrase)
-                hdWallet = HDWallet.fromSeed(seed)
+                // Derive zswap key (HD wallet already loaded above from biometric auth)
                 val zswapKey = hdWallet
                     .selectAccount(0)
                     .selectRole(MidnightKeyRole.ZSWAP)
@@ -627,7 +627,7 @@ class SendViewModel @Inject constructor(
                         }
 
                         // Step 2: Load dust state for fee payment
-                        val dustKey = hdWallet!!
+                        val dustKey = hdWallet
                             .selectAccount(0)
                             .selectRole(MidnightKeyRole.DUST)
                             .deriveKeyAt(0)
@@ -722,7 +722,7 @@ class SendViewModel @Inject constructor(
                 Log.e(TAG, "Shielded transaction failed", e)
                 _state.value = SendUiState.Error("Shielded transfer error: ${e.message}")
             } finally {
-                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                plaintextSeed?.wipe()
                 hdWallet?.clear()
             }
         }
@@ -936,12 +936,13 @@ class SendViewModel @Inject constructor(
                 // Note: sendTransaction will handle further errors, including triggering
                 // another syncAndRetry if we get error 115 again
                 // IMPORTANT: isRetry=true skips pre-send sync to preserve SPENT UTXOs from error 115
+                // Note: this triggers a fresh biometric prompt for the retry.
                 Log.d(TAG, "Auto-retrying transaction (attempt $retryAttempt)")
                 sendTransaction(
+                    activity = params.activity,
                     fromAddress = params.fromAddress,
                     toAddress = params.toAddress,
                     amount = params.amount,
-                    seedPhrase = params.seedPhrase,
                     isRetry = true
                 )
 
@@ -993,11 +994,6 @@ class SendViewModel @Inject constructor(
             "mn_addr_preprod" to "",
             "mn_addr_undeployed" to "mn_shield-addr_undeployed1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajs4fj9f5",
             "mn_addr_preview" to ""
-        )
-        // MVP test seed phrases per network — Alice is the sender (from CLI: mn wallet info alice)
-        val DEFAULT_TEST_SEED_PHRASES = mapOf(
-            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
-            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
         )
     }
 }
