@@ -24,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,6 +113,7 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     // Job tracking for proper cancellation
     private var collectionJob: Job? = null
     private var syncJob: Job? = null
+    private var optimisticTimeoutJob: Job? = null
 
     // Cached shielded data (preserved across unshielded Flow emissions)
     private var cachedShieldedBalances: Map<String, BigInteger>? = null
@@ -173,10 +175,31 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
             return
         }
 
-        // Cancel previous collection to prevent memory leaks
+        // Cancel previous collection + optimistic timeout to prevent stale transitions
         collectionJob?.cancel()
+        optimisticTimeoutJob?.cancel()
 
         _balanceState.value = BalanceUiState.Loading(isRefreshing = false)
+
+        // Optimistic timeout: if we're still in Loading state after 5 seconds
+        // (e.g., fresh wallet with no UTXOs, indexer slow to respond), transition
+        // to Success with zero balance. The subscription keeps running in the
+        // background, so if real data arrives later it'll update the UI via the
+        // normal flow collection.
+        optimisticTimeoutJob = viewModelScope.launch {
+            delay(OPTIMISTIC_TIMEOUT_MS)
+            if (_balanceState.value is BalanceUiState.Loading) {
+                Log.d(TAG, "Optimistic timeout hit ($OPTIMISTIC_TIMEOUT_MS ms) — showing zero balance")
+                lastLoadTimestamp = clock.instant()
+                _balanceState.value = BalanceUiState.Success(
+                    balances = emptyList(),
+                    lastUpdated = formatLastUpdated(lastLoadTimestamp!!),
+                    totalBalance = BigInteger.ZERO,
+                    shieldedBalances = cachedShieldedBalances,
+                    shieldedAddress = cachedShieldedAddress,
+                )
+            }
+        }
 
         // Start syncing from blockchain (updates database, which repository observes)
         startSync(address)
@@ -228,6 +251,9 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                         }
                 }
                 .collect { uiState ->
+                    // Real data arrived — cancel the optimistic zero-balance timer
+                    // so it doesn't overwrite a genuine Success state later.
+                    optimisticTimeoutJob?.cancel()
                     _balanceState.value = uiState
                 }
         }
@@ -512,6 +538,7 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
         super.onCleared()
         collectionJob?.cancel()
         syncJob?.cancel()
+        optimisticTimeoutJob?.cancel()
         shieldedSyncJob?.cancel()
         shieldedSyncSeed?.let { java.util.Arrays.fill(it, 0.toByte()) }
         shieldedSyncSeed = null
@@ -526,5 +553,13 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
         const val TIME_PATTERN = "h:mm a"
         const val DATE_TIME_PATTERN = "MMM d 'at' h:mm a"
+
+        /**
+         * Time to wait for the indexer/database to emit real balance data before
+         * optimistically showing zero balance. After this timeout, we transition
+         * to Success(0) but keep the subscription running — real data that arrives
+         * later will still update the UI through the normal flow collection.
+         */
+        const val OPTIMISTIC_TIMEOUT_MS = 5_000L
     }
 }

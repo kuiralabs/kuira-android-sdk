@@ -997,7 +997,11 @@ class BalanceViewModelTest {
         advanceUntilIdle()
 
         assertEquals(SyncState.Connecting, viewModel.syncState.value)
-        assertTrue(viewModel.balanceState.value is BalanceUiState.Loading)
+        // Note: with the 5-second optimistic timeout added in Step 8A.8c,
+        // advanceUntilIdle() fast-forwards through the delay and the balance
+        // state auto-transitions to Success(0). The real emission below
+        // then overrides it with the actual balance. This is fine — the
+        // test verifies the end state, not the intermediate Loading.
 
         // Balance arrives (from cached data)
         balanceFlow.emit(listOf(TokenBalance("TNIGHT", BigInteger.valueOf(1_000_000), 1)))
@@ -1032,6 +1036,54 @@ class BalanceViewModelTest {
             BigInteger.valueOf(2_000_000),
             (viewModel.balanceState.value as BalanceUiState.Success).totalBalance
         )
+    }
+
+    // ==================== Optimistic Timeout ====================
+
+    @Test
+    fun `loadBalances transitions to zero-balance Success after optimistic timeout`() = runTest {
+        // Given: observeBalances never emits (simulates fresh wallet with no DB entries
+        // OR slow indexer). subscription also doesn't emit.
+        whenever(repository.observeBalances(testAddress)).thenReturn(emptyFlow())
+        whenever(subscriptionManager.startSubscription(testAddress)).thenReturn(emptyFlow())
+
+        // When: loadBalances is called
+        viewModel.loadBalances(testAddress)
+        advanceUntilIdle() // fast-forwards through the 5-second delay
+
+        // Then: state should be Success(0) even though no real data arrived
+        val state = viewModel.balanceState.value
+        assertTrue(
+            "Expected Success after optimistic timeout, got ${state::class.simpleName}",
+            state is BalanceUiState.Success
+        )
+        assertEquals(BigInteger.ZERO, (state as BalanceUiState.Success).totalBalance)
+        assertTrue("Balance list should be empty", state.balances.isEmpty())
+    }
+
+    @Test
+    fun `loadBalances optimistic timeout is overridden by real data when it arrives`() = runTest {
+        // Given: a flow that we can emit to manually
+        val balanceFlow = MutableSharedFlow<List<TokenBalance>>()
+        whenever(repository.observeBalances(testAddress)).thenReturn(balanceFlow)
+        whenever(subscriptionManager.startSubscription(testAddress)).thenReturn(emptyFlow())
+
+        // When: loadBalances triggers both the optimistic timer and the flow collection
+        viewModel.loadBalances(testAddress)
+        advanceUntilIdle() // optimistic timer fires, state → Success(0)
+
+        // Verify the optimistic timeout fired
+        assertEquals(
+            BigInteger.ZERO,
+            (viewModel.balanceState.value as BalanceUiState.Success).totalBalance
+        )
+
+        // Then: real balance emission overrides the optimistic value
+        balanceFlow.emit(listOf(TokenBalance("TNIGHT", BigInteger.valueOf(42_000_000), 3)))
+        advanceUntilIdle()
+
+        val finalState = viewModel.balanceState.value as BalanceUiState.Success
+        assertEquals(BigInteger.valueOf(42_000_000), finalState.totalBalance)
     }
 
     // ==================== Sync State Initial Value ====================
