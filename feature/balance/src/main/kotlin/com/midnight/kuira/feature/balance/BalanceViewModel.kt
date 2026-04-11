@@ -84,19 +84,37 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 ) : ViewModel() {
 
     /**
-     * The wallet's derived public addresses (unshielded + shielded), loaded
-     * from [WalletAddressCache] at ViewModel creation. Null while loading or
-     * if onboarding hasn't completed.
+     * Loading state for the wallet address cache. Distinguishes:
+     * - [AddressCacheState.Loading]: initial, cache read in progress
+     * - [AddressCacheState.Found]: cache contained valid addresses
+     * - [AddressCacheState.Empty]: cache file missing or corrupted — wallet
+     *   needs to be re-created / re-cached (state reset scenario)
      *
-     * Addresses are public, so no biometric is needed to display them. The
-     * UI observes this to auto-populate the address field.
+     * UI layer observes this to decide whether to show the balance flow,
+     * an empty state, or a loading indicator.
      */
-    private val _walletAddresses = MutableStateFlow<WalletAddresses?>(null)
-    val walletAddresses: StateFlow<WalletAddresses?> = _walletAddresses.asStateFlow()
+    sealed interface AddressCacheState {
+        data object Loading : AddressCacheState
+        data class Found(val addresses: WalletAddresses) : AddressCacheState
+        data object Empty : AddressCacheState
+    }
+
+    private val _walletAddresses = MutableStateFlow<AddressCacheState>(AddressCacheState.Loading)
+    val walletAddresses: StateFlow<AddressCacheState> = _walletAddresses.asStateFlow()
 
     init {
         viewModelScope.launch {
-            _walletAddresses.value = walletAddressCache.load()
+            val loaded = walletAddressCache.load()
+            Log.d(TAG, "WalletAddressCache.load() returned: " +
+                "unshielded=${loaded?.unshieldedAddress}, " +
+                "shielded=${loaded?.shieldedAddress?.take(20)}...")
+            _walletAddresses.value = if (loaded != null) {
+                AddressCacheState.Found(loaded)
+            } else {
+                Log.w(TAG, "No cached wallet address found — onboarding may not have " +
+                    "saved it, or this install predates the cache. UI should show empty state.")
+                AddressCacheState.Empty
+            }
         }
     }
 
@@ -149,17 +167,22 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
      * Does nothing if the wallet has not been onboarded yet (no cached address).
      */
     fun loadFromCache() {
-        val addresses = _walletAddresses.value
-        if (addresses == null) {
-            // Try to reload in case onboarding just completed
-            viewModelScope.launch {
-                val loaded = walletAddressCache.load()
-                _walletAddresses.value = loaded
-                if (loaded != null) loadBalances(loaded.unshieldedAddress)
+        when (val current = _walletAddresses.value) {
+            is AddressCacheState.Found -> loadBalances(current.addresses.unshieldedAddress)
+            is AddressCacheState.Loading,
+            is AddressCacheState.Empty -> {
+                // Try to reload in case onboarding just completed
+                viewModelScope.launch {
+                    val loaded = walletAddressCache.load()
+                    if (loaded != null) {
+                        _walletAddresses.value = AddressCacheState.Found(loaded)
+                        loadBalances(loaded.unshieldedAddress)
+                    } else {
+                        _walletAddresses.value = AddressCacheState.Empty
+                    }
+                }
             }
-            return
         }
-        loadBalances(addresses.unshieldedAddress)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -367,7 +390,8 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                 zswapKey.clear()
 
                 // Shielded address comes from the cache — no need to re-derive
-                val shieldedAddress = _walletAddresses.value?.shieldedAddress
+                val shieldedAddress = (_walletAddresses.value as? AddressCacheState.Found)
+                    ?.addresses?.shieldedAddress
 
                 // Sync zswap events
                 val hasCoins = shieldedRepository.syncFromBlockchain(address, zswapSeed)

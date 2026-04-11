@@ -76,7 +76,10 @@ fun BalanceScreen(
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
 
-    // Wallet addresses loaded from WalletAddressCache (populated by onboarding)
+    // Wallet addresses loaded from WalletAddressCache (populated by onboarding).
+    // Sealed type: Loading → (Found | Empty). Empty means the cache was never
+    // written, or the install predates the cache logic — the ViewModel emits
+    // an Error into balanceState so the UI doesn't hang.
     val walletAddresses by viewModel.walletAddresses.collectAsState()
     var address by remember { mutableStateOf("") }
     var shieldedVisible by remember { mutableStateOf(true) }
@@ -84,10 +87,21 @@ fun BalanceScreen(
     // Once the cached address is available, populate the address field and
     // start loading unshielded balance. No biometric needed — addresses are public.
     LaunchedEffect(walletAddresses) {
-        val cachedUnshielded = walletAddresses?.unshieldedAddress
-        if (!cachedUnshielded.isNullOrBlank() && address.isBlank()) {
-            address = cachedUnshielded
-            viewModel.loadBalances(cachedUnshielded)
+        when (val current = walletAddresses) {
+            is BalanceViewModel.AddressCacheState.Found -> {
+                if (address.isBlank()) {
+                    address = current.addresses.unshieldedAddress
+                    viewModel.loadBalances(current.addresses.unshieldedAddress)
+                }
+            }
+            is BalanceViewModel.AddressCacheState.Empty -> {
+                // Cache is missing (pre-existing install or onboarding save failed).
+                // Don't call loadBalances — there's nothing to load. The UI below
+                // renders an "empty wallet" card with instructions to reset.
+            }
+            is BalanceViewModel.AddressCacheState.Loading -> {
+                // Still reading the cache file. Will fire again on state change.
+            }
         }
     }
 
@@ -176,6 +190,17 @@ fun BalanceScreen(
 
                 // Sync Status Section
                 SyncStatusSection(syncState = syncState)
+
+                // Empty-cache state — shown when the wallet address file is missing.
+                // This happens for installs that pre-date Step 8A.8c's cache logic.
+                // Tell the user how to reset, then gracefully show no balance data.
+                if (walletAddresses is BalanceViewModel.AddressCacheState.Empty) {
+                    ErrorSection(
+                        message = "Wallet state out of sync — please reset.\n\n" +
+                            "Run: adb shell pm clear com.midnight.kuira\n\n" +
+                            "Then reopen the app to onboard."
+                    )
+                }
 
                 // Balance Section
                 when (val state = balanceState) {
