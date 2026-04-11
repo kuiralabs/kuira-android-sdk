@@ -12,11 +12,12 @@ package com.midnight.kuira.core.network
  */
 enum class MidnightNetwork(
     val displayName: String,
-    val addressPrefix: String
+    val addressPrefix: String,
+    val shieldedAddressPrefix: String,
 ) {
-    PREPROD("Preprod", "mn_addr_preprod"),
-    PREVIEW("Preview", "mn_addr_preview"),
-    UNDEPLOYED("Undeployed", "mn_addr_undeployed");
+    PREPROD("Preprod", "mn_addr_preprod", "mn_shield-addr_preprod"),
+    PREVIEW("Preview", "mn_addr_preview", "mn_shield-addr_preview"),
+    UNDEPLOYED("Undeployed", "mn_addr_undeployed", "mn_shield-addr_undeployed");
 
     companion object {
         val DEFAULT = UNDEPLOYED

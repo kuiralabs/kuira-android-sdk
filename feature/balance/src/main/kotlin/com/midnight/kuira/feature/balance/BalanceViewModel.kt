@@ -149,15 +149,6 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     private var lastLoadTimestamp: Instant? = null
 
     /**
-     * Load balances for a specific address.
-     *
-     * Cancels any previous collection and starts observing balance changes.
-     * Uses a single collection pattern with refresh trigger to prevent memory leaks.
-     *
-     * @param address The unshielded address to track (must be valid Midnight address)
-     * @throws IllegalArgumentException if address is invalid
-     */
-    /**
      * Load unshielded balances for the wallet's cached unshielded address.
      *
      * This is the default entry point — no biometric is required because
@@ -351,12 +342,6 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
         }
     }
 
-    /**
-     * Load shielded balance by syncing zswap events.
-     *
-     * Derives the zswap key from the seed phrase, syncs events, and updates
-     * the current Success state with shielded balances.
-     */
     /**
      * Load shielded balance. Requires biometric auth because shielded event
      * decryption needs the zswap private key from the wallet seed.

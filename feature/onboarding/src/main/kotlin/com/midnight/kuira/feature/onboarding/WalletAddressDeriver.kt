@@ -73,12 +73,7 @@ internal object WalletAddressDeriver {
             val shieldedKeys = ShieldedKeyDeriver.deriveKeys(zswapSeed) ?: return null
             val coinPkBytes = hexToBytes(shieldedKeys.coinPublicKey)
             val encPkBytes = hexToBytes(shieldedKeys.encryptionPublicKey)
-            val prefix = "mn_shield-addr" + when (network) {
-                MidnightNetwork.PREPROD -> "_preprod"
-                MidnightNetwork.PREVIEW -> "_preview"
-                MidnightNetwork.UNDEPLOYED -> "_undeployed"
-            }
-            return Bech32m.encode(prefix, coinPkBytes + encPkBytes)
+            return Bech32m.encode(network.shieldedAddressPrefix, coinPkBytes + encPkBytes)
         } finally {
             zswapSeed.fill(0)
         }

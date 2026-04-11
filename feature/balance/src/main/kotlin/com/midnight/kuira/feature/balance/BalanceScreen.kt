@@ -70,7 +70,11 @@ import com.midnight.kuira.core.indexer.sync.SyncState
 @Composable
 fun BalanceScreen(
     viewModel: BalanceViewModel = hiltViewModel(),
-    onNavigateToSend: ((String) -> Unit)? = null,
+    // No address is passed to the Send flow — SendScreen reads the active
+    // wallet's addresses from WalletAddressCache based on its own mode toggle.
+    // Per-mode send buttons on the balance cards are a deferred UX improvement
+    // that can be wired as an additional callback when needed.
+    onNavigateToSend: (() -> Unit)? = null,
     onNavigateToDust: ((String) -> Unit)? = null
 ) {
     val balanceState by viewModel.balanceState.collectAsState()
@@ -139,8 +143,8 @@ fun BalanceScreen(
                     onNavigateToSend?.let { navigateToSend ->
                         IconButton(
                             onClick = {
-                                android.util.Log.d("BalanceScreen", "Send button clicked with address: '$address'")
-                                navigateToSend(address)
+                                android.util.Log.d("BalanceScreen", "Send button clicked")
+                                navigateToSend()
                             },
                             enabled = address.isNotBlank() && address.startsWith("mn_")
                         ) {

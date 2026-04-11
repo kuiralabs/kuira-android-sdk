@@ -1087,10 +1087,11 @@ class SendViewModel @Inject constructor(
             .deriveKeyAt(0)
         return try {
             dustRepository.deleteState(address)
+            // maxBlocks intentionally defaults to DustRepository's own value
+            // (100) — single source of truth, no per-caller constant needed.
             dustRepository.syncFromBlockchain(
                 address = address,
                 dustSeed = dustKey.privateKeyBytes,
-                maxBlocks = DUST_SYNC_MAX_BLOCKS,
             )
         } finally {
             // DerivedKey.clear() wipes the backing array of privateKeyBytes
@@ -1136,11 +1137,6 @@ class SendViewModel @Inject constructor(
         private const val TAG = "SendViewModel"
         private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
         private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
-
-        // Number of recent blocks to scan when replaying dust events from the
-        // indexer. 100 blocks is enough for localnet + Lace-registered dust;
-        // revisit if we need deeper history on preprod/mainnet.
-        private const val DUST_SYNC_MAX_BLOCKS = 100
 
         // Bob's test wallet addresses — used as the default recipient when
         // testing sends from the demo app. Source of truth: `mn info` on the

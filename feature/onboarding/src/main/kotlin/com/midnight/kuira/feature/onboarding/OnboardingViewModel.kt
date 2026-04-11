@@ -167,20 +167,54 @@ class OnboardingViewModel @Inject constructor(
         // on success — addresses are public so this is not a security concern.
         var derivedAddresses: WalletAddresses? = null
 
+        // Tracks whether [SeedVault.storeSeed] has already persisted the
+        // encrypted seed on disk for this attempt. Used to decide whether a
+        // later failure (cache save, etc.) needs to roll back the seed file —
+        // without this, a partial failure leaves an orphaned seed the next
+        // launch cannot decrypt because the Keystore key has been deleted.
+        var wasSeedPersistedThisAttempt = false
+
+        // Rolls back every piece of persisted state created in this attempt.
+        // Extracted so every catch branch can call it identically and we
+        // can't forget a step. Suspend because [walletAddressCache.clear]
+        // runs on Dispatchers.IO.
+        val rollback: suspend () -> Unit = {
+            if (wasSeedPersistedThisAttempt) seedVault.deleteSeed()
+            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
+        }
+
         try {
             seedVault.storeSeed(activity) {
-                // Produced ONLY after biometric auth succeeds
+                // Produced ONLY after biometric auth succeeds. Everything from
+                // here to `PlaintextSeed(...)` touches plaintext key material —
+                // wrap the whole block in try/catch so the raw entropy + seed
+                // bytes get zeroed even if [WalletAddressDeriver.derive]
+                // throws (native failure, encoding error, etc.). Without this,
+                // those bytes persist on the heap until GC and the wallet's
+                // "seed wiped on all paths" guarantee has a hole.
                 val mnemonic = restoreFromPhrase ?: BIP39.generateMnemonic(wordCount = 24)
                 val entropy = BIP39.mnemonicToEntropy(mnemonic)
                 val seed = BIP39.mnemonicToSeed(mnemonic)
-
-                // Derive + capture the public addresses while we have the seed
-                // in memory. These will be persisted outside the lambda after
-                // storeSeed returns successfully.
-                derivedAddresses = WalletAddressDeriver.derive(seed, networkConfig.network)
-
-                PlaintextSeed(entropy, seed)
+                try {
+                    // Derive + capture the public addresses while we have the
+                    // seed in memory. Persisted outside the lambda after
+                    // storeSeed returns successfully.
+                    derivedAddresses = WalletAddressDeriver.derive(seed, networkConfig.network)
+                    // Transfers ownership of entropy + seed to PlaintextSeed;
+                    // SeedVault.storeSeed wipes it in its own finally block.
+                    PlaintextSeed(entropy, seed)
+                } catch (t: Throwable) {
+                    entropy.fill(0)
+                    seed.fill(0)
+                    throw t
+                }
             }
+            // At this point the encrypted seed is committed to disk. Any
+            // failure from here on MUST roll back the seed file — otherwise
+            // hasSeed() returns true on next launch but the Keystore key has
+            // been deleted, leaving an undecryptable orphan.
+            wasSeedPersistedThisAttempt = true
 
             // storeSeed returned successfully → persist the addresses so
             // read-only features (balance display) can find them without
@@ -190,30 +224,25 @@ class OnboardingViewModel @Inject constructor(
             _uiState.value = OnboardingUiState.Success
         } catch (e: CancellationException) {
             // Preserve structured concurrency
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             throw e
         } catch (e: AuthenticationCancelledException) {
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_auth_cancelled)
             )
         } catch (e: AuthenticationLockedOutException) {
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_locked_out)
             )
         } catch (e: AuthenticationPermanentlyLockedOutException) {
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_permanently_locked)
             )
         } catch (e: AuthenticationFailedException) {
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(
                     resId = R.string.onboarding_error_auth_failed,
@@ -221,8 +250,7 @@ class OnboardingViewModel @Inject constructor(
                 )
             )
         } catch (e: Exception) {
-            if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
-            walletAddressCache.clear()
+            rollback()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(
                     resId = R.string.onboarding_error_generic,

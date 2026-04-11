@@ -43,11 +43,11 @@ fun AppNavigation(
         // Balance Screen
         composable(route = Screen.Balance.route) {
             BalanceScreen(
-                onNavigateToSend = { _ ->
-                    // Address is no longer passed — SendScreen reads it from
-                    // WalletAddressCache based on the active mode.
-                    // TODO(8A.8d): pass mode from BalanceScreen when we add
-                    // per-mode send buttons.
+                onNavigateToSend = {
+                    // SendScreen reads the active address from WalletAddressCache
+                    // based on its own mode toggle. Per-mode pre-selection from
+                    // the balance cards is deferred — when wired, pass a SendMode
+                    // through a separate per-mode callback.
                     navController.navigate(Screen.Send.createRoute())
                 },
                 onNavigateToDust = { address ->

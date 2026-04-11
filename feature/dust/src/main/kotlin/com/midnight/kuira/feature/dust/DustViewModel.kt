@@ -98,12 +98,12 @@ class DustViewModel @Inject constructor(
                     .selectRole(MidnightKeyRole.DUST)
                     .deriveKeyAt(0)
 
-                // Try to sync dust from blockchain
+                // Try to sync dust from blockchain. maxBlocks defaults to
+                // DustRepository's own value — single source of truth.
                 Log.d(TAG, "Syncing dust from blockchain for $address")
                 val hasDust = dustRepository.syncFromBlockchain(
                     address = address,
                     dustSeed = dustKey.privateKeyBytes,
-                    maxBlocks = DUST_SYNC_MAX_BLOCKS,
                 )
 
                 if (!hasDust) {
@@ -259,7 +259,6 @@ class DustViewModel @Inject constructor(
                             dustRepository.syncFromBlockchain(
                                 address = address,
                                 dustSeed = dustSeed,
-                                maxBlocks = DUST_SYNC_MAX_BLOCKS,
                             )
                             // Auto-show status after registration
                             showDustStatus(address)
@@ -277,7 +276,6 @@ class DustViewModel @Inject constructor(
                             dustRepository.syncFromBlockchain(
                                 address = address,
                                 dustSeed = dustSeed,
-                                maxBlocks = DUST_SYNC_MAX_BLOCKS,
                             )
                             showDustStatus(address)
                         } catch (e: Exception) {
@@ -365,9 +363,5 @@ class DustViewModel @Inject constructor(
 
         // Submission timeout: 120 seconds (dust registration can be slower)
         private const val SUBMISSION_TIMEOUT_MS = 120_000L
-
-        // Number of recent blocks to scan when replaying dust events from the
-        // indexer. Matches SendViewModel.DUST_SYNC_MAX_BLOCKS.
-        private const val DUST_SYNC_MAX_BLOCKS = 100
     }
 }

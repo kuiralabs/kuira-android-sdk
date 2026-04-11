@@ -52,6 +52,11 @@ class BalanceViewModelTest {
     private lateinit var formatter: BalanceFormatter
     private lateinit var viewModel: BalanceViewModel
     private lateinit var fakeClock: FakeClock
+    // Hoisted so tests can override stubs before constructing a fresh VM.
+    private lateinit var shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository
+    private lateinit var walletAddressCache: com.midnight.kuira.core.auth.WalletAddressCache
+    private lateinit var seedVault: com.midnight.kuira.core.auth.SeedVault
+    private lateinit var testNetworkConfig: NetworkConfig
 
     private val testAddress = "mn_addr_testnet1test123"
     private val testDispatcher = StandardTestDispatcher()
@@ -73,21 +78,29 @@ class BalanceViewModelTest {
 
         formatter = BalanceFormatter()
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
-        val testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
-        val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository = mock()
-        val walletAddressCache: com.midnight.kuira.core.auth.WalletAddressCache = mock()
-        val seedVault: com.midnight.kuira.core.auth.SeedVault = mock()
-        viewModel = BalanceViewModel(
-            repository = repository,
-            shieldedRepository = shieldedRepository,
-            subscriptionManagerFactory = subscriptionManagerFactory,
-            formatter = formatter,
-            networkConfig = testNetworkConfig,
-            walletAddressCache = walletAddressCache,
-            seedVault = seedVault,
-            clock = fakeClock,
-        )
+        testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
+        shieldedRepository = mock()
+        walletAddressCache = mock()
+        seedVault = mock()
+        viewModel = buildViewModel()
     }
+
+    /**
+     * Constructs a fresh [BalanceViewModel] using the current test stubs.
+     * Call this from tests that need to set a specific stub on
+     * [walletAddressCache] / [seedVault] BEFORE the VM's `init` block runs
+     * (the cache load happens immediately on construction).
+     */
+    private fun buildViewModel(): BalanceViewModel = BalanceViewModel(
+        repository = repository,
+        shieldedRepository = shieldedRepository,
+        subscriptionManagerFactory = subscriptionManagerFactory,
+        formatter = formatter,
+        networkConfig = testNetworkConfig,
+        walletAddressCache = walletAddressCache,
+        seedVault = seedVault,
+        clock = fakeClock,
+    )
 
     /**
      * Fake clock for testing time-dependent behavior.
@@ -1307,4 +1320,40 @@ class BalanceViewModelTest {
     // Note: defaultTestSeedPhrase was removed in Step 8A.8c — balance no longer
     // owns a test mnemonic. Addresses come from WalletAddressCache (populated
     // by onboarding) and shielded balance requires explicit biometric auth.
+
+    // ==================== AddressCacheState ====================
+
+    @Test
+    fun `walletAddresses resolves to Empty when cache is missing`() = runTest {
+        // Fresh VM so its init block runs AFTER we stub load() → null.
+        // Default mock returns null, but stubbing explicitly makes intent clear.
+        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load() }.thenReturn(null)
+        viewModel = buildViewModel()
+
+        advanceUntilIdle()
+
+        assertEquals(
+            BalanceViewModel.AddressCacheState.Empty,
+            viewModel.walletAddresses.value
+        )
+    }
+
+    @Test
+    fun `walletAddresses resolves to Found when cache has data`() = runTest {
+        val addresses = com.midnight.kuira.core.auth.WalletAddresses(
+            unshieldedAddress = testAddress,
+            shieldedAddress = "mn_shield-addr_preprod1test",
+        )
+        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load() }.thenReturn(addresses)
+        viewModel = buildViewModel()
+
+        advanceUntilIdle()
+
+        val state = viewModel.walletAddresses.value
+        assertTrue(
+            "Expected Found, got ${state::class.simpleName}",
+            state is BalanceViewModel.AddressCacheState.Found
+        )
+        assertEquals(addresses, (state as BalanceViewModel.AddressCacheState.Found).addresses)
+    }
 }

@@ -7,8 +7,10 @@ package com.midnight.kuira.core.auth
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 
 /**
  * Cached wallet addresses derived at onboarding time.
@@ -75,7 +77,12 @@ class WalletAddressCache(private val context: Context) {
                 ?: return@withContext null
             val shielded = json.optString(KEY_SHIELDED).takeIf { it.isNotBlank() }
             WalletAddresses(unshieldedAddress = unshielded, shieldedAddress = shielded)
-        } catch (e: Exception) {
+        } catch (e: IOException) {
+            // File disappeared / unreadable between exists() and readText(),
+            // or some other I/O failure. Treat as "no cached addresses yet".
+            null
+        } catch (e: JSONException) {
+            // Cache file exists but is malformed — best-effort: skip it.
             null
         }
     }

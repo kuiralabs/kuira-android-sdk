@@ -1,6 +1,7 @@
 package com.midnight.kuira.feature.dust
 
 import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
@@ -218,6 +219,48 @@ class DustViewModelTest {
         val error = state as DustUiState.Error
         assertTrue(error.message.contains("Network error"))
         assertNotNull("Error should preserve throwable for debugging", error.throwable)
+    }
+
+    // ========================================================================
+    // checkDustStatus - Biometric Cancellation
+    // ========================================================================
+
+    @Test
+    fun `checkDustStatus shows Error when user cancels biometric prompt`() = runTest {
+        // REGRESSION: the VM must not hang in Loading forever if the user
+        // declines the biometric prompt. SeedVault.loadSeed throws
+        // AuthenticationCancelledException; the catch block should surface
+        // a user-visible error state.
+        //
+        // Re-stub the hoisted loadSeed() mock via `stub { onBlocking }` —
+        // the @Before sets a default success stub via `mock { }`, and
+        // mockito-kotlin needs the suspend-aware stub DSL to override it.
+        //
+        // We use `doAnswer { throw ... }` rather than `doThrow(...)` because
+        // Mockito rejects `doThrow` on checked exceptions that aren't
+        // declared by the underlying JVM method signature — which is the
+        // case for Kotlin `suspend` functions generated from throwing
+        // lambdas. `doAnswer` sidesteps that check.
+        seedVault.stub {
+            onBlocking { loadSeed(any()) } doAnswer {
+                throw AuthenticationCancelledException("user cancelled")
+            }
+        }
+
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
+
+        val state = viewModel.state.value
+        assertTrue(
+            "Expected Error but got ${state::class.simpleName}",
+            state is DustUiState.Error
+        )
+        assertTrue(
+            "Error message should surface the cancellation cause",
+            (state as DustUiState.Error).message.contains("cancelled", ignoreCase = true)
+                || state.message.contains("check dust status")
+        )
+        // Sync must NOT have run — we bailed before touching the repository.
+        org.mockito.kotlin.verifyNoInteractions(dustRepository)
     }
 
     // ========================================================================

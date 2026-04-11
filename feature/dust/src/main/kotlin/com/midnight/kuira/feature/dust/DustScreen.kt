@@ -96,6 +96,15 @@ fun DustScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Guard for the case where this screen is somehow reached with
+            // a blank nav arg (e.g. a broken deep link). Without this, the
+            // user sees a disabled "Check Dust Status" button with no
+            // explanation. DustScreen is normally navigated to from
+            // BalanceScreen which always supplies a valid unshielded address.
+            if (addressInput.isBlank()) {
+                MissingAddressCard()
+            }
+
             // Dust status/action cards at the TOP for visibility
             when (val currentState = state) {
                 is DustUiState.Idle -> { /* No status card — waiting for user to check */ }
@@ -147,6 +156,37 @@ fun DustScreen(
                     Text("Check Dust Status")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MissingAddressCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "No wallet address",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Open the Dust screen from the Balance screen so we " +
+                    "know which wallet to inspect, or paste a Midnight " +
+                    "address below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }

@@ -138,6 +138,13 @@ class WalletKeyManager {
             )
             // Don't invalidate key when user adds new fingerprint
             setInvalidatedByBiometricEnrollment(false)
+            // Defense-in-depth: block any use of the key while the device is
+            // locked. Per-use BiometricPrompt already gates every call and
+            // the app UI can't render while the screen is locked, so the
+            // extra flag mostly guards programmatic access paths — but it
+            // is the standard Android hardening flag for key material and
+            // costs nothing. Available since API 28; minSdk is 30.
+            setUnlockedDeviceRequired(true)
             if (strongBox) {
                 setIsStrongBoxBacked(true)
             }

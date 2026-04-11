@@ -107,10 +107,11 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
 
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                if (!cont.isActive) return
                 val authenticatedCipher = result.cryptoObject?.cipher
-                if (authenticatedCipher != null && cont.isActive) {
+                if (authenticatedCipher != null) {
                     cont.resume(AuthenticatedCipher(authenticatedCipher))
-                } else if (cont.isActive) {
+                } else {
                     cont.resumeWithException(
                         AuthenticationFailedException("CryptoObject cipher was null after authentication")
                     )
