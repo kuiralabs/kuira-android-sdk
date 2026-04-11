@@ -206,4 +206,69 @@ class OnboardingViewModelTest {
 
         assertEquals(OnboardingUiState.Welcome, viewModel.uiState.value)
     }
+
+    @Test
+    fun `startRestore enters RestoreInput state with empty input`() {
+        viewModel.startRestore()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is OnboardingUiState.RestoreInput)
+        assertEquals("", (state as OnboardingUiState.RestoreInput).input)
+        assertFalse(state.invalid)
+    }
+
+    @Test
+    fun `updateRestoreInput updates the input text and clears invalid flag`() {
+        viewModel.startRestore()
+        // Mark invalid first by setting a known bad state
+        val initial = viewModel.uiState.value as OnboardingUiState.RestoreInput
+
+        viewModel.updateRestoreInput("abandon abandon abandon")
+
+        val updated = viewModel.uiState.value as OnboardingUiState.RestoreInput
+        assertEquals("abandon abandon abandon", updated.input)
+        assertFalse(updated.invalid)
+    }
+
+    @Test
+    fun `confirmRestore marks input invalid for malformed phrase`() = runTest {
+        viewModel.startRestore()
+        viewModel.updateRestoreInput("not a real mnemonic")
+
+        viewModel.confirmRestore(activity)
+
+        val state = viewModel.uiState.value as OnboardingUiState.RestoreInput
+        assertTrue(state.invalid)
+    }
+
+    @Test
+    fun `confirmRestore proceeds to creation flow for valid mnemonic`() = runTest {
+        // BIP-39 zero-entropy mnemonic — guaranteed valid
+        val validPhrase = "abandon abandon abandon abandon abandon abandon abandon abandon " +
+            "abandon abandon abandon abandon abandon abandon abandon abandon " +
+            "abandon abandon abandon abandon abandon abandon abandon art"
+
+        whenever(securityCapabilities.hasAnyAuthenticator).thenReturn(true)
+        whenever(walletKeyManager.hasKey()).thenReturn(false)
+        doAnswer { invocation ->
+            val producer = invocation.getArgument<() -> PlaintextSeed>(1)
+            producer()
+            Unit
+        }.whenever(seedVault).storeSeed(any(), any())
+
+        viewModel.startRestore()
+        viewModel.updateRestoreInput(validPhrase)
+        viewModel.confirmRestore(activity)
+
+        assertEquals(OnboardingUiState.Success, viewModel.uiState.value)
+        verify(walletKeyManager).generateKey()
+    }
+
+    @Test
+    fun `confirmRestore is no-op outside RestoreInput state`() = runTest {
+        // Initial state is Welcome, not RestoreInput
+        viewModel.confirmRestore(activity)
+
+        assertEquals(OnboardingUiState.Welcome, viewModel.uiState.value)
+    }
 }

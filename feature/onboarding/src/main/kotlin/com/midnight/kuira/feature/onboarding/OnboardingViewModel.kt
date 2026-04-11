@@ -32,17 +32,17 @@ import javax.inject.Inject
  * - Orchestrate the wallet creation sequence:
  *   1. Generate Keystore master key (StrongBox → TEE fallback)
  *   2. Trigger biometric prompt via [SeedVault.storeSeed]
- *   3. After auth succeeds: generate BIP-39 mnemonic + derive entropy + seed
+ *   3. After auth succeeds: generate or restore mnemonic → derive entropy + seed
  *   4. Store encrypted seed; plaintext is wiped immediately
  * - Expose a [StateFlow] of [OnboardingUiState] for the UI
+ * - Support two entry points: fresh wallet creation and restore-from-phrase
  *
  * **Lifecycle note:**
- * [createWallet] takes a live [FragmentActivity] captured in the coroutine
- * closure for the duration of the biometric prompt. Configuration changes
- * (rotation, backgrounding) during the 1–2 seconds the prompt is visible
- * will result in the operation failing when the activity is torn down.
- * This is acceptable for the onboarding flow because it's short-lived and
- * the user can retry from a clean state via [reset].
+ * [createWallet]/[confirmRestore] take a live [FragmentActivity] captured in
+ * the coroutine closure for the duration of the biometric prompt. Configuration
+ * changes during the 1–2 seconds the prompt is visible will cause the operation
+ * to fail when the activity is torn down. Acceptable for this short flow —
+ * the user can retry via [reset].
  *
  * **Security notes:**
  * - The plaintext mnemonic is generated LAZILY inside [SeedVault.storeSeed],
@@ -66,12 +66,65 @@ class OnboardingViewModel @Inject constructor(
     suspend fun hasExistingWallet(): Boolean = seedVault.hasSeed()
 
     /**
-     * Orchestrates the full wallet creation flow.
-     *
-     * Navigation to the home screen happens via the [OnboardingUiState.Success]
-     * state emission.
+     * Start a fresh wallet creation flow. Generates a new BIP-39 mnemonic
+     * after biometric auth succeeds.
      */
     fun createWallet(activity: FragmentActivity) {
+        createWalletInternal(activity, restoreFromPhrase = null)
+    }
+
+    /**
+     * Switch to the restore-with-phrase flow from the welcome screen.
+     */
+    fun startRestore() {
+        _uiState.value = OnboardingUiState.RestoreInput()
+    }
+
+    /**
+     * Update the mnemonic input while the user is typing.
+     * Clears any previous "invalid" flag as soon as the user edits.
+     */
+    fun updateRestoreInput(text: String) {
+        val current = _uiState.value
+        if (current is OnboardingUiState.RestoreInput) {
+            _uiState.value = current.copy(input = text, invalid = false)
+        }
+    }
+
+    /**
+     * Validate the entered phrase and, if valid, run the same wallet-creation
+     * flow seeded with the user's existing mnemonic.
+     */
+    fun confirmRestore(activity: FragmentActivity) {
+        val current = _uiState.value
+        if (current !is OnboardingUiState.RestoreInput) return
+
+        val phrase = current.input.trim().replace(Regex("\\s+"), " ")
+        if (!BIP39.validateMnemonic(phrase)) {
+            _uiState.value = current.copy(invalid = true)
+            return
+        }
+
+        createWalletInternal(activity, restoreFromPhrase = phrase)
+    }
+
+    /**
+     * Return to the welcome screen from any state (cancel restore, dismiss error, etc.).
+     */
+    fun reset() {
+        _uiState.value = OnboardingUiState.Welcome
+    }
+
+    /**
+     * Shared implementation for both create-new and restore-from-phrase flows.
+     *
+     * @param restoreFromPhrase If non-null, uses this mnemonic instead of generating
+     *   a new one. Assumed to already be validated by [confirmRestore].
+     */
+    private fun createWalletInternal(
+        activity: FragmentActivity,
+        restoreFromPhrase: String?,
+    ) {
         viewModelScope.launch {
             // Phase 1: verify the device can authenticate
             _uiState.value = OnboardingUiState.CheckingAuth
@@ -108,16 +161,14 @@ class OnboardingViewModel @Inject constructor(
             try {
                 seedVault.storeSeed(activity) {
                     // Produced ONLY after biometric auth succeeds
-                    val mnemonic = BIP39.generateMnemonic(wordCount = 24)
+                    val mnemonic = restoreFromPhrase ?: BIP39.generateMnemonic(wordCount = 24)
                     val entropy = BIP39.mnemonicToEntropy(mnemonic)
                     val seed = BIP39.mnemonicToSeed(mnemonic)
                     PlaintextSeed(entropy, seed)
                 }
                 _uiState.value = OnboardingUiState.Success
             } catch (e: CancellationException) {
-                // Coroutine cancelled (e.g., ViewModel cleared, scope cancelled).
-                // Must rethrow to preserve structured concurrency — do NOT treat
-                // as an error state.
+                // Preserve structured concurrency
                 if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
                 throw e
             } catch (e: AuthenticationCancelledException) {
@@ -153,13 +204,5 @@ class OnboardingViewModel @Inject constructor(
                 )
             }
         }
-    }
-
-    /**
-     * Return to the welcome screen after an error. Resets the state machine
-     * so the user can retry.
-     */
-    fun reset() {
-        _uiState.value = OnboardingUiState.Welcome
     }
 }

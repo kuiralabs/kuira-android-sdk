@@ -35,9 +35,20 @@ data class OnboardingErrorMessage(
 sealed interface OnboardingUiState {
 
     /**
-     * Initial screen: welcome message, "Create Wallet" button.
+     * Initial screen: welcome message, "Create Wallet" and "Restore" buttons.
      */
     data object Welcome : OnboardingUiState
+
+    /**
+     * Restore-with-phrase screen: user is entering their 24-word mnemonic.
+     *
+     * @property input Current text input (not validated yet).
+     * @property invalid True if the user tried to submit and the phrase is invalid.
+     */
+    data class RestoreInput(
+        val input: String = "",
+        val invalid: Boolean = false,
+    ) : OnboardingUiState
 
     /**
      * Transient state while we query BiometricManager to see if the device

@@ -7,10 +7,15 @@ package com.midnight.kuira.feature.onboarding
 import android.content.Intent
 import android.provider.Settings
 import androidx.biometric.BiometricManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,9 +23,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
@@ -28,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.designsystem.component.DuskBulletLine
 import com.midnight.kuira.core.designsystem.component.DuskButtonRow
 import com.midnight.kuira.core.designsystem.component.DuskPrimaryButton
+import com.midnight.kuira.core.designsystem.component.DuskSecondaryButton
 import com.midnight.kuira.core.designsystem.component.DuskScaffold
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
@@ -71,7 +81,18 @@ fun OnboardingScreen(
             Column(modifier = Modifier.alpha(contentAlpha)) {
                 when (val state = uiState) {
                     is OnboardingUiState.Welcome ->
-                        WelcomeContent(onCreate = { viewModel.createWallet(activity) })
+                        WelcomeContent(
+                            onCreate = { viewModel.createWallet(activity) },
+                            onRestore = viewModel::startRestore,
+                        )
+
+                    is OnboardingUiState.RestoreInput ->
+                        RestoreContent(
+                            state = state,
+                            onInputChange = viewModel::updateRestoreInput,
+                            onConfirm = { viewModel.confirmRestore(activity) },
+                            onCancel = viewModel::reset,
+                        )
 
                     is OnboardingUiState.CheckingAuth ->
                         StatusContent(
@@ -121,7 +142,10 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun WelcomeContent(onCreate: () -> Unit) {
+private fun WelcomeContent(
+    onCreate: () -> Unit,
+    onRestore: () -> Unit,
+) {
     Text(
         text = stringResource(R.string.onboarding_welcome_label),
         color = MidnightColors.LightMuted,
@@ -149,6 +173,97 @@ private fun WelcomeContent(onCreate: () -> Unit) {
         text = stringResource(R.string.onboarding_create_wallet),
         onClick = onCreate,
         modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    DuskSecondaryButton(
+        text = stringResource(R.string.onboarding_restore_wallet),
+        onClick = onRestore,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun RestoreContent(
+    state: OnboardingUiState.RestoreInput,
+    onInputChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.onboarding_restore_label),
+        color = MidnightColors.LightMuted,
+        fontSize = 11.sp,
+        letterSpacing = 3.sp,
+    )
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Text(
+        text = stringResource(R.string.onboarding_restore_headline),
+        color = MidnightColors.Light,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.W300,
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = stringResource(R.string.onboarding_restore_detail),
+        color = MidnightColors.LightMuted,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+    )
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    BasicTextField(
+        value = state.input,
+        onValueChange = onInputChange,
+        textStyle = TextStyle(
+            color = MidnightColors.Light,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.W300,
+        ),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(MidnightColors.Light),
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            imeAction = ImeAction.Done,
+        ),
+        minLines = 3,
+        maxLines = 5,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MidnightColors.LightBarely)
+            .padding(16.dp),
+        decorationBox = { innerTextField ->
+            if (state.input.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.onboarding_restore_placeholder),
+                    color = MidnightColors.LightFaint,
+                    fontSize = 14.sp,
+                )
+            }
+            innerTextField()
+        },
+    )
+
+    if (state.invalid) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.onboarding_restore_invalid),
+            color = MidnightColors.LightMuted,
+            fontSize = 12.sp,
+        )
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    DuskButtonRow(
+        secondaryText = stringResource(R.string.onboarding_restore_cancel),
+        primaryText = stringResource(R.string.onboarding_restore_confirm),
+        onSecondary = onCancel,
+        onPrimary = onConfirm,
+        primaryEnabled = state.input.isNotBlank(),
     )
 }
 

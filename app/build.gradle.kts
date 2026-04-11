@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.midnight.kuira"
-        minSdk = 24
+        minSdk = 30 // Required by core:auth (setUserAuthenticationParameters, CryptoObject + DEVICE_CREDENTIAL)
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":feature:balance"))
     implementation(project(":feature:send"))
     implementation(project(":feature:dust"))
+    implementation(project(":feature:onboarding"))
     implementation(project(":core:connector"))
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":core:designsystem"))

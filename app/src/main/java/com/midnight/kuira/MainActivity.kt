@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkRepository
+import com.midnight.kuira.feature.onboarding.WalletGate
 import com.midnight.kuira.navigation.AppNavigation
 import com.midnight.kuira.service.ConnectorService
 import com.midnight.kuira.ui.components.NetworkSelectorBar
@@ -58,26 +59,32 @@ class MainActivity : FragmentActivity() {
             val scope = rememberCoroutineScope()
 
             KuiraTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        NetworkSelectorBar(
-                            selectedNetwork = selectedNetwork,
-                            onNetworkSelected = { network ->
-                                scope.launch {
-                                    networkRepository.setSelectedNetwork(network)
-                                    // Restart the app
-                                    restartApp()
+                // Gate the whole app behind the onboarding flow. On first launch
+                // (or after a wallet reset), WalletGate shows OnboardingScreen
+                // until the user creates or restores a wallet. Once a seed is
+                // persisted, the content slot renders the normal app navigation.
+                WalletGate(activity = this) {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize()
+                    ) { innerPadding ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                        ) {
+                            NetworkSelectorBar(
+                                selectedNetwork = selectedNetwork,
+                                onNetworkSelected = { network ->
+                                    scope.launch {
+                                        networkRepository.setSelectedNetwork(network)
+                                        // Restart the app
+                                        restartApp()
+                                    }
                                 }
-                            }
-                        )
-                        HorizontalDivider()
-                        AppNavigation()
+                            )
+                            HorizontalDivider()
+                            AppNavigation()
+                        }
                     }
                 }
             }
