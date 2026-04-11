@@ -43,6 +43,41 @@ android {
     }
 }
 
+/**
+ * Set up adb reverse port forwarding for the localnet (UNDEPLOYED) services.
+ *
+ * On a physical device, the wallet uses 127.0.0.1 to reach the developer's
+ * laptop services. adb reverse tunnels these ports over the USB / wifi-debugging
+ * connection so the device can reach localhost on the host machine.
+ *
+ * Run this once per adb session before testing localnet on a physical device:
+ *   ./gradlew adbReverseLocalnet
+ *
+ * Ports tunneled (must match NetworkConfig.LOCALNET_*_PORT constants):
+ *   - 8088: indexer GraphQL
+ *   - 9944: node RPC
+ *   - 6300: proof server
+ *
+ * Note: emulators use 10.0.2.2 instead and don't need this — but the task
+ * is harmless to run there.
+ */
+tasks.register("adbReverseLocalnet") {
+    group = "kuira"
+    description = "Forward localnet ports (8088, 9944, 6300) from device to host via adb reverse."
+
+    doLast {
+        val adb = android.sdkDirectory.resolve("platform-tools/adb").absolutePath
+        val ports = listOf(8088, 9944, 6300)
+        ports.forEach { port ->
+            println("adb reverse tcp:$port tcp:$port")
+            exec {
+                commandLine(adb, "reverse", "tcp:$port", "tcp:$port")
+            }
+        }
+        println("Localnet ports forwarded. Phone's localhost now reaches host's localhost.")
+    }
+}
+
 dependencies {
     // Feature modules
     implementation(project(":feature:balance"))

@@ -9,14 +9,18 @@ package com.midnight.kuira.core.network
  * - nodeRpcUrl: Full URL for node JSON-RPC endpoint
  * - proofServerUrl: Full URL for proof server (appends /prove-tx internally)
  *
- * **Android Emulator Note:**
- * - 10.0.2.2 maps to host machine's localhost
- * - Physical devices need actual IP addresses
+ * **Localhost host resolution (see [DeviceType.localhostHost]):**
+ * - Emulator: `10.0.2.2` (Android emulator's special host alias)
+ * - Physical device: `127.0.0.1` (requires `adb reverse tcp:<port> tcp:<port>`
+ *   for the indexer/node/proof-server ports). See `./gradlew adbReverseLocalnet`.
+ *
+ * The localnet (UNDEPLOYED) network uses this for all three services.
+ * PREPROD and PREVIEW use it only for the local proof server.
  *
  * @property network The network this configuration is for
- * @property indexerBaseUrl Indexer API base URL (e.g., "https://indexer.preprod.midnight.network/api/v3")
- * @property nodeRpcUrl Node RPC URL (e.g., "wss://rpc.preprod.midnight.network")
- * @property proofServerUrl Proof server URL (e.g., "http://10.0.2.2:6300")
+ * @property indexerBaseUrl Indexer API base URL
+ * @property nodeRpcUrl Node RPC URL
+ * @property proofServerUrl Proof server URL
  * @property developmentMode If true, allows HTTP connections (for local testing only)
  */
 data class NetworkConfig(
@@ -27,6 +31,12 @@ data class NetworkConfig(
     val developmentMode: Boolean
 ) {
     companion object {
+
+        // Localnet ports — keep in sync with the docker-compose / Gradle adbReverseLocalnet task
+        const val LOCALNET_INDEXER_PORT = 8088
+        const val LOCALNET_NODE_RPC_PORT = 9944
+        const val LOCALNET_PROOF_SERVER_PORT = 6300
+
         /**
          * Get configuration for a specific network.
          *
@@ -37,14 +47,20 @@ data class NetworkConfig(
          * | Preprod | Remote (HTTPS) | Remote (WSS) | Local |
          * | Preview | Remote (HTTPS) | Remote (WSS) | Local |
          * | Undeployed | Local (HTTP) | Local (WS) | Local |
+         *
+         * Localhost endpoints use [DeviceType.localhostHost] which resolves to
+         * `10.0.2.2` on the emulator and `127.0.0.1` on a physical device.
          */
         fun forNetwork(network: MidnightNetwork): NetworkConfig {
+            val host = DeviceType.localhostHost
+            val proofServerUrl = "http://$host:$LOCALNET_PROOF_SERVER_PORT"
+
             return when (network) {
                 MidnightNetwork.PREPROD -> NetworkConfig(
                     network = network,
                     indexerBaseUrl = "https://indexer.preprod.midnight.network/api/v3",
                     nodeRpcUrl = "wss://rpc.preprod.midnight.network",
-                    proofServerUrl = "http://10.0.2.2:6300",
+                    proofServerUrl = proofServerUrl,
                     developmentMode = true // Allow local proof server HTTP
                 )
 
@@ -52,15 +68,15 @@ data class NetworkConfig(
                     network = network,
                     indexerBaseUrl = "https://indexer.preview.midnight.network/api/v3",
                     nodeRpcUrl = "wss://rpc.preview.midnight.network",
-                    proofServerUrl = "http://10.0.2.2:6300",
+                    proofServerUrl = proofServerUrl,
                     developmentMode = true // Allow local proof server HTTP
                 )
 
                 MidnightNetwork.UNDEPLOYED -> NetworkConfig(
                     network = network,
-                    indexerBaseUrl = "http://10.0.2.2:8088/api/v3",
-                    nodeRpcUrl = "ws://10.0.2.2:9944",
-                    proofServerUrl = "http://10.0.2.2:6300",
+                    indexerBaseUrl = "http://$host:$LOCALNET_INDEXER_PORT/api/v3",
+                    nodeRpcUrl = "ws://$host:$LOCALNET_NODE_RPC_PORT",
+                    proofServerUrl = proofServerUrl,
                     developmentMode = true // All local services
                 )
             }
