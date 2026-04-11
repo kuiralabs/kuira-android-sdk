@@ -63,34 +63,28 @@ private fun nightToStars(night: BigDecimal): BigInteger {
 }
 
 /**
- * Simple MVP send screen for testing Phase 2F transaction flow.
+ * MVP send screen — mode-driven sending (shielded vs unshielded).
  *
- * **Purpose:**
- * - Test build → sign → submit flow
- * - Verify transaction submission works end-to-end
- * - Validate fee calculation and dust payment
+ * **Flow (mode-driven, not auto-detected):**
+ * 1. User picks a mode via the toggle (Shielded or Unshielded).
+ * 2. The FROM field is populated from [SendViewModel.walletAddresses] based on
+ *    the mode — unshielded mode shows the unshielded address, shielded mode
+ *    shows the shielded address.
+ * 3. The recipient default is populated with Bob's matching address for the mode.
+ * 4. Send button calls [SendViewModel.send] with an explicit [SendMode] — the
+ *    VM validates the recipient matches the mode and rejects mismatches.
  *
- * **MVP Limitations:**
- * - Exposes seed phrase in UI (NOT production-ready)
- * - No dust tank display (deferred to Phase 2F.1)
- * - No biometric auth
- * - Basic error handling
- *
- * **Features:**
- * - Recipient address input + validation
- * - Amount input + balance checking
- * - Sender address and seed inputs (for MVP testing)
- * - Loading states (Building, Signing, Submitting)
- * - Success/Error display
- *
- * **Design:** Follows BalanceScreen pattern - simple Card-based sections
+ * **Navigation parameter:**
+ * - [initialMode]: optional default mode (e.g., BalanceScreen can pass
+ *   [SendMode.SHIELDED] if the user tapped the shielded balance card).
+ *   Defaults to [SendMode.UNSHIELDED].
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendScreen(
-    address: String,
-    viewModel: SendViewModel = hiltViewModel()
+    initialMode: SendMode = SendMode.UNSHIELDED,
+    viewModel: SendViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val formatter = remember { BalanceFormatter() }
@@ -100,30 +94,42 @@ fun SendScreen(
     val activity = context as? FragmentActivity
         ?: error("SendScreen must be hosted in a FragmentActivity")
 
-    // Auto-load balance when screen mounts
-    LaunchedEffect(address) {
-        android.util.Log.d("SendScreen", "LaunchedEffect triggered with address: '$address'")
-        if (address.isNotBlank()) {
-            android.util.Log.d("SendScreen", "Calling viewModel.loadBalance('$address')")
-            viewModel.loadBalance(address)
-        } else {
-            android.util.Log.e("SendScreen", "Address is blank! Not loading balance")
+    // Observe the wallet's cached addresses (populated by onboarding).
+    val walletAddresses by viewModel.walletAddresses.collectAsState()
+
+    // Authoritative send mode — drives the FROM field, the recipient default,
+    // and which protocol path runs on Send tap.
+    var sendMode by remember { mutableStateOf(initialMode) }
+    val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
+
+    // FROM address: derived from the wallet cache + current mode. Empty string
+    // while the cache is loading so the UI shows a placeholder instead of a
+    // stale / wrong address.
+    val fromAddress: String = when (sendMode) {
+        SendMode.UNSHIELDED -> walletAddresses?.unshieldedAddress.orEmpty()
+        SendMode.SHIELDED -> walletAddresses?.shieldedAddress.orEmpty()
+    }
+
+    // Auto-load balance whenever the FROM address settles to a non-blank value.
+    // Balance is queried by unshielded address (balance repo only handles
+    // unshielded UTXOs today), so for shielded mode we still pass the cached
+    // unshielded address so we can show the total NIGHT balance as context.
+    val balanceQueryAddress = walletAddresses?.unshieldedAddress.orEmpty()
+    LaunchedEffect(balanceQueryAddress) {
+        if (balanceQueryAddress.isNotBlank()) {
+            android.util.Log.d("SendScreen", "loadBalance('$balanceQueryAddress')")
+            viewModel.loadBalance(balanceQueryAddress)
         }
     }
 
-    // Send mode: shielded (private) vs unshielded (public)
-    // Default to unshielded — easier to test end-to-end because the default
-    // recipient (Bob) is always populated for every network. Shielded mode has
-    // gaps (preview doesn't have a shielded default recipient).
-    var isShieldedSend by remember { mutableStateOf(false) }
-    val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
-
-    // User inputs with test placeholders (MVP ONLY - for faster testing)
-    // Update recipient when send mode changes
-    var recipientAddress by remember(isShieldedSend) {
+    // Recipient input — resets to Bob's matching address whenever the mode
+    // toggle changes. User can then override with another address.
+    var recipientAddress by remember(sendMode) {
         mutableStateOf(
-            if (isShieldedSend) viewModel.defaultShieldedRecipient
-            else viewModel.defaultTestRecipient
+            when (sendMode) {
+                SendMode.SHIELDED -> viewModel.defaultShieldedRecipient
+                SendMode.UNSHIELDED -> viewModel.defaultTestRecipient
+            }
         )
     }
     var amountInput by remember { mutableStateOf("1") }
@@ -147,8 +153,8 @@ fun SendScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Sender Address Display (read-only)
-            SenderAddressDisplay(address = address)
+            // Sender Address Display (read-only) — updates with mode toggle
+            SenderAddressDisplay(address = fromAddress)
 
             // Balance Display
             if (state is SendUiState.Idle) {
@@ -158,10 +164,14 @@ fun SendScreen(
                 )
             }
 
-            // Send Mode Selector (Shielded vs Unshielded)
+            // Send Mode Selector (Shielded vs Unshielded) — authoritative.
+            // Toggling updates the FROM field (above), the recipient default,
+            // and which protocol path runs when Send is tapped.
             SendModeSelector(
-                isShielded = isShieldedSend,
-                onModeChange = { isShieldedSend = it }
+                isShielded = (sendMode == SendMode.SHIELDED),
+                onModeChange = { shielded ->
+                    sendMode = if (shielded) SendMode.SHIELDED else SendMode.UNSHIELDED
+                },
             )
 
             // Proving Mode Selector
@@ -188,7 +198,7 @@ fun SendScreen(
             // The seed is no longer entered in the UI — SendViewModel.send() will
             // load it from SeedVault via biometric prompt when the user taps Send.
             SendButtonSection(
-                enabled = address.isNotBlank() &&
+                enabled = fromAddress.isNotBlank() &&
                         recipientAddress.isNotBlank() &&
                         amountInput.isNotBlank() &&
                         state is SendUiState.Idle,
@@ -203,7 +213,7 @@ fun SendScreen(
 
                     viewModel.send(
                         activity = activity,
-                        fromAddress = address,
+                        mode = sendMode,
                         toAddress = recipientAddress,
                         amount = amountInStars,
                     )
@@ -225,11 +235,11 @@ fun SendScreen(
                     amount = currentState.amountSent,
                     recipient = currentState.recipientAddress,
                     formatter = formatter,
-                    onReset = { viewModel.reset(address) }
+                    onReset = { viewModel.reset(balanceQueryAddress) }
                 )
                 is SendUiState.Error -> ErrorCard(
                     message = currentState.message,
-                    onRetry = { viewModel.reset(address) }
+                    onRetry = { viewModel.reset(balanceQueryAddress) }
                 )
                 is SendUiState.Idle -> {} // No extra display needed
             }

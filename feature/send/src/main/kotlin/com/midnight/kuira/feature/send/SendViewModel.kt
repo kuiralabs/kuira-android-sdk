@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.auth.WalletAddressCache
+import com.midnight.kuira.core.auth.WalletAddresses
 import com.midnight.kuira.core.crypto.bip32.DerivedKey
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
@@ -83,6 +85,19 @@ import javax.inject.Inject
  * }
  * ```
  */
+/**
+ * Send mode — determines both the FROM address (from [WalletAddresses]) and
+ * which protocol path to run.
+ *
+ * Unlike the old auto-detect router that switched on `toAddress.isShielded`,
+ * this is the authoritative mode selected by the user. Recipient address must
+ * match the selected mode or we reject the send with a validation error.
+ */
+enum class SendMode {
+    UNSHIELDED,
+    SHIELDED,
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 @HiltViewModel
 class SendViewModel @Inject constructor(
@@ -98,7 +113,25 @@ class SendViewModel @Inject constructor(
     private val syncStateManager: SyncStateManager,
     private val networkConfig: NetworkConfig,
     private val seedVault: SeedVault,
+    private val walletAddressCache: WalletAddressCache,
 ) : ViewModel() {
+
+    /**
+     * The wallet's cached addresses (unshielded + shielded), loaded from
+     * [WalletAddressCache] at ViewModel creation. Null while the cache is
+     * being read or if onboarding hasn't run yet.
+     *
+     * UI observes this to populate the FROM field based on the active
+     * [SendMode]. Addresses are public, so no biometric is needed.
+     */
+    private val _walletAddresses = MutableStateFlow<WalletAddresses?>(null)
+    val walletAddresses: StateFlow<WalletAddresses?> = _walletAddresses.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _walletAddresses.value = walletAddressCache.load()
+        }
+    }
 
     /**
      * Default test recipient — Bob's unshielded address for the current network.
@@ -157,27 +190,79 @@ class SendViewModel @Inject constructor(
      * @param address Sender's address
      */
     /**
-     * Send transaction — auto-detects shielded vs unshielded from recipient address.
+     * Send transaction — uses the explicit [mode] selected in the UI as the
+     * authoritative routing signal. The recipient address is validated to
+     * match the mode; a mismatch produces an immediate error instead of
+     * silently routing to the wrong protocol path.
      *
-     * Routes to [sendTransaction] for `mn_addr_*` addresses or
-     * [sendShieldedTransaction] for `mn_shield-addr_*` addresses.
+     * The FROM address is resolved from [walletAddresses] based on the mode:
+     * - [SendMode.UNSHIELDED] → [WalletAddresses.unshieldedAddress]
+     * - [SendMode.SHIELDED]   → [WalletAddresses.shieldedAddress]
      *
      * The seed is loaded on demand from [SeedVault] via biometric prompt —
      * the caller no longer passes a mnemonic.
      *
      * @param activity The hosting FragmentActivity (required by BiometricPrompt)
+     * @param mode The send mode (authoritative — from UI toggle)
+     * @param toAddress The recipient address (must match [mode])
+     * @param amount Amount to send in smallest units (Stars)
      */
     fun send(
         activity: FragmentActivity,
-        fromAddress: String,
+        mode: SendMode,
         toAddress: String,
         amount: BigInteger,
     ) {
+        // Validate recipient prefix matches the selected mode
         val validation = AddressValidator.validate(toAddress)
-        if (validation is AddressValidator.ValidationResult.Valid && validation.isShielded) {
-            sendShieldedTransaction(activity, fromAddress, toAddress, amount)
-        } else {
-            sendTransaction(activity, fromAddress, toAddress, amount)
+        if (validation is AddressValidator.ValidationResult.Invalid) {
+            _state.value = SendUiState.Error(validation.reason)
+            return
+        }
+        val isShieldedRecipient = (validation as AddressValidator.ValidationResult.Valid).isShielded
+        when (mode) {
+            SendMode.UNSHIELDED -> {
+                if (isShieldedRecipient) {
+                    _state.value = SendUiState.Error(
+                        "Unshielded send requires an unshielded recipient " +
+                            "(mn_addr_…). Got a shielded address (mn_shield-addr_…)."
+                    )
+                    return
+                }
+            }
+            SendMode.SHIELDED -> {
+                if (!isShieldedRecipient) {
+                    _state.value = SendUiState.Error(
+                        "Shielded send requires a shielded recipient " +
+                            "(mn_shield-addr_…). Got an unshielded address (mn_addr_…)."
+                    )
+                    return
+                }
+            }
+        }
+
+        // Resolve FROM address from the wallet cache
+        val addresses = _walletAddresses.value
+        if (addresses == null) {
+            _state.value = SendUiState.Error(
+                "Wallet address not available. Please wait or re-onboard."
+            )
+            return
+        }
+        val fromAddress = when (mode) {
+            SendMode.UNSHIELDED -> addresses.unshieldedAddress
+            SendMode.SHIELDED -> addresses.shieldedAddress
+                ?: run {
+                    _state.value = SendUiState.Error(
+                        "No shielded address in wallet. Cannot send shielded."
+                    )
+                    return
+                }
+        }
+
+        when (mode) {
+            SendMode.UNSHIELDED -> sendTransaction(activity, fromAddress, toAddress, amount)
+            SendMode.SHIELDED -> sendShieldedTransaction(activity, fromAddress, toAddress, amount)
         }
     }
 
@@ -283,6 +368,11 @@ class SendViewModel @Inject constructor(
                 _state.value = SendUiState.Building
                 plaintextSeed = seedVault.loadSeed(activity)
                 hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
+
+                // Step 1b: Ensure proving keys are downloaded if local proving is
+                // selected. Even unshielded sends need ZK proving for the dust
+                // fee binding, so this check applies to both send paths.
+                ensureProvingKeysDownloaded()
 
                 // Step 2: Quick sync to ensure UTXOs are fresh (prevents error 115)
                 // SKIP if this is a retry - we already synced in syncAndRetry() with skipCacheClear=true
@@ -571,14 +661,8 @@ class SendViewModel @Inject constructor(
                 val encPkHex = payload.drop(32).toByteArray()
                     .joinToString("") { "%02x".format(it) }
 
-                // Ensure proving keys are downloaded (one-time, ~24MB)
-                if (!provingKeyManager.hasWalletKeys()) {
-                    Log.d(TAG, "Downloading proving keys for local proving...")
-                    provingKeyManager.downloadWalletKeys { progress ->
-                        Log.d(TAG, "Proving key download: ${(progress * 100).toInt()}%")
-                    }
-                    Log.d(TAG, "Proving keys downloaded")
-                }
+                // Ensure proving keys are downloaded if local proving is selected
+                ensureProvingKeysDownloaded()
 
                 // Derive zswap key (HD wallet already loaded above from biometric auth)
                 val zswapKey = hdWallet
@@ -969,6 +1053,29 @@ class SendViewModel @Inject constructor(
      * Reset retry state on successful transaction.
      * Called when transaction succeeds to clear cached params and retry counter.
      */
+    /**
+     * Download the ZK proving keys if local proving is selected and they
+     * haven't been downloaded yet. Called before any transaction build because
+     * even unshielded sends need proving keys for the dust fee binding proof.
+     *
+     * No-op on subsequent calls (keys are cached ~24MB on device). No-op when
+     * remote proving is selected (keys live on the proof server).
+     */
+    private suspend fun ensureProvingKeysDownloaded() {
+        if (transactionSubmitter.provingMode != ProvingMode.LOCAL) {
+            Log.d(TAG, "Remote proving mode — skipping proving key download")
+            return
+        }
+        if (provingKeyManager.hasWalletKeys()) {
+            return
+        }
+        Log.d(TAG, "Downloading proving keys for local proving…")
+        provingKeyManager.downloadWalletKeys { progress ->
+            Log.d(TAG, "Proving key download: ${(progress * 100).toInt()}%")
+        }
+        Log.d(TAG, "Proving keys downloaded")
+    }
+
     private fun clearRetryState() {
         retryAttempt = 0
         cachedParams = null

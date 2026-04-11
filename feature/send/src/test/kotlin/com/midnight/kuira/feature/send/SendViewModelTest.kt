@@ -72,6 +72,8 @@ class SendViewModelTest {
         syncStateManager = mock()
         seedVault = mock()
 
+        val walletAddressCache: com.midnight.kuira.core.auth.WalletAddressCache = mock()
+
         viewModel = SendViewModel(
             balanceRepository = balanceRepository,
             utxoManager = utxoManager,
@@ -85,6 +87,7 @@ class SendViewModelTest {
             syncStateManager = syncStateManager,
             networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
             seedVault = seedVault,
+            walletAddressCache = walletAddressCache,
         )
     }
 
