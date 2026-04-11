@@ -262,7 +262,18 @@ class SendViewModel @Inject constructor(
 
         when (mode) {
             SendMode.UNSHIELDED -> sendTransaction(activity, fromAddress, toAddress, amount)
-            SendMode.SHIELDED -> sendShieldedTransaction(activity, fromAddress, toAddress, amount)
+            SendMode.SHIELDED -> sendShieldedTransaction(
+                activity = activity,
+                fromAddress = fromAddress,
+                // Dust and shielded state are wallet-level — always key them by the
+                // unshielded (anchor) address so BalanceViewModel and the unshielded
+                // send path share the same cache entries. Otherwise a successful
+                // shielded send leaves stale dust state under the unshielded key,
+                // causing InvalidDustSpendProof (error 170) on the next send.
+                walletAnchorAddress = addresses.unshieldedAddress,
+                toAddress = toAddress,
+                amount = amount,
+            )
         }
     }
 
@@ -443,55 +454,54 @@ class SendViewModel @Inject constructor(
                 val signedIntent = signIntent(unsignedIntent, privateKey)
                 Log.d(TAG, "Transaction signed successfully")
 
-                // Step 5.5: Check dust state (for fee payment)
-                // Note: Dust must be synced once after registration in Lace
-                // We don't sync during transaction because it takes 5-10 minutes
-                Log.d(TAG, "Checking dust state...")
-                val hasCachedDust = dustRepository.hasCachedState(fromAddress)
+                // Step 5.5: Force a fresh dust sync for fee payment.
+                //
+                // Why always resync instead of trusting the cache?
+                // `submitWithFees` only deletes the cached dust state on
+                // *successful* submission. If a previous attempt was rejected
+                // (e.g. error 170 / InvalidDustSpendProof after a chain-level
+                // state change), the stale entry stays on disk and the next
+                // send silently reuses it — creating a feedback loop of 170
+                // errors that can only be broken by clearing app data.
+                // Forcing a delete + resync here breaks that loop at the cost
+                // of one indexer replay per send.
+                Log.d(TAG, "Forcing fresh dust sync for fee payment...")
+                _state.value = SendUiState.Building // Show "Building" state during sync
 
-                if (!hasCachedDust) {
-                    Log.d(TAG, "⚠️  No cached dust state found - first-time sync required")
+                val preSyncDustKey = hdWallet
+                    .selectAccount(0)
+                    .selectRole(MidnightKeyRole.DUST)
+                    .deriveKeyAt(0)
 
-                    // For MVP: Sync dust now (will take 5-10 minutes)
-                    Log.d(TAG, "Starting one-time dust sync (this will take 5-10 minutes)...")
-                    _state.value = SendUiState.Building // Show "Building" state during sync
+                val preSyncDustSeed = preSyncDustKey.privateKeyBytes
+                try {
+                    dustRepository.deleteState(fromAddress)
+                    val dustSynced = dustRepository.syncFromBlockchain(
+                        address = fromAddress,
+                        dustSeed = preSyncDustSeed,
+                        maxBlocks = 100
+                    )
 
-                    val dustKey = hdWallet
-                        .selectAccount(0)
-                        .selectRole(MidnightKeyRole.DUST)
-                        .deriveKeyAt(0)
-
-                    val dustSeed = dustKey.privateKeyBytes
-                    try {
-                        val dustSynced = dustRepository.syncFromBlockchain(
-                            address = fromAddress,
-                            dustSeed = dustSeed,
-                            maxBlocks = 100
-                        )
-
-                        if (!dustSynced) {
-                            Log.e(TAG, "No dust found on blockchain - register dust in Lace first")
-                            _state.value = SendUiState.Error(
-                                message = "No dust registered. Please register dust in Lace wallet first."
-                            )
-                            return@launch
-                        }
-
-                        Log.d(TAG, "✅ Dust synced successfully (cached for future transactions)")
-
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to sync dust", e)
+                    if (!dustSynced) {
+                        Log.e(TAG, "No dust found on blockchain - register dust in Lace first")
                         _state.value = SendUiState.Error(
-                            message = "Failed to sync dust: ${e.message}"
+                            message = "No dust registered. Please register dust in Lace wallet first."
                         )
                         return@launch
-                    } finally {
-                        // Wipe dust seed from memory
-                        java.util.Arrays.fill(dustSeed, 0.toByte())
-                        dustKey.clear()
                     }
-                } else {
-                    Log.d(TAG, "✅ Using cached dust state (fast)")
+
+                    Log.d(TAG, "✅ Dust synced successfully")
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to sync dust", e)
+                    _state.value = SendUiState.Error(
+                        message = "Failed to sync dust: ${e.message}"
+                    )
+                    return@launch
+                } finally {
+                    // Wipe dust seed from memory
+                    java.util.Arrays.fill(preSyncDustSeed, 0.toByte())
+                    preSyncDustKey.clear()
                 }
 
                 // Step 6: Submit transaction WITH dust fees (Phase 2E)
@@ -622,12 +632,20 @@ class SendViewModel @Inject constructor(
      * 6. Prove → seal → submit via TransactionSubmitter
      *
      * @param activity The hosting FragmentActivity (required by BiometricPrompt)
+     * @param fromAddress Sender's shielded address (mn_shield-addr_...) — for
+     *   display/logging only. Shielded state keys are derived from the zswap
+     *   seed, not this string.
+     * @param walletAnchorAddress Sender's UNSHIELDED address. Used as the
+     *   cache key for both `dustRepository` and `shieldedRepository` so that
+     *   unshielded sends, shielded sends, and BalanceViewModel all share the
+     *   same cache entries. Dust is wallet-level, not per-mode.
      * @param toAddress Recipient's shielded address (mn_shield-addr_...)
      * @param amount Amount to send (micro-units)
      */
     fun sendShieldedTransaction(
         activity: FragmentActivity,
         fromAddress: String,
+        walletAnchorAddress: String,
         toAddress: String,
         amount: BigInteger,
     ) {
@@ -675,13 +693,17 @@ class SendViewModel @Inject constructor(
                     // Always fresh-sync shielded state before spending.
                     // Stale state causes ReplayProtectionViolation (error 193) because
                     // nullifiers from previous attempts may already be on-chain.
+                    //
+                    // NOTE: shielded state is cached under `walletAnchorAddress`
+                    // (the unshielded address), matching BalanceViewModel so that
+                    // the send and balance flows share the same cache entry.
                     Log.d(TAG, "Syncing shielded state from blockchain before transfer...")
-                    val synced = shieldedRepository.syncFromBlockchain(fromAddress, zswapSeed)
+                    val synced = shieldedRepository.syncFromBlockchain(walletAnchorAddress, zswapSeed)
                     if (!synced) {
                         _state.value = SendUiState.Error("No shielded coins found. Receive shielded NIGHT first.")
                         return@launch
                     }
-                    val state = shieldedRepository.loadState(fromAddress)
+                    val state = shieldedRepository.loadState(walletAnchorAddress)
                     if (state == null) {
                         _state.value = SendUiState.Error("Failed to load shielded state after sync")
                         return@launch
@@ -719,21 +741,34 @@ class SendViewModel @Inject constructor(
                         val dustSeed = dustKey.privateKeyBytes
 
                         try {
-                            // Sync dust if needed
-                            if (!dustRepository.hasCachedState(fromAddress)) {
-                                Log.d(TAG, "Syncing dust for shielded transfer...")
-                                val dustSynced = dustRepository.syncFromBlockchain(
-                                    address = fromAddress,
-                                    dustSeed = dustSeed,
-                                    maxBlocks = 100
-                                )
-                                if (!dustSynced) {
-                                    _state.value = SendUiState.Error("No dust registered. Register dust in Lace first.")
-                                    return@launch
-                                }
+                            // Dust is a wallet-level resource — ALWAYS key it by
+                            // the unshielded (anchor) address so the same cache
+                            // entry is shared by unshielded sends, shielded sends,
+                            // and the Dust screen. Keying by the shielded address
+                            // here caused a separate cache entry that went stale
+                            // across mode switches (InvalidDustSpendProof / error 170).
+                            //
+                            // ALWAYS force a fresh sync. `submitWithFees` only
+                            // clears the cache on successful submission, so any
+                            // prior rejection (e.g. error 170) leaves a stale
+                            // entry that would otherwise be silently reused —
+                            // creating a feedback loop of 170 errors until the
+                            // user clears app data. Forcing a delete+resync
+                            // here breaks that loop at the cost of one extra
+                            // indexer replay per send.
+                            Log.d(TAG, "Forcing fresh dust sync for shielded transfer...")
+                            dustRepository.deleteState(walletAnchorAddress)
+                            val dustSynced = dustRepository.syncFromBlockchain(
+                                address = walletAnchorAddress,
+                                dustSeed = dustSeed,
+                                maxBlocks = 100
+                            )
+                            if (!dustSynced) {
+                                _state.value = SendUiState.Error("No dust registered. Register dust in Lace first.")
+                                return@launch
                             }
 
-                            val dustState = dustRepository.loadState(fromAddress)
+                            val dustState = dustRepository.loadState(walletAnchorAddress)
                             if (dustState == null) {
                                 _state.value = SendUiState.Error("Failed to load dust state")
                                 return@launch
@@ -775,7 +810,12 @@ class SendViewModel @Inject constructor(
                                     Log.i(TAG, "Shielded transfer finalized: ${result.txHash}")
                                     // Invalidate dust cache — UTXO was consumed on-chain.
                                     // Next transfer will re-sync fresh dust state.
-                                    dustRepository.deleteState(fromAddress)
+                                    // Use walletAnchorAddress so this matches the
+                                    // key the unshielded send path (and the Dust
+                                    // screen) use — otherwise stale dust state
+                                    // persists under the unshielded key and the
+                                    // next unshielded send fails with error 170.
+                                    dustRepository.deleteState(walletAnchorAddress)
                                     _state.value = SendUiState.Success(
                                         txHash = result.txHash,
                                         recipientAddress = toAddress,
