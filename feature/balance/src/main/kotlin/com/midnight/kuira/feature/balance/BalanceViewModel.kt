@@ -2,14 +2,16 @@ package com.midnight.kuira.feature.balance
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
-import com.midnight.kuira.core.crypto.address.Bech32m
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.auth.WalletAddressCache
+import com.midnight.kuira.core.auth.WalletAddresses
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
-import com.midnight.kuira.core.crypto.bip39.BIP39
-import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
 import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
 import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
@@ -75,13 +77,27 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val formatter: BalanceFormatter,
     private val networkConfig: NetworkConfig,
+    private val walletAddressCache: WalletAddressCache,
+    private val seedVault: SeedVault,
     private val clock: Clock = Clock.systemDefaultZone()
 ) : ViewModel() {
 
-    val defaultTestAddress: String = DEFAULT_TEST_ADDRESSES[networkConfig.network.addressPrefix]
-        ?: ""
+    /**
+     * The wallet's derived public addresses (unshielded + shielded), loaded
+     * from [WalletAddressCache] at ViewModel creation. Null while loading or
+     * if onboarding hasn't completed.
+     *
+     * Addresses are public, so no biometric is needed to display them. The
+     * UI observes this to auto-populate the address field.
+     */
+    private val _walletAddresses = MutableStateFlow<WalletAddresses?>(null)
+    val walletAddresses: StateFlow<WalletAddresses?> = _walletAddresses.asStateFlow()
 
-    val defaultTestSeedPhrase: String = DEFAULT_TEST_SEED_PHRASES[networkConfig.network] ?: ""
+    init {
+        viewModelScope.launch {
+            _walletAddresses.value = walletAddressCache.load()
+        }
+    }
 
     private val _balanceState = MutableStateFlow<BalanceUiState>(BalanceUiState.Loading())
     val balanceState: StateFlow<BalanceUiState> = _balanceState.asStateFlow()
@@ -122,28 +138,26 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
      * @throws IllegalArgumentException if address is invalid
      */
     /**
-     * Load unshielded balances + shielded balance together.
-     * Shielded runs after unshielded starts (non-blocking).
+     * Load unshielded balances for the wallet's cached unshielded address.
+     *
+     * This is the default entry point — no biometric is required because
+     * the address is public. Shielded balance is loaded separately via
+     * [loadShieldedBalance] when the user explicitly requests it.
+     *
+     * Does nothing if the wallet has not been onboarded yet (no cached address).
      */
-    fun loadBalancesWithShielded(address: String, seedPhrase: String) {
-        loadBalances(address)
-        if (seedPhrase.isNotBlank()) {
+    fun loadFromCache() {
+        val addresses = _walletAddresses.value
+        if (addresses == null) {
+            // Try to reload in case onboarding just completed
             viewModelScope.launch {
-                // Wait for unshielded to reach Success before starting shielded sync
-                // (they share the same WebSocket client — can't run concurrently)
-                var waitMs = 0L
-                while (_balanceState.value !is BalanceUiState.Success) {
-                    kotlinx.coroutines.delay(500)
-                    waitMs += 500
-                    if (waitMs > 30_000) {
-                        Log.w(TAG, "Timed out waiting for unshielded Success after ${waitMs}ms")
-                        return@launch
-                    }
-                }
-                Log.d(TAG, "Unshielded reached Success after ${waitMs}ms, starting shielded sync")
-                loadShieldedBalance(address, seedPhrase)
+                val loaded = walletAddressCache.load()
+                _walletAddresses.value = loaded
+                if (loaded != null) loadBalances(loaded.unshieldedAddress)
             }
+            return
         }
+        loadBalances(addresses.unshieldedAddress)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -294,16 +308,30 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
      * Derives the zswap key from the seed phrase, syncs events, and updates
      * the current Success state with shielded balances.
      */
-    fun loadShieldedBalance(address: String, seedPhrase: String) {
-        if (seedPhrase.isBlank()) return
-
+    /**
+     * Load shielded balance. Requires biometric auth because shielded event
+     * decryption needs the zswap private key from the wallet seed.
+     *
+     * **UX:** This is LAZY — the user has to explicitly trigger it (e.g., via
+     * a "Sync shielded balance" button or pull-to-refresh). We don't auto-load
+     * it when the screen opens because showing a biometric prompt on launch
+     * would be jarring right after onboarding.
+     *
+     * The shielded address for display is taken from the cache — only the
+     * balance sync needs biometric.
+     *
+     * @param activity The hosting FragmentActivity (required by BiometricPrompt)
+     * @param address The unshielded address (balance is looked up by this)
+     */
+    fun loadShieldedBalance(activity: FragmentActivity, address: String) {
         viewModelScope.launch {
-            var seed: ByteArray? = null
+            var plaintextSeed: PlaintextSeed? = null
             var hdWallet: HDWallet? = null
 
             try {
-                seed = BIP39.mnemonicToSeed(seedPhrase)
-                hdWallet = HDWallet.fromSeed(seed)
+                // Biometric-gated seed load
+                plaintextSeed = seedVault.loadSeed(activity)
+                hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
 
                 // Derive zswap seed at m/44'/2400'/0'/3/0
                 val zswapKey = hdWallet.selectAccount(0)
@@ -312,19 +340,8 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                 val zswapSeed = zswapKey.privateKeyBytes.copyOf()
                 zswapKey.clear()
 
-                // Derive shielded address from keys
-                val shieldedKeys = ShieldedKeyDeriver.deriveKeys(zswapSeed)
-                val shieldedAddress = shieldedKeys?.let {
-                    val coinPkBytes = hexToBytes(it.coinPublicKey)
-                    val encPkBytes = hexToBytes(it.encryptionPublicKey)
-                    val prefix = "mn_shield-addr" + when (networkConfig.network) {
-                        MidnightNetwork.PREPROD -> "_preprod"
-                        MidnightNetwork.PREVIEW -> "_preview"
-                        MidnightNetwork.UNDEPLOYED -> "_undeployed"
-                        else -> ""
-                    }
-                    Bech32m.encode(prefix, coinPkBytes + encPkBytes)
-                }
+                // Shielded address comes from the cache — no need to re-derive
+                val shieldedAddress = _walletAddresses.value?.shieldedAddress
 
                 // Sync zswap events
                 val hasCoins = shieldedRepository.syncFromBlockchain(address, zswapSeed)
@@ -366,7 +383,7 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load shielded balance", e)
             } finally {
-                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                plaintextSeed?.wipe()
                 hdWallet?.clear()
             }
         }
@@ -509,18 +526,5 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
         const val TIME_PATTERN = "h:mm a"
         const val DATE_TIME_PATTERN = "MMM d 'at' h:mm a"
-
-        // MVP test seed phrases — Alice (from CLI: mn wallet info alice)
-        private val DEFAULT_TEST_SEED_PHRASES = mapOf(
-            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
-            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
-        )
-
-        // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
-        val DEFAULT_TEST_ADDRESSES = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds232yy8",
-            "mn_addr_undeployed" to "mn_addr_undeployed18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60dss2s64k",
-            "mn_addr_preview" to "mn_addr_preview18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds2s55h6"
-        )
     }
 }

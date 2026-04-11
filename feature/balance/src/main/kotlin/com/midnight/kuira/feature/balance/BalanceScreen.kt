@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.indexer.sync.SyncState
 
@@ -75,18 +76,26 @@ fun BalanceScreen(
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
 
-    var address by remember { mutableStateOf(viewModel.defaultTestAddress) }
-    var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
+    // Wallet addresses loaded from WalletAddressCache (populated by onboarding)
+    val walletAddresses by viewModel.walletAddresses.collectAsState()
+    var address by remember { mutableStateOf("") }
     var shieldedVisible by remember { mutableStateOf(true) }
 
-    // Auto-load unshielded + shielded on launch (MVP)
-    LaunchedEffect(Unit) {
-        if (address.isNotBlank()) {
-            viewModel.loadBalancesWithShielded(address, seedPhrase)
+    // Once the cached address is available, populate the address field and
+    // start loading unshielded balance. No biometric needed — addresses are public.
+    LaunchedEffect(walletAddresses) {
+        val cachedUnshielded = walletAddresses?.unshieldedAddress
+        if (!cachedUnshielded.isNullOrBlank() && address.isBlank()) {
+            address = cachedUnshielded
+            viewModel.loadBalances(cachedUnshielded)
         }
     }
 
     val context = LocalContext.current
+    // FragmentActivity is needed by SeedVault.loadSeed() for shielded balance sync.
+    // MainActivity extends FragmentActivity (Step 8A.1) so this cast is safe.
+    val activity = context as? FragmentActivity
+        ?: error("BalanceScreen must be hosted in a FragmentActivity")
     val pullToRefreshState = rememberPullToRefreshState()
 
     Scaffold(
@@ -136,8 +145,9 @@ fun BalanceScreen(
             isRefreshing = balanceState is BalanceUiState.Loading &&
                           (balanceState as? BalanceUiState.Loading)?.isRefreshing == true,
             onRefresh = {
+                // Pull-to-refresh only reloads unshielded — doesn't trigger biometric.
+                // Shielded balance has an explicit "Sync" button that requires auth.
                 viewModel.refresh(address)
-                viewModel.loadShieldedBalance(address, seedPhrase)
             },
             state = pullToRefreshState,
             modifier = Modifier
@@ -158,7 +168,7 @@ fun BalanceScreen(
                         android.util.Log.d("BalanceScreen", "Address changed: '${newAddress}'")
                         address = newAddress.trim()
                     },
-                    onLoadBalances = { viewModel.loadBalancesWithShielded(address, seedPhrase) },
+                    onLoadBalances = { viewModel.loadBalances(address) },
                     onCopyAddress = { copyToClipboard(context, address) },
                     onClearAddress = { address = "" },
                     isAddressValid = address.isNotBlank() && address.startsWith("mn_")
@@ -196,15 +206,17 @@ fun BalanceScreen(
                     }
                 }
 
-                // Seed phrase input at bottom
-                OutlinedTextField(
-                    value = seedPhrase,
-                    onValueChange = { seedPhrase = it },
-                    label = { Text("Seed Phrase (for shielded)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 3
-                )
+                // Shielded balance sync trigger — explicit because it requires
+                // a biometric prompt (decrypting zswap events needs the seed).
+                // Unshielded balance loads automatically; shielded does not.
+                if (address.isNotBlank() && address.startsWith("mn_")) {
+                    Button(
+                        onClick = { viewModel.loadShieldedBalance(activity, address) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Sync shielded balance")
+                    }
+                }
             }
         }
     }

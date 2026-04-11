@@ -14,8 +14,11 @@ import com.midnight.kuira.core.auth.AuthenticationPermanentlyLockedOutException
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SecurityCapabilities
 import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.auth.WalletAddressCache
+import com.midnight.kuira.core.auth.WalletAddresses
 import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.crypto.bip39.BIP39
+import com.midnight.kuira.core.network.NetworkConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +57,8 @@ class OnboardingViewModel @Inject constructor(
     private val walletKeyManager: WalletKeyManager,
     private val seedVault: SeedVault,
     private val securityCapabilities: SecurityCapabilities,
+    private val walletAddressCache: WalletAddressCache,
+    private val networkConfig: NetworkConfig,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<OnboardingUiState>(OnboardingUiState.Welcome)
@@ -158,36 +163,57 @@ class OnboardingViewModel @Inject constructor(
             false
         }
 
+        // Captured inside the seedProducer lambda. Written to the address cache
+        // on success — addresses are public so this is not a security concern.
+        var derivedAddresses: WalletAddresses? = null
+
         try {
             seedVault.storeSeed(activity) {
                 // Produced ONLY after biometric auth succeeds
                 val mnemonic = restoreFromPhrase ?: BIP39.generateMnemonic(wordCount = 24)
                 val entropy = BIP39.mnemonicToEntropy(mnemonic)
                 val seed = BIP39.mnemonicToSeed(mnemonic)
+
+                // Derive + capture the public addresses while we have the seed
+                // in memory. These will be persisted outside the lambda after
+                // storeSeed returns successfully.
+                derivedAddresses = WalletAddressDeriver.derive(seed, networkConfig.network)
+
                 PlaintextSeed(entropy, seed)
             }
+
+            // storeSeed returned successfully → persist the addresses so
+            // read-only features (balance display) can find them without
+            // triggering a biometric prompt.
+            derivedAddresses?.let { walletAddressCache.save(it) }
+
             _uiState.value = OnboardingUiState.Success
         } catch (e: CancellationException) {
             // Preserve structured concurrency
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             throw e
         } catch (e: AuthenticationCancelledException) {
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_auth_cancelled)
             )
         } catch (e: AuthenticationLockedOutException) {
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_locked_out)
             )
         } catch (e: AuthenticationPermanentlyLockedOutException) {
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(R.string.onboarding_error_permanently_locked)
             )
         } catch (e: AuthenticationFailedException) {
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(
                     resId = R.string.onboarding_error_auth_failed,
@@ -196,6 +222,7 @@ class OnboardingViewModel @Inject constructor(
             )
         } catch (e: Exception) {
             if (wasKeyCreatedThisAttempt) walletKeyManager.deleteKey()
+            walletAddressCache.clear()
             _uiState.value = OnboardingUiState.Error(
                 OnboardingErrorMessage(
                     resId = R.string.onboarding_error_generic,

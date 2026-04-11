@@ -47,8 +47,9 @@ android {
 dependencies {
     // Core modules
     implementation(project(":core:auth"))        // Wallet authentication + encrypted seed
-    implementation(project(":core:crypto"))      // BIP-39 mnemonic generation
+    implementation(project(":core:crypto"))      // BIP-39 mnemonic generation + address derivation
     implementation(project(":core:designsystem")) // Dusk theme + reusable components
+    implementation(project(":core:network"))     // NetworkConfig for address prefix selection
 
     // Android Core
     implementation(libs.androidx.core.ktx)

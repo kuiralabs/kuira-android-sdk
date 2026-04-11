@@ -75,7 +75,18 @@ class BalanceViewModelTest {
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
         val testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
         val shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository = mock()
-        viewModel = BalanceViewModel(repository, shieldedRepository, subscriptionManagerFactory, formatter, testNetworkConfig, fakeClock)
+        val walletAddressCache: com.midnight.kuira.core.auth.WalletAddressCache = mock()
+        val seedVault: com.midnight.kuira.core.auth.SeedVault = mock()
+        viewModel = BalanceViewModel(
+            repository = repository,
+            shieldedRepository = shieldedRepository,
+            subscriptionManagerFactory = subscriptionManagerFactory,
+            formatter = formatter,
+            networkConfig = testNetworkConfig,
+            walletAddressCache = walletAddressCache,
+            seedVault = seedVault,
+            clock = fakeClock,
+        )
     }
 
     /**
@@ -1241,9 +1252,7 @@ class BalanceViewModelTest {
         assertNull(state2.shieldedBalances)
     }
 
-    @Test
-    fun `defaultTestSeedPhrase is populated for preprod`() {
-        assertTrue(viewModel.defaultTestSeedPhrase.isNotBlank())
-        assertEquals(24, viewModel.defaultTestSeedPhrase.split(" ").size)
-    }
+    // Note: defaultTestSeedPhrase was removed in Step 8A.8c — balance no longer
+    // owns a test mnemonic. Addresses come from WalletAddressCache (populated
+    // by onboarding) and shielded balance requires explicit biometric auth.
 }

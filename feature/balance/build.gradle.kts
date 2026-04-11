@@ -11,7 +11,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 30 // Required by core:auth
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -49,9 +49,11 @@ dependencies {
     implementation(project(":core:crypto"))
     implementation(project(":core:indexer"))
     implementation(project(":core:network"))
+    implementation(project(":core:auth"))
 
     // Android Core
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
