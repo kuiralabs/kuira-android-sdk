@@ -112,7 +112,10 @@ fun SendScreen(
     }
 
     // Send mode: shielded (private) vs unshielded (public)
-    var isShieldedSend by remember { mutableStateOf(true) }
+    // Default to unshielded — easier to test end-to-end because the default
+    // recipient (Bob) is always populated for every network. Shielded mode has
+    // gaps (preview doesn't have a shielded default recipient).
+    var isShieldedSend by remember { mutableStateOf(false) }
     val isLocalProving by viewModel.isLocalProvingEnabled.collectAsState()
 
     // User inputs with test placeholders (MVP ONLY - for faster testing)

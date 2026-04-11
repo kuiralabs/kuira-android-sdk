@@ -101,13 +101,14 @@ class SendViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
-     * Default test recipient address for the currently selected network (MVP only).
-     * Uses Alice's address for preprod, falls back to empty for unknown networks.
+     * Default test recipient — Bob's unshielded address for the current network.
+     * Pre-filled into the Send screen so you can test end-to-end without
+     * typing a 90-character bech32 address.
      */
-    val defaultTestRecipient: String = DEFAULT_TEST_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
+    val defaultTestRecipient: String = BOB_UNSHIELDED_ADDRESSES[networkConfig.network.addressPrefix] ?: ""
 
-    /** Default shielded recipient (for send mode toggle). */
-    val defaultShieldedRecipient: String = DEFAULT_SHIELDED_RECIPIENTS[networkConfig.network.addressPrefix] ?: ""
+    /** Default test recipient — Bob's shielded address for the current network. */
+    val defaultShieldedRecipient: String = BOB_SHIELDED_ADDRESSES[networkConfig.network.addressPrefix] ?: ""
 
     /** Whether proving mode is set to LOCAL — observable for Compose recomposition. */
     private val _isLocalProving = MutableStateFlow(transactionSubmitter.provingMode == ProvingMode.LOCAL)
@@ -983,17 +984,30 @@ class SendViewModel @Inject constructor(
         private const val PRE_SEND_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - fast sync before send
         private const val QUICK_SYNC_TIMEOUT_MS = 10_000L  // 10 seconds - recovery sync after error (same as pre-send)
 
-        // MVP test recipients — Bob unshielded (from CLI: mn wallet info bob)
-        val DEFAULT_TEST_RECIPIENTS = mapOf(
+        // Bob's test wallet addresses — used as the default recipient when
+        // testing sends from the demo app. Source of truth: `mn info` on the
+        // Bob wallet at ~/.midnight/wallets/bob.json. These are hardcoded
+        // recipient addresses, NOT signing secrets — the wallet signs with
+        // whatever seed the user onboarded into SeedVault.
+        //
+        // Keys are the network's address prefix so `networkConfig.network.addressPrefix`
+        // looks up the correct one.
+        val BOB_UNSHIELDED_ADDRESSES = mapOf(
             "mn_addr_preprod" to "mn_addr_preprod1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsev7kky",
             "mn_addr_undeployed" to "mn_addr_undeployed1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsrhyg84",
-            "mn_addr_preview" to "mn_addr_preview1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsedqx9e"
+            "mn_addr_preview" to "mn_addr_preview1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsedqx9e",
         )
-        // MVP test recipients — Bob shielded
-        val DEFAULT_SHIELDED_RECIPIENTS = mapOf(
-            "mn_addr_preprod" to "",
+
+        // Bob's shielded addresses. Same underlying coin_pk + enc_pk as the
+        // preprod address — the undeployed entry is the same bytes re-encoded
+        // with the `mn_shield-addr_undeployed` bech32 prefix.
+        //
+        // preview is empty because Bob's wallet file doesn't record a preview
+        // shielded address and we haven't re-encoded it.
+        val BOB_SHIELDED_ADDRESSES = mapOf(
+            "mn_addr_preprod" to "mn_shield-addr_preprod1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajsvdpu4u",
             "mn_addr_undeployed" to "mn_shield-addr_undeployed1ys3ucc6ly48wtqekax3ehp3qwdfc257tcd2uaqp8vf3kvm6wggccgjhsxtsuw983n80t28fk3ncdtk2dcxn268f4mxrrhaqmkwt7ajs4fj9f5",
-            "mn_addr_preview" to ""
+            "mn_addr_preview" to "",
         )
     }
 }
