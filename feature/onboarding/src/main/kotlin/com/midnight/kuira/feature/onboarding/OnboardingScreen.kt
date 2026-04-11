@@ -8,6 +8,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,14 +63,11 @@ fun OnboardingScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Skip onboarding if a wallet already exists (suspend to avoid main-thread I/O)
-    LaunchedEffect(Unit) {
-        if (viewModel.hasExistingWallet()) {
-            onWalletReady()
-        }
-    }
+    // Note: WalletGate is the single source of truth for "does a wallet exist".
+    // OnboardingScreen is only ever shown when WalletGate has determined there
+    // is none — we don't re-check here.
 
-    // Navigate on success
+    // Notify the host (WalletGate) when wallet creation completes
     LaunchedEffect(uiState) {
         if (uiState is OnboardingUiState.Success) {
             onWalletReady()
@@ -174,13 +172,16 @@ private fun WelcomeContent(
         onClick = onCreate,
         modifier = Modifier.fillMaxWidth(),
     )
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(STACKED_BUTTON_GAP))
     DuskSecondaryButton(
         text = stringResource(R.string.onboarding_restore_wallet),
         onClick = onRestore,
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+/** Vertical gap between stacked DuskButtons (matches the 2dp horizontal gap in DuskButtonRow). */
+private val STACKED_BUTTON_GAP = 8.dp
 
 @Composable
 private fun RestoreContent(
@@ -236,14 +237,19 @@ private fun RestoreContent(
             .background(MidnightColors.LightBarely)
             .padding(16.dp),
         decorationBox = { innerTextField ->
-            if (state.input.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.onboarding_restore_placeholder),
-                    color = MidnightColors.LightFaint,
-                    fontSize = 14.sp,
-                )
+            // Box wrapper makes the placeholder and the actual field overlap
+            // (otherwise they stack vertically and the cursor appears below
+            // the placeholder).
+            Box {
+                if (state.input.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.onboarding_restore_placeholder),
+                        color = MidnightColors.LightFaint,
+                        fontSize = 14.sp,
+                    )
+                }
+                innerTextField()
             }
-            innerTextField()
         },
     )
 

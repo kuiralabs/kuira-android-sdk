@@ -75,15 +75,6 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun `hasExistingWallet delegates to SeedVault`() = runTest {
-        whenever(seedVault.hasSeed()).thenReturn(true)
-        assertTrue(viewModel.hasExistingWallet())
-
-        whenever(seedVault.hasSeed()).thenReturn(false)
-        assertFalse(viewModel.hasExistingWallet())
-    }
-
-    @Test
     fun `createWallet transitions to NeedsAuthSetup when no authenticator`() = runTest {
         whenever(securityCapabilities.hasAnyAuthenticator).thenReturn(false)
 

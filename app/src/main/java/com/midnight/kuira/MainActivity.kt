@@ -63,7 +63,10 @@ class MainActivity : FragmentActivity() {
                 // (or after a wallet reset), WalletGate shows OnboardingScreen
                 // until the user creates or restores a wallet. Once a seed is
                 // persisted, the content slot renders the normal app navigation.
-                WalletGate(activity = this) {
+                // Explicit @MainActivity to make the Activity reference unambiguous
+                // (inside setContent the surrounding `this` could change if someone
+                // wraps the lambda in a different scope)
+                WalletGate(activity = this@MainActivity) {
                     Scaffold(
                         modifier = Modifier.fillMaxSize()
                     ) { innerPadding ->
