@@ -33,8 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
 import java.math.BigInteger
@@ -47,10 +49,10 @@ import java.math.BigInteger
  * - Display dust balance, token count, and generation progress
  * - Register for dust generation (build → prove → seal → submit)
  *
- * **MVP Limitations:**
- * - Exposes seed phrase in UI (NOT production-ready)
- * - No biometric auth
- * - Manual address input (will be auto-populated from wallet state)
+ * **Security:** The seed is loaded on demand by [DustViewModel] via a
+ * biometric prompt — this screen never holds or displays mnemonic
+ * material. The [address] parameter is supplied by navigation from the
+ * Balance screen (read from [WalletAddressCache]).
  *
  * **Design:** Follows BalanceScreen/SendScreen pattern — Card-based sections
  */
@@ -64,9 +66,16 @@ fun DustScreen(
     val state by viewModel.state.collectAsState()
     val formatter = remember { BalanceFormatter() }
 
-    // User inputs with MVP test defaults
-    var addressInput by remember { mutableStateOf(address.ifBlank { viewModel.defaultTestAddress }) }
-    var seedPhrase by remember { mutableStateOf(viewModel.defaultTestSeedPhrase) }
+    val context = LocalContext.current
+    // BiometricPrompt requires a FragmentActivity host. MainActivity already
+    // extends FragmentActivity (changed in Step 8A.1).
+    val activity = context as? FragmentActivity
+        ?: error("DustScreen must be hosted in a FragmentActivity")
+
+    // Address comes from the nav arg (BalanceScreen → onNavigateToDust).
+    // We keep it editable so advanced users can paste a different address
+    // for inspection, but there is no test default to fall back to.
+    var addressInput by remember { mutableStateOf(address) }
 
     Scaffold(
         topBar = {
@@ -102,9 +111,9 @@ fun DustScreen(
 
                 is DustUiState.NoDust -> NoDustCard(
                     onRegister = {
-                        viewModel.registerDust(addressInput, seedPhrase)
+                        viewModel.registerDust(activity, addressInput)
                     },
-                    enabled = addressInput.isNotBlank() && seedPhrase.isNotBlank()
+                    enabled = addressInput.isNotBlank()
                 )
 
                 is DustUiState.Registering -> RegisteringCard(
@@ -113,12 +122,12 @@ fun DustScreen(
 
                 is DustUiState.RegistrationSuccess -> SuccessCard(
                     txHash = currentState.txHash,
-                    onReset = { viewModel.reset(addressInput, seedPhrase) }
+                    onReset = { viewModel.reset(activity, addressInput) }
                 )
 
                 is DustUiState.Error -> ErrorCard(
                     message = currentState.message,
-                    onRetry = { viewModel.checkDustStatus(addressInput, seedPhrase) }
+                    onRetry = { viewModel.checkDustStatus(activity, addressInput) }
                 )
             }
 
@@ -128,18 +137,12 @@ fun DustScreen(
                 onAddressChange = { addressInput = it }
             )
 
-            // Seed Phrase Input (MVP only)
-            SeedPhraseCard(
-                seedPhrase = seedPhrase,
-                onSeedPhraseChange = { seedPhrase = it }
-            )
-
             // Check Status Button (only when not already loading/registering)
             if (state !is DustUiState.Registering && state !is DustUiState.Loading) {
                 Button(
-                    onClick = { viewModel.checkDustStatus(addressInput, seedPhrase) },
+                    onClick = { viewModel.checkDustStatus(activity, addressInput) },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = addressInput.isNotBlank() && seedPhrase.isNotBlank()
+                    enabled = addressInput.isNotBlank()
                 ) {
                     Text("Check Dust Status")
                 }
@@ -176,46 +179,6 @@ private fun AddressInputCard(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("mn_addr_...") },
                 singleLine = true
-            )
-        }
-    }
-}
-
-@Composable
-private fun SeedPhraseCard(
-    seedPhrase: String,
-    onSeedPhraseChange: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Seed Phrase (MVP ONLY)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "WARNING: Never expose seed in production!",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = seedPhrase,
-                onValueChange = onSeedPhraseChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("24-word mnemonic") },
-                minLines = 3
             )
         }
     }

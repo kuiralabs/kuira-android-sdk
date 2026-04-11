@@ -11,7 +11,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 30 // Required by core:auth
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -48,8 +48,12 @@ dependencies {
     // Core modules
     implementation(project(":core:indexer"))     // For DustRepository, DustBalanceCalculator
     implementation(project(":core:ledger"))      // For DustRegistrationBuilder, ProofServerClient, TransactionSerializer
-    implementation(project(":core:crypto"))      // For DustKeyDeriver, HDWallet, BIP39
-    implementation(project(":core:network"))     // For NetworkConfig (default test addresses)
+    implementation(project(":core:crypto"))      // For DustKeyDeriver, HDWallet
+    implementation(project(":core:network"))     // For NetworkConfig
+    implementation(project(":core:auth"))        // SeedVault for biometric-gated key access
+
+    // AndroidX Fragment (FragmentActivity required by BiometricPrompt)
+    implementation(libs.androidx.fragment.ktx)
 
     // Android Core
     implementation(libs.androidx.core.ktx)

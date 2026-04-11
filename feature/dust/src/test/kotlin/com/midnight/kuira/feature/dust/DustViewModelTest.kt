@@ -1,5 +1,8 @@
 package com.midnight.kuira.feature.dust
 
+import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.database.UtxoState
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -8,8 +11,6 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.ProofServerClient
 import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.ledger.model.UtxoSpend
-import com.midnight.kuira.core.network.MidnightNetwork
-import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -27,14 +28,21 @@ import java.math.BigInteger
  * Unit tests for DustViewModel.
  *
  * **What's mocked:**
- * - DustRepository (database + FFI), ProofServerClient (network),
- *   TransactionSerializer (FFI), NodeRpcClient (network), UtxoManager (database)
+ * - [DustRepository] (database + FFI), [ProofServerClient] (network),
+ *   [TransactionSerializer] (FFI), [NodeRpcClient] (network),
+ *   [UtxoManager] (database), [SeedVault] (hardware-backed biometric),
+ *   [FragmentActivity] (Android host).
+ *
+ * **Seed handling:** `seedVault.loadSeed(activity)` is stubbed to return a
+ * fresh [PlaintextSeed] on every call so the real BIP-32 / HDWallet
+ * derivation path still runs inside the VM. That keeps the tests honest
+ * about the key lifecycle (wipe in `finally`) without needing a device.
  *
  * **Known gap:** The registerDust happy path (build → prove → seal → submit)
- * is not testable because DustKeyDeriver and DustRegistrationBuilder are
- * static objects with native library loading. They need to be behind
- * injectable interfaces to enable unit testing of the full registration flow
- * and TransactionFinalizationResult branch handling.
+ * is not testable because [com.midnight.kuira.core.crypto.dust.DustKeyDeriver]
+ * and [com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder] are
+ * static objects that load the native library. They'd need to sit behind
+ * injectable interfaces for a full unit test of the registration flow.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DustViewModelTest {
@@ -44,6 +52,8 @@ class DustViewModelTest {
     private lateinit var serializer: TransactionSerializer
     private lateinit var nodeRpcClient: NodeRpcClient
     private lateinit var utxoManager: UtxoManager
+    private lateinit var seedVault: SeedVault
+    private lateinit var activity: FragmentActivity
     private lateinit var viewModel: DustViewModel
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -57,14 +67,28 @@ class DustViewModelTest {
         serializer = mock()
         nodeRpcClient = mock()
         utxoManager = mock()
+        activity = mock()
+
+        // Stub `seedVault.loadSeed` via `onBlocking` (it's a `suspend` fun).
+        // Return a fresh PlaintextSeed on every call — VM's finally block
+        // wipes it, so re-using the same instance across calls would fail
+        // the size invariants on the second load.
+        seedVault = mock {
+            onBlocking { loadSeed(any()) } doAnswer {
+                PlaintextSeed(
+                    mnemonicEntropy = ByteArray(PlaintextSeed.ENTROPY_SIZE) { 0x11 },
+                    bip39Seed = ByteArray(PlaintextSeed.SEED_SIZE) { 0x22 },
+                )
+            }
+        }
 
         viewModel = DustViewModel(
             dustRepository = dustRepository,
             proofServerClient = proofServerClient,
             serializer = serializer,
             nodeRpcClient = nodeRpcClient,
-            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
-            utxoManager = utxoManager
+            utxoManager = utxoManager,
+            seedVault = seedVault,
         )
     }
 
@@ -87,25 +111,15 @@ class DustViewModelTest {
     // ========================================================================
 
     @Test
-    fun `checkDustStatus with blank address shows error and does not call repository`() = runTest {
-        viewModel.checkDustStatus("", "some seed phrase")
+    fun `checkDustStatus with blank address shows error and does not prompt biometric`() = runTest {
+        viewModel.checkDustStatus(activity, "")
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Error)
         assertEquals("Address cannot be empty", (state as DustUiState.Error).message)
 
-        // Verify no unnecessary network/database work
-        verifyNoInteractions(dustRepository)
-    }
-
-    @Test
-    fun `checkDustStatus with blank seed phrase shows error and does not call repository`() = runTest {
-        viewModel.checkDustStatus("mn_addr_preprod1test", "")
-
-        val state = viewModel.state.value
-        assertTrue(state is DustUiState.Error)
-        assertEquals("Seed phrase cannot be empty", (state as DustUiState.Error).message)
-
+        // Cheap validation runs before anything touches SeedVault or the repo.
+        verifyNoInteractions(seedVault)
         verifyNoInteractions(dustRepository)
     }
 
@@ -117,7 +131,7 @@ class DustViewModelTest {
     fun `checkDustStatus when no dust returns NoDust state`() = runTest {
         whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(false)
 
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
         val state = viewModel.state.value
         assertTrue("Expected NoDust but got ${state::class.simpleName}", state is DustUiState.NoDust)
@@ -130,15 +144,14 @@ class DustViewModelTest {
     @Test
     fun `checkDustStatus with generating token computes real time to capacity`() = runTest {
         val balance = BigInteger.valueOf(500_000)
-        val tokenCount = 1
 
         // Token created 10 seconds ago, rate=1000/sec, capacity=1,000,000, initial=0
         // After ~10s: current ≈ 10,000; remaining ≈ 990,000; time ≈ 990s ≈ 990,000ms
-        val token = createToken(
+        createToken(
             initialValue = "0",
             creationTimeMillis = System.currentTimeMillis() - 10_000,
             dustCapacitySpecks = "1000000",
-            generationRatePerSecond = "1000"
+            generationRatePerSecond = "1000",
         )
 
         val nightBalance = BigInteger.valueOf(5_000_000)
@@ -148,7 +161,7 @@ class DustViewModelTest {
             mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
         )
 
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
         val state = viewModel.state.value
         assertTrue("Expected Status but got ${state::class.simpleName}", state is DustUiState.Status)
@@ -167,7 +180,7 @@ class DustViewModelTest {
             mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
         )
 
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Status)
@@ -181,7 +194,7 @@ class DustViewModelTest {
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.ZERO)
         whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(emptyMap())
 
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Status)
@@ -198,7 +211,7 @@ class DustViewModelTest {
         whenever(dustRepository.syncFromBlockchain(any(), any(), any()))
             .thenThrow(RuntimeException("Network error"))
 
-        viewModel.checkDustStatus(TEST_ADDRESS, TEST_SEED_PHRASE)
+        viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Error)
@@ -212,51 +225,13 @@ class DustViewModelTest {
     // ========================================================================
 
     @Test
-    fun `registerDust with blank address shows error without entering Registering state`() = runTest {
-        viewModel.registerDust("", "seed")
+    fun `registerDust with blank address shows error without prompting biometric`() = runTest {
+        viewModel.registerDust(activity, "")
 
         val state = viewModel.state.value
         assertTrue(state is DustUiState.Error)
-        assertEquals("Address and seed phrase are required", (state as DustUiState.Error).message)
-    }
-
-    @Test
-    fun `registerDust with blank seed shows error without entering Registering state`() = runTest {
-        viewModel.registerDust("mn_addr_test", "")
-
-        val state = viewModel.state.value
-        assertTrue(state is DustUiState.Error)
-        assertEquals("Address and seed phrase are required", (state as DustUiState.Error).message)
-    }
-
-    // ========================================================================
-    // registerDust - Error Handling
-    // ========================================================================
-
-    @Test
-    fun `registerDust with invalid seed phrase shows error`() = runTest {
-        // BIP39.mnemonicToSeed will throw for invalid mnemonic — real crypto, not mocked
-        viewModel.registerDust(TEST_ADDRESS, "invalid seed")
-
-        val state = viewModel.state.value
-        assertTrue("Expected Error but got ${state::class.simpleName}", state is DustUiState.Error)
-        assertTrue((state as DustUiState.Error).message.contains("Registration failed"))
-    }
-
-    // ========================================================================
-    // Default values
-    // ========================================================================
-
-    @Test
-    fun `defaultTestSeedPhrase is populated for preprod`() {
-        assertTrue(viewModel.defaultTestSeedPhrase.isNotBlank())
-        assertEquals(24, viewModel.defaultTestSeedPhrase.split(" ").size)
-    }
-
-    @Test
-    fun `defaultTestAddress is populated for preprod`() {
-        assertTrue(viewModel.defaultTestAddress.isNotBlank())
-        assertTrue(viewModel.defaultTestAddress.startsWith("mn_addr_preprod"))
+        assertEquals("Address is required", (state as DustUiState.Error).message)
+        verifyNoInteractions(seedVault)
     }
 
     // ========================================================================
@@ -290,6 +265,5 @@ class DustViewModelTest {
 
     private companion object {
         const val TEST_ADDRESS = "mn_addr_preprod14jv9z9g3dwpm74zx8ntv9wt026gtt87wu7ev90mv2hm94r6zc6jqjj0mtk"
-        const val TEST_SEED_PHRASE = "slot pave company hobby wear thank erupt license major devote jealous plunge protect dice floor exact ride manual harvest ribbon harbor regular romance artist"
     }
 }

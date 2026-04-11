@@ -3,12 +3,14 @@ package com.midnight.kuira.feature.dust
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.crypto.bip32.DerivedKey
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
-import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.crypto.dust.DustKeyDeriver
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
@@ -18,8 +20,6 @@ import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
 import com.midnight.kuira.core.ledger.model.UtxoSpend
-import com.midnight.kuira.core.network.MidnightNetwork
-import com.midnight.kuira.core.network.NetworkConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,9 +47,10 @@ import javax.inject.Inject
  * 6. Submit sealed tx via NodeRpcClient
  * 7. Sync dust state from blockchain
  *
- * **MVP Note:**
- * Same seed-phrase input pattern as SendScreen. Production will use
- * secure wallet state management with biometric auth.
+ * **Security:** The seed is never held in the UI. It is loaded on demand
+ * from [SeedVault] via a biometric prompt, used for key derivation, and
+ * wiped in the `finally` block of every operation. See [SeedVault] and
+ * [HDWallet] for the key-material lifecycle.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @HiltViewModel
@@ -58,21 +59,9 @@ class DustViewModel @Inject constructor(
     private val proofServerClient: ProofServerClient,
     private val serializer: TransactionSerializer,
     private val nodeRpcClient: NodeRpcClient,
-    private val networkConfig: NetworkConfig,
-    private val utxoManager: UtxoManager
+    private val utxoManager: UtxoManager,
+    private val seedVault: SeedVault,
 ) : ViewModel() {
-
-    /**
-     * Default test seed phrase for the currently selected network (MVP only).
-     * Uses Bob's mnemonic (same as SendViewModel).
-     */
-    val defaultTestSeedPhrase: String = DEFAULT_TEST_SEED_PHRASES[networkConfig.network] ?: ""
-
-    /**
-     * Default test address for the currently selected network (MVP only).
-     * Uses Bob's address (same as BalanceViewModel).
-     */
-    val defaultTestAddress: String = DEFAULT_TEST_ADDRESSES[networkConfig.network.addressPrefix] ?: ""
 
     private val _state = MutableStateFlow<DustUiState>(DustUiState.Idle)
     val state: StateFlow<DustUiState> = _state.asStateFlow()
@@ -80,15 +69,16 @@ class DustViewModel @Inject constructor(
     /**
      * Check dust status for an address.
      *
-     * Syncs dust from blockchain using the provided seed phrase, then determines
-     * whether dust is registered. Emits Status or NoDust state.
+     * Loads the seed via [SeedVault] (biometric prompt), syncs dust from
+     * chain, then emits either a [DustUiState.Status] (dust exists) or
+     * [DustUiState.NoDust] (not registered yet).
      *
+     * @param activity Hosting FragmentActivity (required by BiometricPrompt)
      * @param address Wallet address to check
-     * @param seedPhrase 24-word mnemonic (for deriving dust key)
      */
-    fun checkDustStatus(address: String, seedPhrase: String) {
+    fun checkDustStatus(activity: FragmentActivity, address: String) {
         viewModelScope.launch {
-            var seed: ByteArray? = null
+            var plaintextSeed: PlaintextSeed? = null
             var hdWallet: HDWallet? = null
             var dustKey: DerivedKey? = null
 
@@ -100,26 +90,20 @@ class DustViewModel @Inject constructor(
                     return@launch
                 }
 
-                if (seedPhrase.isBlank()) {
-                    _state.value = DustUiState.Error("Seed phrase cannot be empty")
-                    return@launch
-                }
-
-                // Derive dust key for sync
-                seed = BIP39.mnemonicToSeed(seedPhrase)
-                hdWallet = HDWallet.fromSeed(seed)
+                // Load seed via biometric prompt, then derive the dust key
+                plaintextSeed = seedVault.loadSeed(activity)
+                hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
                 dustKey = hdWallet
                     .selectAccount(0)
                     .selectRole(MidnightKeyRole.DUST)
                     .deriveKeyAt(0)
-                val dustSeed = dustKey.privateKeyBytes
 
                 // Try to sync dust from blockchain
                 Log.d(TAG, "Syncing dust from blockchain for $address")
                 val hasDust = dustRepository.syncFromBlockchain(
                     address = address,
-                    dustSeed = dustSeed,
-                    maxBlocks = 100
+                    dustSeed = dustKey.privateKeyBytes,
+                    maxBlocks = DUST_SYNC_MAX_BLOCKS,
                 )
 
                 if (!hasDust) {
@@ -138,9 +122,11 @@ class DustViewModel @Inject constructor(
                     throwable = e
                 )
             } finally {
-                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                // CRITICAL SECURITY: wipe all key material in reverse-order.
+                // DerivedKey.clear() also zeros the backing array of privateKeyBytes.
                 dustKey?.clear()
                 hdWallet?.clear()
+                plaintextSeed?.wipe()
             }
         }
     }
@@ -149,39 +135,40 @@ class DustViewModel @Inject constructor(
      * Register for dust generation.
      *
      * Full registration flow:
-     * 1. Derive NIGHT key at m/44'/2400'/0'/0/0
-     * 2. Derive dust key at m/44'/2400'/0'/2/0
-     * 3. Fetch NIGHT UTXOs (required for guaranteed unshielded offer)
-     * 4. Build registration tx (Rust FFI) with UTXOs
-     * 5. Prove tx (proof server)
-     * 6. Seal proven tx
-     * 7. Submit to blockchain and wait for finalization
-     * 8. Sync dust state
+     * 1. Load seed via [SeedVault] (biometric prompt)
+     * 2. Derive NIGHT key at m/44'/2400'/0'/0/0
+     * 3. Derive dust key at m/44'/2400'/0'/2/0
+     * 4. Fetch NIGHT UTXOs (required for guaranteed unshielded offer)
+     * 5. Build registration tx (Rust FFI) with UTXOs
+     * 6. Prove tx (proof server)
+     * 7. Seal proven tx
+     * 8. Submit to blockchain and wait for finalization
+     * 9. Sync dust state
      *
+     * @param activity Hosting FragmentActivity (required by BiometricPrompt)
      * @param address Wallet address to register
-     * @param seedPhrase 24-word mnemonic
      */
     fun registerDust(
+        activity: FragmentActivity,
         address: String,
-        seedPhrase: String
     ) {
         viewModelScope.launch {
-            var seed: ByteArray? = null
+            var plaintextSeed: PlaintextSeed? = null
             var hdWallet: HDWallet? = null
             var nightKey: DerivedKey? = null
             var dustKey: DerivedKey? = null
 
             try {
-                if (address.isBlank() || seedPhrase.isBlank()) {
-                    _state.value = DustUiState.Error("Address and seed phrase are required")
+                if (address.isBlank()) {
+                    _state.value = DustUiState.Error("Address is required")
                     return@launch
                 }
 
-                // Step 1: Derive keys
+                // Step 1: Load seed via biometric prompt + derive keys
                 _state.value = DustUiState.Registering(RegistrationStep.BUILDING)
 
-                seed = BIP39.mnemonicToSeed(seedPhrase)
-                hdWallet = HDWallet.fromSeed(seed)
+                plaintextSeed = seedVault.loadSeed(activity)
+                hdWallet = HDWallet.fromSeed(plaintextSeed.bip39Seed)
 
                 // NIGHT key at m/44'/2400'/0'/0/0
                 nightKey = hdWallet
@@ -272,7 +259,7 @@ class DustViewModel @Inject constructor(
                             dustRepository.syncFromBlockchain(
                                 address = address,
                                 dustSeed = dustSeed,
-                                maxBlocks = 100
+                                maxBlocks = DUST_SYNC_MAX_BLOCKS,
                             )
                             // Auto-show status after registration
                             showDustStatus(address)
@@ -290,7 +277,7 @@ class DustViewModel @Inject constructor(
                             dustRepository.syncFromBlockchain(
                                 address = address,
                                 dustSeed = dustSeed,
-                                maxBlocks = 100
+                                maxBlocks = DUST_SYNC_MAX_BLOCKS,
                             )
                             showDustStatus(address)
                         } catch (e: Exception) {
@@ -327,11 +314,14 @@ class DustViewModel @Inject constructor(
                     throwable = e
                 )
             } finally {
-                // CRITICAL SECURITY: Wipe all key material
-                seed?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                // CRITICAL SECURITY: Wipe all key material.
+                // DerivedKey.clear() also zeros the backing array of
+                // privateKeyBytes, so no separate Arrays.fill is needed on
+                // nightPrivateKey / dustSeed.
                 nightKey?.clear()
                 dustKey?.clear()
                 hdWallet?.clear()
+                plaintextSeed?.wipe()
             }
         }
     }
@@ -361,9 +351,10 @@ class DustViewModel @Inject constructor(
 
     /**
      * Reset to loading state and re-check dust status.
+     * Triggers a fresh biometric prompt.
      */
-    fun reset(address: String, seedPhrase: String) {
-        checkDustStatus(address, seedPhrase)
+    fun reset(activity: FragmentActivity, address: String) {
+        checkDustStatus(activity, address)
     }
 
     companion object {
@@ -375,17 +366,8 @@ class DustViewModel @Inject constructor(
         // Submission timeout: 120 seconds (dust registration can be slower)
         private const val SUBMISSION_TIMEOUT_MS = 120_000L
 
-        // MVP test seed phrases per network — Alice (from CLI: mn wallet info alice)
-        private val DEFAULT_TEST_SEED_PHRASES = mapOf(
-            MidnightNetwork.PREPROD to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own",
-            MidnightNetwork.UNDEPLOYED to "shoot swallow grunt cement glory exclude forward boring stool skirt portion swallow slow light town ripple obvious carry unfair beauty world small add own"
-        )
-
-        // MVP test addresses per network — Alice (from CLI: mn wallet info alice)
-        private val DEFAULT_TEST_ADDRESSES = mapOf(
-            "mn_addr_preprod" to "mn_addr_preprod18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds232yy8",
-            "mn_addr_undeployed" to "mn_addr_undeployed18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60dss2s64k",
-            "mn_addr_preview" to "mn_addr_preview18mj9eclnzussedhnvj99hdqug7n0kwsutj8dz5ez7edtwx4a60ds2s55h6"
-        )
+        // Number of recent blocks to scan when replaying dust events from the
+        // indexer. Matches SendViewModel.DUST_SYNC_MAX_BLOCKS.
+        private const val DUST_SYNC_MAX_BLOCKS = 100
     }
 }
