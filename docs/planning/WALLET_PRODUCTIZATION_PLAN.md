@@ -1031,22 +1031,176 @@ parallelized cleanly by one developer.
 
 ## Task breakdown
 
-_Will be populated once feature decisions (above) are locked and Q2 + Q3
-are resolved. The tier table above is the input; this section turns it
-into ordered, dependency-aware subphase tasks._
+Ordered subphases for executing 8B. Sequencing reflects real
+dependencies — later subphases cannot start meaningfully until their
+upstream subphase is done. Some subphases can run in parallel
+(explicitly noted).
 
-Draft structure (subject to the feature decisions above):
-- **8B.0** — De-risk early (R8 + a minified release build on device), before any UI investment
-- **8B.1** — Missing features (Tier 1 items: Settings, recovery phrase, tx history, receive QR, wipe)
-- **8B.2** — UX polish (Tier 1 items: Dusk everywhere, empty/error states, copy, icon, splash)
-- **8B.3** — Release engineering (T1-11 through T1-14 + any Tier 2 infra)
-- **8B.4** — Play Store compliance + submission
-- **8B.5** — Tier 2 selections (depends on what survives the cut)
+Notation:
+- **Ordering** — `[n]` means subphase n comes after n-1 unless
+  marked "parallel to".
+- **Gates** — `gate:` means this subphase blocks later work until done.
 
-Note: the classic "backup story" subphase is intentionally absent
-because Q3 will resolve to option A (manual mnemonic only) if Q1 stays
-at B, which collapses backup into T1-2 (view recovery phrase) and does
-not need its own subphase.
+### [0] 8B.0 — Week-1 de-risk
+
+**Gate: unknown R8 behavior.** Must happen before any UI investment.
+The worst case for R8 breakage (20-40h debugging Rust FFI / QuickJS
+symbol tables) must be discovered in week 1, not week 12.
+
+| Task | Rows | Est. |
+|---|---|---|
+| Enable R8 + `proguard-android-optimize.txt` + resource shrinking in the release build; build a release APK; install on device; fix whatever breaks; write the `proguard-rules.pro` set we can trust | T1-13 | 8–24h |
+| Firebase project creation + Remote Config setup (just the infra, no code use yet) | T1-19 infra | 2h |
+
+**Deliverable:** release APK with `isMinifyEnabled = true` installs
+and runs on device; Firebase project exists and `mainnet_enabled`
+boolean flag is declared (default `false`).
+
+### [1] 8B.1 — Design sprint (parallel to 8B.2)
+
+**Gate: no Compose work starts until IA spec is approved.**
+AI-assisted but engineer-driven, per T1-8 resolution.
+
+| Task | Rows | Est. |
+|---|---|---|
+| Competitive study (Rainbow, Phantom, Trust Wallet, MetaMask Mobile); AI-assisted wireframes per screen (BalanceScreen, SendScreen, DustScreen, SettingsScreen, TxHistoryScreen, ReceiveScreen); per-screen IA spec written into this plan doc; token + new-component inventory | T1-8 design | 3–4h |
+| App icon concept generation (AI drafts of pure-symbol marks in Dusk palette); splash animation storyboard reusing `MaterializeEffect` | T1-7 concepts | 3–4h |
+
+**Deliverable:** every screen has an agreed wireframe in this plan
+doc; icon/splash direction green-lit.
+
+### [1] 8B.2 — Infrastructure features (parallel to 8B.1)
+
+**Gate: downstream UI work (8B.3) cannot wire Firebase features or
+test signed-release flows until this is done.**
+
+| Task | Rows | Est. |
+|---|---|---|
+| Production signing keystore generation + secure storage + release `signingConfigs` in `build.gradle.kts` + Play App Signing setup | T1-14 | 4h |
+| Firebase Remote Config client code + `mainnet_enabled` flag fetch/cache/apply logic + `MAINNET` enum case with stubbed URLs + BuildConfig flag as local override for tests | T1-19 code | 8–10h |
+| Firebase Crashlytics integration + auto-upload mapping files for deobfuscation + test that stack traces land in Firebase console | T2-6 | 1h (incremental) |
+
+**Deliverable:** release builds signed with production key, crashes
+appear in Firebase Crashlytics with readable stack traces,
+`mainnet_enabled = false` hides MAINNET from the network picker.
+
+### [2] 8B.3 — Core UI + features
+
+**The biggest block.** All Level 3 Compose work, new screens, and
+feature wiring. Order inside the subphase: Settings first (other
+rows need it as a host), then screen-by-screen.
+
+Sequence within 8B.3:
+1. Settings screen skeleton + navigation wiring (T1-1)
+2. Developer toggle + network picker inside Settings (T1-17, T1-4)
+3. Environment badge in top nav bar (T1-16)
+4. Recovery phrase view + non-dismissible home banner (T1-2)
+5. Wipe wallet (T1-3)
+6. Proof server config UI (T1-18)
+7. Send confirmation screen (T1-15)
+8. Transaction history + detail drill-in + explorer link (T1-5)
+9. Receive screen + QR + `midnight:` URI parser + intent-filter (T1-6)
+10. Level 3 Dusk redesign applied across all existing screens (T1-8 Compose implementation)
+
+| Rows | Combined est. |
+|---|---|
+| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18 | 104–132h |
+
+**Deliverable:** feature-complete testnet wallet with polished L3 UX
+across every screen; dark mode verified via `MaterialTheme.colorScheme`
+audit; baseline a11y (content descriptions, 48dp touch targets).
+
+### [3] 8B.4 — Agent seed + Tier 2 quick wins
+
+**Dependency:** Settings screen (T1-1) from 8B.3 must exist as a host.
+
+| Task | Rows | Est. |
+|---|---|---|
+| MCP Bridge over WebSocket + Pattern A pairing (PIN + biometric approval) + Settings → Agent Mode screen + session token management + audit log of agent calls + structured JSON output for every exposed method | T1-20 | 20–25h |
+| About / Help screen (version, build hash, license, GitHub, support email) | T2-2 | 2h |
+| Biometric re-auth test row in Settings | T2-3 | 2h |
+| Faucet link + first-launch hint card | T2-4 | 2h |
+
+**Deliverable:** Claude Desktop can connect over LAN and query wallet
+(Scenario 1); Settings is complete.
+
+### [4] 8B.5 — Release assets + compliance
+
+**Dependency:** 8B.3 must be done (screenshots need polished UI).
+
+| Task | Rows | Est. |
+|---|---|---|
+| Icon vector refinement (AI draft → Figma/Inkscape), adaptive icon layers, animated splash implementation using Splash Screen API + `MaterializeEffect` | T1-7 impl | 5–6h |
+| Privacy policy + Terms of Use drafted; reviewed round 1 → revisions → round 2 → revisions (multi-round per T1-11 resolution); published to GitHub Pages | T1-11 | 4h drafting + ~4–8h review |
+| Play Store listing copy (respecting the content restrictions from the compliance cheat sheet); screenshots of every major screen in light + dark mode; feature graphic (1024×500); Data Safety form answers per the cheat sheet; Financial Features Declaration with "Software wallet (non-custodial)" checked | T1-12 | 4h |
+
+**Deliverable:** Play Console submission package assembled and
+staged; legal text public at stable URLs.
+
+### [5] 8B.6 — Final hardening
+
+**Last engineering work before beta.** Scheduled here because Play
+Integrity fails on rooted/emulated dev devices and would impede
+iteration if added earlier.
+
+| Task | Rows | Est. |
+|---|---|---|
+| Play Integrity API integration; verdict check at start of send-confirmation handler (T1-15); graceful failure message ("This device cannot be verified by Play Integrity. If you are running a rooted or emulated device, this is expected."); developer bypass via `BuildConfig.DEBUG` check | T2-9 | 6–8h |
+
+**Deliverable:** production build enforces Play Integrity on
+transaction submission.
+
+### [6] 8B.7 — Closed beta + production
+
+**14-day mandatory gate** for new developer accounts before Play
+Store promotion to production. Plan accordingly.
+
+| Task | Rows | Est. |
+|---|---|---|
+| Internal testing track setup in Play Console; closed testing track with ≥12 opted-in testers; 14 consecutive days of testing (non-negotiable Google gate); collect + triage feedback; fix critical bugs; upload incremented build | T2-10 | 4h setup + 14 calendar days |
+| Production submission; monitor review queue; respond to any Google policy queries (Financial Features Declaration clarifications, Data Safety form corrections) | — | 4–8h contingent |
+
+**Deliverable:** v1.0 live on Play Store.
+
+### Parallel track — SDK alpha (Q4 Option C)
+
+Runs alongside 8B, does not gate any wallet subphase.
+
+| Task | Rows | Est. |
+|---|---|---|
+| Maven snapshot / Sonatype OSSRH staging setup; POM metadata for `com.midnight.kuira:compact-engine`; GPG signing for snapshots; first alpha release `0.x.0-alpha1`; public sample repo extraction for BBoard; alpha-tag disclaimer on the README | — | 18–20h |
+
+**Deliverable:** external Kotlin/Android developers can `implementation("com.midnight.kuira:compact-engine:0.x.0-alphaN")`
+from a snapshot repo. Full GA polish deferred to Phase 8C.
+
+### Subphase dependency graph
+
+```
+        ┌──► 8B.1 (design) ──┐
+8B.0 ───┤                    ├──► 8B.3 (core UI) ──► 8B.4 ──► 8B.5 ──► 8B.6 ──► 8B.7
+        └──► 8B.2 (infra)   ─┘                                              (14 days)
+
+SDK alpha track — runs parallel to everything in 8B, no gate.
+```
+
+### Calendar estimate (one engineer, full-time)
+
+| Subphase | Eng. hours | Calendar weeks (1 dev, ~30 productive h/wk) |
+|---|---|---|
+| 8B.0 de-risk | 10–26h | 0.5–1 |
+| 8B.1 design (parallel) | 6–8h | 0.25 |
+| 8B.2 infra (parallel) | 13–15h | 0.5 |
+| 8B.3 core UI | 104–132h | 3.5–4.5 |
+| 8B.4 agent seed + T2 | 26–31h | 1 |
+| 8B.5 release assets | 17–22h | 0.75 |
+| 8B.6 Play Integrity | 6–8h | 0.25 |
+| 8B.7 closed beta + submit | 8–12h + 14 calendar days | 3 (gate-bound) |
+| SDK alpha (parallel) | 18–20h | — (absorbed into gaps) |
+| **Total** | **~180–230h** | **~10–13 calendar weeks** |
+
+Realistic ship date: **2.5–3.5 months** from kickoff for a single
+full-time engineer, assuming no R8 worst-case and no Play Store
+rejection round-trip.
 
 ---
 

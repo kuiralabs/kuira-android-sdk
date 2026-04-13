@@ -1,10 +1,10 @@
 # Kuira Wallet - Implementation Plan
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
-**Total Invested:** ~280h across completed phases
-**Status:** Phase 1-6 ✅ | **Phase 8A (Auth & Onboarding) 🔧 Active**
+**Total Invested:** ~330h across completed phases
+**Status:** Phases 1–6 ✅ | Phase 8A (Auth & Onboarding) ✅ | **Phase 8B (Productization) 🔧 Active**
 
-**Last Updated:** April 9, 2026
+**Last Updated:** 2026-04-13
 
 ## Implementation Strategy
 
@@ -20,11 +20,12 @@
 
 9. ✅ **Phase 5**: DApp Connector (~30h) — ConnectedAPI, WebSocket, IPC, approval UI, 4 transport layers, bboard example
 10. ✅ **Phase 6**: Android DApp SDK (~50h) — QuickJS + Rust FFI for contract execution, self-contained SDK module
+11. ✅ **Phase 8A**: Wallet Auth & Onboarding (~35h) — hardware-backed biometric, encrypted SeedVault, StrongBox/TEE, `WalletGate`, onboarding + restore, all 4 feature modules wired to SeedVault. 8A.9 E2E verification deferred to 8B (view-recovery-phrase feature was missing and is now scoped in 8B as T1-2)
 
 **Next:**
-11. 🔧 **Phase 8A**: Wallet Auth & Onboarding — hardware-backed biometric auth, encrypted seed storage, 5-second wallet creation
-12. ⏭️ **Phase 7**: Agent Runtime — on-chain agent authorization via Compact contracts
-13. ⏭️ **Phase 8B**: Production Polish — settings, app store readiness
+12. 🔧 **Phase 8B**: Wallet Productization (est ~180–230h) — **see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`** for the full feature matrix and decisions log. Scope: Settings + View recovery phrase + Tx history + Receive QR + `midnight:` URI scheme + Send confirmation screen + Dusk L3 redesign everywhere + App icon + Firebase (Remote Config + Crashlytics) + R8 enablement + Play Store listing + closed-beta testing gate + MCP Bridge seed (minimal Agent Runtime). Ships v1.0 as "first Midnight wallet on Android, MCP-compatible" targeting Preprod testnet.
+13. ⏭️ **Phase 8C**: SDK GA release (est ~60–80h) — `com.midnight.kuira:compact-engine` public API audit, KDoc, semver, Maven Central GA. Alpha (`0.x.0-alphaN`) ships parallel to 8B per Q4 hybrid decision.
+14. ⏭️ **Phase 7**: Agent Runtime (est ~80–120h) — full five-pillar runtime (Agent Mode background service, Policy Engine, x402 Handler, MCP Bridge, Agent Registration). Ships as Kuira v1.1 alongside **CipherDefense** companion game as the canonical live demo of "first agent-native wallet on Midnight".
 
 ---
 
@@ -42,11 +43,12 @@
 | **Phase 4C: Local Proving** | On-phone ZK proofs (no proof server) | ~20h | ✅ Complete |
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
 | **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | ~50h | ✅ Complete |
-| **Phase 8A: Auth & Onboarding** | Hardware biometric auth, encrypted seed, wallet creation | est 15-20h | 🔧 Active |
-| **Phase 7: Agent Runtime** | On-chain agent authorization | est 20-30h | ⏸️ Planned |
-| **Phase 8B: Production Polish** | Settings, app store readiness | est 10-15h | ⏸️ Planned |
+| **Phase 8A: Auth & Onboarding** | Hardware biometric auth, encrypted seed, wallet creation | ~35h | ✅ Complete |
+| **Phase 8B: Productization (v1.0 ship)** | Settings + tx history + receive QR + URI scheme + L3 Dusk redesign + Firebase + R8 + MCP seed + Play Store submission. See [`WALLET_PRODUCTIZATION_PLAN.md`](planning/WALLET_PRODUCTIZATION_PLAN.md) | est ~180-230h | 🔧 Active |
+| **Phase 8C: SDK GA** | `core:compact-engine` Maven Central release, public API audit, semver | est ~60-80h | ⏸️ Planned (alpha ships parallel to 8B) |
+| **Phase 7: Agent Runtime (v1.1)** | Full 5-pillar runtime (Agent Mode, Policy Engine, x402, MCP Bridge, Agent Registration) + CipherDefense co-launch | est ~80-120h | ⏸️ Planned |
 
-**Invested:** ~330h | **Remaining:** ~45-65h to full production
+**Invested:** ~365h | **Remaining to v1.0 (8B only):** ~180-230h | **Remaining to v1.1 (+ 8C + Phase 7):** ~320-430h
 
 ### Phase 5 Summary (Complete)
 
@@ -83,15 +85,42 @@
 
 | Step | Goal | Status |
 |------|------|--------|
-| 8A.1 | Module setup (`core:auth`) + change `MainActivity` to `FragmentActivity` | ⏳ |
-| 8A.2 | `SecurityCapabilities` — detect StrongBox, TEE, biometric class | ⏳ |
-| 8A.3 | `WalletKeyManager` — Keystore master key with StrongBox/TEE fallback | ⏳ |
-| 8A.4 | `BiometricGate` — BiometricPrompt + CryptoObject, per-use auth | ⏳ |
-| 8A.5 | `SeedVault` — two-layer encrypted seed storage (local + backup-ready) | ⏳ |
-| 8A.6 | Tests — unit + instrumentation for core:auth | ⏳ |
-| 8A.7 | `feature:onboarding` — wallet creation UI (5-second flow) | ⏳ |
-| 8A.8 | Wire auth into existing signing flow (`feature:send`) | ⏳ |
-| 8A.9 | E2E verification on physical device | ⏳ |
+| 8A.1 | Module setup (`core:auth`) + change `MainActivity` to `FragmentActivity` | ✅ |
+| 8A.2 | `SecurityCapabilities` — detect StrongBox, TEE, biometric class | ✅ |
+| 8A.3 | `WalletKeyManager` — Keystore master key with StrongBox/TEE fallback + `setUnlockedDeviceRequired` | ✅ |
+| 8A.4 | `BiometricGate` — BiometricPrompt + CryptoObject, per-use auth | ✅ |
+| 8A.5 | `SeedVault` — encrypted seed storage (backup-ready two-layer design; cloud backup itself deferred to post-v1.0) | ✅ |
+| 8A.6 | Tests — unit + instrumentation for core:auth | ✅ |
+| 8A.7 | `feature:onboarding` — wallet creation + restore UI with `WalletGate` | ✅ |
+| 8A.8 | Wire auth into all feature modules (`feature:send`, `feature:balance`, `feature:dust` all converted to SeedVault; `DEFAULT_TEST_SEED_PHRASES` deleted) | ✅ |
+| 8A.9 | E2E verification on physical device | 🔀 Moved into 8B — view-recovery-phrase feature was missing (now T1-2 in `WALLET_PRODUCTIZATION_PLAN.md`); happy paths verified on device during 8A but the formal 8A.9 checklist folds into 8B closed-beta |
+
+**Phase 8A outcomes beyond the sub-steps:**
+- Dust cache key regression found + fixed (route by wallet anchor + always-resync) — see commits `aba9fc9`, `cd1da9b`, `3de7518`
+- `core:auth` security review (external subagent) addressed 6 real findings including orphaned-seed cleanup, entropy wipe on derivation failure, `setUnlockedDeviceRequired` hardening, onboarding test compile fix — see commit `819f2d8`
+
+### Phase 8B Sub-Steps (see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`)
+
+The detailed feature matrix, strategic-decision log, Play Store
+compliance cheat sheet, and task breakdown all live in the
+productization plan doc. Summary of the ordered subphases:
+
+| Subphase | Scope | Deliverable |
+|----------|-------|-------------|
+| 8B.0 | **Week-1 de-risk** — R8 / ProGuard enablement (T1-13); Firebase project + Remote Config setup (T1-19 infra) | Release build runs with R8 on; mainnet gate plumbing ready |
+| 8B.1 | **Design sprint** — AI-assisted wireframes, competitive study, per-screen IA spec written into plan doc (T1-8 upfront); icon concept generation (T1-7 drafts) | Green-lit per-screen designs before any Compose work begins |
+| 8B.2 | **Infrastructure features** (parallel to 8B.1) — Production keystore + release pipeline (T1-14); Firebase Crashlytics (T2-6); MAINNET enum with BuildConfig/Remote Config gate (T1-19 code) | Shippable release build; crash telemetry live |
+| 8B.3 | **Core UI + features** — Settings screen (T1-1); Level 3 Dusk redesign across all screens (T1-8 impl); Recovery phrase + banner (T1-2); Wipe wallet (T1-3); Network picker migration (T1-4); Tx history + detail + explorer link (T1-5); Receive + `midnight:` URI + intent-filter (T1-6); Send confirmation (T1-15); Environment badge (T1-16); Developer toggle (T1-17); Proof-server config (T1-18) | Feature-complete testnet wallet with L3 UX |
+| 8B.4 | **Agent seed + Tier 2 quick wins** — MCP Bridge + Pattern A pairing + structured JSON (T1-20); About (T2-2); Biometric test (T2-3); Faucet link (T2-4) | Claude-Desktop-queries-wallet demo works; full Settings surface complete |
+| 8B.5 | **Release assets + compliance** — Final icon + splash (T1-7); Privacy policy + Terms drafted + GitHub Pages hosted + reviewed (T1-11); Play Store listing + screenshots + feature graphic (T1-12) | Submission-ready artifacts |
+| 8B.6 | **Final hardening** — Play Integrity API integration (T2-9) | Pre-submission security gate |
+| 8B.7 | **Closed beta + production** — Closed-beta testing round (T2-10, mandatory 14-day gate with ≥12 testers); Play Store submission; monitor | v1.0 on Play Store |
+
+Parallel track: `com.midnight.kuira:compact-engine:0.x.0-alphaN` SDK
+snapshots published to Sonatype, BBoard sample repo extracted and
+made public — enables external developers to experiment against the
+SDK during 8B without a GA commitment. Full 8C GA scope begins after
+v1.0 ships.
 
 ### Key Architecture Decisions
 
