@@ -1047,14 +1047,42 @@ Notation:
 The worst case for R8 breakage (20-40h debugging Rust FFI / QuickJS
 symbol tables) must be discovered in week 1, not week 12.
 
-| Task | Rows | Est. |
-|---|---|---|
-| Enable R8 + `proguard-android-optimize.txt` + resource shrinking in the release build; build a release APK; install on device; fix whatever breaks; write the `proguard-rules.pro` set we can trust | T1-13 | 8–24h |
-| Firebase project creation + Remote Config setup (just the infra, no code use yet) | T1-19 infra | 2h |
+| Task | Rows | Est. | Status |
+|---|---|---|---|
+| Enable R8 + `proguard-android-optimize.txt` + resource shrinking in the release build; build a release APK; install on device; fix whatever breaks; write the `proguard-rules.pro` set we can trust | T1-13 | 8–24h | **✅ Done 2026-04-13** |
+| Firebase project creation + Remote Config setup (just the infra, no code use yet) | T1-19 infra | 2h | ⏳ User-action pending (Firebase console) |
 
 **Deliverable:** release APK with `isMinifyEnabled = true` installs
 and runs on device; Firebase project exists and `mainnet_enabled`
 boolean flag is declared (default `false`).
+
+**Actual 8B.0 outcome (retrospective):**
+- **R8 passed first try.** Speculative keep-rules derived from a
+  codebase survey (67 `external fun` declarations across 11 FFI
+  classes) were correct on first attempt — no iteration on the
+  proguard rules required. Release APK builds in ~44s incremental.
+- **Size win:** debug 79 MB → release 37 MB (54% reduction).
+- **One unrelated release-build issue surfaced** (commit `ee5fef0`):
+  Android's default release network security policy blocks cleartext
+  HTTP. Our UNDEPLOYED network uses `http://127.0.0.1:8088`. Fixed
+  by adding `app/src/main/res/xml/network_security_config.xml` that
+  permits cleartext for `127.0.0.1` / `10.0.2.2` / `localhost` only
+  (HTTPS required for everything else, matching production
+  expectations).
+- **One latent bug surfaced in runtime testing** (logged as task #86
+  for 8B.3 fix): `WalletAddressCache` stores addresses with the
+  network prefix embedded from onboarding-time, so switching network
+  leaves the wallet using the wrong-prefix address against the new
+  indexer. This belongs in T1-4 / T1-17 network picker migration.
+  Workaround for ongoing testing: `adb shell pm clear com.midnight.kuira`
+  and re-onboard on the target network.
+- **Build artefacts:**
+  - `./gradlew :app:assembleRelease` → signed release APK
+  - Release signing falls back to debug keystore when
+    `rootProject/release.keystore` is absent (drops in seamlessly
+    when T1-14 lands)
+  - Mapping file at `app/build/outputs/mapping/release/mapping.txt`
+    (~58 MB) ready for Crashlytics auto-upload in 8B.2
 
 ### [1] 8B.1 — Design sprint (parallel to 8B.2)
 
