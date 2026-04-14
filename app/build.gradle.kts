@@ -24,11 +24,20 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 / ProGuard enabled for v1.0 per 8B.0 de-risk decision.
+            // See app/proguard-rules.pro for the keep-rule strategy.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // Debug builds stay unminified to keep the iteration loop fast.
+            // R8 verification happens in release builds (and via
+            // `./gradlew :app:assembleRelease` during 8B.0 de-risking).
+            isMinifyEnabled = false
         }
     }
     compileOptions {
