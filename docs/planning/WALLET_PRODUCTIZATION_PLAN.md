@@ -610,6 +610,57 @@ that ships alongside the full Agent Runtime.
 and absorption of T1-9 + T1-10 + T2-7). Net delta against the
 absorbed items: T1 grows by ~14h, Tier 2 loses ~6h.
 
+### 2026-04-14 — T1-21: Incremental UTXO sync = **ship (Tier 1, slotted first in 8B.3)**
+
+Surfaced during 8B.3 (post-network-switch device testing): the user
+observed the balance screen flickering through zero on every app
+launch. Root cause:
+`SubscriptionManager.checkAndHandleResyncNeeded` unconditionally
+wipes the UTXO DB and replays the subscription from
+`transactionId = null` at every subscription start. The behavior is
+intentional per an earlier design (code comment at
+`SubscriptionManager.kt:85-93` — "guarantees we NEVER show
+incorrect balances, trade-off: re-sync on every app start"), but it
+compounds badly with the premium-UX bar from Q1 and with any
+real-world indexer where replay-from-genesis is non-trivial.
+
+**Why now (Tier 1, not Tier 2):**
+- Incompatible with "premium UX" (Q1) — zero-balance flicker on
+  every launch is an immediate tell that the app is rough
+- Every downstream UI screen reads balance, so the L3 redesign
+  (T1-8) will look broken on real indexers until this is fixed
+- Production wallets (MetaMask, Phantom, Rainbow, Trust) all do
+  incremental sync with reorg detection — this is table stakes,
+  not an optimization
+- Dust cache already works correctly across launches; aligning
+  UTXO sync with the same pattern is a small, contained refactor
+
+**Scope:**
+- Persist `lastProcessedTransactionId` in `SyncStateManager` across
+  app launches (already partially there; confirm and fix any wipe
+  logic that runs at launch)
+- On launch: resume subscription from the cached tx ID
+- On indexer signalling a reorg (tx ID not known to indexer, or
+  indexer reports chain rollback): roll back UTXOs to the fork
+  point and resume from there
+- On "indexer completely unknown state" (e.g. dev localnet was
+  wiped): fall back to full re-sync, log warning
+- Add a "Force re-sync" button in the Developer-options screen
+  (T1-17) for the user-escape case
+
+**Estimate: 8-12h.** Contained to `SubscriptionManager` +
+`SyncStateManager` + possibly `UtxoManager.clearUtxos()` behavior.
+No UI dependencies beyond the Settings row.
+
+**Slotted as the FIRST item in 8B.3** so all downstream screen
+implementations (Settings, recovery phrase, tx history, send
+confirmation, receive, L3 Dusk redesign) observe a wallet that
+opens with a correct cached balance in sub-second time. Avoids
+building polish on top of a known UX regression.
+
+**8B.3 budget delta:** 104-132h → 112-144h (+8-12h). No other
+subphase is affected.
+
 ---
 
 ## Feature scope for v1.0
@@ -651,6 +702,7 @@ cannot be submitted to the Play Store at all.
 | T1-18 | Proof server configuration (local + remote, dev-mode-gated) | `NetworkConfig.proofServerUrl` hardcoded to `http://$host:6300`; `SendViewModel.toggleProvingMode()` toggles mode but URL is fixed | Support both local proving AND a user-configurable remote proof server URL. DataStore-persisted. Validation + "test connection" button. Falls back to local if remote fails. No default URL baked in — user or the ecosystem decides | 8h | **ship** |
 | T1-19 | `MAINNET` enum case + Firebase Remote Config gate | Not in `MidnightNetwork` enum; no Firebase integration yet | Add `MAINNET` to the enum with endpoint URLs stubbed. Hide UI visibility (picker + badge) behind a Firebase Remote Config boolean `mainnet_enabled` (default `false`, refresh on app startup + once per hour). Flipping to `true` in the Firebase console enables mainnet without an app update. Requires Firebase project setup + Google Play Services dependency + Data Safety form update | 10–12h | **ship** |
 | T1-20 | MCP Bridge + structured JSON output (Agent Runtime seed, Pattern A pairing) | Zero infrastructure; CLI wallet has MCP Server prior art with 24 tools | Q5 Option C — minimal agent seed. Enables "Claude Desktop queries my wallet" demo (Scenario 1). Full Agent Runtime (4 remaining pillars) deferred to Phase 7 / v1.1 alongside CipherDefense | 20–25h | **ship** |
+| T1-21 | Incremental UTXO sync (persist `SyncStateManager` across launches, reorg-aware resume, fallback to full re-sync on indexer state loss) | `SubscriptionManager.checkAndHandleResyncNeeded` currently wipes the UTXO DB and replays from `transactionId = null` on every app launch — safe, but produces a zero-balance flicker + slow balance load every time the app opens. Dust cache is separate and works correctly. | High-priority optimization — incompatible with the premium-UX bar. Wallet startup should resume from last known tx ID; indexer signals reorg → invalidate back to fork point. Add a "Force re-sync" button in Settings for the user-escape case. | 8–12h | **ship** |
 
 **Tier 1 subtotal:** ~94–134h.
 
@@ -1115,27 +1167,34 @@ appear in Firebase Crashlytics with readable stack traces,
 ### [2] 8B.3 — Core UI + features
 
 **The biggest block.** All Level 3 Compose work, new screens, and
-feature wiring. Order inside the subphase: Settings first (other
-rows need it as a host), then screen-by-screen.
+feature wiring. Order inside the subphase: incremental sync + Settings
+first (the former unblocks "wallet opens fast" UX that every screen
+observes; the latter hosts other rows), then screen-by-screen.
 
 Sequence within 8B.3:
-1. Settings screen skeleton + navigation wiring (T1-1)
-2. Developer toggle + network picker inside Settings (T1-17, T1-4)
-3. Environment badge in top nav bar (T1-16)
-4. Recovery phrase view + non-dismissible home banner (T1-2)
-5. Wipe wallet (T1-3)
-6. Proof server config UI (T1-18)
-7. Send confirmation screen (T1-15)
-8. Transaction history + detail drill-in + explorer link (T1-5)
-9. Receive screen + QR + `midnight:` URI parser + intent-filter (T1-6)
-10. Level 3 Dusk redesign applied across all existing screens (T1-8 Compose implementation)
+1. **Incremental UTXO sync (T1-21)** — persist `SyncStateManager`
+   across launches, reorg-aware resume, "Force re-sync" escape hatch.
+   **Do this first** so every downstream screen gets the fast-open UX
+   and the zero-balance flicker is gone before we invest in the L3
+   visual polish. 8-12h.
+2. Settings screen skeleton + navigation wiring (T1-1)
+3. Developer toggle + network picker inside Settings (T1-17, T1-4)
+4. Environment badge in top nav bar (T1-16)
+5. Recovery phrase view + non-dismissible home banner (T1-2)
+6. Wipe wallet (T1-3)
+7. Proof server config UI (T1-18)
+8. Send confirmation screen (T1-15)
+9. Transaction history + detail drill-in + explorer link (T1-5)
+10. Receive screen + QR + `midnight:` URI parser + intent-filter (T1-6)
+11. Level 3 Dusk redesign applied across all existing screens (T1-8 Compose implementation)
 
 | Rows | Combined est. |
 |---|---|
-| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18 | 104–132h |
+| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18, T1-21 | 112–144h |
 
 **Deliverable:** feature-complete testnet wallet with polished L3 UX
-across every screen; dark mode verified via `MaterialTheme.colorScheme`
+across every screen; wallet opens in under a second with cached
+balance (T1-21); dark mode verified via `MaterialTheme.colorScheme`
 audit; baseline a11y (content descriptions, 48dp touch targets).
 
 ### [3] 8B.4 — Agent seed + Tier 2 quick wins
@@ -1218,13 +1277,13 @@ SDK alpha track — runs parallel to everything in 8B, no gate.
 | 8B.0 de-risk | 10–26h | 0.5–1 |
 | 8B.1 design (parallel) | 6–8h | 0.25 |
 | 8B.2 infra (parallel) | 13–15h | 0.5 |
-| 8B.3 core UI | 104–132h | 3.5–4.5 |
+| 8B.3 core UI | 112–144h | 4–5 |
 | 8B.4 agent seed + T2 | 26–31h | 1 |
 | 8B.5 release assets | 17–22h | 0.75 |
 | 8B.6 Play Integrity | 6–8h | 0.25 |
 | 8B.7 closed beta + submit | 8–12h + 14 calendar days | 3 (gate-bound) |
 | SDK alpha (parallel) | 18–20h | — (absorbed into gaps) |
-| **Total** | **~180–230h** | **~10–13 calendar weeks** |
+| **Total** | **~188–242h** | **~10–14 calendar weeks** |
 
 Realistic ship date: **2.5–3.5 months** from kickoff for a single
 full-time engineer, assuming no R8 worst-case and no Play Store

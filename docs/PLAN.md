@@ -44,11 +44,11 @@
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
 | **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | ~50h | ✅ Complete |
 | **Phase 8A: Auth & Onboarding** | Hardware biometric auth, encrypted seed, wallet creation | ~35h | ✅ Complete |
-| **Phase 8B: Productization (v1.0 ship)** | Settings + tx history + receive QR + URI scheme + L3 Dusk redesign + Firebase + R8 + MCP seed + Play Store submission. See [`WALLET_PRODUCTIZATION_PLAN.md`](planning/WALLET_PRODUCTIZATION_PLAN.md) | est ~180-230h | 🔧 Active |
+| **Phase 8B: Productization (v1.0 ship)** | Settings + tx history + receive QR + URI scheme + L3 Dusk redesign + Firebase + R8 + MCP seed + incremental UTXO sync + Play Store submission. See [`WALLET_PRODUCTIZATION_PLAN.md`](planning/WALLET_PRODUCTIZATION_PLAN.md) | est ~188-242h | 🔧 Active |
 | **Phase 8C: SDK GA** | `core:compact-engine` Maven Central release, public API audit, semver | est ~60-80h | ⏸️ Planned (alpha ships parallel to 8B) |
 | **Phase 7: Agent Runtime (v1.1)** | Full 5-pillar runtime (Agent Mode, Policy Engine, x402, MCP Bridge, Agent Registration) + CipherDefense co-launch | est ~80-120h | ⏸️ Planned |
 
-**Invested:** ~365h | **Remaining to v1.0 (8B only):** ~180-230h | **Remaining to v1.1 (+ 8C + Phase 7):** ~320-430h
+**Invested:** ~365h | **Remaining to v1.0 (8B only):** ~188-242h | **Remaining to v1.1 (+ 8C + Phase 7):** ~328-442h
 
 ### Phase 5 Summary (Complete)
 
