@@ -663,6 +663,62 @@ subphase is affected.
 
 ---
 
+### 2026-04-14 — Settings: proof-server + proving-mode scope = **deferred (not in 8B.3 first pass)**
+
+Surfaced while planning the Settings screen (8B.3 T1-17). Today the
+app has two implicit pieces of wallet-wide configuration that the
+user can't see or change:
+
+- **Proof-server URL** — hardcoded to `127.0.0.1:6300` for every
+  network in `NetworkConfig.proofServerUrl`. No custom override.
+- **Proving mode** (LOCAL on-device ZK proving vs REMOTE to proof
+  server) — exists as `@Volatile` on `TransactionSubmitter`, hot-
+  swapped only from the Send screen's toggle. Dust registration
+  calls `proofServerClient.proveTransaction()` directly and cannot
+  prove locally at all.
+
+Surfacing both in global Settings is the right end-state, but the
+refactor is larger than it looks: to make proving-mode truly app-
+wide we'd extract a `TransactionProver` service that routes
+prove(unprovenHex) by mode, then migrate DustViewModel off the raw
+ProofServerClient so the global toggle takes effect everywhere.
+
+**Deferred from 8B.3.** Current behavior works (dust registration
+and send both succeed against local proof server for the default
+network), so this is polish, not a blocker. Promoting to Tier 2
+with explicit re-entry in 8B.4 or later.
+
+**Open design questions to answer before implementation:**
+
+- Q-PS1: Does the user-settable custom proof-server URL ship to
+  end users (needs URL validation + "data exposure" warning), or
+  is it dev-only (hidden behind Developer options / long-press)?
+- Q-PS2: When proving-mode = LOCAL but on-device keys aren't
+  downloaded, does the app fall back to REMOTE silently
+  (TransactionSubmitter's current rule at line 72) or hard-fail
+  with a "download keys first" prompt? Needs consistent policy
+  for both Send and Dust paths.
+
+**Shape of the eventual work (for reference, not committed scope):**
+
+| # | Change | Restart? |
+|---|---|---|
+| 1 | `ProofServerSelection` (sealed: LocalDefault / Custom) + `ProofServerRepository` + `NetworkConfig` derives URL | yes |
+| 2 | Settings UI — proof-server section (pending Q-PS1) | yes (reuses `restartApp`) |
+| 3 | Extract `TransactionProver` service; route `DustViewModel` through it | no |
+| 4 | `ProvingModeRepository` (DataStore-backed) + migrate `SendViewModel.toggleProvingMode` to write to it | no |
+| 5 | Settings UI — proving-mode section (global toggle) | no |
+
+Deliberately ordered so proof-server-URL (restart-required,
+symmetrical with network switch) lands before proving-mode
+(hot-swap, touches more ViewModels).
+
+**Estimate (when it lands): 10-14h.** Most of the cost is step 3
+(TransactionProver extraction) and the DustViewModel migration,
+not the Settings UI.
+
+---
+
 ## Feature scope for v1.0
 
 Full candidate feature matrix, tiered. Each row is an independent ship/cut
