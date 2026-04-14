@@ -490,15 +490,16 @@ class NodeRpcClientImpl(
     /**
      * Parse transaction status from Substrate node.
      *
-     * Substrate TransactionStatus enum:
-     * - "future": Transaction is part of the future queue
-     * - "ready": Transaction is part of the ready queue
-     * - "broadcast": Transaction has been broadcast to peers
-     * - {"inBlock": "0x..."}: Transaction is in a block
-     * - {"finalized": "0x..."}: Transaction has been finalized
-     * - {"usurped": "0x..."}: Transaction was replaced
-     * - "dropped": Transaction was dropped from the pool
-     * - "invalid": Transaction is invalid
+     * Substrate `TransactionStatus` lifecycle:
+     *   future → ready → broadcast → inBlock → finalized
+     *
+     * Wire form varies: some statuses are bare strings, others arrive as single-key
+     * objects. Both shapes may appear for the same logical status depending on node
+     * version — `broadcast` in particular is emitted as `{"broadcast": [peer_ids]}`
+     * by Substrate's JSON-RPC, not as the string `"broadcast"` (which is what the
+     * Rust enum debug format uses). Treating the object form as unknown → Invalid
+     * was aborting every submission mid-flight right after the proof server
+     * succeeded.
      */
     private fun parseTransactionStatus(status: JsonElement, txHash: String): TransactionFinalizationResult {
         return when {
@@ -527,6 +528,10 @@ class NodeRpcClientImpl(
                         val blockHash = status["finalized"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x") ?: ""
                         TransactionFinalizationResult.Finalized(txHash, blockHash)
                     }
+                    status.containsKey("broadcast") -> {
+                        // Payload is the peer id list; still an intermediate status.
+                        TransactionFinalizationResult.InBlock(txHash, "")
+                    }
                     status.containsKey("usurped") -> {
                         val replacedBy = status["usurped"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x")
                         TransactionFinalizationResult.Usurped(txHash, replacedBy)
@@ -535,6 +540,12 @@ class NodeRpcClientImpl(
                         // Block was retracted (reorg) - transaction went back to pool
                         // Treat as still waiting
                         TransactionFinalizationResult.InBlock(txHash, "")
+                    }
+                    status.containsKey("finalityTimeout") -> {
+                        // Block finalization timed out; substrate no longer tracks it.
+                        // Surface as Dropped so the caller can decide whether to retry.
+                        val blockHash = status["finalityTimeout"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x")
+                        TransactionFinalizationResult.Dropped(txHash, "Finality timeout at block $blockHash")
                     }
                     else -> TransactionFinalizationResult.Invalid(txHash, "Unknown status object: $status")
                 }
