@@ -1327,7 +1327,9 @@ class BalanceViewModelTest {
     fun `walletAddresses resolves to Empty when cache is missing`() = runTest {
         // Fresh VM so its init block runs AFTER we stub load() → null.
         // Default mock returns null, but stubbing explicitly makes intent clear.
-        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load() }.thenReturn(null)
+        // Post-8B.3: cache is keyed by MidnightNetwork.
+        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load(any<MidnightNetwork>()) }
+            .thenReturn(null)
         viewModel = buildViewModel()
 
         advanceUntilIdle()
@@ -1344,7 +1346,8 @@ class BalanceViewModelTest {
             unshieldedAddress = testAddress,
             shieldedAddress = "mn_shield-addr_preprod1test",
         )
-        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load() }.thenReturn(addresses)
+        org.mockito.kotlin.wheneverBlocking { walletAddressCache.load(any<MidnightNetwork>()) }
+            .thenReturn(addresses)
         viewModel = buildViewModel()
 
         advanceUntilIdle()

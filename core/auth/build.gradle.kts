@@ -41,6 +41,9 @@ android {
 }
 
 dependencies {
+    // Core modules
+    implementation(project(":core:network")) // MidnightNetwork enum for per-network address cache
+
     // Core Android
     implementation(libs.androidx.core.ktx)
 

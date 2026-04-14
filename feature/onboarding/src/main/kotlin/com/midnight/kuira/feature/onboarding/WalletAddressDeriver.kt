@@ -23,7 +23,7 @@ import java.security.MessageDigest
  * **Thread safety:** This is a pure function — no state. Safe to call from
  * any coroutine context.
  */
-internal object WalletAddressDeriver {
+object WalletAddressDeriver {
 
     /**
      * Derive unshielded + shielded addresses for account 0, index 0.

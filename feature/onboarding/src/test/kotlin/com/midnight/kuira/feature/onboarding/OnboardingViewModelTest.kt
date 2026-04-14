@@ -31,6 +31,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -115,8 +116,9 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingUiState.Success, viewModel.uiState.value)
         verify(walletKeyManager).generateKey()
         // Addresses derived inside the lambda must be persisted for the
-        // biometric-free balance read path.
-        verify(walletAddressCache).save(any())
+        // biometric-free balance read path. Post-8B.3, the cache is keyed
+        // by MidnightNetwork — onboarding saves under the current network.
+        verify(walletAddressCache).save(eq(MidnightNetwork.PREPROD), any())
     }
 
     @Test
@@ -135,7 +137,7 @@ class OnboardingViewModelTest {
         }.whenever(seedVault).storeSeed(any(), any())
         // Simulate the cache write failing (disk full, permission, etc.)
         doAnswer { throw java.io.IOException("disk full") }
-            .whenever(walletAddressCache).save(any<WalletAddresses>())
+            .whenever(walletAddressCache).save(any<MidnightNetwork>(), any<WalletAddresses>())
 
         viewModel.createWallet(activity)
 

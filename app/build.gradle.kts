@@ -126,6 +126,7 @@ dependencies {
     implementation(project(":feature:send"))
     implementation(project(":feature:dust"))
     implementation(project(":feature:onboarding"))
+    implementation(project(":core:auth")) // Direct dep: SeedVault + WalletAddressCache injected into MainActivity
     implementation(project(":core:connector"))
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":core:designsystem"))

@@ -125,7 +125,7 @@ class SendViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _walletAddresses.value = walletAddressCache.load()
+            _walletAddresses.value = walletAddressCache.load(networkConfig.network)
         }
     }
 

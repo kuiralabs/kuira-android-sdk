@@ -218,8 +218,13 @@ class OnboardingViewModel @Inject constructor(
 
             // storeSeed returned successfully → persist the addresses so
             // read-only features (balance display) can find them without
-            // triggering a biometric prompt.
-            derivedAddresses?.let { walletAddressCache.save(it) }
+            // triggering a biometric prompt. Keyed by the network the
+            // wallet is currently configured for; other networks' entries
+            // get derived on-demand when the user switches (see
+            // MainActivity.switchNetwork).
+            derivedAddresses?.let {
+                walletAddressCache.save(networkConfig.network, it)
+            }
 
             _uiState.value = OnboardingUiState.Success
         } catch (e: CancellationException) {

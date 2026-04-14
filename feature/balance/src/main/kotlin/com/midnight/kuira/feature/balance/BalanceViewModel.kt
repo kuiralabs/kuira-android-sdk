@@ -104,15 +104,16 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
 
     init {
         viewModelScope.launch {
-            val loaded = walletAddressCache.load()
-            Log.d(TAG, "WalletAddressCache.load() returned: " +
+            val loaded = walletAddressCache.load(networkConfig.network)
+            Log.d(TAG, "WalletAddressCache.load(${networkConfig.network.name}) returned: " +
                 "unshielded=${loaded?.unshieldedAddress}, " +
                 "shielded=${loaded?.shieldedAddress?.take(20)}...")
             _walletAddresses.value = if (loaded != null) {
                 AddressCacheState.Found(loaded)
             } else {
-                Log.w(TAG, "No cached wallet address found — onboarding may not have " +
-                    "saved it, or this install predates the cache. UI should show empty state.")
+                Log.w(TAG, "No cached wallet address for ${networkConfig.network.name} — " +
+                    "onboarding may not have saved it for this network, or we haven't " +
+                    "derived it after a network switch yet. UI should show empty state.")
                 AddressCacheState.Empty
             }
         }
@@ -162,9 +163,11 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
             is AddressCacheState.Found -> loadBalances(current.addresses.unshieldedAddress)
             is AddressCacheState.Loading,
             is AddressCacheState.Empty -> {
-                // Try to reload in case onboarding just completed
+                // Try to reload — onboarding may have just completed, or we
+                // may have just finished deriving addresses for a new network
+                // after a network switch.
                 viewModelScope.launch {
-                    val loaded = walletAddressCache.load()
+                    val loaded = walletAddressCache.load(networkConfig.network)
                     if (loaded != null) {
                         _walletAddresses.value = AddressCacheState.Found(loaded)
                         loadBalances(loaded.unshieldedAddress)
