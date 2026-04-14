@@ -22,12 +22,45 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing: falls back to the debug keystore when the
+    // production keystore file `release.keystore` isn't present, so
+    // `./gradlew :app:installRelease` works for local testing without
+    // requiring every developer to have the production signing key.
+    //
+    // When T1-14 (production keystore setup) is done, drop
+    // `release.keystore` at the repo root (git-ignored) and set the
+    // three env vars — this block will then pick up the production
+    // config automatically without further build-script changes.
+    //
+    // Play Store enforces that debug-signed APKs cannot be uploaded
+    // to the production track, so the fallback can't leak into a real
+    // shipped build by accident.
+    val releaseKeystore = rootProject.file("release.keystore").takeIf { it.exists() }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("KUIRA_RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("KUIRA_RELEASE_KEY_ALIAS") ?: "kuira-release"
+                keyPassword = System.getenv("KUIRA_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8 / ProGuard enabled for v1.0 per 8B.0 de-risk decision.
             // See app/proguard-rules.pro for the keep-rule strategy.
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                // Dev fallback — debug keystore is on every dev's machine.
+                // NEVER the production config; Play Store rejects it.
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

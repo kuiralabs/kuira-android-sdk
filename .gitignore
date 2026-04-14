@@ -18,3 +18,10 @@ local.properties
 .vscode/settings.json
 htmlReport/
 .claude/settings.local.json
+
+# Release signing — production keystore must NEVER be committed.
+# T1-14 sets this up; live copy lives outside the repo (password manager).
+/release.keystore
+release.keystore
+*.jks
+*.keystore
