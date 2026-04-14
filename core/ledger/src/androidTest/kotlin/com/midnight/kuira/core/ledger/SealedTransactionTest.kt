@@ -20,7 +20,7 @@ class SealedTransactionTest {
 
     @Test
     fun testSealedTransactionTagFormat() {
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
 
         val testOwnerAddress = Bech32m.encode("mn_addr_undeployed", ByteArray(32))
 

@@ -313,7 +313,7 @@ class RealDustFeePaymentTest {
         )
 
         // Sign transaction
-        val serializer = com.midnight.kuira.core.ledger.api.FfiTransactionSerializer()
+        val serializer = com.midnight.kuira.core.ledger.api.FfiTransactionSerializer(networkId = "undeployed")
 
         val signingMessageHex = serializer.getSigningMessageForInput(
             inputs = listOf(inputUtxo),

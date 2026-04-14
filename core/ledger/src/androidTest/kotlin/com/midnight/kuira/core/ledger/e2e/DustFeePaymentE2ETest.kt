@@ -154,7 +154,7 @@ class DustFeePaymentE2ETest {
             tokenType = NATIVE_TOKEN
         )
 
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         val ttl = System.currentTimeMillis() + (5 * 60 * 1000)
 
         val signingMessageHex = serializer.getSigningMessageForInput(
@@ -220,7 +220,7 @@ class DustFeePaymentE2ETest {
         assertNotNull("TransactionSigner works", testSig)
 
         // 4. FfiTransactionSerializer
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         assertNotNull("FfiTransactionSerializer exists", serializer)
 
         // 5. FeeCalculator

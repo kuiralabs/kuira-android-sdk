@@ -314,7 +314,7 @@ class RealTransactionTest {
 
         // Use FfiTransactionSerializer to get the ACTUAL message to sign
         // This is THE critical step for real on-chain transactions
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         val signingMessageHex = serializer.getSigningMessageForInput(
             inputs = listOf(input),
             outputs = listOf(paymentOutput, changeOutput),

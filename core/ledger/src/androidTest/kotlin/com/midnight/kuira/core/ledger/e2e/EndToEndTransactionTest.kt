@@ -172,7 +172,7 @@ class EndToEndTransactionTest {
         )
 
         // Serialize to SCALE (Rust FFI)
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         serializer.getSigningMessageForInput(signedOffer.inputs, signedOffer.outputs, 0, signedIntent.ttl)
         val scaleHex = serializer.serialize(signedIntent)
 
@@ -245,7 +245,7 @@ class EndToEndTransactionTest {
             ttl = System.currentTimeMillis() + 30 * 60 * 1000
         )
 
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         serializer.getSigningMessageForInput(signedOffer.inputs, signedOffer.outputs, 0, signedIntent.ttl)
         val scaleHex = serializer.serialize(signedIntent)
 

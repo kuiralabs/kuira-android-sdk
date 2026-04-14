@@ -22,7 +22,7 @@ class SealedTransactionInstrumentedTest {
 
     @Before
     fun setup() {
-        serializer = FfiTransactionSerializer()
+        serializer = FfiTransactionSerializer(networkId = "undeployed")
     }
 
     @Test

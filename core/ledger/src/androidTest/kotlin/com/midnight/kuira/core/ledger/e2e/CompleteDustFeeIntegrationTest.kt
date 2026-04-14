@@ -177,7 +177,7 @@ class CompleteDustFeeIntegrationTest {
             tokenType = NATIVE_TOKEN
         )
 
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         val ttl = System.currentTimeMillis() + (5 * 60 * 1000)
 
         val signingMessageHex = serializer.getSigningMessageForInput(
@@ -247,7 +247,7 @@ class CompleteDustFeeIntegrationTest {
 
         // 4. FfiTransactionSerializer
         try {
-            val serializer = FfiTransactionSerializer()
+            val serializer = FfiTransactionSerializer(networkId = "undeployed")
             assertNotNull(serializer)
             testsPassed++
         } catch (e: Exception) {
@@ -330,7 +330,7 @@ class CompleteDustFeeIntegrationTest {
 
         // Test serialize_unshielded_transaction
         try {
-            val serializer = FfiTransactionSerializer()
+            val serializer = FfiTransactionSerializer(networkId = "undeployed")
             assertNotNull(serializer)
             functionsAvailable++
         } catch (_: Exception) { }

@@ -92,8 +92,12 @@ object LedgerModule {
      */
     @Provides
     @Singleton
-    fun provideTransactionSerializer(): TransactionSerializer {
-        return FfiTransactionSerializer()
+    fun provideTransactionSerializer(
+        networkConfig: NetworkConfig,
+    ): TransactionSerializer {
+        return FfiTransactionSerializer(
+            networkId = networkConfig.network.rustNetworkId,
+        )
     }
 
     /**

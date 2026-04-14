@@ -56,12 +56,14 @@ object DustRegistrationBuilder {
         dustPublicKeyHex: String,
         utxosJson: String,
         ttlMillis: Long,
+        networkId: String,
         currentTimeMillis: Long = System.currentTimeMillis(),
     ): String? {
         require(nightPrivateKey.size == 32) { "Night private key must be exactly 32 bytes" }
         require(dustPublicKeyHex.isNotBlank()) { "Dust public key hex must not be blank" }
         require(utxosJson.isNotBlank()) { "UTXOs JSON must not be blank" }
         require(ttlMillis > 0) { "TTL must be positive" }
+        require(networkId.isNotBlank()) { "networkId must not be blank" }
 
         return nativeBuildDustRegistrationTransaction(
             nightPrivateKey = nightPrivateKey,
@@ -70,6 +72,7 @@ object DustRegistrationBuilder {
             ttlMillis = ttlMillis,
             currentTimeMillis = currentTimeMillis,
             utxosJson = utxosJson,
+            networkId = networkId,
         )
     }
 
@@ -91,5 +94,6 @@ object DustRegistrationBuilder {
         ttlMillis: Long,
         currentTimeMillis: Long,
         utxosJson: String,
+        networkId: String,
     ): String?
 }

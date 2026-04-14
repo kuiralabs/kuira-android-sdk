@@ -44,7 +44,18 @@ interface TransactionSerializer {
  * Serializes signed Intent to SCALE codec using midnight-ledger types.
  * Converts Kotlin models → JSON → Rust FFI → SCALE hex.
  */
-class FfiTransactionSerializer : TransactionSerializer {
+class FfiTransactionSerializer(
+    /**
+     * Network identifier that gets embedded in every Transaction this serializer
+     * produces. The node compares this byte-for-byte against its own stored
+     * `LedgerState.network_id` during `well_formed()` verification — mismatch
+     * surfaces as `MalformedError::InvalidNetworkId` (error code 166).
+     *
+     * Pass [com.midnight.kuira.core.network.MidnightNetwork.rustNetworkId] at
+     * construction. Tests may use "undeployed" directly.
+     */
+    private val networkId: String,
+) : TransactionSerializer {
 
     init {
         // Load native library (same as TransactionSigner)
@@ -93,7 +104,8 @@ class FfiTransactionSerializer : TransactionSerializer {
             signaturesJson,
             dustActionsJson,
             intent.ttl,
-            commitment  // CRITICAL: Use same binding_commitment from signing
+            commitment,  // CRITICAL: Use same binding_commitment from signing
+            networkId,
         ) ?: throw IllegalStateException("FFI SCALE serialization failed")
 
         // DON'T clear binding_commitment here - it may be needed for serializeWithDust() later
@@ -160,7 +172,8 @@ class FfiTransactionSerializer : TransactionSerializer {
             dustUtxosJson,
             System.currentTimeMillis(),
             ttl,
-            commitment
+            commitment,
+            networkId,
         ) ?: throw IllegalStateException("FFI SCALE serialization with dust failed")
 
         // Clear binding_commitment after use
@@ -302,7 +315,8 @@ class FfiTransactionSerializer : TransactionSerializer {
         signaturesJson: String,
         dustActionsJson: String,
         ttl: Long,
-        bindingCommitmentHex: String
+        bindingCommitmentHex: String,
+        networkId: String,
     ): String?
 
     /**
@@ -331,7 +345,8 @@ class FfiTransactionSerializer : TransactionSerializer {
         dustUtxosJson: String,
         currentTimeMs: Long,
         ttl: Long,
-        bindingCommitmentHex: String
+        bindingCommitmentHex: String,
+        networkId: String,
     ): String?
 
     /**

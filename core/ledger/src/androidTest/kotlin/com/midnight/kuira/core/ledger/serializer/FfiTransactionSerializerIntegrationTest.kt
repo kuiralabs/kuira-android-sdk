@@ -110,7 +110,7 @@ class FfiTransactionSerializerIntegrationTest {
     fun testLibraryLoadsSuccessfully() {
         // This test verifies the native library is loaded
         // If library loading fails, FfiTransactionSerializer init block throws exception
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         assertNotNull("FfiTransactionSerializer should instantiate", serializer)
     }
 
@@ -145,7 +145,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When: Serialize to SCALE
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         // MUST call getSigningMessageForInput first to generate binding commitment
         serializer.getSigningMessageForInput(offer.inputs, offer.outputs, 0, intent.ttl)
         val scaleHex = serializer.serialize(intent)
@@ -202,7 +202,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When: Serialize
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         // MUST call getSigningMessageForInput first to generate binding commitment
         serializer.getSigningMessageForInput(offer.inputs, offer.outputs, 0, intent.ttl)
         val scaleHex = serializer.serialize(intent)
@@ -252,7 +252,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When: Serialize
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         // MUST call getSigningMessageForInput first to generate binding commitment
         serializer.getSigningMessageForInput(offer.inputs, offer.outputs, 0, intent.ttl)
         val scaleHex = serializer.serialize(intent)
@@ -296,7 +296,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When: Serialize (triggers Bech32m.decode())
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         // MUST call getSigningMessageForInput first to generate binding commitment
         serializer.getSigningMessageForInput(offer.inputs, offer.outputs, 0, intent.ttl)
 
@@ -340,7 +340,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When/Then: Should throw IllegalStateException
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
         serializer.serialize(intent)  // Should throw
     }
 
@@ -375,7 +375,7 @@ class FfiTransactionSerializerIntegrationTest {
         )
 
         // When: Serialize twice (each generates new random binding commitment)
-        val serializer = FfiTransactionSerializer()
+        val serializer = FfiTransactionSerializer(networkId = "undeployed")
 
         // First serialization
         serializer.getSigningMessageForInput(offer.inputs, offer.outputs, 0, intent.ttl)
