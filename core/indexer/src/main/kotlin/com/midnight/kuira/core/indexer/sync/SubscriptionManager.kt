@@ -197,6 +197,10 @@ class SubscriptionManager(
         // by startSubscription (forceFullResync=true path). Here we simply read
         // whatever sync state exists and pass it to the indexer.
         val lastId = syncStateManager.getLastProcessedTransactionId(address)
+        // Snapshot at subscription start — used by the reorg check below to
+        // detect when the indexer reports a max txId lower than what we have
+        // locally (reorg, indexer-wipe, dev localnet reset).
+        var highestSeenBySession: Int = lastId ?: 0
         if (lastId == null) {
             Log.i(TAG, "🆕 FIRST SYNC: No saved tx id for $address — subscribing from genesis")
         } else {
@@ -233,6 +237,7 @@ class SubscriptionManager(
                     is UtxoManager.ProcessingResult.TransactionProcessed -> {
                         processedCount++
                         latestTransactionId = result.transactionId
+                        highestSeenBySession = maxOf(highestSeenBySession, result.transactionId)
 
                         // Emit syncing state
                         send(SyncState.Syncing(processedCount, result.transactionId))
@@ -248,8 +253,44 @@ class SubscriptionManager(
                         }
                     }
                     is UtxoManager.ProcessingResult.ProgressUpdate -> {
+                        val serverMax = result.highestTransactionId
+
+                        // Reorg / indexer-wipe detection (T1-21 Round 2):
+                        // The indexer never returns an error for an unknown cursor —
+                        // empirically verified by poisoning the cursor with INT_MAX
+                        // and observing only ordinary Progress updates in response.
+                        // The only reliable signal is the Progress payload going
+                        // *backwards* relative to what we've seen locally: either
+                        // the saved resume point, or the highest id we've
+                        // observed in this session (catches mid-subscription reorgs).
+                        if (serverMax < highestSeenBySession) {
+                            Log.w(
+                                TAG,
+                                "🔁 REORG detected for $address: " +
+                                    "indexer highestTransactionId=$serverMax but we expected ≥$highestSeenBySession. " +
+                                    "Wiping local state and restarting from genesis."
+                            )
+                            performFullResync(address)
+                            syncTimeoutJob?.cancel()
+                            // Prevent the `finally` block below from saving the
+                            // now-stale latestTransactionId back into the sync
+                            // state we just wiped. Race: performFullResync
+                            // clears, `finally` would re-save otherwise.
+                            latestTransactionId = null
+                            // Throwing propagates through `retryWhen`, which
+                            // restarts the subscription. Because sync state was
+                            // just wiped, the restart subscribes from null
+                            // (genesis) against the server's current truth.
+                            throw ReorgDetectedException(
+                                address = address,
+                                localHighest = highestSeenBySession,
+                                serverMax = serverMax
+                            )
+                        }
+                        highestSeenBySession = maxOf(highestSeenBySession, serverMax)
+
                         // Track latest transaction ID for final save
-                        latestTransactionId = result.highestTransactionId
+                        latestTransactionId = serverMax
 
                         // Save sync progress (throttled to reduce battery drain)
                         val now = System.currentTimeMillis()
@@ -300,6 +341,22 @@ class SubscriptionManager(
         return min(exponentialDelay, MAX_RETRY_DELAY_MS)
     }
 }
+
+/**
+ * Raised from inside the subscription flow when the indexer reports a
+ * `highestTransactionId` lower than what we have locally. Means the server's
+ * view of the chain went backwards (reorg, indexer DB wiped, dev localnet
+ * reset from genesis). [SubscriptionManager] catches this, wipes local state
+ * via `performFullResync`, and lets [kotlinx.coroutines.flow.retryWhen]
+ * restart the subscription cleanly from the new server truth.
+ */
+class ReorgDetectedException(
+    val address: String,
+    val localHighest: Int,
+    val serverMax: Int,
+) : RuntimeException(
+    "Reorg detected for $address: local=$localHighest > server=$serverMax"
+)
 
 /**
  * Sync state for UI/logging.

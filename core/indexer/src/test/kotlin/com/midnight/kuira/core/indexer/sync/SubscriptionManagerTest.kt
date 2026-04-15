@@ -283,6 +283,96 @@ class SubscriptionManagerTest {
     }
 
     /**
+     * T1-21 Round 2: the indexer never returns an error for an unknown /
+     * future txId (verified on the local dev stack). Our only reorg signal
+     * is Progress updates going backwards relative to what we've seen
+     * locally. Saved cursor > server's highest → wipe + restart.
+     */
+    @Test
+    fun `Progress going backwards vs saved cursor triggers full resync`() = runTest {
+        // Saved cursor says we've processed up to tx id 100.
+        coEvery { syncStateManager.getLastProcessedTransactionId(testAddress) } returns 100
+
+        // Indexer now reports max id 50 — chain reorg'd or indexer was wiped.
+        val backwardsProgress = UnshieldedTransactionUpdate.Progress(
+            type = "UnshieldedTransactionsProgress",
+            highestTransactionId = 50
+        )
+        // First subscription: emits the backwards Progress, which should
+        // cause ReorgDetectedException. Second subscription (after retry):
+        // return empty so the test terminates.
+        var callCount = 0
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } answers {
+            callCount++
+            if (callCount == 1) flowOf(backwardsProgress) else emptyFlow()
+        }
+        coEvery { utxoManager.processUpdate(backwardsProgress) } returns
+            UtxoManager.ProcessingResult.ProgressUpdate(50)
+
+        subscriptionManager.startSubscription(testAddress).toList()
+
+        // Reorg path ran: state + utxos cleared.
+        coVerify(exactly = 1) { syncStateManager.clearSyncState(testAddress) }
+        coVerify(exactly = 1) { utxoManager.clearUtxos(testAddress) }
+        // retryWhen re-subscribed (second call to subscribeToUnshieldedTransactions).
+        verify(atLeast = 2) { indexerClient.subscribeToUnshieldedTransactions(any(), any()) }
+    }
+
+    @Test
+    fun `Progress matching or exceeding saved cursor does NOT trigger resync`() = runTest {
+        coEvery { syncStateManager.getLastProcessedTransactionId(testAddress) } returns 100
+
+        // Indexer reports max id 120 — normal forward progress.
+        val forwardProgress = UnshieldedTransactionUpdate.Progress(
+            type = "UnshieldedTransactionsProgress",
+            highestTransactionId = 120
+        )
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns
+            flowOf(forwardProgress)
+        coEvery { utxoManager.processUpdate(forwardProgress) } returns
+            UtxoManager.ProcessingResult.ProgressUpdate(120)
+
+        subscriptionManager.startSubscription(testAddress).toList()
+
+        // No wipe — forward progress is the happy path.
+        coVerify(exactly = 0) { syncStateManager.clearSyncState(any()) }
+        coVerify(exactly = 0) { utxoManager.clearUtxos(any()) }
+    }
+
+    @Test
+    fun `mid-session reorg - server max drops below tx processed this session`() = runTest {
+        // No saved cursor (first sync). But during this session we process
+        // a tx at id 200, then a Progress says server max is 150. Reorg.
+        coEvery { syncStateManager.getLastProcessedTransactionId(testAddress) } returns null
+
+        val tx = mockk<UnshieldedTransactionUpdate.Transaction>(relaxed = true)
+        val backwardsProgress = UnshieldedTransactionUpdate.Progress(
+            type = "UnshieldedTransactionsProgress",
+            highestTransactionId = 150
+        )
+        var callCount = 0
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } answers {
+            callCount++
+            if (callCount == 1) flowOf(tx, backwardsProgress) else emptyFlow()
+        }
+        coEvery { utxoManager.processUpdate(tx) } returns
+            UtxoManager.ProcessingResult.TransactionProcessed(
+                transactionId = 200,
+                transactionHash = "abc",
+                createdCount = 1,
+                spentCount = 0,
+                status = TransactionStatus.SUCCESS
+            )
+        coEvery { utxoManager.processUpdate(backwardsProgress) } returns
+            UtxoManager.ProcessingResult.ProgressUpdate(150)
+
+        subscriptionManager.startSubscription(testAddress).toList()
+
+        coVerify(exactly = 1) { syncStateManager.clearSyncState(testAddress) }
+        coVerify(exactly = 1) { utxoManager.clearUtxos(testAddress) }
+    }
+
+    /**
      * Additional tests covered by integration tests:
      * - Retry logic with exponential backoff (BalanceRepositoryIntegrationTest)
      * - Real WebSocket subscription behavior (BalanceRepositoryIntegrationTest)
