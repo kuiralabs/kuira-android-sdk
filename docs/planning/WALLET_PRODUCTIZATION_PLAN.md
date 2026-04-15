@@ -663,6 +663,55 @@ subphase is affected.
 
 ---
 
+### 2026-04-14 — T1-21 implementation complete
+
+Shipped over four rounds, ~6h (under the 8-12h estimate). Commits on
+`main`: Round 1 (no-wipe-on-launch), Round 2 (reorg detection), Round
+4+5 (force-resync API clarification + devnet-wipe regression test).
+
+**What shipped:**
+- Incremental resume on every launch — `SubscriptionManager` reads the
+  saved `lastProcessedTransactionId` and passes it to the indexer
+  subscription. Zero-balance flicker is gone (verified on emulator).
+- Reorg / indexer-wipe auto-recovery. The indexer never returns an
+  error for an unknown cursor (verified empirically by poisoning the
+  cursor with `Int.MAX_VALUE`); it just sends ordinary Progress
+  updates reflecting its current highest id. We use that: any Progress
+  with `highestTransactionId < highestSeenBySession` (either the saved
+  cursor or anything we processed in this session) triggers
+  `performFullResync` + `ReorgDetectedException` → retryWhen restarts
+  the subscription from genesis. Device-verified against a
+  `docker rm indexer && docker-compose up -d` reset.
+- Force re-sync entry point for Developer Options:
+  `startSubscription(address, forceFullResync = true)`. The wipe runs
+  exactly once per call (outside the retryWhen loop), so transient
+  network errors during the force-resync don't discard progress
+  already replayed in the current attempt.
+
+**What changed vs the original 6-round plan:**
+- Round 3 ("indexer-wipe fallback") folded into Round 2 — the
+  backwards-Progress check catches `serverMax = 0` naturally.
+- Round 4 was purely documentation — the public API was already
+  complete as of Round 1 via the `forceFullResync` parameter on
+  `startSubscription`.
+
+**What's NOT in scope for T1-21 (intentionally):**
+- UI for the Developer Options button (lands with T1-17 later in 8B.3).
+- Orphaned sync state cleanup on network switch (Q-2 from the plan;
+  deferred, not a v1.0 concern — each entry is ~1 KB on disk).
+- Proving-mode / proof-server selection (separate deferred entry
+  below).
+
+**Unit test coverage added:**
+- default startSubscription does not wipe
+- forceFullResync=true wipes exactly once, even across transient retries
+- backwards Progress vs saved cursor → wipe + restart
+- forward Progress → no wipe
+- mid-session reorg (no saved cursor, but tx processed this session)
+- indexer wiped to genesis (serverMax=0)
+
+---
+
 ### 2026-04-14 — Settings: proof-server + proving-mode scope = **deferred (not in 8B.3 first pass)**
 
 Surfaced while planning the Settings screen (8B.3 T1-17). Today the
