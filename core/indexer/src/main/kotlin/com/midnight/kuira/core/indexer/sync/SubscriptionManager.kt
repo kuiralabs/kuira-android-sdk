@@ -175,10 +175,25 @@ class SubscriptionManager(
                             false
                         }
                         attempt < MAX_RETRY_ATTEMPTS -> {
-                            // Network error or connection failure - retry with exponential backoff
-                            // Catches: IOException, WebSocket errors, connection timeouts, etc.
                             val delayMs = calculateRetryDelay(attempt)
-                            Log.w(TAG, "Subscription error (${cause.javaClass.simpleName}), retrying in ${delayMs}ms (attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)", cause)
+                            if (cause is ReorgDetectedException) {
+                                // Intended restart after local state was wiped.
+                                // Single concise line, no stacktrace.
+                                Log.i(
+                                    TAG,
+                                    "Restarting subscription in ${delayMs}ms after reorg recovery " +
+                                        "(attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)"
+                                )
+                            } else {
+                                // Real network / connection / WebSocket failure —
+                                // keep the full diagnostic.
+                                Log.w(
+                                    TAG,
+                                    "Subscription error (${cause.javaClass.simpleName}), " +
+                                        "retrying in ${delayMs}ms (attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)",
+                                    cause
+                                )
+                            }
                             delay(delayMs)
                             true
                         }
@@ -231,7 +246,16 @@ class SubscriptionManager(
                 transactionId = lastId
             )
                 .onCompletion { error ->
-                    if (error != null) Log.e(TAG, "Subscription error", error)
+                    when (error) {
+                        null -> { /* normal completion, nothing to log */ }
+                        is ReorgDetectedException -> {
+                            // Expected recovery path — reorg/wipe detection already
+                            // logged the actionable message with the id comparison.
+                            // No stacktrace at E-level, that's for real bugs.
+                            Log.i(TAG, "Subscription ended to trigger reorg recovery: ${error.message}")
+                        }
+                        else -> Log.e(TAG, "Subscription error", error)
+                    }
                     syncTimeoutJob?.cancel()
                 }
                 .catch { error ->
