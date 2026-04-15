@@ -138,11 +138,20 @@ class SubscriptionManager(
      * - Retryable errors: IOException, connection failures, WebSocket errors.
      * - Non-retryable errors: CancellationException (user cancelled).
      *
+     * **Force re-sync entry point (T1-17 Developer Options).** A UI-level
+     * "Force re-sync" button should cancel the currently-collecting Flow
+     * first, then re-call `startSubscription(address, forceFullResync = true)`.
+     * That wipes local state once (not on every retry) and re-subscribes from
+     * genesis. No separate public `forceFullResync(address)` method — the
+     * flag on this function is the single authoritative entry point.
+     *
      * @param address Unshielded address to sync.
      * @param forceFullResync When true, clear sync state + UTXOs for [address]
      *        before subscribing, forcing a replay from genesis. Default false
-     *        (incremental). Intended for explicit recovery paths (force-resync
-     *        button, reorg fallback), not normal launches.
+     *        (incremental). Intended for explicit recovery paths (Developer
+     *        Options button, user-initiated "reset wallet cache" action) —
+     *        NOT for normal launches. Reorg / indexer-wipe detection is
+     *        automatic and doesn't need this flag.
      * @return Flow of sync states (Syncing, Synced, Error).
      */
     fun startSubscription(address: String, forceFullResync: Boolean = false): Flow<SyncState> = flow {

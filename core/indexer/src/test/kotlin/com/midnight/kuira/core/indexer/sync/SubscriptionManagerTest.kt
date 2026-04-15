@@ -339,6 +339,36 @@ class SubscriptionManagerTest {
         coVerify(exactly = 0) { utxoManager.clearUtxos(any()) }
     }
 
+    /**
+     * Regression guard for the devnet-wipe case that surfaced on 2026-04-14.
+     * Explicitly tests `serverMax == 0` because that's the exact signal a
+     * fresh `docker rm indexer && docker-compose up -d` produces — the state
+     * we device-verified Round 2 against. Subsumed by the generic reorg
+     * test above, but kept separate to document intent.
+     */
+    @Test
+    fun `indexer wiped to genesis - server max drops to 0 triggers resync`() = runTest {
+        coEvery { syncStateManager.getLastProcessedTransactionId(testAddress) } returns 76
+
+        val devnetResetProgress = UnshieldedTransactionUpdate.Progress(
+            type = "UnshieldedTransactionsProgress",
+            highestTransactionId = 0
+        )
+        var callCount = 0
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } answers {
+            callCount++
+            if (callCount == 1) flowOf(devnetResetProgress) else emptyFlow()
+        }
+        coEvery { utxoManager.processUpdate(devnetResetProgress) } returns
+            UtxoManager.ProcessingResult.ProgressUpdate(0)
+
+        subscriptionManager.startSubscription(testAddress).toList()
+
+        coVerify(exactly = 1) { syncStateManager.clearSyncState(testAddress) }
+        coVerify(exactly = 1) { utxoManager.clearUtxos(testAddress) }
+        verify(atLeast = 2) { indexerClient.subscribeToUnshieldedTransactions(any(), any()) }
+    }
+
     @Test
     fun `mid-session reorg - server max drops below tx processed this session`() = runTest {
         // No saved cursor (first sync). But during this session we process
