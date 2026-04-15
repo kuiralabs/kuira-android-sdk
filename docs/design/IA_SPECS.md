@@ -495,3 +495,513 @@ Enumerated for convenience. Each of these appears on multiple screens; building 
 # Review + sign-off
 
 When every screen above is `✅ IA approved`, 8B.1 is done and 8B.3 Compose work may begin on the screens in the order listed in `WALLET_PRODUCTIZATION_PLAN.md` 8B.3 sequencing table.
+
+---
+
+# AI wireframe prompt templates
+
+Copy-paste-ready prompts for Figma AI / Galileo / Uizard / v0 / Claude / etc. Each screen prompt is **prefix + body**. Paste the shared prefix once, then the screen-specific body. Iterate the body, not the prefix.
+
+## Shared prefix (copy once per prompt)
+
+```
+ROLE
+You are a senior mobile product designer laying out a low-fidelity
+wireframe for an Android wallet app. You care about information
+density, clear hierarchy, and premium polish.
+
+BRAND — "Dusk"
+- Black and white only. No color introduces meaning — contrast does.
+- Light mode = inverted Dusk (Light foreground on Void background).
+  Dark mode = the default (Light foreground on Void).
+- Palette tokens already defined:
+  Void       #000000  (primary dark bg)
+  VoidSoft   #0A0A0A  (elevated surfaces)
+  VoidElev   #111111  (cards)
+  Light      #FFFFFF  (primary text / icons)
+  LightSoft  80% Light (secondary text)
+  LightMuted 40% Light (tertiary / placeholders)
+  LightFaint 20% Light (separators)
+  StarBright 80% Light  (accents)
+- Typography: sans, tight tracking on numerals; NO serif.
+- Shapes: rounded corners (8-12dp cards, 24dp FABs). No heavy shadows.
+- Texture allowed: subtle ambient star effect in background hero areas.
+
+VOICE
+Minimalist, intentional. Think Phantom wallet crossed with Linear
+crossed with Ledger Live. No cute copy. No emoji in UI strings.
+
+OUTPUT
+- Portrait Android, 412 × 892 dp viewport (≈ Pixel 7).
+- Low-fidelity wireframe is fine for first pass — greyboxes + type.
+- Show the DEFAULT loaded state (happy path, real-ish data), not empty.
+- Include top nav + bottom nav if the screen has them.
+- Label every custom spacing decision (8 / 16 / 24 dp grid).
+- Include the A11y target box on interactive elements (48dp min).
+- If the screen has multiple states (loading / error / success), produce them side-by-side.
+```
+
+## Per-screen bodies
+
+### 1 — Balance
+
+```
+SCREEN: Balance (home)
+
+PRIMARY GOAL
+In under a second of opening the app, the user sees their verified
+NIGHT + DUST + shielded balances for the current network, and can
+initiate the two most common actions (send, receive).
+
+MUST SHOW
+- Top nav: wallet name | environment badge (e.g. "PREPROD") | settings icon
+- Hero: total balance (NIGHT), big numeric
+- Secondary row: DUST balance · Shielded balance ("locked — tap to unlock" if encrypted)
+- Last-sync timestamp (relative, "Synced 12s ago")
+- Address toggle chip (Unshielded / Shielded)
+- Primary actions: SEND and RECEIVE (equal weight, side-by-side)
+- Non-dismissible banner above balance: "Back up your recovery phrase →"
+  (only until the user has completed phrase view once; hide forever after)
+
+INTERACTIONS
+- Pull-to-refresh on the whole screen
+- Tap balance hero → drill into a per-token detail (TxHistory filtered)
+- Tap address chip → copy to clipboard with haptic + "Copied" pill
+
+LOCKED — don't deviate
+- Dusk palette only. No red "warning" color on the backup banner —
+  contrast and weight only.
+- Environment badge is always visible at the top (T1-16).
+- Banner is non-dismissible but must not block scrolling.
+
+INSPIRATIONS (for hierarchy, not color)
+- Phantom wallet home — minimalist hero + horizontal action row
+- Rainbow — typographic scale of the balance hero
+- AVOID: Trust Wallet (too dense), MetaMask (too utilitarian)
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold (top-level wrapper)
+- DuskButton (primary + secondary)
+- DuskEffect (ambient star background)
+- MaterializeEffect (intro animation for the hero)
+```
+
+### 2 — Send (compose step)
+
+```
+SCREEN: Send (step 1 of 2 — compose)
+
+PRIMARY GOAL
+Enter recipient + amount with confidence about which wallet mode
+(unshielded / shielded) and which network is being used.
+
+MUST SHOW
+- Top nav: back · "Send" · mode indicator
+- Mode selector: Unshielded / Shielded (segmented control)
+- "To" field: address input with Paste + Scan QR buttons
+- "Amount" field: numeric with denomination ("NIGHT") + MAX button
+- Static estimated dust fee strip ("≈ 0.0001 DUST")
+- Proving mode badge (LOCAL on-device / REMOTE via proof server)
+- Primary button: "Review" (disabled until address + amount valid)
+
+INTERACTIONS
+- Paste → validates address, shows inline error if wrong network
+  (e.g. "This is a Preview address; you're on Preprod")
+- Scan QR → opens camera, auto-fills from `midnight:` URI
+- MAX → fills amount with balance − fee
+- Review → navigates to Send Confirmation (next screen)
+
+LOCKED
+- Static fee estimate — NO live dry-run round-trip. Single line.
+- Address field must support both bech32m and `midnight:` URIs.
+- Proving mode badge is visible but not editable from this screen
+  (dev-mode Settings is the editor).
+
+INSPIRATIONS
+- Rainbow send — tight compose-in-one-screen
+- Phantom — address validation error copy
+- Ledger Live — fee estimate chrome
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskButton
+- (New components to design) AddressField, AmountField, FeeEstimateStrip, ProvingModeBadge
+```
+
+### 3 — Send Confirmation
+
+```
+SCREEN: Send Confirmation (step 2 of 2)
+
+PRIMARY GOAL
+Last gate before the user commits. Reread destination, amount, fee.
+Tap-to-reveal truncated fields. No surprises.
+
+MUST SHOW
+- Top nav: back (preserves all Send fields) · "Review"
+- "You're sending" hero (amount + denomination)
+- ConfirmRow — TO: truncated address (mn_addr_preprod1abc…xyz, tap to expand)
+- ConfirmRow — FROM: truncated source address (same pattern)
+- ConfirmRow — FEE: ≈ 0.0001 DUST (static)
+- ConfirmRow — TOTAL: amount + fee
+- Proving mode badge
+- Primary button: "Confirm with biometric"
+- Secondary button: "Cancel"
+
+ALSO DESIGN — success state
+After signing + submission:
+- Success card (not a toast): "Sent" headline + tx hash (truncated, tap to copy)
+- Two actions: "View in history" → TxDetail; "Send another" → fresh Send
+
+LOCKED
+- Addresses truncated 6…4 by default, tap-to-reveal full + copy
+- NO identicons. Text only.
+- Post-send is a card, NOT a toast. User must dismiss.
+- Cannot confirm without biometric prompt intercepting
+
+INSPIRATIONS
+- Ledger Live confirm screen (gold standard)
+- Phantom confirm sheet — clean Y/N
+- AVOID: MetaMask (too much chrome)
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskButton
+- (New) ConfirmRow, TotalStrip, SuccessCard, ProvingModeBadge (shared with Send)
+```
+
+### 4 — Dust
+
+```
+SCREEN: Dust
+
+PRIMARY GOAL
+See current dust balance, understand dust is generated from held NIGHT
+over time, and register for generation if not yet registered.
+
+MUST SHOW (registered state)
+- Top nav: back · "Dust" · info icon
+- Hero: DUST balance (large numeric)
+- Subtitle: generation rate ("≈ 0.0002 DUST/hour from your 10 NIGHT")
+- "Next fill estimate" line (optional, if known)
+- Registration status: ✓ Registered · link to proof in explorer
+- Quiet explainer strip at bottom (≤ 2 lines)
+
+MUST SHOW (UNregistered state — alternate layout, same file)
+- Hero: "Not yet registered"
+- Body copy (2-3 lines): what dust is, why you register, what it costs
+  ("Register to start generating DUST from your NIGHT. One-time
+  transaction, costs ~1000 Specks.")
+- Primary button: "Register"
+- Small disclaimer under: "Requires a NIGHT UTXO and a biometric prompt"
+
+INTERACTIONS
+- Register → biometric prompt → proof-server flow → success returns here
+- Explorer link → browser
+- Info icon → half-sheet explaining dust mechanics (reuse DuskBulletLine)
+
+LOCKED
+- Two distinct states (registered / unregistered) in one layout file
+- No color for status — use icon weight + typography
+
+INSPIRATIONS
+- Solana "rent" explainer in Phantom
+- No direct competitor for dust specifically — design from first principles
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskButton, DuskBulletLine
+```
+
+### 5 — Settings
+
+```
+SCREEN: Settings (host screen, T1-1)
+
+PRIMARY GOAL
+Configure wallet-wide preferences, review network + security, access
+destructive actions behind gates.
+
+SECTIONS (in order)
+1. NETWORK
+   - Current network row (tap opens picker — dev-mode only; in
+     non-dev, the row is read-only and shows "Preprod (cannot change)")
+   - Network sync status ("Last sync: 12s ago")
+
+2. DEVELOPER OPTIONS (collapsible, hidden by default;
+   tap version 7 times on About to reveal)
+   - Proof server URL (PLACEHOLDER FOR NOW — shows "Default (local)",
+     not editable in v1.0 first pass — see deferred decision)
+   - Force re-sync button (danger styling)
+   - Build info: version, commit SHA, env
+
+3. SECURITY
+   - View recovery phrase (biometric + FLAG_SECURE gate)
+   - Test biometric re-auth
+   - Wipe wallet (DANGER row — distinct visual weight)
+
+4. ABOUT
+   - Version
+   - Commit SHA
+   - License link
+   - GitHub link
+   - Support contact
+
+INTERACTIONS
+- Every row is a DuskBulletLine with a chevron
+- Destructive rows (Wipe, View phrase) visually distinct — NOT red,
+  just a heavier treatment (icon + weight)
+- Wipe requires: biometric → second confirmation sheet → third "type WIPE" challenge
+
+LOCKED
+- Developer section is HIDDEN by default (dev-mode gate)
+- Destructive rows visually distinct WITHOUT color
+- Network picker is dev-mode-only (non-dev users see read-only row)
+
+INSPIRATIONS
+- Phantom settings — compact section list, good density
+- Tailscale / 1Password — developer-options-under-version-tap pattern
+- AVOID: Rainbow (profile-hero wastes the top of the screen)
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskBulletLine, DuskButton
+- (New) SettingsSectionHeader, DangerRow, NetworkPicker (bottom sheet)
+```
+
+### 6 — Transaction History + Detail
+
+```
+SCREEN(S): TxHistory list + TxDetail (two-screen pair)
+
+LIST — PRIMARY GOAL
+Recognize "I sent 10 NIGHT to Bob yesterday" at a glance. Drill into
+any row for full details.
+
+LIST — MUST SHOW
+- Top nav: back · "Activity" · filter icon
+- Day-grouped sections (Today, Yesterday, Mar 12, etc.)
+- Row (per tx):
+  • Direction icon (up-arrow = out, down-arrow = in), small
+  • Type badge (UNSHIELDED / SHIELDED / DUST / CONTRACT) — short chip, light-on-dark
+  • Counterparty address, truncated 6…4
+  • Amount + token, right-aligned
+  • Relative timestamp, tiny
+  • Status affordance: ✓ confirmed (no chrome) · pending (subtle pulse) ·
+    failed (weight + icon, NOT red)
+- Empty state: explainer line + illustration-free "no activity yet"
+
+DETAIL — MUST SHOW
+- Top nav: back · "Transaction" · share icon
+- Headline: amount + direction ("Sent 10 NIGHT" or "Received 10 NIGHT")
+- Status chip + full timestamp (ISO)
+- Type badge
+- Full addresses (FROM and TO, both copyable)
+- Amount / fee / total
+- Tx hash (copyable)
+- Block number
+- "Open in explorer" row (opens browser)
+- Failure reason block (if failed)
+- Contract specifics (if CONTRACT type): contract address, method name if known
+
+INTERACTIONS
+- Pull-to-refresh on list
+- Filter icon → half-sheet filter (by type, by token, by status)
+- Tap row → detail
+- Detail share icon → share sheet (text summary)
+
+LOCKED
+- All four types shown (UNSHIELDED, SHIELDED, DUST, CONTRACT)
+- Three lifecycle states shown (PENDING, CONFIRMED, FAILED)
+- Data source: local Room cache, indexer-backfilled
+  (so list must work offline — indicate "last synced" subtly)
+
+INSPIRATIONS
+- Rainbow detail screen (gold standard for density)
+- Phantom activity list (day-grouped)
+- AVOID: Trust Wallet (too dense), Etherscan embed (data-dump aesthetic)
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskBulletLine
+- (New) TxRow, TxStatusBadge, TxTypeBadge, TxDetailField
+```
+
+### 7 — Receive
+
+```
+SCREEN: Receive
+
+PRIMARY GOAL
+Show a QR code of the current address encoded as a `midnight:` URI,
+copy / share / save / full-screen it. Conference-table hand-off is a
+real use case.
+
+MUST SHOW
+- Top nav: back · "Receive NIGHT on [network]" · full-screen icon
+- Tabs: Unshielded / Shielded (tab selection persists across sessions)
+- QR code (large, centered, white modules on Void)
+- Address text (large enough to read over the user's shoulder, truncated
+  with tap-to-reveal full)
+- Action row (equal weight): Copy · Share · Save
+- Network badge near the address (NOT on the QR)
+
+DO NOT SHOW
+- Amount input field. The `midnight:` URI spec supports amount but we
+  do NOT surface it on the Receive UI. Keeps the flow to a glance.
+- Memo / label input (also URI-only).
+- Identicons.
+
+FULL-SCREEN MODE
+- QR fills the display edge-to-edge
+- Network + address text at top
+- Tap anywhere to exit
+- Status bar hidden
+
+LOCKED
+- QR encodes the `midnight:` URI (not bare address)
+- Tabs, not toggle
+- Full-screen mode is first-class (not hidden in an overflow)
+
+INSPIRATIONS
+- Rainbow receive (just QR + address, minimal)
+- Phantom receive (similar)
+- AVOID: Trust Wallet (too many fields)
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskButton
+- (New) QRCodeCanvas, AddressChip, FullScreenQrSheet, NetworkBadge (shared)
+```
+
+### 7a — Recovery phrase view
+
+```
+SCREEN: Recovery phrase view
+
+PRIMARY GOAL
+Present the user's 24-word mnemonic with appropriate gravity. Warn
+about copy. Gate on biometric (when entered from Settings). Prevent
+screenshots (FLAG_SECURE).
+
+MUST SHOW
+- Top nav: back · "Recovery phrase"
+- Above the grid: a high-contrast warning block
+  "Anyone with these 24 words has full control of this wallet.
+   Never share them. Never type them into a website.
+   Never give them to 'support'."
+- Mnemonic grid: 6 rows × 4 columns, each cell shows "<n>. <word>"
+  numbered 1-24, serif-or-mono typography so each word is distinct
+- Checkbox: "I've safely recorded my phrase"
+- Primary button: "Confirm" (disabled until checkbox is ticked)
+- Secondary: "Copy" (fires a warning toast on tap)
+- Secondary: "Back" (no confirm prompt — backup flag stays un-set)
+
+INTERACTIONS
+- Tap Copy → warning toast:
+  "This phrase is the only way to recover your wallet.
+   Clipboard contents can be read by other apps.
+   Only paste into a trusted password manager."
+- Tap Confirm → marks `recovery_phrase_viewed = true` in DataStore,
+  dismisses the Balance banner, navigates back
+- FLAG_SECURE prevents screen-recording (screen-record produces black)
+
+LOCKED
+- 24-word grid, no 12-word option
+- FLAG_SECURE always on for this screen's lifecycle
+- Copy is allowed but with warning toast
+- Biometric ALWAYS required on entry from Settings
+
+INSPIRATIONS
+- Ledger Live seed-display pattern
+- Bitcoin Core "back up your wallet" UX
+
+COMPONENTS ALREADY IN SYSTEM
+- DuskScaffold, DuskButton
+- (New) MnemonicGrid, WarningBlock
+```
+
+### 8 — Onboarding visual pass
+
+```
+SCOPE: Onboarding visual-consistency pass (NO IA change)
+
+EXISTING SCREENS (do not redesign, just restyle)
+- Welcome screen (app logo + two primary actions: Create / Restore)
+- Create wallet flow (seed generation + biometric setup)
+- Restore wallet flow (24-word input)
+- Success → Home transition
+
+WHAT THIS PASS DOES
+- Apply Dusk color tokens consistently (no hardcoded Material3 colors)
+- Verify the recovery-phrase step (if it currently exists separately
+  from the new Recovery phrase view screen) matches the new pattern
+- Confirm Onboarding → Home transition uses MaterializeEffect
+- Ensure every screen has the DuskEffect ambient background
+
+WHAT THIS PASS DOES NOT DO
+- No new screens
+- No change to biometric gating or SeedVault flow (8A shipped, working)
+- No change to the 24-word input grid / word-autocomplete (in Restore)
+
+OUTPUT
+Provide annotated screenshots of EACH existing onboarding screen with
+Dusk tokens applied. Note any hardcoded color references that need
+to be removed from the Compose code.
+```
+
+## Icon prompt (T1-7)
+
+```
+OUTPUT: Android app icon, Dusk palette (black + white only)
+
+GOAL
+A pure-symbol mark, no wordmark, that reads at 24dp and scales cleanly
+to 512dp. No literal wallet, coin, lock, shield. The mark represents:
+"light in darkness — stars against void". Luminosity is the only
+variable. Think single abstract glyph.
+
+DELIVERABLES
+- Adaptive icon: foreground vector (fits 66dp safe zone on a 108dp canvas)
+  and background (solid Void #000000)
+- Monochrome / themed variant for Android 13+ (mask fill only)
+- Play Store 512×512 PNG
+- Round variant
+
+CONSTRAINTS
+- Must read at 24dp in a crowded launcher grid
+- Must pass contrast against both light and dark wallpapers
+- Monochrome variant must be legible (single-color, no gradient)
+
+GENERATE 5-8 CONCEPTS. The engineer will refine one in a vector tool.
+```
+
+## Splash prompt (T1-7)
+
+```
+OUTPUT: Android 12+ splash animation storyboard (4-6 keyframes)
+
+GOAL
+Intro from app-launch to Balance screen ready. Length ≤ 800ms.
+Reuses the existing MaterializeEffect (scattered stars resolving into
+the glyph) — see core/designsystem/.../effect/MaterializeEffect.kt
+
+KEYFRAMES
+1. 0ms — Void background, no mark. Single star point (bright).
+2. ~100ms — Stars scatter in from off-screen, resolve toward center.
+3. ~400ms — Stars converge into the app icon glyph (full mark visible).
+4. ~500ms — Mark pulses once (subtle scale 1.0 → 1.04 → 1.0).
+5. ~700ms — Mark fades out; Balance screen fades in on the same Void.
+6. 800ms — Balance screen visible, MaterializeEffect on the balance hero
+   continues with the same star language.
+
+CONSTRAINTS
+- Must respect reduced-motion preference (instant swap if set).
+- No white flash between splash and first frame of Balance.
+- Android 12+ SplashScreen API; no third-party animation library.
+
+PROVIDE AS
+Storyboard frames (5-8 PNGs) + short description of the easing between
+each frame (e.g. "1→2: ease-out, 250ms").
+```
+
+## How to iterate
+
+1. Paste prefix + body into your AI design tool.
+2. Review the first pass. If something looks wrong, the fix is usually in the **LOCKED** block — either the tool ignored a constraint, or our constraint is overconstrained.
+3. When a mock looks right, save the PNG / Figma frame, paste the path into the matching stub's `Wireframe:` line, fill the component inventory, tick the checklist.
+4. Commit the mocks under `docs/design/wireframes/<screen>.png` so they ship with the repo.
