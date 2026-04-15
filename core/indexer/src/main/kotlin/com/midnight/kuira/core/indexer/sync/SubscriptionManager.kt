@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.retryWhen
@@ -76,28 +77,27 @@ class SubscriptionManager(
     private val lastSaveTimestamps = mutableMapOf<String, Long>()
 
     /**
-     * Prepare for sync by clearing unverified local cache.
+     * Wipe sync state + UTXOs for a given address and start over from genesis.
      *
-     * **CRITICAL DESIGN DECISION:**
-     * The indexer/blockchain is the ONLY source of truth. Local database is just a cache.
-     * We ALWAYS clear and rebuild from indexer to prevent showing stale/incorrect data.
+     * **When this runs:**
+     * - `forceFullResync = true` (e.g. Developer options "Force re-sync" button)
+     * - Round 2+: reorg detected, or indexer reports our cached txId is unknown
+     * - NOT on every app launch — that was the old behavior (Phase 8B.3 T1-21 fix).
      *
-     * **Why this is correct:**
-     * 1. Previous approach trusted local DB and showed stale data if sync failed
-     * 2. Users saw balances that didn't exist on blockchain
-     * 3. Now: Clear cache → Sync from indexer → Show only verified data
+     * **What gets cleared:**
+     * - `syncStateManager.lastProcessedTransactionId[address]` → null (replay all)
+     * - `utxoManager` UTXOs for this address
+     * - Migration flag `needs_full_resync`
      *
-     * **Trade-off:**
-     * - Requires re-sync on every app start
-     * - But guarantees we NEVER show incorrect balances
-     * - This matches industry standard wallet behavior
+     * **What DOESN'T get cleared (and shouldn't):**
+     * - Other addresses' state (per-address keying is preserved)
+     * - Dust state (separate repo, separate replay model)
+     * - WalletAddressCache (biometric-gated, orthogonal)
      */
-    private suspend fun checkAndHandleResyncNeeded(address: String) {
+    private suspend fun performFullResync(address: String) {
         val prefs = context.getSharedPreferences("utxo_db_flags", android.content.Context.MODE_PRIVATE)
 
-        // Always clear local cache and sync fresh from indexer
-        // This is the ONLY way to guarantee we show correct balances
-        Log.i(TAG, "🔄 FRESH SYNC: Clearing local cache for $address - will rebuild from indexer")
+        Log.i(TAG, "🔄 FULL RESYNC: Clearing local cache for $address - will rebuild from indexer")
 
         // Clear sync state to replay all transactions
         syncStateManager.clearSyncState(address)
@@ -114,81 +114,93 @@ class SubscriptionManager(
     /**
      * Start subscription for an address with automatic reconnection.
      *
+     * **Incremental by default (Phase 8B.3 T1-21).** Previous behavior wiped the
+     * local UTXO cache and sync state on every subscription start, causing a
+     * visible zero-balance flicker at every app launch. Now the default path
+     * resumes from the last saved `transactionId` — full resync only happens
+     * when [forceFullResync] is true (Developer options) or a later round detects
+     * a reorg / unknown-txId signal from the indexer.
+     *
      * **Flow:**
-     * 1. Get last processed transaction ID from SyncStateManager
-     * 2. Subscribe from that ID (null = start from beginning)
-     * 3. Process each update via UtxoManager
-     * 4. Save progress after each Progress update
-     * 5. On error: retry with exponential backoff
+     * 1. Read saved `lastProcessedTransactionId` from SyncStateManager.
+     * 2. Subscribe from that ID (null = new address, replay from genesis).
+     * 3. Process each update via UtxoManager.
+     * 4. Save progress after each Progress update (throttled).
+     * 5. On error: retry with exponential backoff.
      *
      * **Resumption:**
-     * - First sync: fromTransactionId = null (replay all history)
-     * - Subsequent syncs: fromTransactionId = last saved ID (skip already processed)
+     * - First sync for an address: saved ID is null → replay all history.
+     * - Warm launch: saved ID present → resume from it, no wipe, no flicker.
      *
      * **Reconnection:**
-     * - Network errors: retry with exponential backoff (1s, 2s, 4s, 8s, 16s, 32s max)
-     * - After max retries: emit error state and stop (caller must restart subscription)
-     * - Retryable errors: IOException, connection failures, WebSocket errors
-     * - Non-retryable errors: CancellationException (user cancelled)
+     * - Network errors: retry with exponential backoff (1s, 2s, 4s, 8s, 16s, 32s max).
+     * - After max retries: emit error state and stop (caller must restart subscription).
+     * - Retryable errors: IOException, connection failures, WebSocket errors.
+     * - Non-retryable errors: CancellationException (user cancelled).
      *
-     * @param address Unshielded address to sync
-     * @param skipCacheClear If true, don't clear local UTXO cache before syncing.
-     *        Used during error 115 recovery to preserve UTXOs marked as SPENT by the node.
-     *        Default: false (fresh sync clears cache to prevent stale data).
-     * @return Flow of sync states (Syncing, Synced, Error)
+     * @param address Unshielded address to sync.
+     * @param forceFullResync When true, clear sync state + UTXOs for [address]
+     *        before subscribing, forcing a replay from genesis. Default false
+     *        (incremental). Intended for explicit recovery paths (force-resync
+     *        button, reorg fallback), not normal launches.
+     * @return Flow of sync states (Syncing, Synced, Error).
      */
-    fun startSubscription(address: String, skipCacheClear: Boolean = false): Flow<SyncState> {
-        // NOTE: retryWhen re-creates the flow on each retry, so skipCacheClear is preserved
-        return createSubscriptionFlow(address, skipCacheClear)
-            .retryWhen { cause, attempt ->
-                // Retry all errors except cancellation (user-initiated stop)
-                when {
-                    cause is CancellationException -> {
-                        // User cancelled - don't retry
-                        Log.d(TAG, "Subscription cancelled by user")
-                        false
-                    }
-                    attempt < MAX_RETRY_ATTEMPTS -> {
-                        // Network error or connection failure - retry with exponential backoff
-                        // Catches: IOException, WebSocket errors, connection timeouts, etc.
-                        val delayMs = calculateRetryDelay(attempt)
-                        Log.w(TAG, "Subscription error (${cause.javaClass.simpleName}), retrying in ${delayMs}ms (attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)", cause)
-                        delay(delayMs)
-                        true
-                    }
-                    else -> {
-                        // Max retries reached - stop retrying
-                        Log.e(TAG, "Subscription failed after $attempt attempts: ${cause.message}", cause)
-                        false
+    fun startSubscription(address: String, forceFullResync: Boolean = false): Flow<SyncState> = flow {
+        // One-shot wipe BEFORE entering the retry loop. If we wiped inside
+        // createSubscriptionFlow, every transient WebSocket error → retryWhen
+        // would re-wipe and discard progress already replayed during this
+        // attempt. Running it once out here means "force resync" means exactly
+        // one clean-slate pass, regardless of network flakiness.
+        if (forceFullResync) {
+            performFullResync(address)
+        }
+
+        emitAll(
+            createSubscriptionFlow(address)
+                .retryWhen { cause, attempt ->
+                    // Retry all errors except cancellation (user-initiated stop)
+                    when {
+                        cause is CancellationException -> {
+                            // User cancelled - don't retry
+                            Log.d(TAG, "Subscription cancelled by user")
+                            false
+                        }
+                        attempt < MAX_RETRY_ATTEMPTS -> {
+                            // Network error or connection failure - retry with exponential backoff
+                            // Catches: IOException, WebSocket errors, connection timeouts, etc.
+                            val delayMs = calculateRetryDelay(attempt)
+                            Log.w(TAG, "Subscription error (${cause.javaClass.simpleName}), retrying in ${delayMs}ms (attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)", cause)
+                            delay(delayMs)
+                            true
+                        }
+                        else -> {
+                            // Max retries reached - stop retrying
+                            Log.e(TAG, "Subscription failed after $attempt attempts: ${cause.message}", cause)
+                            false
+                        }
                     }
                 }
-            }
-            .catch { error ->
-                // Emit error state after retries exhausted
-                Log.e(TAG, "Subscription failed permanently", error)
-                emit(SyncState.Error(error.message ?: "Unknown error"))
-            }
+                .catch { error ->
+                    // Emit error state after retries exhausted
+                    Log.e(TAG, "Subscription failed permanently", error)
+                    emit(SyncState.Error(error.message ?: "Unknown error"))
+                }
+        )
     }
 
-    private fun createSubscriptionFlow(address: String, skipCacheClear: Boolean = false): Flow<SyncState> = channelFlow {
+    private fun createSubscriptionFlow(address: String): Flow<SyncState> = channelFlow {
         var processedCount = 0
         var latestTransactionId: Int? = null // Track latest for final save
         var syncTimeoutJob: Job? = null // Job for auto-sync timeout
 
-        // Check if full resync is needed (e.g., after destructive database migration)
-        // SKIP if skipCacheClear=true (used during error 115 recovery to preserve SPENT UTXOs)
-        if (!skipCacheClear) {
-            checkAndHandleResyncNeeded(address)
-        } else {
-            Log.i(TAG, "⚡ INCREMENTAL SYNC: Skipping cache clear for $address (preserving SPENT UTXOs)")
-        }
-
-        // Get resume point before starting subscription
+        // Resume-point lookup. Any wipe that needed to happen was already done
+        // by startSubscription (forceFullResync=true path). Here we simply read
+        // whatever sync state exists and pass it to the indexer.
         val lastId = syncStateManager.getLastProcessedTransactionId(address)
         if (lastId == null) {
-            Log.i(TAG, "🔄 FULL SYNC: Starting subscription for $address from transaction ID: null (will replay ALL history)")
+            Log.i(TAG, "🆕 FIRST SYNC: No saved tx id for $address — subscribing from genesis")
         } else {
-            Log.i(TAG, "⏩ RESUME SYNC: Starting subscription for $address from transaction ID: $lastId")
+            Log.i(TAG, "⏩ INCREMENTAL: Resuming $address from transaction id $lastId")
         }
         send(SyncState.Connecting)
 

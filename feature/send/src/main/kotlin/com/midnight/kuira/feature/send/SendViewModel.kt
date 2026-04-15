@@ -381,9 +381,9 @@ class SendViewModel @Inject constructor(
                 // fee binding, so this check applies to both send paths.
                 ensureProvingKeysDownloaded()
 
-                // Step 2: Quick sync to ensure UTXOs are fresh (prevents error 115)
-                // SKIP if this is a retry - we already synced in syncAndRetry() with skipCacheClear=true
-                // to preserve UTXOs marked SPENT from error 115
+                // Step 2: Quick sync to ensure UTXOs are fresh (prevents error 115).
+                // Skip if this is a retry — syncAndRetry() has already done an
+                // incremental sync that preserved the SPENT markers we need.
                 if (!isRetry) {
                     val syncedOk = quickSyncBeforeSend(fromAddress)
                     if (!syncedOk) {
@@ -991,12 +991,13 @@ class SendViewModel @Inject constructor(
 
                 Log.d(TAG, "Quick sync: Starting subscription for ${params.fromAddress}")
 
-                // Use timeout to prevent getting stuck
-                // IMPORTANT: skipCacheClear=true preserves UTXOs marked as SPENT from error 115
-                // Without this, the sync would clear all UTXOs and rebuild from indexer,
-                // which would restore the stale UTXO that the node already rejected.
+                // Use timeout to prevent getting stuck.
+                // Default is incremental (forceFullResync=false) — we DO want to
+                // preserve the UTXOs the node has marked SPENT from error 115.
+                // A full wipe here would re-fetch the stale UTXO from the indexer
+                // and the retry would fail the same way.
                 val synced = withTimeoutOrNull(QUICK_SYNC_TIMEOUT_MS) {
-                    subscriptionManager.startSubscription(params.fromAddress, skipCacheClear = true)
+                    subscriptionManager.startSubscription(params.fromAddress)
                         .first { state ->
                             Log.d(TAG, "Quick sync state: $state")
                             state is SyncState.Synced

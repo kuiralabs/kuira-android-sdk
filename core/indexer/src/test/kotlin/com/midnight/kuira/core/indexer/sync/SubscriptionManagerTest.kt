@@ -233,6 +233,56 @@ class SubscriptionManagerTest {
     }
 
     /**
+     * Phase 8B.3 T1-21 Round 1: the default launch path must NOT wipe local
+     * state. Previously `checkAndHandleResyncNeeded` cleared sync state and
+     * UTXOs on every subscription start, causing the zero-balance flicker on
+     * every app launch.
+     */
+    @Test
+    fun `default startSubscription does not wipe sync state or UTXOs`() = runTest {
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns emptyFlow()
+
+        // When: default incremental path
+        subscriptionManager.startSubscription(testAddress).toList()
+
+        // Then: neither wipe primitive ran
+        coVerify(exactly = 0) { syncStateManager.clearSyncState(any()) }
+        coVerify(exactly = 0) { utxoManager.clearUtxos(any()) }
+    }
+
+    @Test
+    fun `forceFullResync=true wipes sync state and UTXOs before subscribing`() = runTest {
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } returns emptyFlow()
+
+        subscriptionManager.startSubscription(testAddress, forceFullResync = true).toList()
+
+        coVerify(exactly = 1) { syncStateManager.clearSyncState(testAddress) }
+        coVerify(exactly = 1) { utxoManager.clearUtxos(testAddress) }
+    }
+
+    @Test
+    fun `forceFullResync=true wipes once even with transient retries`() = runTest {
+        // Fail the first collect attempt with a retryable IOException; the retry
+        // must NOT re-run the wipe (that would discard progress already saved
+        // during the first pass).
+        var attempts = 0
+        every { indexerClient.subscribeToUnshieldedTransactions(any(), any()) } answers {
+            attempts++
+            if (attempts == 1) {
+                flow<UnshieldedTransactionUpdate> { throw java.io.IOException("flaky socket") }
+            } else {
+                emptyFlow()
+            }
+        }
+
+        subscriptionManager.startSubscription(testAddress, forceFullResync = true).toList()
+
+        // Wipe ran once; retry reused the already-clean state.
+        coVerify(exactly = 1) { syncStateManager.clearSyncState(testAddress) }
+        coVerify(exactly = 1) { utxoManager.clearUtxos(testAddress) }
+    }
+
+    /**
      * Additional tests covered by integration tests:
      * - Retry logic with exponential backoff (BalanceRepositoryIntegrationTest)
      * - Real WebSocket subscription behavior (BalanceRepositoryIntegrationTest)
