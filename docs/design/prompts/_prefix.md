@@ -34,6 +34,32 @@ Every shipped screen follows this template. New screens MUST match it:
 
 Deviate from this template only with a stated reason.
 
+## AMBIENT STAR BACKGROUND (always present)
+
+Every screen has a subtle star field behind all content. This is the
+brand signature — "light in darkness, stars against void." The AI
+must render it in every wireframe, not leave a flat black background.
+
+Visual description:
+- 25 small white dots scattered randomly across the full screen
+- Dot size: 0.5 to 2.3 dp radius (tiny — barely visible individually)
+- Dot brightness: 30% to 80% white, varying per dot
+- Each dot gently twinkles (sine-wave alpha oscillation, ~1-2 Hz)
+- The field is static in position — dots don't move, they only pulse
+- Overall effect: a quiet, living night sky behind the content
+- In DARK MODE: white dots on Void (0xFF000000)
+- In LIGHT MODE: very faint dark dots on off-white (0xFFF7F7F7) —
+  much subtler than dark mode, barely perceptible, just enough to
+  break the flatness of the white surface
+
+Do NOT make the stars prominent. They are texture, not content. If
+the stars compete with text readability, they are too bright. The
+content must always read clearly over the star field.
+
+In wireframes: render the star field as a subtle dot pattern behind
+all content layers. Even in a low-fidelity wireframe, include a few
+faint dots to signal the texture is present.
+
 ## TOP BAR (every screen with navigation)
 
 ```
