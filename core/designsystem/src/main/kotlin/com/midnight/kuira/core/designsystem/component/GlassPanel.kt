@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
  *   LightBarely token). Opaque values will fully hide stars behind.
  * @param border hairline color — pass palette LightFaint or pass
  *   Color.Transparent to suppress the border.
- * @param cornerRadius default radius-lg (20dp) per the Dusk shapes scale.
+ * @param cornerRadius default radius-md (12dp) per the Dusk shapes rule
+ *   "most components use radius-md". Matches BackupBanner / AddressChip /
+ *   NetworkBadge radii so stacked cards feel consistent.
  * @param contentPadding inner padding. Defaults to space-16.
  */
 @Composable
@@ -39,7 +41,7 @@ fun GlassPanel(
     tint: Color,
     border: Color,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 20.dp,
+    cornerRadius: Dp = 12.dp,
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {

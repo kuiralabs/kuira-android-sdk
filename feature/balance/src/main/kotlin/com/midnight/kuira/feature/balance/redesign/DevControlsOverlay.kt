@@ -37,7 +37,7 @@ fun BalanceWireframeWithDevControls(
     var lightMode by remember { mutableStateOf(false) }
     var modalOpen by remember { mutableStateOf(false) }
 
-    val palette = if (lightMode) DuskPalette.Light else DuskPalette.Dark
+    val palette = if (lightMode) DuskPalette.LightMode else DuskPalette.DarkMode
 
     Box(modifier = Modifier.fillMaxSize()) {
         BalanceWireframe(

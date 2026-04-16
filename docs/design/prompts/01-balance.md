@@ -59,19 +59,20 @@ space-16 (screen horizontal inset throughout)
 
 (if banner present: space-24 · else space-32)
 
-[Hero]
+[GlassPanel — hero]  content-protection: stars hidden behind this zone
   label    "BALANCE"           (type-label-tiny)
   space-20
   headline <format-amount-night> (type-numeric-hero)
   space-4
   detail   "NIGHT · Synced <format-time-relative>"  (type-detail)
 
-space-32
+space-16
 
-[Secondary tokens]
-  DuskBulletLine  "DUST"      · right-aligned  <format-amount-dust> · DUST
-  DuskBulletLine  "SHIELDED"  · right-aligned  <format-amount-night>
-                                               (or "locked — tap to unlock")
+[GlassPanel — secondary tokens]  content-protection: stars hidden behind this zone
+  TokenRow  "DUST"      · right-aligned  <format-amount-dust> · DUST
+  space-8
+  TokenRow  "SHIELDED"  · right-aligned  <format-amount-night>
+                                         (or "locked — tap to unlock")
 
 space-24
 
@@ -207,6 +208,12 @@ Exact strings; do not rewrite.
 - Hero uses `type-numeric-hero` (W200); all other headlines use W300.
 - Every spacing value MUST be a `space-*` token.
 - Every type choice MUST be a `type-*` token.
+- Star-protection policy: numeric balances + fee-relevant amounts sit on
+  opaque content panels (`GlassPanel` with `contentPanel` tint) so the
+  ambient StarField does not reduce legibility. Secondary UI (backup
+  banner, quick action circles, address chip track) may use semi-
+  transparent surfaces (`LightBarely`) because distraction there is
+  acceptable and keeps the screen from feeling over-carded.
 
 ## 11. PRODUCT LOCKED
 
@@ -231,7 +238,8 @@ Exact strings; do not rewrite.
 | `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
 | `BalanceHero`   | Composes label + numeric + detail using the visual language template slots. Numeric uses type-numeric-hero. |
 | `QuickActionCircle` | 48dp circle, bg LightBarely, radius-full. Centered icon-24 in Light. Label below: type-caption in LightMuted, space-8 gap between circle and label. Entire column tappable, 48dp tap target on circle. Inspired by Phantom's home-screen action row — icon circles with text labels underneath. |
-| `AddressChip`   | Segmented control (Unshielded / Shielded), radius-md, track bg LightBarely, space-4 inner padding. Active segment bg `Light` (opposite-pole fill — same rule as DuskPrimaryButton) with text color `Void`. Inactive segment: transparent, label `LightMuted`, address `LightFaint`. Address uses format-address-short in type-mono. Rationale: `VoidElevated` against `LightBarely` gives only ~3% luminance delta in light mode — too subtle for a tab selector. Opposite-pole fill is the strongest dual-channel affordance (fill + text color both invert) and stays within the no-color rule. |
+| `AddressChip`   | Segmented control (Unshielded / Shielded), radius-md, track bg LightBarely, space-4 inner padding. Active segment bg `Light` (opposite-pole fill — same rule as DuskPrimaryButton) with text color `Void`. Inactive segment: transparent, label `LightMuted`, address `LightMuted`. Address uses format-address-short in type-mono. Rationale: `VoidElevated` against `LightBarely` gives only ~3% luminance delta in light mode — too subtle for a tab selector. Opposite-pole fill is the strongest dual-channel affordance (fill + text color both invert) and stays within the no-color rule. Inactive address uses `LightMuted` (not `LightFaint`) because mono address characters at 33% contrast are near-illegible in light mode. |
+| `GlassPanel`    | Content-protection container used to hide the ambient StarField behind critical numeric content. Opaque tint (mode-aware: `VoidElevated` in dark for stronger ~7% lift vs 4% with VoidSoft; `VoidSoft` in light for pure-white elevated surface on F7 bg). radius-md, 1dp `LightFaint` hairline border, space-16 content padding. Applied to: Balance hero panel, Token rows panel. Intentionally NOT applied to Backup banner, QuickActionCircle, or AddressChip track — those are lower-priority surfaces where star-through-surface noise is acceptable and keeps the screen from feeling over-carded. |
 
 ---
 

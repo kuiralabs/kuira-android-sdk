@@ -25,8 +25,22 @@ data class DuskPalette(
     val ConfirmSurface: Color,
     val RejectText: Color,
 ) {
+    /**
+     * Fill color for content panels sitting over the StarField. Picks the
+     * elevation token that gives the strongest perceived lift against the
+     * bg per mode:
+     *   Dark mode  → VoidElevated (#111111, ~7% luminance delta vs #000)
+     *   Light mode → VoidSoft (#FFFFFF, pure white vs #F7F7F7 bg)
+     *
+     * Using a single "VoidSoft" token for both modes gives only a 4%
+     * delta in dark mode — too subtle. This helper picks the right
+     * token so content cards feel appropriately elevated in both modes.
+     */
+    val contentPanel: Color
+        get() = if (this === DarkMode) VoidElevated else VoidSoft
+
     companion object {
-        val Dark = DuskPalette(
+        val DarkMode = DuskPalette(
             Void = Color(0xFF000000),
             VoidSoft = Color(0xFF0A0A0A),
             VoidElevated = Color(0xFF111111),
@@ -42,7 +56,7 @@ data class DuskPalette(
             RejectText = Color(0x66FFFFFF),
         )
 
-        val Light = DuskPalette(
+        val LightMode = DuskPalette(
             Void = Color(0xFFF7F7F7),
             VoidSoft = Color(0xFFFFFFFF),
             VoidElevated = Color(0xFFFAFAFA),

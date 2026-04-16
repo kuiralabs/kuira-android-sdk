@@ -51,7 +51,7 @@ enum class WireframeState { DEFAULT, LOADING_FIRST, SYNCING, ERROR, OFFLINE }
 fun BalanceWireframe(
     state: WireframeState = WireframeState.DEFAULT,
     showBackupBanner: Boolean = true,
-    palette: DuskPalette = DuskPalette.Dark,
+    palette: DuskPalette = DuskPalette.DarkMode,
     onBack: () -> Unit = {},
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
@@ -72,7 +72,7 @@ fun BalanceWireframe(
             // off-white have much less perceptual weight than white dots on
             // pure black. 0.55 puts peak stars around 40% black — visible
             // but below the LightMuted 40% label text so they don't compete.
-            alpha = if (palette == DuskPalette.Light) 0.55f else 1f,
+            alpha = if (palette === DuskPalette.LightMode) 0.55f else 1f,
             starCount = 60,
         )
 
@@ -104,7 +104,7 @@ fun BalanceWireframe(
                 // Hero — wrapped in a glass panel so the numeric hero
                 // doesn't sit directly on noisy stars.
                 GlassPanel(
-                    tint = palette.VoidSoft,
+                    tint = palette.contentPanel,
                     border = palette.LightFaint,
                 ) {
                     BalanceHero(state = state, palette = palette)
@@ -115,7 +115,7 @@ fun BalanceWireframe(
                 // Secondary tokens — their own glass panel.
                 val isLoading = state == WireframeState.LOADING_FIRST
                 GlassPanel(
-                    tint = palette.VoidSoft,
+                    tint = palette.contentPanel,
                     border = palette.LightFaint,
                 ) {
                     TokenRow(
@@ -125,7 +125,7 @@ fun BalanceWireframe(
                         isLoading = isLoading,
                         palette = palette,
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     TokenRow(
                         label = "SHIELDED",
                         value = null,
@@ -431,7 +431,7 @@ private fun AddressChipSection(palette: DuskPalette) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = addresses[index],
-                        color = if (isActive) palette.Void else palette.LightFaint,
+                        color = if (isActive) palette.Void else palette.LightMuted,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.W400,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
