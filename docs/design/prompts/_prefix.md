@@ -11,21 +11,21 @@ wireframe for ONE screen that matches the existing style exactly.
 Every shipped screen follows this template. New screens MUST match it:
 
 ```
-[ambient star background — subtle particle field on Void]
-[content sheet, enters with star-particle materialize animation]
+[DuskScaffold — ambient star background on Void]
+[content sheet, enters with MaterializeEffect]
 
-  LABEL        11sp · letter-spacing 3sp · UPPERCASE · 40% white
-  ─── 20dp gap ───
-  HEADLINE     18–22sp · FontWeight.W300 (light) · 100% white
-  ─── 4dp gap ───
-  DETAIL       13sp · line-height 18sp · 40% white
-  ─── 24 to 48dp gap ───
+  LABEL        type-label-tiny
+  ─── space-20 ───
+  HEADLINE     type-headline-sm OR type-headline-md OR type-numeric-hero
+  ─── space-4 ───
+  DETAIL       type-detail
+  ─── space-24 to space-48 ───
   CONTENT      (screen-specific: inputs, lists, cards, data)
-  ─── 48dp gap ───
-  ACTIONS      full-width primary button (white bg, black text)
-               8dp gap
-               full-width secondary button (10% white bg, white text)
-               — OR horizontal pair: secondary left + primary right —
+  ─── space-48 ───
+  ACTIONS      DuskPrimaryButton (full-width)
+               space-8
+               DuskSecondaryButton (full-width)
+               — OR DuskButtonRow: secondary left + primary right —
 ```
 
 Deviate from this template only with a stated reason.
@@ -58,13 +58,14 @@ No rounded-square or squircle — only circular arcs.
 ## SAFE AREAS
 
 ```
-Top:    status bar height (system) + 56dp top bar = content start
-Bottom: space-24 padding above safe-area-insets.bottom (nav gesture bar)
-Left/Right: space-16 inset (always, on all screens)
+Top:    status bar height (system, not tokenized) + top bar (56dp, not tokenized)
+Bottom: space-24 content padding (tokenized) + system nav inset (not tokenized)
+Left/Right: space-16 content inset (tokenized, always, on all screens)
 ```
 
-These are fixed chrome; they do NOT use space-* tokens in wireframe
-labels. Label them as "safe-area" or "top bar" instead.
+Label system chrome (status bar, nav bar, top bar height) as fixed
+values, NOT as space-* tokens. Content padding between chrome and
+content (space-24, space-16) IS tokenized.
 
 ## PALETTE — DARK MODE (primary)
 
@@ -116,7 +117,7 @@ Cancel / reject text      0x66000000
 ```
 space-4    4dp    tight grouping, inline margins
 space-8    8dp    button gaps, icon-to-text
-space-12  12dp    chip inner padding, small radius
+space-12  12dp    chip inner padding
 space-16  16dp    card padding, SCREEN HORIZONTAL INSET (always)
 space-20  20dp    label→headline gap
 space-24  24dp    section break
@@ -267,19 +268,18 @@ DuskEffect             ambient star background (inside DuskScaffold)
 ToastPill              confirmation pill ("Copied"), bottom safe area, 2s, VoidSoft bg
 ```
 
-## MODES
+## MODES × STATES
 
-Generate every layout in BOTH modes side by side:
+Generate every layout in BOTH modes:
 - Dark (primary): Void bg, Light fg
 - Light (design target): 0xFFF7F7F7 bg, 0xFF000000 fg
 
+The screen body lists which states apply. Ship one layout frame per
+state × mode combination (e.g., 5 states × 2 modes = 10 frames).
+Place dark and light side by side for each state.
+
 If a component looks right in one mode but wrong in the other, the
 component is wrong — not the mode.
-
-## STATES × MODES
-
-The screen body lists which states apply. Ship one layout frame per
-state × mode combination.
 
 ## SECTION SCHEMA PER SCREEN
 
@@ -309,8 +309,13 @@ PRODUCT LOCKED = non-negotiable product logic. Wireframe must reflect it.
 
 - Portrait Android, 412 × 892 dp viewport
 - Paired dark + light frame per state (side by side or separate PNGs)
-- Label every spacing with its space-* token name
-- Label every type choice with its type-* token name
+- Label content spacing with its space-* token name (space-8, space-24, etc.)
+- Label type choices with its type-* token name (type-detail, type-headline-sm, etc.)
+- Label radii with its radius-* token name (radius-md, radius-full, etc.)
+- Fixed chrome dimensions (top bar 56dp, system status bar, nav bar inset) are
+  labeled as-is, NOT as space-* tokens
+- Component-internal spacing below space-4 (e.g., DuskButtonRow 2dp gap) is
+  not tokenized — label as component default
 - Mark 48dp minimum touch-target on all interactive elements
 
 ## DO NOT

@@ -93,7 +93,7 @@ Identical skeleton to `default`. Differences:
 
 Identical to `default`. Differences:
 - Hero detail reads `"NIGHT · Syncing…"` (type-detail, LightSoft)
-- 12dp pulsing dot (color `LightSoft`, motion-fast) inline after the text
+- icon-16 pulsing dot (color LightSoft, motion-fast) inline after the text
 
 ### Layout — `error`
 
@@ -127,7 +127,7 @@ Identical to `default`. Differences:
 | Receive button    | Tap         | Receive screen                                                 |
 | Send button       | Tap         | Send screen                                                    |
 | Settings icon     | Tap         | Settings screen                                                |
-| Error "Retry"     | Tap         | Triggers sync                                                  |
+| Error "Retry"     | Tap         | Triggers sync (error state only)                               |
 
 ## 6. MOTION
 
@@ -164,6 +164,8 @@ Exact strings; do not rewrite.
 - SHIELDED row locked value: `locked — tap to unlock`
 - Backup banner: `Back up your recovery phrase`
 - Error inline: `Could not update balance`
+- Receive button: `Receive`
+- Send button: `Send`
 - Retry text button: `Retry`
 - Copied pill: `Copied`
 
@@ -211,17 +213,17 @@ Exact strings; do not rewrite.
 - Shielded row shows `locked — tap to unlock` if the shielded key is
   not decrypted this session. Decryption is session-scoped, not
   persistent.
-- Network picker in the top bar (tapping NetworkBadge) is **dev-mode
-  only**. Non-dev users see NetworkBadge as read-only.
+- Network picker in the top bar (tapping NetworkBadge) is dev-mode
+  only. Non-dev users see NetworkBadge as read-only.
 
 ## 12. NEW COMPONENTS
 
 | Component       | Shape                                                            |
 |-----------------|------------------------------------------------------------------|
-| `NetworkBadge`  | Pill, height 24dp, padding h-space-8 v-space-4, radius-full, bg `LightBarely`, text `type-label-tiny` in `LightSoft` |
-| `BackupBanner`  | Full-width row, height 48dp, radius-md, bg `LightBarely`. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
-| `BalanceHero`   | Composes label + numeric + detail using the onboarding template slots. Numeric uses `type-numeric-hero`. |
-| `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg `LightBarely`. Active segment bg `VoidElevated`. Shows `format-address-short` in `type-mono`. |
+| `NetworkBadge`  | Pill, height 24dp, horizontal padding space-8, vertical padding space-4, radius-full, bg LightBarely, text type-label-tiny in LightSoft |
+| `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
+| `BalanceHero`   | Composes label + numeric + detail using the onboarding template slots. Numeric uses type-numeric-hero. |
+| `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg LightBarely. Active segment bg VoidElevated. Shows format-address-short in type-mono. |
 
 ---
 
