@@ -59,7 +59,7 @@ space-16 top spacing
 
 [Section: NETWORK]
   SettingsSectionHeader "NETWORK"
-  space-8
+  space-12   (sectioned-list rhythm — see _prefix.md LIST ROWS)
   [GlassPanel — contentPanel tint, LightFaint hairline]
     SettingsRow
       leading icon  icon-24 (Icons.Filled.Language)
@@ -72,11 +72,11 @@ space-16 top spacing
       label         "Last sync"
       right value   "12s ago"        (type-body, LightMuted)
 
-space-24
+space-32   (sectioned-list rhythm — see _prefix.md LIST ROWS)
 
 [Section: SECURITY]
   SettingsSectionHeader "SECURITY"
-  space-8
+  space-12   (sectioned-list rhythm — see _prefix.md LIST ROWS)
   [GlassPanel]
     SettingsRow   icon-24 (Icons.Filled.Key)           label "View recovery phrase"   chevron (biometric gate)
     divider
@@ -84,11 +84,11 @@ space-24
     divider
     DangerRow     icon-24 (Icons.Filled.DeleteForever) label "Wipe wallet"            chevron
 
-space-24
+space-32   (sectioned-list rhythm — see _prefix.md LIST ROWS)
 
 [Section: ABOUT]
   SettingsSectionHeader "ABOUT"
-  space-8
+  space-12   (sectioned-list rhythm — see _prefix.md LIST ROWS)
   [GlassPanel]
     SettingsRow (read-only)  label "Version"  right value "1.0.0"
     divider
@@ -100,7 +100,7 @@ space-24
     divider
     SettingsRow              label "Support"  chevron (opens mailto)
 
-space-24 above safe-area-insets.bottom
+space-24 above safe-area-insets.bottom   (sectioned-list rhythm — see _prefix.md LIST ROWS)
 ```
 
 ### Variant — `default / dev-mode-unlocked`
@@ -111,7 +111,7 @@ SECURITY:
 ```
 [Section: DEVELOPER OPTIONS]
   SettingsSectionHeader "DEVELOPER OPTIONS"
-  space-8
+  space-12   (sectioned-list rhythm — see _prefix.md LIST ROWS)
   [GlassPanel]
     SettingsRow (read-only)  label "Proof server"   right value "Default (local)"
                                                     (placeholder, non-editable in v1.0 first pass)
@@ -120,7 +120,7 @@ SECURITY:
     divider
     SettingsRow (read-only)  label "Build info"     right value "debug · abc123"
 
-space-24
+space-32   (sectioned-list rhythm — inter-section gap to SECURITY)
 ```
 
 ## 5. INTERACTIONS
@@ -203,7 +203,9 @@ Exact strings; do not rewrite.
   - License / GitHub / Support: verb + destination
 - Dynamic type: rows scale up; truncate right-value with ellipsis if needed.
 - Reduce motion: all transitions snap.
-- Touch targets: every row ≥ 48dp tall.
+- Touch targets: every row follows the LIST ROWS standard in `_prefix.md`
+  (56dp minimum, 16dp vertical inner padding). 48dp is the accessibility
+  floor, not the target.
 - Destructive rows (wipe, force resync) have distinct TalkBack announcement prefix (`Destructive action, ...`).
 
 ## 10. VISUAL LOCKED
@@ -217,7 +219,8 @@ Exact strings; do not rewrite.
   confirmation gating (all destructive actions open a
   ConfirmationSheet), not the row's visual weight.
 - Section headers use `type-label-tiny` uppercase letter-spaced.
-- Row heights ≥ 48dp.
+- Row heights follow the LIST ROWS standard in `_prefix.md` (56dp
+  minimum, 16dp vertical inner padding).
 - Dividers are 1dp `LightFaint` hairlines inside the GlassPanel.
 - Every section's rows sit in a `GlassPanel` (`palette.contentPanel`, 1dp LightFaint border, radius-md). Star-protection policy applies to all settings rows — text legibility wins over texture.
 - Every spacing value MUST be a `space-*` token.
@@ -242,7 +245,7 @@ Exact strings; do not rewrite.
 | Component                 | Shape                                                                    |
 |---------------------------|--------------------------------------------------------------------------|
 | `SettingsSectionHeader`   | Uppercase label in `type-label-tiny` (inherits `LightMuted` default color), left-aligned, space-16 horizontal inset, space-8 gap to panel below. |
-| `SettingsRow`             | Full-width row inside a GlassPanel. Height ≥ 48dp. Leading optional `icon-24` (space-12 gap to label). Label `type-body` in `Light`. Two modes governed by a `readOnly: Boolean` param: (a) **navigational** — right-value in `LightSoft`, trailing `icon-16` chevron in `LightMuted`, entire row tappable with `haptic-tap`; (b) **read-only** — right-value in `LightMuted`, no chevron, not tappable. |
+| `SettingsRow`             | Full-width row inside a GlassPanel. Sizing per the LIST ROWS standard in `_prefix.md` (56dp minimum, 16dp vertical inner padding). Leading optional `icon-24` (space-12 gap to label). Label `type-body` in `Light`. Two modes governed by a `readOnly: Boolean` param: (a) **navigational** — right-value in `LightSoft`, trailing `icon-16` chevron in `LightMuted`, entire row tappable with `haptic-tap`; (b) **read-only** — right-value in `LightMuted`, no chevron, not tappable. |
 | `DangerRow`               | SettingsRow variant for destructive actions. Identical typography and colors — no weight changes, no color changes. Distinguished ONLY by a destructive leading icon (trash / delete / warning glyph, `icon-24`, color `Light` like any other icon). Tap always opens a `ConfirmationSheet`. Content description prefixed `Destructive action, `. |
 | `ConfirmationSheet`       | Modal bottom sheet for destructive confirmations. Reuses `DevPortalModal` shell from `core:designsystem.devportal`: drag handle, `VoidElevated` container, 16dp padding. Slots: headline (`type-headline-sm`), body (`type-body` in `LightSoft`), optional typed-challenge field (type-input with placeholder from COPY), `DuskButtonRow` with cancel (secondary) + confirm (primary). Primary button only enables once challenge text matches the expected string (when the sheet specifies one). |
 | `NetworkPicker` sheet     | Modal bottom sheet. Reuses `DevRadioRow` from `core:designsystem.devportal` (the same primitive used by the wireframe dev controls). Mainnet row uses `DevRadioRow` with `enabled = false` and a `type-caption` subtitle `Coming soon` until the `mainnet_enabled` remote flag flips. Heading in `type-label-tiny` per COPY. |

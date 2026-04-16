@@ -86,8 +86,8 @@ private val wireframes = listOf(
         id = "05",
         title = "Settings",
         subtitle = "Network · Security · About · Developer options (hidden)",
-        status = WireframeStatus.PENDING,
-        route = null,
+        status = WireframeStatus.DRAFTING,
+        route = "settings-wireframe",
     ),
     WireframeEntry(
         id = "06",

@@ -199,6 +199,50 @@ These are GLYPH sizes, not tap targets. An icon-only button renders
 an icon-24 glyph centered inside a 48×48dp tap target (the tap
 target is an accessibility rule, not an icon token).
 
+## LIST ROWS (settings, tx history, address book, any scannable list)
+
+Any row in a scannable list follows production-wallet sizing — NOT the
+48dp accessibility floor. 48dp is the minimum a tap target may ever be;
+56dp + 16dp inner padding is where production-wallet lists actually sit
+(Phantom, Rainbow, MetaMask) and where Material 3 ListItem / iOS HIG
+grouped lists land.
+
+```
+Row height           56dp minimum (not 48dp)
+Vertical padding     space-16 inner (16dp)
+Horizontal padding   space-16 inner (16dp)
+Leading icon         icon-24, space-12 gap to label
+Trailing chevron     icon-16 (navigational rows only)
+Divider              1dp LightFaint hairline between rows
+```
+
+Rule: floor the height at 56dp, don't target 48dp. Cramped rows read as
+"dev demo"; 56dp reads as "product."
+
+**Applies to:** Settings rows, tx history rows, address book rows,
+recipient picker rows — any vertically-stacked nav/scan list.
+
+**Does NOT apply to:** data-display rows inside hero cards (e.g.,
+Balance's TokenRow showing DUST balance — those are display widgets,
+not nav primaries, and use their own content-driven heights). Even so,
+any *clickable* row must still honor the 48dp accessibility floor —
+the carve-out is only on the 56dp target, not the 48dp floor.
+
+### Sectioned lists (Settings, Tx history by day, etc.)
+
+Lists composed of multiple named groups use these rhythms — inherited
+from M3 List section spacing and iOS HIG grouped-list "grey gutter":
+
+```
+Section header → panel gap      space-12   (label → GlassPanel)
+Inter-section gap               space-32   (panel → next section header)
+Top-of-list → first header      space-16   (below top bar border)
+Bottom-of-list → nav-inset      space-24   (above system nav bar)
+```
+
+These are targets for new screens. Existing screens may override if
+the override has a stated reason in their `10. VISUAL LOCKED` section.
+
 ## ELEVATION
 
 Three layers. No shadows.
@@ -365,3 +409,28 @@ PRODUCT LOCKED = non-negotiable product logic. Wireframe must reflect it.
 - Show fiat values
 - Show identicons
 - Invent new tokens — use only what's defined above
+
+## REFERENCES (for values defined above)
+
+The tokens and sizing rules above are Kuira-specific, but the floors
+and conventions they enforce trace to canonical mobile-platform
+standards. When an AI agent needs to judge an edge case this prefix
+doesn't cover, default to these sources:
+
+- **Material Design 3** — https://m3.material.io
+  - Touch target 48dp minimum (Accessibility → Touch targets)
+  - ListItem single-line default 56dp height, 16dp inner padding (Components → Lists)
+  - Dynamic type scaling (Foundations → Typography)
+- **Apple Human Interface Guidelines** — https://developer.apple.com/design/human-interface-guidelines
+  - Tap target 44pt × 44pt minimum (Inputs → Layout)
+  - Grouped list row rhythm (~60pt) with generous section gutters (Components → Lists and tables)
+  - Dynamic Type (Foundations → Typography)
+- **Android Material Components (Compose)** — reference implementation
+  of the Material 3 list sizing used here:
+  https://developer.android.com/jetpack/compose/components/list
+
+Kuira tightens these floors where it matters (LIST ROWS = 56dp, not
+48dp) and keeps them where industry consensus is already correct (icon
+scale, dynamic type). Do not loosen a Kuira rule by citing a minimum
+from these references — the prefix is authoritative; the references
+are there to orient, not to override.

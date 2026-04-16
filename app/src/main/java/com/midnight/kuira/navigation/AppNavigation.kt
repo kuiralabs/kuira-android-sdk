@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midnight.kuira.dev.DevPortalScreen
+import com.midnight.kuira.dev.wireframes.settings.SettingsWireframeWithDevControls
 import com.midnight.kuira.feature.balance.BalanceScreen
 import com.midnight.kuira.feature.balance.redesign.BalanceWireframeWithDevControls
 import com.midnight.kuira.feature.dust.DustScreen
@@ -19,6 +20,7 @@ import com.midnight.kuira.feature.send.SendScreen
 sealed class Screen(val route: String) {
     data object DevPortal : Screen("dev-portal")
     data object BalanceWireframe : Screen("balance-wireframe")
+    data object SettingsWireframe : Screen("settings-wireframe")
     data object Balance : Screen("balance")
 
     // Send screen takes an optional mode hint ("unshielded" or "shielded").
@@ -54,6 +56,18 @@ fun AppNavigation(
         // Balance Wireframe (design preview — remove after 8B.1)
         composable(route = Screen.BalanceWireframe.route) {
             BalanceWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Settings Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.SettingsWireframe.route) {
+            SettingsWireframeWithDevControls(
                 onBack = { navController.popBackStack() },
                 onOpenWireframeList = {
                     navController.navigate(Screen.DevPortal.route) {

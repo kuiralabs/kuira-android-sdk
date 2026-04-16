@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -317,11 +318,15 @@ private fun TokenRow(
     isLoading: Boolean = false,
     palette: DuskPalette,
 ) {
+    // Data-display row in a hero card (not a scannable-list primary), but
+    // it's clickable — so it honors the 48dp accessibility floor per
+    // `_prefix.md` LIST ROWS carve-out. The 56dp LIST ROW target is
+    // reserved for nav lists like Settings, not card content rows.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .heightIn(min = 48.dp)
             .clickable { },
     ) {
         Text(

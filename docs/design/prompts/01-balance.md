@@ -197,7 +197,11 @@ Exact strings; do not rewrite.
   scale. All other rows keep single-line; truncate with ellipsis if
   needed.
 - Reduce motion: `MaterializeEffect` snaps to end state.
-- Touch targets: all rows ≥ 48dp. `AddressChip` segments are 48dp tall.
+- Touch targets: all rows ≥ 48dp per `_prefix.md` accessibility floor.
+  `AddressChip` segments are 48dp tall. Card-internal data-display
+  rows (TokenRow) honor the 48dp floor but are exempt from the 56dp
+  LIST ROWS target — they are hero-card content, not scannable-list
+  primaries. See the LIST ROWS carve-out in `_prefix.md`.
 
 ## 10. VISUAL LOCKED
 
@@ -237,6 +241,7 @@ Exact strings; do not rewrite.
 | `NetworkBadge`  | Pill, height 24dp, horizontal padding space-8, vertical padding space-4, radius-full, bg LightBarely, text type-label-tiny in LightSoft |
 | `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
 | `BalanceHero`   | Composes label + numeric + detail using the visual language template slots. Numeric uses type-numeric-hero. |
+| `TokenRow`      | Card-internal data-display row inside the secondary-tokens GlassPanel. Height ≥ 48dp (accessibility floor; clickable row opens Dust / unlock-shielded flows). NOT subject to the 56dp LIST ROWS target — this is hero-card content, not a scannable-list primary (see carve-out in `_prefix.md` LIST ROWS). Layout: bullet dot (LightFaint), space-8, label (`type-body`, Light), — flex —, amount (`type-body`, Light) + optional denomination (`type-caption`, LightMuted) OR `locked — tap to unlock` (`type-detail`, LightMuted). Shimmer block replaces amount when `loading-first`. |
 | `QuickActionCircle` | 48dp circle, bg LightBarely, radius-full. Centered icon-24 in Light. Label below: type-caption in LightMuted, space-8 gap between circle and label. Entire column tappable, 48dp tap target on circle. Inspired by Phantom's home-screen action row — icon circles with text labels underneath. |
 | `AddressChip`   | Segmented control (Unshielded / Shielded), radius-md, track bg LightBarely, space-4 inner padding. Active segment bg `Light` (opposite-pole fill — same rule as DuskPrimaryButton) with text color `Void`. Inactive segment: transparent, label `LightMuted`, address `LightMuted`. Address uses format-address-short in type-mono. Rationale: `VoidElevated` against `LightBarely` gives only ~3% luminance delta in light mode — too subtle for a tab selector. Opposite-pole fill is the strongest dual-channel affordance (fill + text color both invert) and stays within the no-color rule. Inactive address uses `LightMuted` (not `LightFaint`) because mono address characters at 33% contrast are near-illegible in light mode. |
 | `GlassPanel`    | Content-protection container used to hide the ambient StarField behind critical numeric content. Opaque tint (mode-aware: `VoidElevated` in dark for stronger ~7% lift vs 4% with VoidSoft; `VoidSoft` in light for pure-white elevated surface on F7 bg). radius-md, 1dp `LightFaint` hairline border, space-16 content padding. Applied to: Balance hero panel, Token rows panel. Intentionally NOT applied to Backup banner, QuickActionCircle, or AddressChip track — those are lower-priority surfaces where star-through-surface noise is acceptable and keeps the screen from feeling over-carded. |
