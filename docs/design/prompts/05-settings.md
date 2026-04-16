@@ -1,4 +1,4 @@
-# Screen — Settings
+# Screen — Settings (host screen, T1-1)
 
 ## 1. GOAL
 
@@ -13,18 +13,25 @@ destructive actions behind gates. Host screen for T1-1.
 
 ## 3. STATES
 
-| State               | Applies?  | Notes                                       |
-|---------------------|-----------|---------------------------------------------|
-| `default`           | ✓         | Standard settings list                      |
-| `dev-mode-unlocked` | ✓         | Developer Options section revealed (after 7-tap on version) |
-| `loading-first`     | n/a       |                                             |
-| `syncing`           | n/a       |                                             |
-| `empty`             | n/a       |                                             |
-| `no-results`        | n/a       |                                             |
-| `error`             | n/a       |                                             |
-| `offline`           | n/a       |                                             |
-| `pending`           | n/a       |                                             |
-| `success`           | n/a       |                                             |
+| State           | Applies?  | Notes                                       |
+|-----------------|-----------|---------------------------------------------|
+| `default`       | ✓         | Standard settings list                      |
+| `loading-first` | n/a       |                                             |
+| `syncing`       | n/a       |                                             |
+| `empty`         | n/a       |                                             |
+| `no-results`    | n/a       |                                             |
+| `error`         | n/a       |                                             |
+| `offline`       | n/a       |                                             |
+| `pending`       | n/a       |                                             |
+| `success`       | n/a       |                                             |
+
+**Variants** (additional frames on top of `default`, not canonical
+states — the screen adds/removes sections rather than changing its
+core render mode):
+
+- `default / dev-mode-unlocked` — 7-tap on Version row reveals the
+  Developer Options section between NETWORK and SECURITY. Session-
+  scoped; reverts on app restart.
 
 ## 4. LAYOUT
 
@@ -33,35 +40,37 @@ top bar. Each section = header (`type-label-tiny`) + opaque
 `GlassPanel` containing `SettingsRow` entries separated by 1dp
 `LightFaint` dividers.
 
+Material icon names in square brackets (e.g. `Icons.Filled.Language`)
+are the exact AI reference so the wireframe doesn't guess glyphs.
+
 ### Layout — `default`
 
 ```
 [DuskScaffold] — wraps entire screen, ambient StarField
 
 [Top bar] 56dp · bg Void · border-bottom 1dp LightFaint
-  [icon-24 back]
-  "Settings" (type-body, Light)
-  — flex —  (no right-slot actions)
+  [icon-24 back]  (Icons.AutoMirrored.Filled.ArrowBack)
+  "Settings"      (type-body, Light)
+  — flex —        (no right-slot actions)
 
 space-16 (screen horizontal inset throughout)
 
 space-16 top spacing
 
 [Section: NETWORK]
-  SettingsSectionHeader "NETWORK"  (type-label-tiny, LightMuted)
+  SettingsSectionHeader "NETWORK"
   space-8
   [GlassPanel — contentPanel tint, LightFaint hairline]
     SettingsRow
-      leading icon  globe (icon-24)
+      leading icon  icon-24 (Icons.Filled.Language)
       label         "Network"
-      right value   "Preprod"       (type-body, LightSoft)
-      chevron       (dev-mode only)
+      right value   "Preprod"        (type-body, LightSoft)
+      chevron       (icon-16 Icons.AutoMirrored.Filled.ArrowForward, dev-mode only)
     1dp LightFaint divider inside panel
-    SettingsRow
-      leading icon  sync (icon-24)
+    SettingsRow (read-only)
+      leading icon  icon-24 (Icons.Filled.Sync)
       label         "Last sync"
-      right value   "12s ago"       (type-body, LightMuted)
-      no chevron (read-only)
+      right value   "12s ago"        (type-body, LightMuted)
 
 space-24
 
@@ -69,11 +78,11 @@ space-24
   SettingsSectionHeader "SECURITY"
   space-8
   [GlassPanel]
-    SettingsRow      key glyph    "View recovery phrase"        → (biometric)
+    SettingsRow   icon-24 (Icons.Filled.Key)           label "View recovery phrase"   chevron (biometric gate)
     divider
-    SettingsRow      shield       "Test biometric"              →
+    SettingsRow   icon-24 (Icons.Filled.Fingerprint)   label "Test biometric"         chevron
     divider
-    DangerRow        warning glyph "Wipe wallet"                 → (destructive)
+    DangerRow     icon-24 (Icons.Filled.DeleteForever) label "Wipe wallet"            chevron
 
 space-24
 
@@ -81,20 +90,20 @@ space-24
   SettingsSectionHeader "ABOUT"
   space-8
   [GlassPanel]
-    SettingsRow      label "Version"           right value "1.0.0"
+    SettingsRow (read-only)  label "Version"  right value "1.0.0"
     divider
-    SettingsRow      label "Commit"            right value "abc12345" (type-mono)
+    SettingsRow (read-only)  label "Commit"   right value "abc12345" (type-mono)
     divider
-    SettingsRow      label "License"           → (opens browser)
+    SettingsRow              label "License"  chevron (opens browser)
     divider
-    SettingsRow      label "GitHub"            → (opens browser)
+    SettingsRow              label "GitHub"   chevron (opens browser)
     divider
-    SettingsRow      label "Support"           → (opens mailto)
+    SettingsRow              label "Support"  chevron (opens mailto)
 
 space-24 above safe-area-insets.bottom
 ```
 
-### Layout — `dev-mode-unlocked`
+### Variant — `default / dev-mode-unlocked`
 
 Same as `default` plus a new section inserted between NETWORK and
 SECURITY:
@@ -104,11 +113,12 @@ SECURITY:
   SettingsSectionHeader "DEVELOPER OPTIONS"
   space-8
   [GlassPanel]
-    SettingsRow      label "Proof server"     right value "Default (local)"  (placeholder, non-editable in v1.0 first pass)
+    SettingsRow (read-only)  label "Proof server"   right value "Default (local)"
+                                                    (placeholder, non-editable in v1.0 first pass)
     divider
-    SettingsRow      label "Force re-sync"    → (danger styling, triggers full resync)
+    DangerRow                label "Force re-sync"  chevron (destructive, triggers performFullResync)
     divider
-    SettingsRow      label "Build info"       right value "debug · abc123"
+    SettingsRow (read-only)  label "Build info"     right value "debug · abc123"
 
 space-24
 ```
@@ -129,10 +139,11 @@ space-24
 
 ## 6. MOTION
 
-- Entry: `MaterializeEffect` on the first section header.
+- Entry: `MaterializeEffect` on the first section header (`motion-emphasize`).
 - Section-to-section: no animation; static list.
-- Dev-mode unlock: new section slides in from top with `motion-standard`.
-- Network picker sheet: standard Material3 `ModalBottomSheet` slide-up.
+- Dev-mode unlock: new section slides in from top (`motion-standard`).
+- ConfirmationSheet open/close: `motion-standard` slide-up.
+- NetworkPicker sheet open/close: `motion-standard` slide-up.
 - Reduce-motion: all of the above snap to end state.
 
 ## 7. HAPTICS
@@ -148,6 +159,8 @@ space-24
 
 Exact strings; do not rewrite.
 
+### Row labels
+
 - Top bar title: `Settings`
 - Section headers: `NETWORK`, `DEVELOPER OPTIONS`, `SECURITY`, `ABOUT`
 - Network row label: `Network`
@@ -161,9 +174,27 @@ Exact strings; do not rewrite.
 - Build info row label: `Build info`
 - About row labels: `Version`, `Commit`, `License`, `GitHub`, `Support`
 
+### Sheets + toasts
+
+- NetworkPicker sheet heading: `Select network`
+- NetworkPicker mainnet-disabled subtitle: `Coming soon`
+- Biometric test success toast: `Biometric OK`
+- ConfirmationSheet for `Wipe wallet`:
+  - headline: `Wipe wallet?`
+  - body: `This erases your seed, keys, and cached state from this device. You can only restore with your recovery phrase.`
+  - type-challenge prompt: `Type WIPE to confirm`
+  - primary button: `Wipe wallet`
+  - secondary button: `Cancel`
+- ConfirmationSheet for `Force re-sync`:
+  - headline: `Force re-sync?`
+  - body: `This clears cached transactions and re-syncs from the indexer. Takes a few seconds on a warm stack.`
+  - primary button: `Re-sync`
+  - secondary button: `Cancel`
+- Dev-mode unlock toast: `Developer options unlocked`
+
 ## 9. A11Y
 
-- Focus order: back arrow → NETWORK section rows → (DEV OPTIONS if unlocked) → SECURITY rows → ABOUT rows
+- Focus order: back arrow → within each section, top-to-bottom rows → next section. Sequence: NETWORK (Network, Last sync) → (DEV OPTIONS if unlocked: Proof server, Force re-sync, Build info) → SECURITY (View recovery phrase, Test biometric, Wipe wallet) → ABOUT (Version, Commit, License, GitHub, Support). Read-only rows (Last sync, Proof server, Build info, Version, Commit) remain focusable for TalkBack read-out.
 - Content descriptions:
   - back arrow: `Back to balance`
   - Network row: `Current network <name>. <Double tap to change.>` (omit second sentence in non-dev)
@@ -178,7 +209,13 @@ Exact strings; do not rewrite.
 ## 10. VISUAL LOCKED
 
 - Dusk palette only. No red / green / yellow / blue.
-- DangerRow distinguishes via weight + icon, NOT color. Never `Color.Red`.
+- DangerRow distinguishes ONLY via icon choice (destructive glyph:
+  trash, warning, or equivalent) + explicit "destructive" content
+  description for TalkBack. Same type + color tokens as SettingsRow
+  — no weight changes, no color changes, no inverted fill. The
+  "this action is destructive" signal is the icon and the
+  confirmation gating (all destructive actions open a
+  ConfirmationSheet), not the row's visual weight.
 - Section headers use `type-label-tiny` uppercase letter-spaced.
 - Row heights ≥ 48dp.
 - Dividers are 1dp `LightFaint` hairlines inside the GlassPanel.
@@ -204,10 +241,11 @@ Exact strings; do not rewrite.
 
 | Component                 | Shape                                                                    |
 |---------------------------|--------------------------------------------------------------------------|
-| `SettingsSectionHeader`   | Uppercase label in `type-label-tiny`, color `LightMuted`, left-aligned, space-16 horizontal inset, space-8 gap to panel below. |
-| `SettingsRow`             | Full-width row inside a GlassPanel. Height ≥ 48dp. Leading optional `icon-24` (with space-12 gap). Label `type-body` Light. Right-value `type-body` LightSoft (or LightMuted for read-only). Optional trailing `icon-16` chevron `LightMuted`. Entire row tappable. |
-| `DangerRow`               | SettingsRow variant for destructive actions. Label in `Light`, weight unchanged, leading icon weight increased; no color change. Distinguished by `type-body` W400 (heavier than standard W300 row labels). |
-| `NetworkPicker` sheet     | Modal bottom sheet. List of networks with radio row (`DevRadioRow`-like component shared with dev modal). Mainnet row is disabled with a subtitle "coming soon" until `mainnet_enabled` remote flag flips. |
+| `SettingsSectionHeader`   | Uppercase label in `type-label-tiny` (inherits `LightMuted` default color), left-aligned, space-16 horizontal inset, space-8 gap to panel below. |
+| `SettingsRow`             | Full-width row inside a GlassPanel. Height ≥ 48dp. Leading optional `icon-24` (space-12 gap to label). Label `type-body` in `Light`. Two modes governed by a `readOnly: Boolean` param: (a) **navigational** — right-value in `LightSoft`, trailing `icon-16` chevron in `LightMuted`, entire row tappable with `haptic-tap`; (b) **read-only** — right-value in `LightMuted`, no chevron, not tappable. |
+| `DangerRow`               | SettingsRow variant for destructive actions. Identical typography and colors — no weight changes, no color changes. Distinguished ONLY by a destructive leading icon (trash / delete / warning glyph, `icon-24`, color `Light` like any other icon). Tap always opens a `ConfirmationSheet`. Content description prefixed `Destructive action, `. |
+| `ConfirmationSheet`       | Modal bottom sheet for destructive confirmations. Reuses `DevPortalModal` shell from `core:designsystem.devportal`: drag handle, `VoidElevated` container, 16dp padding. Slots: headline (`type-headline-sm`), body (`type-body` in `LightSoft`), optional typed-challenge field (type-input with placeholder from COPY), `DuskButtonRow` with cancel (secondary) + confirm (primary). Primary button only enables once challenge text matches the expected string (when the sheet specifies one). |
+| `NetworkPicker` sheet     | Modal bottom sheet. Reuses `DevRadioRow` from `core:designsystem.devportal` (the same primitive used by the wireframe dev controls). Mainnet row uses `DevRadioRow` with `enabled = false` and a `type-caption` subtitle `Coming soon` until the `mainnet_enabled` remote flag flips. Heading in `type-label-tiny` per COPY. |
 
 ---
 
