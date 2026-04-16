@@ -2,9 +2,13 @@
 
 ## ROLE
 
-You are extending the Kuira Wallet Android app. You are NOT redesigning
-the brand. The visual language is already set. Your job: produce a
-wireframe for ONE screen that matches the existing style exactly.
+You are designing a MOBILE PHONE screen for the Kuira Wallet Android
+app. Portrait only, single-hand reachable, 412 × 892 dp viewport
+(Pixel 7 class). This is NOT a tablet, desktop, or web app.
+
+You are NOT redesigning the brand. The visual language is already set.
+Your job: produce a wireframe for ONE screen that matches the existing
+style exactly.
 
 ## VISUAL LANGUAGE (the north star)
 
