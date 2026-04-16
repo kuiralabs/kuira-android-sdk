@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.midnight.kuira.dev.DevPortalScreen
 import com.midnight.kuira.feature.balance.BalanceScreen
 import com.midnight.kuira.feature.balance.redesign.BalanceWireframeWithDevControls
 import com.midnight.kuira.feature.dust.DustScreen
@@ -16,6 +17,7 @@ import com.midnight.kuira.feature.send.SendMode
 import com.midnight.kuira.feature.send.SendScreen
 
 sealed class Screen(val route: String) {
+    data object DevPortal : Screen("dev-portal")
     data object BalanceWireframe : Screen("balance-wireframe")
     data object Balance : Screen("balance")
 
@@ -40,28 +42,45 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        // TODO: revert to Screen.Balance.route after 8B.1 wireframe review
-        startDestination = Screen.BalanceWireframe.route
+        startDestination = Screen.Balance.route
     ) {
-        // Balance Wireframe (design preview — remove after 8B.1)
-        composable(route = Screen.BalanceWireframe.route) {
-            BalanceWireframeWithDevControls()
+        // Dev Portal — index of wireframes (remove after 8B.1)
+        composable(route = Screen.DevPortal.route) {
+            DevPortalScreen(
+                onOpenWireframe = { route -> navController.navigate(route) },
+            )
         }
 
-        // Balance Screen
-        composable(route = Screen.Balance.route) {
-            BalanceScreen(
-                onNavigateToSend = {
-                    // SendScreen reads the active address from WalletAddressCache
-                    // based on its own mode toggle. Per-mode pre-selection from
-                    // the balance cards is deferred — when wired, pass a SendMode
-                    // through a separate per-mode callback.
-                    navController.navigate(Screen.Send.createRoute())
+        // Balance Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.BalanceWireframe.route) {
+            BalanceWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
                 },
-                onNavigateToDust = { address ->
-                    navController.navigate(Screen.Dust.createRoute(address))
-                }
             )
+        }
+
+        // Balance Screen — with dev-portal FAB overlay (remove FAB after 8B.1)
+        composable(route = Screen.Balance.route) {
+            com.midnight.kuira.dev.BalanceWithDevPortalFab(
+                onOpenDevPortal = { navController.navigate(Screen.DevPortal.route) },
+            ) {
+                BalanceScreen(
+                    onNavigateToSend = {
+                        // SendScreen reads the active address from WalletAddressCache
+                        // based on its own mode toggle. Per-mode pre-selection from
+                        // the balance cards is deferred — when wired, pass a SendMode
+                        // through a separate per-mode callback.
+                        navController.navigate(Screen.Send.createRoute())
+                    },
+                    onNavigateToDust = { address ->
+                        navController.navigate(Screen.Dust.createRoute(address))
+                    }
+                )
+            }
         }
 
         // Send Screen — mode-driven. The optional `mode` query arg is used

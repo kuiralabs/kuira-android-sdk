@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Key
@@ -50,6 +51,7 @@ enum class WireframeState { DEFAULT, LOADING_FIRST, SYNCING, ERROR, OFFLINE }
 fun BalanceWireframe(
     state: WireframeState = WireframeState.DEFAULT,
     showBackupBanner: Boolean = true,
+    onBack: () -> Unit = {},
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
@@ -68,7 +70,7 @@ fun BalanceWireframe(
                 .padding(top = statusBarPadding.calculateTopPadding()),
         ) {
             // Top bar
-            TopBar()
+            TopBar(onBack = onBack)
 
             // Scrollable content
             Column(
@@ -124,7 +126,7 @@ fun BalanceWireframe(
 }
 
 @Composable
-private fun TopBar() {
+private fun TopBar(onBack: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -132,10 +134,19 @@ private fun TopBar() {
             .height(56.dp)
             .padding(horizontal = 16.dp),
     ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back to dev portal",
+            tint = MidnightColors.Light,
+            modifier = Modifier
+                .size(24.dp)
+                .clickable { onBack() },
+        )
+        Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = "KUIRA",
             color = MidnightColors.Light,
-            fontSize = 14.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.W300,
             letterSpacing = 3.sp,
         )
