@@ -30,7 +30,14 @@ Produce one frame per state × mode (so 5 × 2 = 10 frames total).
 ## 4. LAYOUT
 
 Follows the visual language template: label → space-20 → headline →
-space-4 → detail → … → space-48 → actions.
+space-4 → detail → … → content → actions.
+
+Deviation from template: actions are NOT DuskPrimaryButton /
+DuskButtonRow at the bottom. Balance uses a horizontal row of
+`QuickActionCircle` components (icon circles with labels) placed
+directly below the secondary tokens — matching the Phantom wallet
+home-screen pattern. This is a Balance-only deviation; all other
+screens use the standard button pattern.
 
 ### Layout — `default`
 
@@ -68,14 +75,13 @@ space-32
 
 space-24
 
+[Quick actions row]  — horizontally centered, evenly spaced
+  QuickActionCircle  icon: arrow-up     label: "Send"
+  QuickActionCircle  icon: qr-code      label: "Receive"
+
+space-32
+
 [AddressChip]  segmented Unshielded / Shielded · type-mono · copy on tap
-
-space-48
-
-[Action row]
-  DuskButtonRow
-    secondary "Receive"
-    primary   "Send"
 
 space-24 above safe-area-insets.bottom
 ```
@@ -123,8 +129,8 @@ Identical to `default`. Differences:
 | AddressChip seg   | Tap         | Swap active segment                                            |
 | AddressChip seg   | Long-press  | Copy that address · `haptic-select` · `ToastPill "Copied"`     |
 | Backup banner     | Tap         | Recovery phrase view (biometric-gated)                         |
-| Receive button    | Tap         | Receive screen                                                 |
-| Send button       | Tap         | Send screen                                                    |
+| Send circle       | Tap         | Send screen                                                    |
+| Receive circle    | Tap         | Receive screen                                                 |
 | Settings icon     | Tap         | Settings screen                                                |
 | Error "Retry"     | Tap         | Triggers sync (error state only)                               |
 
@@ -165,8 +171,8 @@ Exact strings; do not rewrite.
 - Balance denomination (hero detail): `NIGHT`
 - Backup banner: `Back up your recovery phrase`
 - Error inline: `Could not update balance`
-- Receive button: `Receive`
-- Send button: `Send`
+- Send circle label: `Send`
+- Receive circle label: `Receive`
 - Retry text button: `Retry`
 - Copied pill: `Copied`
 
@@ -174,7 +180,7 @@ Exact strings; do not rewrite.
 
 - Focus order (system back not applicable at home): settings icon →
   NetworkBadge (if tappable in dev mode) → banner (if present) → hero →
-  DUST row → SHIELDED row → AddressChip → Receive → Send
+  DUST row → SHIELDED row → Send circle → Receive circle → AddressChip
 - Content descriptions:
   - settings icon: `Open settings`
   - NetworkBadge: `Current network, <name>`
@@ -184,8 +190,8 @@ Exact strings; do not rewrite.
   - SHIELDED row (locked): `Shielded balance, locked, double tap to unlock`
   - SHIELDED row (value): `<amount> shielded balance`
   - AddressChip: `<segment> address, <truncated>, double tap to copy`
-  - Receive button: `Open receive screen`
-  - Send button: `Send a transaction`
+  - Send circle: `Send a transaction`
+  - Receive circle: `Open receive screen`
 - Dynamic type: `type-numeric-hero` may wrap to two lines at ≥200%
   scale. All other rows keep single-line; truncate with ellipsis if
   needed.
@@ -224,6 +230,7 @@ Exact strings; do not rewrite.
 | `NetworkBadge`  | Pill, height 24dp, horizontal padding space-8, vertical padding space-4, radius-full, bg LightBarely, text type-label-tiny in LightSoft |
 | `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
 | `BalanceHero`   | Composes label + numeric + detail using the visual language template slots. Numeric uses type-numeric-hero. |
+| `QuickActionCircle` | 48dp circle, bg LightBarely, radius-full. Centered icon-24 in Light. Label below: type-caption in LightMuted, space-8 gap between circle and label. Entire column tappable, 48dp tap target on circle. Inspired by Phantom's home-screen action row — icon circles with text labels underneath. |
 | `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg LightBarely. Active segment bg VoidElevated. Shows format-address-short in type-mono. |
 
 ---
