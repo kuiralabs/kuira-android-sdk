@@ -20,13 +20,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 @Composable
 fun QuickActionCircle(
     icon: ImageVector,
     label: String,
     contentDesc: String,
+    palette: DuskPalette,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -39,20 +39,20 @@ fun QuickActionCircle(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MidnightColors.LightBarely)
+                .background(palette.LightBarely)
                 .clickable(onClick = onClick),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MidnightColors.Light,
+                tint = palette.Light,
                 modifier = Modifier.size(24.dp),
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = label,
-            color = MidnightColors.LightMuted,
+            color = palette.LightMuted,
             fontSize = 12.sp,
             fontWeight = FontWeight.W400,
             lineHeight = 16.sp,

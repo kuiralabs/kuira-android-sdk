@@ -143,7 +143,7 @@ fun DevPortalScreen(onOpenWireframe: (route: String) -> Unit) {
             .fillMaxSize()
             .background(MidnightColors.Void),
     ) {
-        StarField(modifier = Modifier.fillMaxSize())
+        StarField(modifier = Modifier.fillMaxSize(), starCount = 60)
 
         Column(
             modifier = Modifier

@@ -19,11 +19,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 @Composable
 fun ShimmerBlock(
     height: Dp,
+    palette: DuskPalette,
     widthFraction: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
@@ -40,9 +40,9 @@ fun ShimmerBlock(
 
     val brush = Brush.linearGradient(
         colors = listOf(
-            MidnightColors.LightBarely,
-            MidnightColors.LightFaint,
-            MidnightColors.LightBarely,
+            palette.LightBarely,
+            palette.LightFaint,
+            palette.LightBarely,
         ),
         start = Offset(offsetX * 300f, 0f),
         end = Offset(offsetX * 300f + 300f, 0f),

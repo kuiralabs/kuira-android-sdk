@@ -95,6 +95,11 @@ fun HorizonGlow(modifier: Modifier = Modifier) {
 @Composable
 fun StarField(
     modifier: Modifier = Modifier,
+    // Star color. Alpha on this color is ignored — `alpha` param controls
+    // max brightness. Dark mode: Color.White (default). Light mode: Color.Black.
+    color: Color = Color.White,
+    // Max brightness cap. Dark mode: 1f (default, yields stars up to ~0.8 α).
+    // Light mode: ~0.25f keeps stars as subtle texture, not competing with text.
     alpha: Float = 1f,
     starCount: Int = 25,
 ) {
@@ -126,7 +131,7 @@ fun StarField(
             val starAlpha = star.baseAlpha * alpha * (0.3f + twinkle * 0.7f)
             val pulseSize = star.size + twinkle * 0.4f
             drawCircle(
-                color = Color.White.copy(alpha = starAlpha),
+                color = color.copy(alpha = starAlpha),
                 radius = pulseSize.dp.toPx(),
                 center = Offset(star.x * size.width, star.y * size.height),
             )

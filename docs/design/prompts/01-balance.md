@@ -231,7 +231,7 @@ Exact strings; do not rewrite.
 | `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
 | `BalanceHero`   | Composes label + numeric + detail using the visual language template slots. Numeric uses type-numeric-hero. |
 | `QuickActionCircle` | 48dp circle, bg LightBarely, radius-full. Centered icon-24 in Light. Label below: type-caption in LightMuted, space-8 gap between circle and label. Entire column tappable, 48dp tap target on circle. Inspired by Phantom's home-screen action row — icon circles with text labels underneath. |
-| `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg LightBarely. Active segment bg VoidElevated. Shows format-address-short in type-mono. |
+| `AddressChip`   | Segmented control (Unshielded / Shielded), radius-md, track bg LightBarely, space-4 inner padding. Active segment bg `Light` (opposite-pole fill — same rule as DuskPrimaryButton) with text color `Void`. Inactive segment: transparent, label `LightMuted`, address `LightFaint`. Address uses format-address-short in type-mono. Rationale: `VoidElevated` against `LightBarely` gives only ~3% luminance delta in light mode — too subtle for a tab selector. Opposite-pole fill is the strongest dual-channel affordance (fill + text color both invert) and stays within the no-color rule. |
 
 ---
 

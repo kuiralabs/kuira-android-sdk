@@ -1,6 +1,7 @@
 package com.midnight.kuira.feature.balance.redesign
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -23,8 +24,8 @@ import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 /**
  * Balance wireframe with dev-portal modal. Tap the FAB → bottom-sheet
- * modal with state switcher + backup banner toggle + a link back to the
- * full wireframe list.
+ * modal with state switcher + backup banner toggle + light/dark toggle +
+ * a link back to the full wireframe list.
  */
 @Composable
 fun BalanceWireframeWithDevControls(
@@ -33,17 +34,23 @@ fun BalanceWireframeWithDevControls(
 ) {
     var state by remember { mutableStateOf(WireframeState.DEFAULT) }
     var showBanner by remember { mutableStateOf(true) }
+    var lightMode by remember { mutableStateOf(false) }
     var modalOpen by remember { mutableStateOf(false) }
+
+    val palette = if (lightMode) DuskPalette.Light else DuskPalette.Dark
 
     Box(modifier = Modifier.fillMaxSize()) {
         BalanceWireframe(
             state = state,
             showBackupBanner = showBanner,
+            palette = palette,
             onBack = onBack,
         )
 
         FloatingActionButton(
             onClick = { modalOpen = true },
+            // FAB keeps dark-mode styling regardless of wireframe palette —
+            // it's dev chrome, not part of the wireframe under review.
             containerColor = MidnightColors.VoidElevated,
             contentColor = MidnightColors.Light,
             modifier = Modifier
@@ -73,11 +80,14 @@ fun BalanceWireframeWithDevControls(
                     }
                 }
 
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.padding(top = 16.dp),
-                )
+                Spacer(modifier = Modifier.padding(top = 16.dp))
 
                 DevStateSection(label = "OPTIONS") {
+                    DevCheckboxRow(
+                        label = "Light mode",
+                        checked = lightMode,
+                        onCheckedChange = { lightMode = it },
+                    )
                     DevCheckboxRow(
                         label = "Backup banner",
                         checked = showBanner,
