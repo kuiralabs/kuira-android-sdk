@@ -30,6 +30,42 @@ Every shipped screen follows this template. New screens MUST match it:
 
 Deviate from this template only with a stated reason.
 
+## TOP BAR (every screen with navigation)
+
+```
+Height: 56dp (fixed platform chrome — not a space-* token)
+Background: Void
+Border-bottom: 1dp LightFaint hairline
+Left slot: icon-24 back arrow (if not home) OR icon-24 app glyph (home)
+Center slot: optional title (type-body, Light)
+Right slot: 1-2 icon-24 actions (48dp tap each)
+```
+
+Home screen (Balance) has no back arrow. All other screens do.
+
+## SHAPES
+
+```
+radius-sm     8dp     small cards, badges
+radius-md    12dp     input fields, chips, banners, most components
+radius-lg    20dp     full-width buttons, FAB-like elements
+radius-full  9999dp   pills (NetworkBadge, ToastPill)
+```
+
+No border-radius token above radius-lg except radius-full.
+No rounded-square or squircle — only circular arcs.
+
+## SAFE AREAS
+
+```
+Top:    status bar height (system) + 56dp top bar = content start
+Bottom: space-24 padding above safe-area-insets.bottom (nav gesture bar)
+Left/Right: space-16 inset (always, on all screens)
+```
+
+These are fixed chrome; they do NOT use space-* tokens in wireframe
+labels. Label them as "safe-area" or "top bar" instead.
+
 ## PALETTE — DARK MODE (primary)
 
 No accent color. No red, green, yellow, blue. Ever. Contrast and
@@ -164,6 +200,7 @@ format-address-short    first 6 chars + … + last 4    (mn_add…f5a2)
 format-address-full     complete bech32m string
 format-amount-night     up to 6 decimals, trailing zeros trimmed, comma thousands
 format-amount-dust      up to 12 decimals, trailing zeros trimmed
+format-amount-specks    integer, comma thousands
 format-hash-short       first 8 + … + last 6          (abc12345…def678)
 format-hash-full        complete hex
 format-time-relative    Just now / 12s ago / 5m ago / 3h ago / 2d ago / Mar 12
@@ -227,6 +264,7 @@ DuskButtonRow          secondary + primary horizontal pair, 2dp gap
 DuskBulletLine         bullet list row for feature/explainer lists
 MaterializeEffect      star-particle intro animation for hero areas
 DuskEffect             ambient star background (inside DuskScaffold)
+ToastPill              confirmation pill ("Copied"), bottom safe area, 2s, VoidSoft bg
 ```
 
 ## MODES

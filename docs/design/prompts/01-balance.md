@@ -3,7 +3,7 @@
 ## 1. GOAL
 
 In under 1s of cold open, the user sees verified NIGHT + DUST + shielded
-balances on the current network and can tap **Receive** or **Send**.
+balances on the current network and can tap Receive or Send.
 
 ## 2. SITEMAP POSITION
 
@@ -35,6 +35,8 @@ detail → … → space-48 → actions`.
 ### Layout — `default`
 
 ```
+[DuskScaffold] — wraps entire screen, provides DuskEffect ambient bg
+
 [Top bar] 56dp · bg Void · border-bottom 1dp LightFaint
   [icon-24 kuira-glyph]  "Kuira" (type-body, Light)
   — flex —
@@ -43,7 +45,7 @@ detail → … → space-48 → actions`.
 space-16 (screen horizontal inset throughout)
 
 [Backup banner]  CONDITIONAL: only if recovery_phrase_viewed == false
-  Height 48dp · bg LightBarely · radius 12dp · full-width (inside insets)
+  Height 48dp · bg LightBarely · radius-md · full-width (inside insets)
   [icon-20 key]  "Back up your recovery phrase" (type-detail, Light)
   — flex —
   [icon-16 chevron, LightMuted]
@@ -75,7 +77,7 @@ space-48
     secondary "Receive"
     primary   "Send"
 
-safe-area bottom inset
+space-24 above safe-area-insets.bottom
 ```
 
 ### Layout — `loading-first`
@@ -216,10 +218,10 @@ Exact strings; do not rewrite.
 
 | Component       | Shape                                                            |
 |-----------------|------------------------------------------------------------------|
-| `NetworkBadge`  | Pill, height 24dp, padding h-8 v-4, radius 12dp, bg `LightBarely`, text `type-label-tiny` in `LightSoft` |
-| `BackupBanner`  | Full-width row, height 48dp, radius 12dp, bg `LightBarely`. Leading icon-20, trailing icon-16, content type-detail. Entire row tappable, 48dp tap. |
+| `NetworkBadge`  | Pill, height 24dp, padding h-space-8 v-space-4, radius-full, bg `LightBarely`, text `type-label-tiny` in `LightSoft` |
+| `BackupBanner`  | Full-width row, height 48dp, radius-md, bg `LightBarely`. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
 | `BalanceHero`   | Composes label + numeric + detail using the onboarding template slots. Numeric uses `type-numeric-hero`. |
-| `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius 12dp, bg `LightBarely`. Active segment bg `VoidElevated`. Shows `format-address-short` in `type-mono`. |
+| `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg `LightBarely`. Active segment bg `VoidElevated`. Shows `format-address-short` in `type-mono`. |
 
 ---
 
