@@ -11,8 +11,8 @@ wireframe for ONE screen that matches the existing style exactly.
 Every shipped screen follows this template. New screens MUST match it:
 
 ```
-[DuskScaffold — ambient star background on Void]
-[content sheet, enters with MaterializeEffect]
+[DuskScaffold — full-screen shell, ambient star background on Void]
+[main content area fades in via MaterializeEffect star-particle animation]
 
   LABEL        type-label-tiny
   ─── space-20 ───
@@ -94,23 +94,32 @@ Cancel / reject text      RejectText        0x66FFFFFF   = LightMuted
 
 Same semantic roles, inverted base. Same alpha values.
 
+Use the SAME token names as dark mode. The agent labels elements with
+the token name (e.g., "bg = Void") regardless of mode — only the
+resolved value changes.
+
 ```
-SEMANTIC ROLE             LIGHT VALUE    NOTE
+TOKEN             LIGHT VALUE    NOTE
 ──────────────────────────────────────────────────
-Primary background        0xFFF7F7F7     off-white so elevated reads as lifted
-Elevated surface          0xFFFFFFFF
-Card surface              0xFFFAFAFA
-Primary fg / icons        0xFF000000
-Secondary text            0xCC000000
-Tertiary / small label    0x66000000
-Separator / disabled      0x33000000
-Input bg / pressed        0x0A000000     4% black (lighter than dark-mode's 10%)
-Star bright               0x33000000     stars quieter on light bg
-Star dim                  0x14000000
-Primary button fill       0xFF000000
-Secondary button fill     0x0A000000
-Cancel / reject text      0x66000000
+Void              0xFFF7F7F7     off-white so elevated reads as lifted
+VoidSoft          0xFFFFFFFF
+VoidElevated      0xFFFAFAFA
+Light             0xFF000000
+LightSoft         0xCC000000
+LightMuted        0x66000000
+LightFaint        0x33000000
+LightBarely       0x0A000000     4% black (lighter than dark-mode's 10%)
+StarBright        0x33000000     stars quieter on light bg
+StarDim           0x14000000
+Confirm           0xFF000000
+ConfirmSurface    0x0A000000
+RejectText        0x66000000
 ```
+
+Button text in light mode: primary button fill (`Confirm`) is dark
+(0xFF000000), so button text uses `Void` (0xFFF7F7F7 — near-white).
+This is the inverse of dark mode where fill is white and text is black.
+The rule: button text is always the opposite-pole token from the fill.
 
 ## SPACING SCALE
 

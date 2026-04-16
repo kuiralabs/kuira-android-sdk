@@ -223,10 +223,10 @@ Exact strings; do not rewrite.
 |-----------------|------------------------------------------------------------------|
 | `NetworkBadge`  | Pill, height 24dp, horizontal padding space-8, vertical padding space-4, radius-full, bg LightBarely, text type-label-tiny in LightSoft |
 | `BackupBanner`  | Full-width row, height 48dp, radius-md, bg LightBarely. Leading icon-20, trailing icon-16, content type-detail in Light. Entire row tappable, 48dp tap target. |
-| `BalanceHero`   | Composes label + numeric + detail using the onboarding template slots. Numeric uses type-numeric-hero. |
+| `BalanceHero`   | Composes label + numeric + detail using the visual language template slots. Numeric uses type-numeric-hero. |
 | `AddressChip`   | Segmented control (Unshielded / Shielded), height 48dp, radius-md, bg LightBarely. Active segment bg VoidElevated. Shows format-address-short in type-mono. |
 
 ---
 
-**End of Balance screen spec.** Ship paired dark + light frames for each
+End of Balance screen spec. Ship paired dark + light frames for each
 state listed above.
