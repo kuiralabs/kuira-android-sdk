@@ -10,11 +10,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midnight.kuira.feature.balance.BalanceScreen
+import com.midnight.kuira.feature.balance.redesign.BalanceWireframeWithDevControls
 import com.midnight.kuira.feature.dust.DustScreen
 import com.midnight.kuira.feature.send.SendMode
 import com.midnight.kuira.feature.send.SendScreen
 
 sealed class Screen(val route: String) {
+    data object BalanceWireframe : Screen("balance-wireframe")
     data object Balance : Screen("balance")
 
     // Send screen takes an optional mode hint ("unshielded" or "shielded").
@@ -38,8 +40,14 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Balance.route
+        // TODO: revert to Screen.Balance.route after 8B.1 wireframe review
+        startDestination = Screen.BalanceWireframe.route
     ) {
+        // Balance Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.BalanceWireframe.route) {
+            BalanceWireframeWithDevControls()
+        }
+
         // Balance Screen
         composable(route = Screen.Balance.route) {
             BalanceScreen(
