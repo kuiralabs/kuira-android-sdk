@@ -223,5 +223,5 @@ Exact strings; do not rewrite.
 
 ---
 
-**End of Balance screen spec.** Ship the paired dark+light frames for
-each state under `docs/design/wireframes/balance/`.
+**End of Balance screen spec.** Ship paired dark + light frames for each
+state listed above.
