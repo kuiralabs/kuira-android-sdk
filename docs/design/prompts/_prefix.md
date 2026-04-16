@@ -154,11 +154,11 @@ icon-16    inline text decorators (chevrons, dots)
 icon-20    list row glyphs, status indicators
 icon-24    top bar actions, inline button leading-icons
 icon-32    hero badges, empty-state accents
-icon-48    minimum interactive footprint (icon-only button tap area)
 ```
 
-Rule: icon-only buttons always have a 48×48dp tap target with the
-icon (usually icon-24) centered inside.
+These are GLYPH sizes, not tap targets. An icon-only button renders
+an icon-24 glyph centered inside a 48×48dp tap target (the tap
+target is an accessibility rule, not an icon token).
 
 ## ELEVATION
 

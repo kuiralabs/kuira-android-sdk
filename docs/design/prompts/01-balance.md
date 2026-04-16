@@ -29,8 +29,8 @@ Produce one frame per state × mode (so 5 × 2 = 10 frames total).
 
 ## 4. LAYOUT
 
-Onboarding template slots: `label → space-20 → headline → space-4 →
-detail → … → space-48 → actions`.
+Follows the visual language template: label → space-20 → headline →
+space-4 → detail → … → space-48 → actions.
 
 ### Layout — `default`
 
@@ -83,22 +83,21 @@ space-24 above safe-area-insets.bottom
 ### Layout — `loading-first`
 
 Identical skeleton to `default`. Differences:
-- Hero numeric: skeleton block, bg `LightBarely`, height matches
-  type-numeric-hero glyph box
-- Hero detail: `"Loading…"` (type-detail, LightMuted)
-- Secondary tokens: skeleton rows
+- Hero numeric: skeleton block, bg `LightBarely`, height matches `type-numeric-hero` glyph box
+- Hero detail: "Loading…" (`type-detail`, `LightMuted`)
+- Secondary tokens: skeleton rows (same `LightBarely` blocks)
 - Banner: hidden (not yet determined if phrase viewed)
 
 ### Layout — `syncing`
 
 Identical to `default`. Differences:
-- Hero detail reads `"NIGHT · Syncing…"` (type-detail, LightSoft)
-- icon-16 pulsing dot (color LightSoft, motion-fast) inline after the text
+- Hero detail reads "NIGHT · Syncing…" (`type-detail`, `LightSoft`)
+- `icon-16` pulsing dot (color `LightSoft`, `motion-fast`) inline after the text
 
 ### Layout — `error`
 
 Identical to `default`. Differences:
-- Hero detail reads `"NIGHT · Sync failed"` (type-detail, LightSoft)
+- Hero detail reads "NIGHT · Sync failed" (`type-detail`, `LightSoft`)
 - Above the action row, inline row:
   ```
   "Could not update balance"  (type-detail, LightMuted)
@@ -109,8 +108,8 @@ Identical to `default`. Differences:
 ### Layout — `offline`
 
 Identical to `default`. Differences:
-- NetworkBadge gains an adjacent `icon-16` offline-dot in LightMuted
-- Hero detail reads `"NIGHT · Offline · showing cached"`
+- `NetworkBadge` gains an adjacent `icon-16` offline-dot in `LightMuted`
+- Hero detail reads "NIGHT · Offline · showing cached" (`type-detail`)
 
 ## 5. INTERACTIONS
 
@@ -131,14 +130,14 @@ Identical to `default`. Differences:
 
 ## 6. MOTION
 
-- **Entry:** `MaterializeEffect` on the hero block (`motion-emphasize`).
+- Entry: `MaterializeEffect` on the hero block (`motion-emphasize`).
   Stars scatter → converge → reveal the numeric.
-- **NetworkBadge:** instant, no animation (it is chrome).
-- **Skeleton → real content:** cross-fade `motion-standard`.
-- **Pull-to-refresh:** Android stock overshoot.
-- **Hero → Tx History navigation:** shared-element ease if feasible;
+- NetworkBadge: instant, no animation (it is chrome).
+- Skeleton → real content: cross-fade (`motion-standard`).
+- Pull-to-refresh: Android stock overshoot.
+- Hero → Tx History navigation: shared-element ease if feasible;
   otherwise `motion-standard` forward slide.
-- **Respect reduce-motion:** snap to end state.
+- Reduce-motion: all of the above snap to end state.
 
 ## 7. HAPTICS
 
@@ -160,8 +159,10 @@ Exact strings; do not rewrite.
 - Hero detail (error): `NIGHT · Sync failed`
 - Hero detail (offline): `NIGHT · Offline · showing cached`
 - DUST row label: `DUST`
+- DUST row denomination (after amount): `DUST`
 - SHIELDED row label: `SHIELDED`
 - SHIELDED row locked value: `locked — tap to unlock`
+- Balance denomination (hero detail): `NIGHT`
 - Backup banner: `Back up your recovery phrase`
 - Error inline: `Could not update balance`
 - Receive button: `Receive`
@@ -171,10 +172,10 @@ Exact strings; do not rewrite.
 
 ## 9. A11Y
 
-- **Focus order (system back not applicable at home):** settings icon →
+- Focus order (system back not applicable at home): settings icon →
   NetworkBadge (if tappable in dev mode) → banner (if present) → hero →
   DUST row → SHIELDED row → AddressChip → Receive → Send
-- **Content descriptions:**
+- Content descriptions:
   - settings icon: `Open settings`
   - NetworkBadge: `Current network, <name>`
   - banner: `Back up your recovery phrase. Double tap to view.`
@@ -185,11 +186,11 @@ Exact strings; do not rewrite.
   - AddressChip: `<segment> address, <truncated>, double tap to copy`
   - Receive button: `Open receive screen`
   - Send button: `Send a transaction`
-- **Dynamic type:** type-numeric-hero may wrap to two lines at ≥200%
+- Dynamic type: `type-numeric-hero` may wrap to two lines at ≥200%
   scale. All other rows keep single-line; truncate with ellipsis if
   needed.
-- **Reduce motion:** `MaterializeEffect` snaps to end state.
-- **Touch targets:** all rows ≥ 48dp. AddressChip segments are 48dp tall.
+- Reduce motion: `MaterializeEffect` snaps to end state.
+- Touch targets: all rows ≥ 48dp. `AddressChip` segments are 48dp tall.
 
 ## 10. VISUAL LOCKED
 
