@@ -324,6 +324,13 @@ Exact strings; do not rewrite.
   `contentPadding = 0.dp` — rows own their own padding.
 - Section rhythm follows `_prefix.md` LIST ROWS (space-12 / space-32).
 - Every spacing value MUST be a `space-*` token.
+- Success state top bar replaces the back arrow with a "Done" text
+  button (`type-body`, `Light`) in the left slot. This deviates from
+  the `_prefix.md` TOP BAR template (icon-24 back arrow). Reason:
+  after a successful submit, "back" is semantically wrong — the user
+  isn't going back, they're dismissing. "Done" matches iOS/Android
+  convention for post-action dismissal and is acknowledged in
+  `_prefix.md` TOP BAR as an accepted left-slot variant.
 
 ## 11. PRODUCT LOCKED
 

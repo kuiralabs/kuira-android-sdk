@@ -65,8 +65,8 @@ space-32
 space-24
 
 [Tab selector]  — reuses AddressChip geometry from Balance
-  segment-1  "Unshielded"  (active: opposite-pole fill)
-  segment-2  "Shielded"
+  segment-1  "UNSHIELDED"  (active: opposite-pole fill)
+  segment-2  "SHIELDED"
 
 space-32
 
@@ -128,7 +128,7 @@ Exact strings; do not rewrite.
 
 - Top bar title: `Receive`
 - Header: `Receive NIGHT on Preprod` (network name from runtime)
-- Tab labels: `Unshielded` / `Shielded`
+- Tab labels: `UNSHIELDED` / `SHIELDED`
 - Action pills: `Copy`, `Share`, `Expand`
 
 ### Toasts

@@ -422,6 +422,10 @@ Exact strings; do not rewrite.
   so it rides above the system keyboard on Android.
 - Screen 2b: "Next" button at the bottom must also stay above the
   keyboard — same `imePadding()` approach.
+- Screen 2b: `space-24` gap between the mode badge and the TO section
+  header is intentionally tighter than the `space-32` inter-section
+  standard. The badge is a standalone label, not a section panel — it
+  doesn't carry the "grey gutter" weight of a panel-to-header gap.
 - Screen 2c top bar uses a text button ("Review") in the right slot
   instead of an `icon-24` action. This deviates from the `_prefix.md`
   TOP BAR template. Reason: the hero screen fills the viewport with
