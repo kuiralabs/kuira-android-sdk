@@ -45,9 +45,17 @@ fun SettingsSectionHeader(
 }
 
 /**
- * Row inside a GlassPanel section. [readOnly] = true drops the chevron
- * and dims the right-value to `LightMuted`. Tapping a read-only row is
- * a no-op.
+ * Row inside a GlassPanel section.
+ *
+ * [readOnly] controls visual treatment only: `true` dims the right-value
+ * to `LightMuted` and drops the default chevron. Interaction is governed
+ * by whether a [trailingIcon] is provided — a read-only-looking row can
+ * still be actionable (e.g., Send's FROM address row copies on tap).
+ *
+ * [trailingIcon] overrides the default trailing slot:
+ *  - `null` + nav (`!readOnly`)       → default chevron (tap navigates)
+ *  - `null` + read-only               → no trailing, no tap
+ *  - explicit + either mode           → custom icon (tap fires `onClick`)
  */
 @Composable
 fun SettingsRow(
@@ -58,11 +66,19 @@ fun SettingsRow(
     rightValue: String? = null,
     rightValueMono: Boolean = false,
     readOnly: Boolean = false,
+    trailingIcon: ImageVector? = null,
     contentDesc: String? = null,
     onClick: () -> Unit = {},
 ) {
-    val clickModifier = if (readOnly) Modifier else Modifier.clickable(onClick = onClick)
+    // Row is clickable when it's a nav row OR when an explicit trailing
+    // action is present — so FROM-style rows (readOnly-looking + copy
+    // icon) remain tappable.
+    val isClickable = !readOnly || trailingIcon != null
+    val clickModifier = if (isClickable) Modifier.clickable(onClick = onClick) else Modifier
     val rightValueColor = if (readOnly) palette.LightMuted else palette.LightSoft
+    // Explicit trailingIcon wins; otherwise chevron on nav rows; otherwise nothing.
+    val resolvedTrailing: ImageVector? = trailingIcon
+        ?: if (!readOnly) Icons.AutoMirrored.Filled.ArrowForward else null
 
     // Row sizing follows Material 3 ListItem single-line defaults (56dp min,
     // 16dp inner padding) and iOS HIG grouped-list rhythm (~60pt rows). The
@@ -107,10 +123,10 @@ fun SettingsRow(
                 fontFamily = if (rightValueMono) FontFamily.Monospace else FontFamily.Default,
             )
         }
-        if (!readOnly) {
+        if (resolvedTrailing != null) {
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = resolvedTrailing,
                 contentDescription = null,
                 tint = palette.LightMuted,
                 modifier = Modifier.size(16.dp),

@@ -24,6 +24,7 @@ data class DuskPalette(
     val Confirm: Color,
     val ConfirmSurface: Color,
     val RejectText: Color,
+    val ErrorText: Color,
 ) {
     /**
      * Fill color for content panels sitting over the StarField. Picks the
@@ -54,6 +55,7 @@ data class DuskPalette(
             Confirm = Color(0xFFFFFFFF),
             ConfirmSurface = Color(0x1AFFFFFF),
             RejectText = Color(0x66FFFFFF),
+            ErrorText = Color(0xFFFF4444),
         )
 
         val LightMode = DuskPalette(
@@ -71,6 +73,7 @@ data class DuskPalette(
             // Button text on Confirm fill = opposite-pole token (Void in light mode).
             ConfirmSurface = Color(0x0A000000),
             RejectText = Color(0x66000000),
+            ErrorText = Color(0xFFCC0000), // darker red for contrast on light bg
         )
     }
 }

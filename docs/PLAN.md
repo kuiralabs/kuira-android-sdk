@@ -4,7 +4,7 @@
 **Total Invested:** ~330h across completed phases
 **Status:** Phases 1–6 ✅ | Phase 8A (Auth & Onboarding) ✅ | **Phase 8B (Productization) 🔧 Active**
 
-**Last Updated:** 2026-04-13
+**Last Updated:** 2026-04-16
 
 ## Implementation Strategy
 
@@ -26,6 +26,7 @@
 12. 🔧 **Phase 8B**: Wallet Productization (est ~180–230h) — **see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`** for the full feature matrix and decisions log. Scope: Settings + View recovery phrase + Tx history + Receive QR + `midnight:` URI scheme + Send confirmation screen + Dusk L3 redesign everywhere + App icon + Firebase (Remote Config + Crashlytics) + R8 enablement + Play Store listing + closed-beta testing gate + MCP Bridge seed (minimal Agent Runtime). Ships v1.0 as "first Midnight wallet on Android, MCP-compatible" targeting Preprod testnet.
 13. ⏭️ **Phase 8C**: SDK GA release (est ~60–80h) — `com.midnight.kuira:compact-engine` public API audit, KDoc, semver, Maven Central GA. Alpha (`0.x.0-alphaN`) ships parallel to 8B per Q4 hybrid decision.
 14. ⏭️ **Phase 7**: Agent Runtime (est ~80–120h) — full five-pillar runtime (Agent Mode background service, Policy Engine, x402 Handler, MCP Bridge, Agent Registration). Ships as Kuira v1.1 alongside **CipherDefense** companion game as the canonical live demo of "first agent-native wallet on Midnight".
+15. 🔬 **Phase 9**: Privacy-Preserving Spendability Indexer (research + prototype, est — scoped after discovery spike) — eliminate the ~90s cold-sync wait by building a PIR-based (or PIR-adjacent) privacy-preserving indexer for Midnight. **Ecosystem-level initiative, not Kuira-only** — benefits every Midnight wallet and any dApp needing fast spendability signals (especially agents doing x402 payments). Inspired by `valargroup/spendability-pir` (Zcash prototype) + `zodl-ios` PR #32. Open-source outcome targeted: `midnight-spendability-indexer`. Queued post-v1.1.
 
 ---
 
@@ -47,8 +48,9 @@
 | **Phase 8B: Productization (v1.0 ship)** | Settings + tx history + receive QR + URI scheme + L3 Dusk redesign + Firebase + R8 + MCP seed + incremental UTXO sync + Play Store submission. See [`WALLET_PRODUCTIZATION_PLAN.md`](planning/WALLET_PRODUCTIZATION_PLAN.md) | est ~188-242h | 🔧 Active |
 | **Phase 8C: SDK GA** | `core:compact-engine` Maven Central release, public API audit, semver | est ~60-80h | ⏸️ Planned (alpha ships parallel to 8B) |
 | **Phase 7: Agent Runtime (v1.1)** | Full 5-pillar runtime (Agent Mode, Policy Engine, x402, MCP Bridge, Agent Registration) + CipherDefense co-launch | est ~80-120h | ⏸️ Planned |
+| **Phase 9: Spendability Indexer (research)** | Privacy-preserving indexer for Midnight (PIR or equivalent) → instant spend UX, ecosystem-level infra | est — research first | 🔬 Queued post-v1.1 |
 
-**Invested:** ~365h | **Remaining to v1.0 (8B only):** ~188-242h | **Remaining to v1.1 (+ 8C + Phase 7):** ~328-442h
+**Invested:** ~365h | **Remaining to v1.0 (8B only):** ~188-242h | **Remaining to v1.1 (+ 8C + Phase 7):** ~328-442h | **Phase 9:** scoped after discovery spike
 
 ### Phase 5 Summary (Complete)
 
@@ -1165,6 +1167,53 @@ feature/dapp/                          # New feature module
 - [ ] Transaction history
 - [ ] Settings & security
 - [ ] App icon & branding
+
+---
+
+## Phase 9: Privacy-Preserving Spendability Indexer (Research + Prototype)
+
+**Goal:** Eliminate Kuira's ~90s cold-sync wait (driven by global zswap + dust event replay) by introducing a **privacy-preserving indexer for Midnight** — a service that holds global chain state and answers wallet queries without learning what was asked.
+
+**Status:** 🔬 Research track, queued post-v1.1. **Ecosystem-level initiative, not Kuira-only** — benefits every Midnight wallet and any dApp that needs fast spendability signals (agents doing x402 payments, swap UIs, checkout flows). Open-source target: `midnight-spendability-indexer`.
+
+### Why this matters beyond Kuira
+
+Public-chain wallets got instant startup UX around 2015 via centralized indexers (Etherscan, The Graph, Alchemy) — fine because public addresses leak nothing new. Privacy chains couldn't adopt the same pattern: querying "notes for viewing key X" would deanonymize the wallet. So privacy wallets stuck with client-side full scan. Single-server PIR (SimplePIR, YPIR) became practical ~2022–2024, and `valargroup/spendability-pir` + `zodl-ios` PR #32 are the first real consumer application — for Zcash. **Midnight has no equivalent today.** Whoever builds it unlocks instant-spend UX across the ecosystem and sets a precedent for agent-native privacy wallets.
+
+### Strategic alignment with Phase 7
+
+Kuira v1.1 positions as "first agent-native wallet on Midnight." Agent-native workflows (x402 auto-payments, automated trades) cannot tolerate a 90-second wait on cold start. Solving this is strategically aligned with the v1.1 narrative and differentiates the Midnight ecosystem broadly — not just our wallet.
+
+### Research questions (not a commitment to build)
+
+- **Primitive fit:** Do Midnight zswap tree primitives (hash function, depth, shard geometry) match the Orchard-based decomposition used by valargroup's prototype?
+- **Reusability:** The generic bucket / hash-table parts of `hashtable-pir` look ~90% protocol-agnostic. Confirm by porting to Midnight nullifier format.
+- **SDK gaps:** PIR integration requires new FFI primitives in `midnight-ledger` (`check_nullifier_spent`, `inject_witness_for_coin`). Upstream conversation with Midnight Labs required.
+- **Dust:** Dust sync slowness is orthogonal to PIR (time-phase progression, not Merkle witnesses). Parallel mechanism needed — or a different approach entirely.
+- **Alternatives:** TEE-based (SGX enclave), MPC across non-colluding servers, ORAM. PIR is currently the leader on simplicity + no-trust-assumptions — confirm by evaluation.
+- **Operator model:** Single-operator, multi-operator coalition, or self-hostable? Funding source for the service long-term?
+
+### Cheaper optimizations to evaluate first
+
+Before committing to PIR, profile whether simpler wins close the gap:
+- Rust-side optimization (batching / memoization) of `dust_replay_events` — current bottleneck.
+- Background sync with a skeleton spendability UI — most users don't send in the first 90 seconds.
+- View-key-filtered event subscriptions at the indexer — if Midnight Labs will add it, this does ~80% of PIR's work without the PIR math. Ecosystem ask worth filing.
+
+If these recover ≥60s of cold-start time, PIR may not be justified. If not, PIR becomes the clear next step.
+
+### Outcomes
+
+- **Research doc:** Midnight-to-Orchard primitive mapping; go/no-go recommendation.
+- **Prototype (if go):** `midnight-spendability-indexer` server + Kotlin client integration in Kuira.
+- **Upstream PRs:** FFI additions to `midnight-ledger`; indexer changes if pursued.
+- **Ecosystem positioning:** Paper or blog post — "first privacy-preserving indexer for Midnight."
+
+### References
+
+- `valargroup/spendability-pir` — Zcash PIR prototype, MIT-licensed
+- `valargroup/zodl-ios` PR #32 — iOS wallet integration pattern
+- `valargroup/zcash-swift-wallet-sdk` PR #15 + `valargroup/librustzcash` PR #13 — SDK-side changes the wallet integration depends on
 
 ---
 

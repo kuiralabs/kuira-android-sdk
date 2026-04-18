@@ -67,8 +67,11 @@ Height: 56dp (fixed platform chrome — not a space-* token)
 Background: Void
 Border-bottom: 1dp LightFaint hairline
 Left slot: icon-24 back arrow (if not home) OR icon-24 app glyph (home)
+             Success state may replace arrow with "Done" text (type-body, Light)
 Center slot: optional title (type-body, Light)
 Right slot: 1-2 icon-24 actions (48dp tap each)
+             Hero screens may use a text button (e.g. "Review") instead —
+             state the deviation reason in §10 VISUAL LOCKED
 ```
 
 Home screen (Balance) has no back arrow. All other screens do.
@@ -99,8 +102,10 @@ content (space-24, space-16) IS tokenized.
 
 ## PALETTE — DARK MODE (primary)
 
-No accent color. No red, green, yellow, blue. Ever. Contrast and
-weight carry meaning.
+No accent color for hierarchy or decoration. Contrast and weight
+carry meaning. One exception: `ErrorText` is reserved for financial
+danger signals — the user is about to lose money or has typed an
+impossible amount. No green, yellow, blue. Ever.
 
 ```
 SEMANTIC ROLE             TOKEN             ARGB         NOTE
@@ -118,6 +123,7 @@ Star dim                  StarDim           0x33FFFFFF   = LightFaint
 Primary button fill       Confirm           0xFFFFFFFF   = Light
 Secondary button fill     ConfirmSurface    0x1AFFFFFF   = LightBarely
 Cancel / reject text      RejectText        0x66FFFFFF   = LightMuted
+Financial danger          ErrorText         0xFFFF4444   red — see rules below
 ```
 
 ## PALETTE — LIGHT MODE (design target)
@@ -144,7 +150,31 @@ StarDim           0x14000000
 Confirm           0xFF000000
 ConfirmSurface    0x0A000000
 RejectText        0x66000000
+ErrorText         0xFFCC0000     darker red on light bg for contrast
 ```
+
+### `ErrorText` usage rules
+
+`ErrorText` is the ONLY color token in the palette. It exists because
+financial safety signals must be unmistakable — dimming to `LightMuted`
+is ambiguous (could mean loading, disabled, or low emphasis).
+
+**Where it applies:**
+- Amount hero number when amount > available balance
+- Amount error caption ("Insufficient balance")
+- Destructive confirmation highlights (e.g., "WIPE" challenge text)
+- Insufficient-fee warnings on review/summary screens
+
+**Where it does NOT apply:**
+- Buttons (still `Confirm` / `ConfirmSurface` opposite-pole)
+- Input borders (still `LightFaint` → `Light` opacity flip)
+- General form validation (wrong address prefix = `LightMuted` caption,
+  not `ErrorText` — that's a "fix this" hint, not a danger signal)
+- Icons, badges, or decorative elements
+- Success states (no green — check glyph in `Light` + headline is enough)
+
+**The principle:** color only for financial danger. Everything else
+uses contrast and weight.
 
 Button text in light mode: primary button fill (`Confirm`) is dark
 (0xFF000000), so button text uses `Void` (0xFFF7F7F7 — near-white).
@@ -236,7 +266,9 @@ from M3 List section spacing and iOS HIG grouped-list "grey gutter":
 ```
 Section header → panel gap      space-12   (label → GlassPanel)
 Inter-section gap               space-32   (panel → next section header)
-Top-of-list → first header      space-16   (below top bar border)
+Top-of-list → first header      space-16 to space-32 (space-16 for dense
+                                 lists like Settings; space-32 for hero or
+                                 form screens like Send — more breathing room)
 Bottom-of-list → nav-inset      space-24   (above system nav bar)
 ```
 
@@ -275,7 +307,8 @@ haptic-select    long-press      long-press actions, selection changes
 haptic-confirm   confirmation    biometric success, tx submitted
 ```
 
-No "error" or "warning" haptic. Same principle as no accent color.
+No "error" or "warning" haptic. Failure is signaled visually
+(ErrorCard + `haptic-tap`), not through a distinct haptic pattern.
 
 ## DATA FORMATTING
 
@@ -284,7 +317,7 @@ format-address-short    first 6 chars + … + last 4    (mn_add…f5a2)
 format-address-full     complete bech32m string
 format-amount-night     up to 6 decimals, trailing zeros trimmed, comma thousands
 format-amount-dust      up to 12 decimals, trailing zeros trimmed
-format-amount-specks    integer, comma thousands
+format-amount-stars     integer, comma thousands
 format-hash-short       first 8 + … + last 6          (abc12345…def678)
 format-hash-full        complete hex
 format-time-relative    Just now / 12s ago / 5m ago / 3h ago / 2d ago / Mar 12
@@ -340,16 +373,44 @@ Screen-record block    FLAG_SECURE on recovery phrase view only
 
 ## EXISTING COMPONENTS (do not duplicate)
 
+### Core (in `core:designsystem`, available to all modules)
+
 ```
 DuskScaffold           full-screen shell with ambient star background
-DuskPrimaryButton      filled (white bg / black text), full-width default
-DuskSecondaryButton    10% white bg / white text, full-width default
+DuskPrimaryButton      filled (Confirm bg / Void text), full-width default
+                       NOTE: hardcodes MidnightColors (dark mode only).
+                       Use DuskPrimaryButtonPaletted for light-mode wireframes.
+DuskSecondaryButton    ConfirmSurface bg / RejectText text, full-width
 DuskButtonRow          secondary + primary horizontal pair, 2dp gap
 DuskBulletLine         bullet list row for feature/explainer lists
 MaterializeEffect      star-particle intro animation for hero areas
 DuskEffect             ambient star background (inside DuskScaffold)
 ToastPill              confirmation pill ("Copied"), bottom safe area, 2s, VoidSoft bg
+GlassPanel             content-protection container, opaque tint (contentPanel),
+                       1dp LightFaint border, radius-md. Defined in 01-balance §12.
 ```
+
+### Palette-aware (wireframe-scoped, promote to core in T1-8)
+
+```
+DuskPrimaryButtonPaletted   same as DuskPrimaryButton but takes a DuskPalette
+                            param for correct rendering in both modes
+DuskSecondaryButtonPaletted same
+DuskButtonRowPaletted       same
+```
+
+### Screen-defined (check individual screen specs §12)
+
+Each screen spec defines its own components in §12 NEW COMPONENTS.
+Before inventing a new component, check whether an existing screen
+already defines one with the right shape:
+
+- **01-balance §12:** NetworkBadge, BackupBanner, BalanceHero, TokenRow,
+  QuickActionCircle, AddressChip
+- **02-send §12:** TokenModeCard, AmountHeroInput, RecipientChip
+- **03-send-confirmation §12:** StepIndicator, ErrorCard
+- **05-settings §12:** SettingsSectionHeader, SettingsRow (reused across
+  multiple screens), DangerRow, ConfirmationSheet, NetworkPicker
 
 ## MODES × STATES
 
@@ -403,10 +464,14 @@ PRODUCT LOCKED = non-negotiable product logic. Wireframe must reflect it.
 
 ## DO NOT
 
-- Introduce color (red / green / yellow / blue)
+- Introduce color beyond `ErrorText` — no green, yellow, blue. Red
+  is reserved for financial danger signals only (see `ErrorText` rules)
 - Use shadows (elevation is Void → VoidSoft → VoidElevated)
 - Use bold (W700+)
-- Show fiat values
+- Show fiat values on balance or history screens. Fiat conversion is
+  allowed ONLY on the amount entry screen (Send 2c) as a secondary
+  denomination swap (NIGHT ↔ USD). The USD figure is a convenience
+  hint, not a valuation claim.
 - Show identicons
 - Invent new tokens — use only what's defined above
 

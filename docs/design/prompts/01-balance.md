@@ -205,7 +205,10 @@ Exact strings; do not rewrite.
 
 ## 10. VISUAL LOCKED
 
-- Dusk palette only. No red / green / yellow / blue anywhere.
+- Dusk palette only. No accent color for hierarchy or decoration.
+  `ErrorText` is the only color token — see `_prefix.md` palette
+  rules. Balance does not use `ErrorText` (no financial amount
+  input on this screen).
 - Backup banner uses `LightBarely` bg + weight — NOT red.
 - No fiat values anywhere.
 - No accent icons on balance numbers (no "↑" on the hero).

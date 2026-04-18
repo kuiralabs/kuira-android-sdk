@@ -210,7 +210,10 @@ Exact strings; do not rewrite.
 
 ## 10. VISUAL LOCKED
 
-- Dusk palette only. No red / green / yellow / blue.
+- Dusk palette only. No accent color for hierarchy or decoration.
+  `ErrorText` is the only color token — see `_prefix.md` palette
+  rules. Settings uses `ErrorText` only on destructive confirmation
+  challenges (e.g., "WIPE" typed text in the ConfirmationSheet).
 - DangerRow distinguishes ONLY via icon choice (destructive glyph:
   trash, warning, or equivalent) + explicit "destructive" content
   description for TalkBack. Same type + color tokens as SettingsRow
@@ -244,8 +247,8 @@ Exact strings; do not rewrite.
 
 | Component                 | Shape                                                                    |
 |---------------------------|--------------------------------------------------------------------------|
-| `SettingsSectionHeader`   | Uppercase label in `type-label-tiny` (inherits `LightMuted` default color), left-aligned, space-16 horizontal inset, space-8 gap to panel below. |
-| `SettingsRow`             | Full-width row inside a GlassPanel. Sizing per the LIST ROWS standard in `_prefix.md` (56dp minimum, 16dp vertical inner padding). Leading optional `icon-24` (space-12 gap to label). Label `type-body` in `Light`. Two modes governed by a `readOnly: Boolean` param: (a) **navigational** — right-value in `LightSoft`, trailing `icon-16` chevron in `LightMuted`, entire row tappable with `haptic-tap`; (b) **read-only** — right-value in `LightMuted`, no chevron, not tappable. |
+| `SettingsSectionHeader`   | Uppercase label in `type-label-tiny` (inherits `LightMuted` default color), left-aligned, space-16 horizontal inset, `space-12` gap to panel below (sectioned-list rhythm per `_prefix.md` LIST ROWS). |
+| `SettingsRow`             | Full-width row inside a GlassPanel. Sizing per the LIST ROWS standard in `_prefix.md` (56dp minimum, 16dp vertical inner padding). Leading optional `icon-24` (space-12 gap to label). Label `type-body` in `Light`. **`readOnly: Boolean`** controls visual treatment only: `true` dims the right-value to `LightMuted` and drops the default chevron. **`trailingIcon: ImageVector?`** (default `null`) overrides the default trailing slot. Interaction rules: `null` + nav (`!readOnly`) shows the default `icon-16` chevron in `LightMuted`; `null` + read-only shows nothing and the row is not tappable; an explicit `trailingIcon` (nav or read-only) shows that icon in `LightMuted` and makes the row tappable with `haptic-tap`. This lets a read-only-looking row still be actionable (e.g., Send's FROM address row copies on tap — `readOnly = true, trailingIcon = Icons.Filled.ContentCopy`). |
 | `DangerRow`               | SettingsRow variant for destructive actions. Identical typography and colors — no weight changes, no color changes. Distinguished ONLY by a destructive leading icon (trash / delete / warning glyph, `icon-24`, color `Light` like any other icon). Tap always opens a `ConfirmationSheet`. Content description prefixed `Destructive action, `. |
 | `ConfirmationSheet`       | Modal bottom sheet for destructive confirmations. Reuses `DevPortalModal` shell from `core:designsystem.devportal`: drag handle, `VoidElevated` container, 16dp padding. Slots: headline (`type-headline-sm`), body (`type-body` in `LightSoft`), optional typed-challenge field (type-input with placeholder from COPY), `DuskButtonRow` with cancel (secondary) + confirm (primary). Primary button only enables once challenge text matches the expected string (when the sheet specifies one). |
 | `NetworkPicker` sheet     | Modal bottom sheet. Reuses `DevRadioRow` from `core:designsystem.devportal` (the same primitive used by the wireframe dev controls). Mainnet row uses `DevRadioRow` with `enabled = false` and a `type-caption` subtitle `Coming soon` until the `mainnet_enabled` remote flag flips. Heading in `type-label-tiny` per COPY. |
