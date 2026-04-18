@@ -272,6 +272,11 @@ Top-of-list → first header      space-16 to space-32 (space-16 for dense
 Bottom-of-list → nav-inset      space-24   (above system nav bar)
 ```
 
+**Centered-hero layouts** (pending spinners, success heroes, empty
+states with a single icon+headline): use `space-48` top spacing.
+This pushes the content down so it doesn't feel pinned to the top bar
+when there's only one content block on screen.
+
 These are targets for new screens. Existing screens may override if
 the override has a stated reason in their `10. VISUAL LOCKED` section.
 
@@ -409,8 +414,15 @@ already defines one with the right shape:
   QuickActionCircle, AddressChip
 - **02-send §12:** TokenModeCard, AmountHeroInput, RecipientChip
 - **03-send-confirmation §12:** StepIndicator, ErrorCard
+- **04-dust §12:** (no new — reuses StepIndicator, ErrorCard, SettingsRow)
 - **05-settings §12:** SettingsSectionHeader, SettingsRow (reused across
   multiple screens), DangerRow, ConfirmationSheet, NetworkPicker
+- **06-tx-history §12:** TxRow, TxTypeBadge
+- **07-receive §12:** ActionPill, FullScreenQR
+- **08-recovery-phrase §12:** WordGrid
+- **09-onboarding-visual-pass §12:** none (audit, not new components)
+- **10-app-icon §12:** none (asset deliverable)
+- **11-splash §12:** none (uses existing MaterializeEffect)
 
 ## MODES × STATES
 
