@@ -10,6 +10,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midnight.kuira.dev.DevPortalScreen
+import com.midnight.kuira.dev.wireframes.dust.DustWireframeWithDevControls
+import com.midnight.kuira.dev.wireframes.history.TxHistoryWireframeWithDevControls
+import com.midnight.kuira.dev.wireframes.receive.ReceiveWireframeWithDevControls
+import com.midnight.kuira.dev.wireframes.recovery.RecoveryPhraseWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.send.SendConfirmationWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.send.SendWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.settings.SettingsWireframeWithDevControls
@@ -25,6 +29,10 @@ sealed class Screen(val route: String) {
     data object SettingsWireframe : Screen("settings-wireframe")
     data object SendWireframe : Screen("send-wireframe")
     data object SendConfirmationWireframe : Screen("send-confirmation-wireframe")
+    data object DustWireframe : Screen("dust-wireframe")
+    data object TxHistoryWireframe : Screen("tx-history-wireframe")
+    data object ReceiveWireframe : Screen("receive-wireframe")
+    data object RecoveryPhraseWireframe : Screen("recovery-phrase-wireframe")
     data object Balance : Screen("balance")
 
     // Send screen takes an optional mode hint ("unshielded" or "shielded").
@@ -96,6 +104,54 @@ fun AppNavigation(
         // Send Confirmation Wireframe (design preview — remove after 8B.1)
         composable(route = Screen.SendConfirmationWireframe.route) {
             SendConfirmationWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Dust Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.DustWireframe.route) {
+            DustWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Tx History Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.TxHistoryWireframe.route) {
+            TxHistoryWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Receive Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.ReceiveWireframe.route) {
+            ReceiveWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Recovery Phrase Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.RecoveryPhraseWireframe.route) {
+            RecoveryPhraseWireframeWithDevControls(
                 onBack = { navController.popBackStack() },
                 onOpenWireframeList = {
                     navController.navigate(Screen.DevPortal.route) {
