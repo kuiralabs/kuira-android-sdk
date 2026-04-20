@@ -268,8 +268,12 @@ private fun PasscodeScreen(
                 numpadRows.forEach { row ->
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Spacer(modifier = Modifier.weight(1f))
                         row.forEach { key ->
                             if (key.isEmpty()) {
                                 Spacer(modifier = Modifier.size(72.dp))
@@ -306,6 +310,7 @@ private fun PasscodeScreen(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
 
