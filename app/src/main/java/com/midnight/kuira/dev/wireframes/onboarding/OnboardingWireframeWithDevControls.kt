@@ -58,10 +58,10 @@ fun OnboardingWireframeWithDevControls(
                 onOpenWireframeList()
             },
             stateControls = {
-                DevStateSection(label = "STEP") {
+                DevStateSection(label = "STEP (7-step flow)") {
                     OnboardingStep.entries.forEach { s ->
                         DevRadioRow(
-                            label = s.name.lowercase().replace('_', ' '),
+                            label = "${s.ordinal + 1}. ${s.name.lowercase().replace('_', ' ')}",
                             selected = s == step,
                             onClick = { step = s },
                         )
