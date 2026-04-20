@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.dev.wireframes.shared.DuskTokens
+import com.midnight.kuira.core.designsystem.effect.DustVortex
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.ErrorCard
@@ -192,12 +193,28 @@ private fun DefaultContent(palette: DuskPalette) {
 
     Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
-    // Generation progress — the visual heartbeat of the screen.
-    // Shows how close the next dust payout is.
+    // Generation vortex — the visual heartbeat of the screen.
+    // Canyon dust swirls, density = generation progress.
     SettingsSectionHeader(label = "GENERATION", palette = palette)
     Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPadding) {
+        // Vortex animation
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            DustVortex(
+                progress = 0.42f,
+                modifier = Modifier.matchParentSize(),
+                color = palette.Light,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(DuskTokens.Space16))
+
         // Progress label + percentage
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -205,45 +222,45 @@ private fun DefaultContent(palette: DuskPalette) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Next payout",
-                color = palette.Light,
+                text = "Generation",
+                color = palette.LightSoft,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
                 lineHeight = 20.sp,
             )
             Text(
                 text = "42%",
-                color = palette.LightSoft,
+                color = palette.Light,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
             )
         }
-        Spacer(modifier = Modifier.height(DuskTokens.Space12))
-        // Progress bar
+        Spacer(modifier = Modifier.height(DuskTokens.Space8))
+        // Progress bar below the vortex for precise reading
         DuskProgressBar(
             progress = 0.42f,
             palette = palette,
             height = DuskTokens.ProgressBarHeight,
         )
         Spacer(modifier = Modifier.height(DuskTokens.Space12))
-        // Rate detail
-        Text(
-            text = "0.001 DUST/block",
-            color = palette.LightMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.W400,
-            lineHeight = 16.sp,
-        )
-    }
-
-    Spacer(modifier = Modifier.height(DuskTokens.Space32))
-
-    // Backing info
-    SettingsSectionHeader(label = "BACKING", palette = palette)
-    Spacer(modifier = Modifier.size(DuskTokens.Space12))
-
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
-        SettingsRow(label = "NIGHT locked", rightValue = "1,234.567890 NIGHT", readOnly = true, palette = palette)
+        // Rate + backing details
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "0.001 DUST/block",
+                color = palette.LightMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W400,
+            )
+            Text(
+                text = "1,234.56 NIGHT locked",
+                color = palette.LightMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W400,
+            )
+        }
     }
 }
 
