@@ -288,13 +288,17 @@ private fun PendingContent(state: ConfirmationState, palette: DuskPalette) {
 
     val copy = stepCopy(state) ?: return
 
-    // Rarámuri runner — brand progress indicator
-    RunnerWithDust(
-        modifier = Modifier
-            .fillMaxWidth(DuskTokens.RunnerWidthFraction)
-            .height(DuskTokens.RunnerHeight),
-        color = palette.Light,
-    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        RunnerWithDust(
+            modifier = Modifier
+                .fillMaxWidth(DuskTokens.RunnerWidthFraction)
+                .height(DuskTokens.RunnerHeight),
+            color = palette.Light,
+        )
+    }
 
     Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
