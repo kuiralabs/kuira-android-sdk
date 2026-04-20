@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.dev.wireframes.shared.DuskTokens
+import com.midnight.kuira.core.designsystem.effect.DustLifecycleGraph
 import com.midnight.kuira.core.designsystem.effect.DustVortex
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
@@ -243,6 +244,17 @@ private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
             palette = palette,
             height = DuskTokens.ProgressBarHeight,
         )
+        Spacer(modifier = Modifier.height(DuskTokens.Space16))
+
+        // Lifecycle graph — shows the generation curve + current position
+        DustLifecycleGraph(
+            progress = generationProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            color = palette.Light,
+        )
+
         Spacer(modifier = Modifier.height(DuskTokens.Space12))
         // Rate + backing details
         Row(
