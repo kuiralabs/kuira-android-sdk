@@ -256,6 +256,22 @@ Divider              1dp LightFaint hairline between rows
 Rule: floor the height at 56dp, don't target 48dp. Cramped rows read as
 "dev demo"; 56dp reads as "product."
 
+### Label/value emphasis rule
+
+In key-value rows, **labels are context and values are data.** Data
+should always be the brightest element. The emphasis flips based on
+whether the row is navigational or data-display:
+
+```
+Nav rows (readOnly=false):    label Light (100%)   value LightSoft (80%)
+Data rows (readOnly=true):    label LightSoft (80%) value Light (100%)
+```
+
+The principle: on a nav row, you're scanning WHAT TO TAP (label pops).
+On a data row, you're reading THE VALUE (value pops). Never dim
+data values to LightMuted — that's for hints and placeholders, not
+content the user came here to read.
+
 **Applies to:** Settings rows, tx history rows, address book rows,
 recipient picker rows — any vertically-stacked nav/scan list.
 

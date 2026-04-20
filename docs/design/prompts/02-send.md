@@ -109,7 +109,8 @@ space-12
   [GlassPanel — contentPanel tint, LightFaint hairline]
     [Token header row]
       label         "NIGHT"                 (type-body, Light)
-      rightValue    <format-amount-night>   (type-body, LightMuted)
+      rightValue    <format-amount-night>   (type-body, Light — data pops
+                                             per readOnly emphasis rule)
     1dp LightFaint divider
     [Mode sub-row: Unshielded]
       label         "Unshielded"            (type-body, Light)
@@ -466,7 +467,7 @@ Exact strings; do not rewrite.
 
 | Component           | Shape                                                                    |
 |---------------------|--------------------------------------------------------------------------|
-| `TokenModeCard`     | Full-width card inside a `GlassPanel` for a single token. Header row: reuses `SettingsRow` with `readOnly = true`, `label = token name`, `rightValue = balance` — inherits 56dp minimum and all SettingsRow styling. Below: 1+ mode sub-rows, each a custom tappable row with: label (`type-body`, `Light`) on the first line, hint below label (`type-caption`, `LightMuted`) on a second line, trailing `icon-16` chevron (`LightMuted`). Sub-rows are 56dp minimum (LIST ROWS standard) but render TWO lines of content so they're naturally taller. Dividers between header and sub-rows, and between sub-rows. In v1.0 there is one card (NIGHT) with two sub-rows. In v1.1+: one card per token; the pattern scales without layout changes. |
+| `TokenModeCard`     | Full-width card inside a `GlassPanel` for a single token. Header row: reuses `SettingsRow` with `readOnly = true`, `label = token name`, `rightValue = balance` — inherits 56dp minimum, label/value emphasis (label LightSoft, value Light), and all SettingsRow styling. Below: 1+ mode sub-rows, each a custom tappable row with: label (`type-body`, `Light`) on the first line, hint below label (`type-caption`, `LightMuted`) on a second line, trailing `icon-16` chevron (`LightMuted`). Sub-rows are 56dp minimum (LIST ROWS standard) but render TWO lines of content so they're naturally taller. Dividers between header and sub-rows, and between sub-rows. In v1.0 there is one card (NIGHT) with two sub-rows. In v1.1+: one card per token; the pattern scales without layout changes. |
 | `AmountHeroInput`   | Hero-scale amount input with denomination swap. NOT a `DuskInputField`. Display `Text` (styled as `type-numeric-hero`, 44sp, W200, Light) renders the typed digits; a hidden `BasicTextField` captures keyboard input via `FocusRequester`. Denomination label (`type-headline-sm`, `LightMuted`, shows `NIGHT` or `USD` per input mode) baseline-aligned to the right. **Swap toggle (↕):** 32dp circle, `LightBarely` bg, `radius-full`, to the right of the denomination; tap flips between NIGHT and USD input modes. Conversion hint below (`type-detail`, `LightMuted`): NIGHT mode shows `~$X.XX`, USD mode shows `~X.XX NIGHT`. On insufficient-balance error: number + denomination flip to `ErrorText`; error caption appears below in `ErrorText`. Wrapped in a `GlassPanel` by the caller for star-protection. System numeric keyboard drives input; max 6 decimals enforced at input-filter level. |
 | `RecipientChip`     | Compact bar below the top bar on Screen 2c. Full-width, `LightBarely` bg, `radius-md`. Shows `To: <format-address-short>` (`type-caption`, `LightMuted`). Trailing `icon-16` edit glyph. Tap navigates back to Screen 2b. Height content-driven with 48dp minimum (accessibility floor). |
 

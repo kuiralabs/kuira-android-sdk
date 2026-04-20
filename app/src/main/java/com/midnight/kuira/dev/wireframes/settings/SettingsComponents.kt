@@ -75,8 +75,11 @@ fun SettingsRow(
     // icon) remain tappable.
     val isClickable = !readOnly || trailingIcon != null
     val clickModifier = if (isClickable) Modifier.clickable(onClick = onClick) else Modifier
-    val rightValueColor = if (readOnly) palette.LightMuted else palette.LightSoft
-    // Explicit trailingIcon wins; otherwise chevron on nav rows; otherwise nothing.
+    // Read-only rows flip the emphasis: label recedes (LightSoft),
+    // value pops (Light). Labels are context; values are data.
+    // Nav rows keep label bright (you're scanning what to tap).
+    val labelColor = if (readOnly) palette.LightSoft else palette.Light
+    val rightValueColor = if (readOnly) palette.Light else palette.LightSoft
     val resolvedTrailing: ImageVector? = trailingIcon
         ?: if (!readOnly) Icons.AutoMirrored.Filled.ArrowForward else null
 
@@ -107,7 +110,7 @@ fun SettingsRow(
         }
         Text(
             text = label,
-            color = palette.Light,
+            color = labelColor,
             fontSize = 14.sp,
             fontWeight = FontWeight.W300,
             lineHeight = 20.sp,

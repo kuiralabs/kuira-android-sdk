@@ -69,7 +69,9 @@ space-32
   1dp LightFaint divider
   SettingsRow (readOnly = true)
     label       "Network fee"
-    rightValue  "≈ <format-amount-night> NIGHT"  (LightMuted; ≈ signals estimate)
+    rightValue  "≈ <format-amount-night> NIGHT"  (Light; readOnly data-display
+                                                  emphasis — ≈ prefix signals
+                                                  estimate, not the color)
   1dp LightFaint divider
   SettingsRow (readOnly = true)
     label       "Total"
