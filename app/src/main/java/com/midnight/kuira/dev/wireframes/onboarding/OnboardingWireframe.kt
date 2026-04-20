@@ -120,25 +120,14 @@ private fun WelcomeScreen(palette: DuskPalette) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Headline — centered to match wordmark
+            // Tagline — short, powerful, no explanation needed
             Text(
-                text = "your phone is\nyour hardware wallet",
+                text = "YOUR KEYS.\nYOUR MIDNIGHT.",
                 color = palette.Light,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.W300,
-                lineHeight = 28.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Detail — single centered line instead of bullet list
-            Text(
-                text = "Private keys secured by biometric.\nPowered by Midnight.",
-                color = palette.LightMuted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.W400,
-                lineHeight = 18.sp,
+                lineHeight = 32.sp,
+                letterSpacing = 2.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
