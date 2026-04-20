@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
@@ -86,17 +87,17 @@ fun RecoveryPhraseWireframe(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(DuskTokens.TopBarHeight)
+                    .padding(horizontal = DuskTokens.Space16),
             ) {
                 if (!isOnboardingEntry) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back to settings",
                         tint = palette.Light,
-                        modifier = Modifier.size(24.dp).clickable { onBack() },
+                        modifier = Modifier.size(DuskTokens.Icon24).clickable { onBack() },
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(DuskTokens.Space16))
                 }
                 Text(
                     text = title,
@@ -111,27 +112,27 @@ fun RecoveryPhraseWireframe(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Warning banner
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(DuskTokens.RadiusMd))
                         .background(palette.LightBarely)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.VisibilityOff,
                         contentDescription = null,
                         tint = palette.LightMuted,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(DuskTokens.Icon20),
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(DuskTokens.Space8))
                     Text(
                         text = "Anyone with these words can access your funds. Never share them.",
                         color = palette.Light,
@@ -141,16 +142,16 @@ fun RecoveryPhraseWireframe(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Word grid (3 columns × 8 rows)
                 GlassPanel(
                     tint = palette.contentPanel,
                     border = palette.LightFaint,
-                    contentPadding = 16.dp,
+                    contentPadding = DuskTokens.PanelPadding,
                 ) {
                     for (row in 0 until 8) {
-                        if (row > 0) Spacer(modifier = Modifier.height(8.dp))
+                        if (row > 0) Spacer(modifier = Modifier.height(DuskTokens.Space8))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -167,9 +168,9 @@ fun RecoveryPhraseWireframe(
                                         color = palette.LightMuted,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.W400,
-                                        modifier = Modifier.width(24.dp),
+                                        modifier = Modifier.width(DuskTokens.Space24),
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(DuskTokens.Space4))
                                     Text(
                                         text = sampleWords[index],
                                         color = palette.Light,
@@ -183,7 +184,7 @@ fun RecoveryPhraseWireframe(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Copy action pill
                 Row(
@@ -193,18 +194,18 @@ fun RecoveryPhraseWireframe(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(9999.dp))
+                            .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                             .background(palette.LightBarely)
                             .clickable { }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = DuskTokens.Space12, vertical = DuskTokens.Space8),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ContentCopy,
                             contentDescription = "Copy all 24 words to clipboard",
                             tint = palette.Light,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(DuskTokens.Icon20),
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(DuskTokens.Space8))
                         Text(
                             text = "Copy",
                             color = palette.Light,
@@ -216,7 +217,7 @@ fun RecoveryPhraseWireframe(
 
                 // Onboarding-entry: confirmation checkbox + Continue button
                 if (isOnboardingEntry) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                     Row(
                         verticalAlignment = Alignment.Top,
@@ -233,18 +234,18 @@ fun RecoveryPhraseWireframe(
                                 checkmarkColor = palette.Void,
                             ),
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(DuskTokens.Space12))
                         Text(
                             text = "I have written down my recovery phrase and understand I am responsible for keeping it safe.",
                             color = palette.Light,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.W400,
                             lineHeight = 18.sp,
-                            modifier = Modifier.padding(top = 12.dp),
+                            modifier = Modifier.padding(top = DuskTokens.Space12),
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
                     DuskPrimaryButtonPaletted(
                         text = "Continue",

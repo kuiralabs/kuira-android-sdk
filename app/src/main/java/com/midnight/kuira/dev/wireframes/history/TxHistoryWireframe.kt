@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
@@ -105,8 +106,8 @@ private fun HistoryListScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 when (state) {
                     TxHistoryState.EMPTY -> EmptyContent(palette)
@@ -120,11 +121,11 @@ private fun HistoryListScreen(
 
 @Composable
 private fun DefaultListContent(state: TxHistoryState, palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
     // Day group: TODAY
     SettingsSectionHeader(label = "TODAY", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         TxRow(
             typeBadge = "SENT",
@@ -143,11 +144,11 @@ private fun DefaultListContent(state: TxHistoryState, palette: DuskPalette) {
         )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Day group: YESTERDAY
     SettingsSectionHeader(label = "YESTERDAY", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         TxRow(
             typeBadge = "DUST",
@@ -168,7 +169,7 @@ private fun DefaultListContent(state: TxHistoryState, palette: DuskPalette) {
 
     // Error inline
     if (state == TxHistoryState.ERROR) {
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space24))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
@@ -192,9 +193,9 @@ private fun DefaultListContent(state: TxHistoryState, palette: DuskPalette) {
 
 @Composable
 private fun EmptyContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth(),
@@ -203,9 +204,9 @@ private fun EmptyContent(palette: DuskPalette) {
                 imageVector = Icons.Filled.History,
                 contentDescription = null,
                 tint = palette.LightMuted,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(DuskTokens.Icon32),
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space20))
             Text(
                 text = "No activity yet",
                 color = palette.Light,
@@ -213,7 +214,7 @@ private fun EmptyContent(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "Send or receive NIGHT to see your transactions here.",
                 color = palette.LightMuted,
@@ -227,16 +228,16 @@ private fun EmptyContent(palette: DuskPalette) {
 
 @Composable
 private fun LoadingContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
     SettingsSectionHeader(label = "TODAY", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         repeat(3) { i ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -245,7 +246,7 @@ private fun LoadingContent(palette: DuskPalette) {
                     ShimmerBlock(height = 20.dp, widthFraction = 0.25f, palette = palette)
                     ShimmerBlock(height = 20.dp, widthFraction = 0.3f, palette = palette)
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space8))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -258,19 +259,19 @@ private fun LoadingContent(palette: DuskPalette) {
         }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     ShimmerBlock(height = 14.dp, widthFraction = 0.3f, palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         repeat(2) { i ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
             ) {
                 ShimmerBlock(height = 20.dp, widthFraction = 0.5f, palette = palette)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space8))
                 ShimmerBlock(height = 14.dp, widthFraction = 0.35f, palette = palette)
             }
             if (i < 1) SettingsDivider(palette = palette)
@@ -308,13 +309,13 @@ private fun TxDetailScreen(palette: DuskPalette, onBack: () -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Amount hero
-                GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+                GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth(),
@@ -327,16 +328,16 @@ private fun TxDetailScreen(palette: DuskPalette, onBack: () -> Unit) {
                             letterSpacing = (-1).sp,
                             lineHeight = 48.sp,
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(DuskTokens.Space4))
                         Text(
                             text = "NIGHT",
                             color = palette.LightMuted,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.W300,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(DuskTokens.Space8))
                         TxTypeBadge(label = "SENT", palette = palette)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(DuskTokens.Space4))
                         Text(
                             text = "Confirmed",
                             color = palette.LightMuted,
@@ -346,10 +347,10 @@ private fun TxDetailScreen(palette: DuskPalette, onBack: () -> Unit) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 SettingsSectionHeader(label = "DETAILS", palette = palette)
-                Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
                 GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
                     SettingsRow(label = "Date", rightValue = "2026-04-18T03:27:11Z", readOnly = true, palette = palette)
@@ -374,7 +375,7 @@ private fun TxDetailScreen(palette: DuskPalette, onBack: () -> Unit) {
                     SettingsRow(label = "Fee", rightValue = "0.001 NIGHT", readOnly = true, palette = palette)
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
                     SettingsRow(label = "View on explorer", palette = palette)
@@ -390,16 +391,16 @@ private fun TopBar(title: String, palette: DuskPalette, onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
+            .height(DuskTokens.TopBarHeight)
+            .padding(horizontal = DuskTokens.Space16),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back",
             tint = palette.Light,
-            modifier = Modifier.size(24.dp).clickable { onBack() },
+            modifier = Modifier.size(DuskTokens.Icon24).clickable { onBack() },
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space16))
         Text(
             text = title,
             color = palette.Light,

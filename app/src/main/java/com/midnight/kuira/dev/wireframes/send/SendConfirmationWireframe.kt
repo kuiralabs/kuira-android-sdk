@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
@@ -103,8 +104,8 @@ fun SendConfirmationWireframe(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 when {
                     state.isPending() -> PendingContent(state = state, palette = palette)
@@ -126,8 +127,8 @@ private fun TopBar(state: ConfirmationState, palette: DuskPalette, onBack: () ->
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
+            .height(DuskTokens.TopBarHeight)
+            .padding(horizontal = DuskTokens.Space16),
     ) {
         if (leading != null) {
             Text(
@@ -143,11 +144,11 @@ private fun TopBar(state: ConfirmationState, palette: DuskPalette, onBack: () ->
                 contentDescription = if (backInteractive) "Back to amount" else null,
                 tint = if (backInteractive) palette.Light else palette.LightMuted,
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(DuskTokens.Icon24)
                     .clickable(enabled = backInteractive) { onBack() },
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space16))
         Text(
             text = title,
             color = palette.Light,
@@ -162,13 +163,13 @@ private fun TopBar(state: ConfirmationState, palette: DuskPalette, onBack: () ->
 
 @Composable
 private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Receipt hero — amount centered, star-protected
     GlassPanel(
         tint = palette.contentPanel,
         border = palette.LightFaint,
-        contentPadding = 24.dp,
+        contentPadding = DuskTokens.PanelPaddingHero,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -182,7 +183,7 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
                 letterSpacing = (-1).sp,
                 lineHeight = 48.sp,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space4))
             Text(
                 text = "NIGHT",
                 color = palette.LightMuted,
@@ -190,13 +191,13 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             // Mode badge
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(9999.dp))
+                    .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                     .background(palette.LightBarely)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = DuskTokens.Space8, vertical = DuskTokens.Space4),
             ) {
                 Text(
                     text = "UNSHIELDED",
@@ -209,7 +210,7 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
         }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Details card
     GlassPanel(
@@ -244,7 +245,7 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
     // Error / offline additions
     when (state) {
         ConfirmationState.ERROR -> {
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space32))
             ErrorCard(
                 headline = "Submit failed",
                 body = "Something went wrong. Network unreachable after 3 retries.",
@@ -252,7 +253,7 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
             )
         }
         ConfirmationState.OFFLINE -> {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space16))
             Text(
                 text = "You're offline. Connect to a network to send.",
                 color = palette.LightMuted,
@@ -264,7 +265,7 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
         else -> Unit
     }
 
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     val primaryText = if (state == ConfirmationState.ERROR) "Try Again" else "Confirm"
     val primaryEnabled = state != ConfirmationState.OFFLINE
@@ -283,19 +284,19 @@ private fun ReviewContent(state: ConfirmationState, palette: DuskPalette) {
 
 @Composable
 private fun PendingContent(state: ConfirmationState, palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     val copy = stepCopy(state) ?: return
 
     // Rarámuri runner — brand progress indicator
     RaramuriRunner(
         modifier = Modifier
-            .fillMaxWidth(0.4f)
-            .height(120.dp),
+            .fillMaxWidth(DuskTokens.RunnerWidthFraction)
+            .height(DuskTokens.RunnerHeight),
         color = palette.Light,
     )
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     StepIndicator(
         stepLabel = copy.label,
@@ -308,13 +309,13 @@ private fun PendingContent(state: ConfirmationState, palette: DuskPalette) {
 
 @Composable
 private fun SuccessContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     // Success hero
     GlassPanel(
         tint = palette.contentPanel,
         border = palette.LightFaint,
-        contentPadding = 24.dp,
+        contentPadding = DuskTokens.PanelPaddingHero,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -324,9 +325,9 @@ private fun SuccessContent(palette: DuskPalette) {
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
                 tint = palette.SuccessText,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(DuskTokens.Icon32),
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space20))
             Text(
                 text = "Transaction submitted",
                 color = palette.Light,
@@ -334,7 +335,7 @@ private fun SuccessContent(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "It may take a few minutes to confirm.",
                 color = palette.LightMuted,
@@ -345,10 +346,10 @@ private fun SuccessContent(palette: DuskPalette) {
         }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     SettingsSectionHeader(label = "TRANSACTION", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
     GlassPanel(
         tint = palette.contentPanel,
@@ -370,7 +371,7 @@ private fun SuccessContent(palette: DuskPalette) {
         )
     }
 
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     DuskPrimaryButtonPaletted(
         text = "Send another",

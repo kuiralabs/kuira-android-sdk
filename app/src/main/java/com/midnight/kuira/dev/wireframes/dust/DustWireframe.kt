@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.ErrorCard
@@ -110,8 +111,8 @@ fun DustWireframe(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 when (state) {
                     DustWireframeState.DEFAULT -> DefaultContent(palette)
@@ -135,18 +136,18 @@ private fun TopBar(palette: DuskPalette, backEnabled: Boolean, onBack: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
+            .height(DuskTokens.TopBarHeight)
+            .padding(horizontal = DuskTokens.Space16),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back to balance",
             tint = if (backEnabled) palette.Light else palette.LightMuted,
             modifier = Modifier
-                .size(24.dp)
+                .size(DuskTokens.Icon24)
                 .clickable(enabled = backEnabled) { onBack() },
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space16))
         Text(
             text = "Dust",
             color = palette.Light,
@@ -159,10 +160,10 @@ private fun TopBar(palette: DuskPalette, backEnabled: Boolean, onBack: () -> Uni
 
 @Composable
 private fun DefaultContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Hero balance
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
         Text(
             text = "DUST BALANCE",
             color = palette.LightMuted,
@@ -170,7 +171,7 @@ private fun DefaultContent(palette: DuskPalette) {
             fontWeight = FontWeight.W400,
             letterSpacing = 3.sp,
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space20))
         Text(
             text = "98,765.432109876543",
             color = palette.Light,
@@ -179,7 +180,7 @@ private fun DefaultContent(palette: DuskPalette) {
             letterSpacing = (-1).sp,
             lineHeight = 48.sp,
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space4))
         Text(
             text = "DUST",
             color = palette.LightMuted,
@@ -189,14 +190,14 @@ private fun DefaultContent(palette: DuskPalette) {
         )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Generation progress — the visual heartbeat of the screen.
     // Shows how close the next dust payout is.
     SettingsSectionHeader(label = "GENERATION", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPadding) {
         // Progress label + percentage
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -217,14 +218,14 @@ private fun DefaultContent(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space12))
         // Progress bar
         DuskProgressBar(
             progress = 0.42f,
             palette = palette,
-            height = 6.dp,
+            height = DuskTokens.ProgressBarHeight,
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space12))
         // Rate detail
         Text(
             text = "0.001 DUST/block",
@@ -235,11 +236,11 @@ private fun DefaultContent(palette: DuskPalette) {
         )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Backing info
     SettingsSectionHeader(label = "BACKING", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         SettingsRow(label = "NIGHT locked", rightValue = "1,234.567890 NIGHT", readOnly = true, palette = palette)
@@ -248,9 +249,9 @@ private fun DefaultContent(palette: DuskPalette) {
 
 @Composable
 private fun LoadingContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
         Text(
             text = "DUST BALANCE",
             color = palette.LightMuted,
@@ -258,40 +259,40 @@ private fun LoadingContent(palette: DuskPalette) {
             fontWeight = FontWeight.W400,
             letterSpacing = 3.sp,
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space20))
         ShimmerBlock(height = 48.dp, widthFraction = 0.6f, palette = palette)
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space4))
         ShimmerBlock(height = 20.dp, widthFraction = 0.25f, palette = palette)
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     SettingsSectionHeader(label = "GENERATION", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPadding) {
         ShimmerBlock(height = 16.dp, widthFraction = 0.5f, palette = palette)
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space12))
         ShimmerBlock(height = 6.dp, widthFraction = 1f, palette = palette)
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space12))
         ShimmerBlock(height = 12.dp, widthFraction = 0.4f, palette = palette)
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     SettingsSectionHeader(label = "BACKING", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPadding) {
         ShimmerBlock(height = 20.dp, widthFraction = 0.7f, palette = palette)
     }
 }
 
 @Composable
 private fun EmptyContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth(),
@@ -300,9 +301,9 @@ private fun EmptyContent(palette: DuskPalette) {
                 imageVector = Icons.Filled.Token,
                 contentDescription = null,
                 tint = palette.LightMuted,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(DuskTokens.Icon32),
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space20))
             Text(
                 text = "Register your dust tank",
                 color = palette.Light,
@@ -310,7 +311,7 @@ private fun EmptyContent(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "Dust generates passively from your NIGHT balance. Register once to start earning.",
                 color = palette.LightMuted,
@@ -321,7 +322,7 @@ private fun EmptyContent(palette: DuskPalette) {
         }
     }
 
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     DuskPrimaryButtonPaletted(
         text = "Register",
@@ -332,7 +333,7 @@ private fun EmptyContent(palette: DuskPalette) {
 
 @Composable
 private fun PendingContent(copy: DustStepCopy, palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -340,11 +341,11 @@ private fun PendingContent(copy: DustStepCopy, palette: DuskPalette) {
     ) {
         RaramuriRunner(
             modifier = Modifier
-                .fillMaxWidth(0.4f)
-                .height(120.dp),
+                .fillMaxWidth(DuskTokens.RunnerWidthFraction)
+                .height(DuskTokens.RunnerHeight),
             color = palette.Light,
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space32))
         StepIndicator(
             stepLabel = copy.label,
             detailHint = copy.detail,
@@ -355,9 +356,9 @@ private fun PendingContent(copy: DustStepCopy, palette: DuskPalette) {
 
 @Composable
 private fun SuccessContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = DuskTokens.PanelPaddingHero) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth(),
@@ -366,9 +367,9 @@ private fun SuccessContent(palette: DuskPalette) {
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
                 tint = palette.SuccessText,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(DuskTokens.Icon32),
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space20))
             Text(
                 text = "Dust tank registered",
                 color = palette.Light,
@@ -376,7 +377,7 @@ private fun SuccessContent(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "Generation will begin on the next block.",
                 color = palette.LightMuted,
@@ -387,10 +388,10 @@ private fun SuccessContent(palette: DuskPalette) {
         }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     SettingsSectionHeader(label = "TRANSACTION", palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         SettingsRow(
@@ -403,7 +404,7 @@ private fun SuccessContent(palette: DuskPalette) {
         )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     DuskPrimaryButtonPaletted(
         text = "Check Dust Status",
@@ -414,7 +415,7 @@ private fun SuccessContent(palette: DuskPalette) {
 
 @Composable
 private fun ErrorContent(palette: DuskPalette) {
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     ErrorCard(
         headline = "Something went wrong",
@@ -422,7 +423,7 @@ private fun ErrorContent(palette: DuskPalette) {
         palette = palette,
     )
 
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
     DuskPrimaryButtonPaletted(
         text = "Try Again",

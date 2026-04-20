@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 /** Uppercase letter-spaced section heading placed above a GlassPanel. */
@@ -91,22 +92,22 @@ fun SettingsRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = DuskTokens.RowMinHeight)
             .then(clickModifier)
             .then(
                 if (contentDesc != null) Modifier.semantics { contentDescription = contentDesc }
                 else Modifier,
             )
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space16),
     ) {
         if (leadingIcon != null) {
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
                 tint = palette.Light,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(DuskTokens.Icon24),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(DuskTokens.Space12))
         }
         Text(
             text = label,
@@ -127,12 +128,12 @@ fun SettingsRow(
             )
         }
         if (resolvedTrailing != null) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(DuskTokens.Space8))
             Icon(
                 imageVector = resolvedTrailing,
                 contentDescription = null,
                 tint = palette.LightMuted,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(DuskTokens.Icon16),
             )
         }
     }
@@ -168,7 +169,7 @@ fun SettingsDivider(palette: DuskPalette) {
     HorizontalDivider(
         color = palette.LightFaint,
         thickness = 1.dp,
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = Modifier.padding(horizontal = DuskTokens.Space16),
     )
 }
 
@@ -181,7 +182,7 @@ fun SettingsSection(
     content: @Composable () -> Unit,
 ) {
     SettingsSectionHeader(label = label, palette = palette)
-    Spacer(modifier = Modifier.size(12.dp))
+    Spacer(modifier = Modifier.size(DuskTokens.Space12))
     content()
 }
 

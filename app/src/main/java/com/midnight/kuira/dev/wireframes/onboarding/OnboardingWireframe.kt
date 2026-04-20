@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.KuiraMaterializeFrame
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
@@ -105,8 +106,8 @@ private fun WelcomeScreen(palette: DuskPalette) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = statusBarPadding.calculateTopPadding())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                .padding(horizontal = DuskTokens.Space16)
+                .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
         ) {
             Spacer(modifier = Modifier.weight(0.4f))
 
@@ -119,7 +120,7 @@ private fun WelcomeScreen(palette: DuskPalette) {
                 KuiraMaterializeFrame(progress = 1f)
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
             // Tagline — from Rarámuri belief that the soul is active
             // at night while the body sleeps. "Kuira" derives from
@@ -136,7 +137,7 @@ private fun WelcomeScreen(palette: DuskPalette) {
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space48))
 
             // Action stack
             DuskPrimaryButtonPaletted(
@@ -144,7 +145,7 @@ private fun WelcomeScreen(palette: DuskPalette) {
                 onClick = { },
                 palette = palette,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             DuskSecondaryButtonPaletted(
                 text = "Import existing wallet",
                 onClick = { },
@@ -166,7 +167,7 @@ private fun BulletLine(text: String, palette: DuskPalette) {
             color = palette.LightFaint,
             fontSize = 14.sp,
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space8))
         Text(
             text = text,
             color = palette.LightSoft,
@@ -211,16 +212,16 @@ private fun PasscodeScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(DuskTokens.TopBarHeight)
+                    .padding(horizontal = DuskTokens.Space16),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = palette.Light,
-                    modifier = Modifier.size(24.dp).clickable { onBack() },
+                    modifier = Modifier.size(DuskTokens.Icon24).clickable { onBack() },
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space16))
                 Text(
                     text = title,
                     color = palette.Light,
@@ -234,19 +235,19 @@ private fun PasscodeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 Spacer(modifier = Modifier.weight(0.3f))
 
                 // 6 dots
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(DuskTokens.Space16),
                 ) {
                     repeat(6) { index ->
                         Box(
                             modifier = Modifier
-                                .size(16.dp)
+                                .size(DuskTokens.PasscodeDotSize)
                                 .clip(CircleShape)
                                 .background(
                                     if (index < filledDots) palette.Light
@@ -268,21 +269,21 @@ private fun PasscodeScreen(
 
                 numpadRows.forEach { row ->
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(DuskTokens.Space16),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = DuskTokens.Space8),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Spacer(modifier = Modifier.weight(1f))
                         row.forEach { key ->
                             if (key.isEmpty()) {
-                                Spacer(modifier = Modifier.size(72.dp))
+                                Spacer(modifier = Modifier.size(DuskTokens.NumpadButtonSize))
                             } else {
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
-                                        .size(72.dp)
+                                        .size(DuskTokens.NumpadButtonSize)
                                         .clip(CircleShape)
                                         .background(palette.LightBarely)
                                         .clickable {
@@ -298,7 +299,7 @@ private fun PasscodeScreen(
                                             imageVector = Icons.Filled.Backspace,
                                             contentDescription = "Delete",
                                             tint = palette.Light,
-                                            modifier = Modifier.size(24.dp),
+                                            modifier = Modifier.size(DuskTokens.Icon24),
                                         )
                                     } else {
                                         Text(
@@ -349,16 +350,16 @@ private fun BiometricSetupScreen(palette: DuskPalette, onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(DuskTokens.TopBarHeight)
+                    .padding(horizontal = DuskTokens.Space16),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = palette.Light,
-                    modifier = Modifier.size(24.dp).clickable { onBack() },
+                    modifier = Modifier.size(DuskTokens.Icon24).clickable { onBack() },
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space16))
                 Text(
                     text = "Secure your wallet",
                     color = palette.Light,
@@ -372,8 +373,8 @@ private fun BiometricSetupScreen(palette: DuskPalette, onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -381,9 +382,9 @@ private fun BiometricSetupScreen(palette: DuskPalette, onBack: () -> Unit) {
                     imageVector = Icons.Filled.Fingerprint,
                     contentDescription = null,
                     tint = palette.Light,
-                    modifier = Modifier.size(64.dp),
+                    modifier = Modifier.size(DuskTokens.Icon64),
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space20))
                 Text(
                     text = "Enable biometrics",
                     color = palette.Light,
@@ -391,7 +392,7 @@ private fun BiometricSetupScreen(palette: DuskPalette, onBack: () -> Unit) {
                     fontWeight = FontWeight.W300,
                     lineHeight = 24.sp,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space8))
                 Text(
                     text = "Unlock quicker with your face or fingerprint. No passcode typing required.",
                     color = palette.LightMuted,
@@ -409,7 +410,7 @@ private fun BiometricSetupScreen(palette: DuskPalette, onBack: () -> Unit) {
                     onClick = { },
                     palette = palette,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space8))
                 DuskSecondaryButtonPaletted(
                     text = "Not now",
                     onClick = { },
@@ -444,8 +445,8 @@ private fun CreatingScreen(palette: DuskPalette) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = statusBarPadding.calculateTopPadding())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                .padding(horizontal = DuskTokens.Space16)
+                .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
         ) {
             Spacer(modifier = Modifier.weight(1f))
 
@@ -454,12 +455,12 @@ private fun CreatingScreen(palette: DuskPalette) {
             // is instant. This is a brand moment, not just a spinner.
             RaramuriRunner(
                 modifier = Modifier
-                    .fillMaxWidth(0.4f)
-                    .height(120.dp),
+                    .fillMaxWidth(DuskTokens.RunnerWidthFraction)
+                    .height(DuskTokens.RunnerHeight),
                 color = palette.Light,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
             Text(
                 text = "Creating wallet",
@@ -468,7 +469,7 @@ private fun CreatingScreen(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 20.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "Generating keys\u2026",
                 color = palette.LightMuted,
@@ -518,8 +519,8 @@ private fun AllSetScreen(palette: DuskPalette) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = statusBarPadding.calculateTopPadding())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                .padding(horizontal = DuskTokens.Space16)
+                .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
         ) {
             Spacer(modifier = Modifier.weight(1f))
 
@@ -527,9 +528,9 @@ private fun AllSetScreen(palette: DuskPalette) {
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
                 tint = palette.SuccessText,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(DuskTokens.Icon32),
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space20))
             Text(
                 text = "You're all set",
                 color = palette.Light,
@@ -537,7 +538,7 @@ private fun AllSetScreen(palette: DuskPalette) {
                 fontWeight = FontWeight.W300,
                 lineHeight = 24.sp,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = "Your wallet is ready and only you control the keys.",
                 color = palette.LightMuted,
@@ -578,7 +579,7 @@ private fun AllSetScreen(palette: DuskPalette) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
             DuskPrimaryButtonPaletted(
                 text = "Let's go",

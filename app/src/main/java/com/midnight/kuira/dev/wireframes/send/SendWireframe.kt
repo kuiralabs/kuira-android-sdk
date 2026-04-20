@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
@@ -102,13 +103,13 @@ private fun TokenModeScreen(palette: DuskPalette, onBack: () -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 SettingsSectionHeader(label = "SELECT TOKEN", palette = palette)
-                Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
                 // NIGHT token card
                 GlassPanel(
@@ -193,17 +194,17 @@ private fun RecipientScreen(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Mode badge
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(9999.dp))
+                        .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                         .background(palette.LightBarely)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = DuskTokens.Space8, vertical = DuskTokens.Space4),
                 ) {
                     Text(
                         text = "UNSHIELDED",
@@ -214,15 +215,15 @@ private fun RecipientScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space24))
 
                 SettingsSectionHeader(label = "TO", palette = palette)
-                Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(DuskTokens.Space12))
 
                 GlassPanel(
                     tint = palette.contentPanel,
                     border = palette.LightFaint,
-                    contentPadding = 16.dp,
+                    contentPadding = DuskTokens.PanelPadding,
                 ) {
                     DuskInputField(
                         value = recipient,
@@ -234,7 +235,7 @@ private fun RecipientScreen(
                         trailingSlot = {
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(DuskTokens.ButtonHeight)
                                     .clickable { },
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -242,14 +243,14 @@ private fun RecipientScreen(
                                     imageVector = Icons.Filled.ContentPaste,
                                     contentDescription = "Paste recipient from clipboard",
                                     tint = palette.LightMuted,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(DuskTokens.Icon20),
                                 )
                             }
                         },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
                 // Recently used placeholder (v1.1+)
                 Text(
@@ -346,10 +347,10 @@ private fun AmountScreen(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = DuskTokens.Space16),
             ) {
                 // Recipient chip
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space4))
                 RecipientChip(
                     addressShort = "mn_addr\u2026f5a2",
                     palette = palette,
@@ -363,7 +364,7 @@ private fun AmountScreen(
                 GlassPanel(
                     tint = palette.contentPanel,
                     border = palette.LightFaint,
-                    contentPadding = 24.dp,
+                    contentPadding = DuskTokens.PanelPaddingHero,
                 ) {
                     AmountHeroInput(
                         value = amount,
@@ -387,7 +388,7 @@ private fun AmountScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(
-                            bottom = navBarPadding.calculateBottomPadding() + 16.dp,
+                            bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space16,
                         ),
                 ) {
                     Column {
@@ -412,10 +413,10 @@ private fun AmountScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(9999.dp))
+                            .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                             .background(palette.LightBarely)
                             .clickable { amount = availableBalance }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = DuskTokens.Space12, vertical = DuskTokens.Space8),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -442,18 +443,18 @@ private fun AmountTopBar(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
+            .height(DuskTokens.TopBarHeight)
+            .padding(horizontal = DuskTokens.Space16),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back to recipient",
             tint = palette.Light,
             modifier = Modifier
-                .size(24.dp)
+                .size(DuskTokens.Icon24)
                 .clickable { onBack() },
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space16))
         Text(
             text = "Enter Amount",
             color = palette.Light,
@@ -480,18 +481,18 @@ private fun TopBar(title: String, palette: DuskPalette, onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
+            .height(DuskTokens.TopBarHeight)
+            .padding(horizontal = DuskTokens.Space16),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back",
             tint = palette.Light,
             modifier = Modifier
-                .size(24.dp)
+                .size(DuskTokens.Icon24)
                 .clickable { onBack() },
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space16))
         Text(
             text = title,
             color = palette.Light,

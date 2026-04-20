@@ -26,7 +26,7 @@ fun DuskProgressBar(
     progress: Float, // 0f..1f
     palette: DuskPalette,
     modifier: Modifier = Modifier,
-    height: Dp = 4.dp,
+    height: Dp = DuskTokens.ProgressBarHeight,
 ) {
     Box(
         modifier = modifier

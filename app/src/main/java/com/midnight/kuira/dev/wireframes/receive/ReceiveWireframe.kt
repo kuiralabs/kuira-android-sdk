@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
@@ -98,16 +99,16 @@ fun ReceiveWireframe(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(DuskTokens.TopBarHeight)
+                    .padding(horizontal = DuskTokens.Space16),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back to balance",
                     tint = palette.Light,
-                    modifier = Modifier.size(24.dp).clickable { onBack() },
+                    modifier = Modifier.size(DuskTokens.Icon24).clickable { onBack() },
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space16))
                 Text(
                     text = "Receive",
                     color = palette.Light,
@@ -122,10 +123,10 @@ fun ReceiveWireframe(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = DuskTokens.Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Header
                 Text(
@@ -135,13 +136,13 @@ fun ReceiveWireframe(
                     fontWeight = FontWeight.W300,
                     lineHeight = 24.sp,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space4))
                 // Network badge
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(9999.dp))
+                        .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                         .background(palette.LightBarely)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = DuskTokens.Space8, vertical = DuskTokens.Space4),
                 ) {
                     Text(
                         text = "PREPROD",
@@ -152,13 +153,13 @@ fun ReceiveWireframe(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // QR panel
                 GlassPanel(
                     tint = palette.contentPanel,
                     border = palette.LightFaint,
-                    contentPadding = 24.dp,
+                    contentPadding = DuskTokens.PanelPaddingHero,
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -167,11 +168,11 @@ fun ReceiveWireframe(
                         if (state == ReceiveWireframeState.LOADING_FIRST) {
                             // Shimmer QR placeholder
                             ShimmerBlock(
-                                height = 200.dp,
+                                height = DuskTokens.QrSize,
                                 widthFraction = 1f,
                                 palette = palette,
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(DuskTokens.Space16))
                             ShimmerBlock(
                                 height = 32.dp,
                                 widthFraction = 0.8f,
@@ -181,8 +182,8 @@ fun ReceiveWireframe(
                             // QR placeholder — white square with "QR" text
                             Box(
                                 modifier = Modifier
-                                    .size(200.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .size(DuskTokens.QrSize)
+                                    .clip(RoundedCornerShape(DuskTokens.RadiusMd))
                                     .background(androidx.compose.ui.graphics.Color.White)
                                     .clickable { showFullScreenQR = true },
                                 contentAlignment = Alignment.Center,
@@ -194,7 +195,7 @@ fun ReceiveWireframe(
                                     fontWeight = FontWeight.W200,
                                 )
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(DuskTokens.Space16))
                             // Address display
                             Text(
                                 text = currentAddress,
@@ -209,15 +210,15 @@ fun ReceiveWireframe(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space24))
 
                 // Tab selector (reuses AddressChip geometry)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(DuskTokens.RadiusMd))
                         .background(palette.LightBarely)
-                        .padding(4.dp),
+                        .padding(DuskTokens.Space4),
                 ) {
                     tabs.forEachIndexed { index, tab ->
                         val isActive = index == selectedTab
@@ -225,10 +226,10 @@ fun ReceiveWireframe(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(DuskTokens.RadiusSm))
                                 .then(if (isActive) Modifier.background(palette.Light) else Modifier)
                                 .clickable { selectedTab = index }
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = DuskTokens.Space12),
                         ) {
                             Text(
                                 text = tab,
@@ -241,7 +242,7 @@ fun ReceiveWireframe(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
                 // Action row
                 Row(
@@ -272,8 +273,8 @@ private fun ActionPill(
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(9999.dp))
+                .size(DuskTokens.ButtonHeight)
+                .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                 .background(palette.LightBarely),
             contentAlignment = Alignment.Center,
         ) {
@@ -281,10 +282,10 @@ private fun ActionPill(
                 imageVector = icon,
                 contentDescription = label,
                 tint = palette.Light,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(DuskTokens.Icon20),
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space8))
         Text(
             text = label,
             color = palette.LightMuted,
@@ -310,9 +311,9 @@ private fun FullScreenQROverlay(
         // QR always renders white bg + dark modules for scanner contrast
         Box(
             modifier = Modifier
-                .padding(32.dp)
+                .padding(DuskTokens.Space32)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(DuskTokens.RadiusMd))
                 .background(androidx.compose.ui.graphics.Color.White),
             contentAlignment = Alignment.Center,
         ) {
@@ -322,7 +323,7 @@ private fun FullScreenQROverlay(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(32.dp),
+                modifier = Modifier.padding(DuskTokens.Space32),
             )
         }
     }

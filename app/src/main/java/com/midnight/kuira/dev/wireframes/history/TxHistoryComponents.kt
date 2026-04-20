@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 /**
@@ -40,9 +41,9 @@ fun TxTypeBadge(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(9999.dp))
+            .clip(RoundedCornerShape(DuskTokens.RadiusFull))
             .background(palette.LightBarely)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = DuskTokens.Space8, vertical = DuskTokens.Space4),
     ) {
         Text(
             text = label,
@@ -74,9 +75,9 @@ fun TxRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = DuskTokens.RowMinHeight)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             // Line 1: badge + amount
@@ -94,7 +95,7 @@ fun TxRow(
                     lineHeight = 20.sp,
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space4))
             // Line 2: detail + status
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -116,12 +117,12 @@ fun TxRow(
                 )
             }
         }
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space8))
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
             tint = palette.LightMuted,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(DuskTokens.Icon16),
         )
     }
 }

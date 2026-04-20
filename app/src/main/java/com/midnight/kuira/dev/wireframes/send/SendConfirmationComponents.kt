@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 /**
@@ -47,7 +48,7 @@ fun StepIndicator(
             fontWeight = FontWeight.W300,
             lineHeight = 20.sp,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(DuskTokens.Space8))
         Text(
             text = detailHint,
             color = palette.LightMuted,
@@ -77,14 +78,14 @@ fun ErrorCard(
     ) {
         Row(
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(DuskTokens.Space8),
         ) {
             Icon(
                 imageVector = Icons.Filled.ErrorOutline,
                 contentDescription = null,
                 tint = palette.ErrorText,
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(DuskTokens.Icon20)
                     .padding(top = 2.dp),
             )
             Column {
@@ -95,7 +96,7 @@ fun ErrorCard(
                     fontWeight = FontWeight.W300,
                     lineHeight = 20.sp,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(DuskTokens.Space4))
                 Text(
                     text = body,
                     color = palette.LightMuted,

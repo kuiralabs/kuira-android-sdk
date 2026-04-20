@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 // ── Palette-aware buttons (production DuskButton hardcodes MidnightColors) ──
@@ -58,8 +59,8 @@ fun DuskPrimaryButtonPaletted(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(DuskTokens.ButtonHeight)
+            .clip(RoundedCornerShape(DuskTokens.RadiusMd))
             .background(if (enabled) palette.Confirm else palette.LightBarely)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -83,8 +84,8 @@ fun DuskSecondaryButtonPaletted(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(DuskTokens.ButtonHeight)
+            .clip(RoundedCornerShape(DuskTokens.RadiusMd))
             .background(palette.ConfirmSurface)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -153,10 +154,10 @@ fun DuskInputField(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(12.dp))
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .clip(RoundedCornerShape(DuskTokens.RadiusMd))
+                .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(DuskTokens.RadiusMd))
+                .heightIn(min = DuskTokens.RowMinHeight)
+                .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
         ) {
             Box(modifier = Modifier.weight(1f)) {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
@@ -189,24 +190,24 @@ fun DuskInputField(
             }
 
             if (trailingSlot != null) {
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space8))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(DuskTokens.Space8),
                     content = trailingSlot,
                 )
             }
         }
 
         if (error != null) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space4))
             Text(
                 text = error,
                 color = palette.LightMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.W400,
                 lineHeight = 16.sp,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = DuskTokens.Space4),
             )
         }
     }
@@ -226,9 +227,9 @@ fun TokenModeSubRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = DuskTokens.RowMinHeight)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -247,12 +248,12 @@ fun TokenModeSubRow(
                 lineHeight = 16.sp,
             )
         }
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(DuskTokens.Space8))
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
             tint = palette.LightMuted,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(DuskTokens.Icon16),
         )
     }
 }
@@ -320,22 +321,22 @@ fun AmountHeroInput(
                     letterSpacing = (-1).sp,
                     lineHeight = 48.sp,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space8))
                 Text(
                     text = denomination,
                     color = denomColor,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.W300,
                     lineHeight = 24.sp,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    modifier = Modifier.padding(bottom = DuskTokens.Space8),
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(DuskTokens.Space12))
                 // Swap toggle (↕)
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(9999.dp))
+                        .padding(bottom = DuskTokens.Space8)
+                        .size(DuskTokens.Icon32)
+                        .clip(RoundedCornerShape(DuskTokens.RadiusFull))
                         .background(palette.LightBarely)
                         .clickable { onToggleMode() },
                     contentAlignment = Alignment.Center,
@@ -374,7 +375,7 @@ fun AmountHeroInput(
 
         // Conversion hint (e.g., "~$5.50" or "~5.5 NIGHT")
         if (conversionHint != null && error == null) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = conversionHint,
                 color = palette.LightMuted,
@@ -386,7 +387,7 @@ fun AmountHeroInput(
 
         // Error caption
         if (error != null) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(DuskTokens.Space8))
             Text(
                 text = error,
                 color = palette.ErrorText,
@@ -413,11 +414,11 @@ fun RecipientChip(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .heightIn(min = DuskTokens.RowMinHeightAccessibility)
+            .clip(RoundedCornerShape(DuskTokens.RadiusMd))
             .background(palette.LightBarely)
             .clickable(onClick = onEdit)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = DuskTokens.Space16, vertical = DuskTokens.Space12),
     ) {
         Text(
             text = "To: $addressShort",
@@ -431,7 +432,7 @@ fun RecipientChip(
             imageVector = Icons.Filled.Edit,
             contentDescription = "Edit recipient",
             tint = palette.LightMuted,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(DuskTokens.Icon16),
         )
     }
 }
