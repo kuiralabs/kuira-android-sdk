@@ -112,24 +112,24 @@ private val wireframes = listOf(
     ),
     WireframeEntry(
         id = "09",
-        title = "Onboarding visual pass",
-        subtitle = "Token audit of existing onboarding screens",
-        status = WireframeStatus.PENDING,
-        route = null,
+        title = "Onboarding",
+        subtitle = "5-step flow · Welcome → Biometric → Create → Phrase → All set",
+        status = WireframeStatus.DRAFTING,
+        route = "onboarding-wireframe",
     ),
     WireframeEntry(
         id = "10",
         title = "App icon",
-        subtitle = "Pure-symbol mark concepts",
-        status = WireframeStatus.PENDING,
-        route = null,
+        subtitle = "Shield + star · Void bg · adaptive icon shipped",
+        status = WireframeStatus.DRAFTING,
+        route = null, // asset deliverable — no wireframe screen
     ),
     WireframeEntry(
         id = "11",
         title = "Splash animation",
-        subtitle = "≤ 800ms intro · MaterializeEffect → Balance",
-        status = WireframeStatus.PENDING,
-        route = null,
+        subtitle = "Branded cold-start · API 31+ theme wired",
+        status = WireframeStatus.DRAFTING,
+        route = null, // theme + motion — no wireframe screen
     ),
 )
 

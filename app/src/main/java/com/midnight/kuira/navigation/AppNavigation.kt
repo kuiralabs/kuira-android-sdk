@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midnight.kuira.dev.DevPortalScreen
 import com.midnight.kuira.dev.wireframes.dust.DustWireframeWithDevControls
+import com.midnight.kuira.dev.wireframes.onboarding.OnboardingWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.history.TxHistoryWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.receive.ReceiveWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.recovery.RecoveryPhraseWireframeWithDevControls
@@ -33,6 +34,7 @@ sealed class Screen(val route: String) {
     data object TxHistoryWireframe : Screen("tx-history-wireframe")
     data object ReceiveWireframe : Screen("receive-wireframe")
     data object RecoveryPhraseWireframe : Screen("recovery-phrase-wireframe")
+    data object OnboardingWireframe : Screen("onboarding-wireframe")
     data object Balance : Screen("balance")
 
     // Send screen takes an optional mode hint ("unshielded" or "shielded").
@@ -152,6 +154,18 @@ fun AppNavigation(
         // Recovery Phrase Wireframe (design preview — remove after 8B.1)
         composable(route = Screen.RecoveryPhraseWireframe.route) {
             RecoveryPhraseWireframeWithDevControls(
+                onBack = { navController.popBackStack() },
+                onOpenWireframeList = {
+                    navController.navigate(Screen.DevPortal.route) {
+                        popUpTo(Screen.DevPortal.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Onboarding Wireframe (design preview — remove after 8B.1)
+        composable(route = Screen.OnboardingWireframe.route) {
+            OnboardingWireframeWithDevControls(
                 onBack = { navController.popBackStack() },
                 onOpenWireframeList = {
                     navController.navigate(Screen.DevPortal.route) {
