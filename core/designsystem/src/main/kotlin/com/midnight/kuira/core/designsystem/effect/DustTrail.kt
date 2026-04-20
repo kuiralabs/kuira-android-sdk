@@ -43,10 +43,10 @@ fun DustTrail(
         List(particleCount) {
             DustParticle(
                 phaseOffset = Random.nextFloat(),
-                driftX = -(Random.nextFloat() * 0.8f + 0.2f), // drift LEFT (behind runner)
-                driftY = -(Random.nextFloat() * 0.3f + 0.1f), // slight upward
-                size = Random.nextFloat() * 3f + 2f,           // 2..5 dp radius (bigger)
-                lifetime = Random.nextFloat() * 0.3f + 0.7f,   // 0.7..1.0 of cycle
+                driftX = -(Random.nextFloat() * 0.6f + 0.1f), // drift LEFT (behind runner)
+                driftY = -(Random.nextFloat() * 0.4f + 0.1f), // drift UP from ground
+                size = Random.nextFloat() * 5f + 3f,           // 3..8 dp — cloud-like puffs
+                lifetime = Random.nextFloat() * 0.3f + 0.7f,
             )
         }
     }
@@ -63,25 +63,26 @@ fun DustTrail(
     )
 
     Canvas(modifier = modifier) {
-        // Particles originate from the right-center (runner's feet)
-        // and trail LEFT behind the runner — like canyon dust.
-        val startX = size.width * 0.6f  // slightly right of center (foot strike)
-        val footY = size.height * 0.7f
+        // Ground line = bottom of the composable (runner's floor).
+        // Particles spawn at ground level and puff upward + behind.
+        val startX = size.width * 0.55f  // foot strike point
+        val groundY = size.height * 0.92f // near the very bottom — the floor
 
         particles.forEach { p ->
             val t = ((cycle + p.phaseOffset) % 1f) / p.lifetime
             if (t > 1f) return@forEach
 
-            val alpha = maxAlpha * (1f - t * t) // quadratic fade — visible longer
-            val x = startX + p.driftX * size.width * 0.7f * t  // long trail behind
-            val y = footY + p.driftY * size.height * 0.5f * t
+            val alpha = maxAlpha * (1f - t * t) // quadratic fade
+            // Dust kicks up from ground and rises
+            val x = startX + p.driftX * size.width * 0.6f * t
+            val y = groundY + p.driftY * size.height * 0.6f * t // rises from floor
 
             val wobble = sin(t * 6.28f * 2f) * 3f
 
             drawCircle(
                 color = color.copy(alpha = alpha),
-                radius = p.size * (1f - t * 0.3f),
-                center = Offset(x + wobble, y + wobble * 0.5f),
+                radius = p.size * (1f + t * 0.5f), // GROWS as it disperses
+                center = Offset(x + wobble, y),
             )
         }
     }
