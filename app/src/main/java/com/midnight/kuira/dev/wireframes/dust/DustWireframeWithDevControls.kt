@@ -48,25 +48,66 @@ fun DustWireframeWithDevControls(
     var lightMode by remember { mutableStateOf(false) }
     var modalOpen by remember { mutableStateOf(false) }
 
-    // Auto-play: 0% → 100% over 8 seconds, loops
+    // Auto-play: full lifecycle over 12 seconds
+    // 0.0–0.35 = generation ramp (0→100%)
+    // 0.35–0.50 = cap plateau (hold at 100%)
+    // 0.50–0.85 = decay (100→0%)
+    // 0.85–1.00 = empty hold (0%)
     val autoTransition = rememberInfiniteTransition(label = "autoPlay")
-    val autoProgress by autoTransition.animateFloat(
+    val autoCycle by autoTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            animation = tween(durationMillis = 12000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "autoProgress",
+        label = "autoCycle",
     )
 
-    val generationProgress = if (autoPlay) autoProgress else manualProgress
+    val generationProgress: Float
+    val isDecaying: Boolean
+    val decayProgress: Float
+
+    if (autoPlay) {
+        when {
+            autoCycle < 0.35f -> {
+                // Generation ramp
+                generationProgress = (autoCycle / 0.35f).coerceIn(0f, 1f)
+                isDecaying = false
+                decayProgress = 0f
+            }
+            autoCycle < 0.50f -> {
+                // Cap plateau
+                generationProgress = 1f
+                isDecaying = false
+                decayProgress = 0f
+            }
+            autoCycle < 0.85f -> {
+                // Decay
+                generationProgress = 1f
+                isDecaying = true
+                decayProgress = ((autoCycle - 0.50f) / 0.35f).coerceIn(0f, 1f)
+            }
+            else -> {
+                // Empty hold
+                generationProgress = 0f
+                isDecaying = false
+                decayProgress = 0f
+            }
+        }
+    } else {
+        generationProgress = manualProgress
+        isDecaying = false
+        decayProgress = 0f
+    }
     val palette = if (lightMode) DuskPalette.LightMode else DuskPalette.DarkMode
 
     Box(modifier = Modifier.fillMaxSize()) {
         DustWireframe(
             state = state,
             generationProgress = generationProgress,
+            isDecaying = isDecaying,
+            decayProgress = decayProgress,
             palette = palette,
             onBack = onBack,
         )
@@ -107,7 +148,7 @@ fun DustWireframeWithDevControls(
                 DevStateSection(label = "GENERATION PROGRESS") {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                         DevCheckboxRow(
-                            label = "Auto-play 0%→100% (8s loop)",
+                            label = "Auto-play full lifecycle (12s loop)",
                             checked = autoPlay,
                             onCheckedChange = { autoPlay = it },
                         )

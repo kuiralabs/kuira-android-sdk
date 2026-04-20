@@ -81,6 +81,8 @@ private fun DustWireframeState.isPending(): Boolean = dustStepCopy(this) != null
 fun DustWireframe(
     state: DustWireframeState = DustWireframeState.DEFAULT,
     generationProgress: Float = 0.42f,
+    isDecaying: Boolean = false,
+    decayProgress: Float = 0f,
     palette: DuskPalette = DuskPalette.DarkMode,
     onBack: () -> Unit = {},
 ) {
@@ -118,7 +120,7 @@ fun DustWireframe(
                     .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 when (state) {
-                    DustWireframeState.DEFAULT -> DefaultContent(palette, generationProgress)
+                    DustWireframeState.DEFAULT -> DefaultContent(palette, generationProgress, isDecaying, decayProgress)
                     DustWireframeState.LOADING_FIRST -> LoadingContent(palette)
                     DustWireframeState.EMPTY -> EmptyContent(palette)
                     DustWireframeState.SUCCESS -> SuccessContent(palette)
@@ -162,7 +164,12 @@ private fun TopBar(palette: DuskPalette, backEnabled: Boolean, onBack: () -> Uni
 }
 
 @Composable
-private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
+private fun DefaultContent(
+    palette: DuskPalette,
+    generationProgress: Float,
+    isDecaying: Boolean = false,
+    decayProgress: Float = 0f,
+) {
     Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Hero balance
@@ -208,8 +215,13 @@ private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
                 .height(160.dp),
             contentAlignment = Alignment.Center,
         ) {
+            // Vortex density: during decay, visual reverses
+            val vortexDensity = if (isDecaying) {
+                (1f - decayProgress).coerceIn(0f, 1f)
+            } else generationProgress
+
             DustVortex(
-                progress = generationProgress,
+                progress = vortexDensity,
                 modifier = Modifier.matchParentSize(),
                 color = palette.Light,
             )
@@ -217,30 +229,45 @@ private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
 
         Spacer(modifier = Modifier.height(DuskTokens.Space16))
 
-        // Progress label + percentage
+        // Status label — changes based on phase
+        val statusLabel = when {
+            isDecaying && decayProgress >= 1f -> "Depleted"
+            isDecaying -> "Decaying"
+            generationProgress >= 1f -> "At capacity"
+            else -> "Generating"
+        }
+        val displayPercent = if (isDecaying) {
+            ((1f - decayProgress) * 100).toInt()
+        } else {
+            (generationProgress * 100).toInt()
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Generation",
-                color = palette.LightSoft,
+                text = statusLabel,
+                color = if (isDecaying) palette.ErrorText else palette.LightSoft,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
                 lineHeight = 20.sp,
             )
             Text(
-                text = "${(generationProgress * 100).toInt()}%",
+                text = "$displayPercent%",
                 color = palette.Light,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
             )
         }
         Spacer(modifier = Modifier.height(DuskTokens.Space8))
-        // Progress bar below the vortex for precise reading
+        // Progress bar
+        val barProgress = if (isDecaying) {
+            (1f - decayProgress).coerceIn(0f, 1f)
+        } else generationProgress
         DuskProgressBar(
-            progress = generationProgress,
+            progress = barProgress,
             palette = palette,
             height = DuskTokens.ProgressBarHeight,
         )
@@ -249,6 +276,8 @@ private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
         // Lifecycle graph — shows the generation curve + current position
         DustLifecycleGraph(
             progress = generationProgress,
+            isDecaying = isDecaying,
+            decayProgress = decayProgress,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
