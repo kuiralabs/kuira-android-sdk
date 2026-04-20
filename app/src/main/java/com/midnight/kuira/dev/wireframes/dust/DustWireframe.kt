@@ -79,6 +79,7 @@ private fun DustWireframeState.isPending(): Boolean = dustStepCopy(this) != null
 @Composable
 fun DustWireframe(
     state: DustWireframeState = DustWireframeState.DEFAULT,
+    generationProgress: Float = 0.42f,
     palette: DuskPalette = DuskPalette.DarkMode,
     onBack: () -> Unit = {},
 ) {
@@ -116,7 +117,7 @@ fun DustWireframe(
                     .padding(bottom = navBarPadding.calculateBottomPadding() + DuskTokens.Space24),
             ) {
                 when (state) {
-                    DustWireframeState.DEFAULT -> DefaultContent(palette)
+                    DustWireframeState.DEFAULT -> DefaultContent(palette, generationProgress)
                     DustWireframeState.LOADING_FIRST -> LoadingContent(palette)
                     DustWireframeState.EMPTY -> EmptyContent(palette)
                     DustWireframeState.SUCCESS -> SuccessContent(palette)
@@ -160,7 +161,7 @@ private fun TopBar(palette: DuskPalette, backEnabled: Boolean, onBack: () -> Uni
 }
 
 @Composable
-private fun DefaultContent(palette: DuskPalette) {
+private fun DefaultContent(palette: DuskPalette, generationProgress: Float) {
     Spacer(modifier = Modifier.height(DuskTokens.Space32))
 
     // Hero balance
@@ -207,7 +208,7 @@ private fun DefaultContent(palette: DuskPalette) {
             contentAlignment = Alignment.Center,
         ) {
             DustVortex(
-                progress = 0.42f,
+                progress = generationProgress,
                 modifier = Modifier.matchParentSize(),
                 color = palette.Light,
             )
@@ -229,7 +230,7 @@ private fun DefaultContent(palette: DuskPalette) {
                 lineHeight = 20.sp,
             )
             Text(
-                text = "42%",
+                text = "${(generationProgress * 100).toInt()}%",
                 color = palette.Light,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W300,
@@ -238,7 +239,7 @@ private fun DefaultContent(palette: DuskPalette) {
         Spacer(modifier = Modifier.height(DuskTokens.Space8))
         // Progress bar below the vortex for precise reading
         DuskProgressBar(
-            progress = 0.42f,
+            progress = generationProgress,
             palette = palette,
             height = DuskTokens.ProgressBarHeight,
         )

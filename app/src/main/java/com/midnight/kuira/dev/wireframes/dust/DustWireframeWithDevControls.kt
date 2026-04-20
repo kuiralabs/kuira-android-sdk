@@ -1,21 +1,29 @@
 package com.midnight.kuira.dev.wireframes.dust
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.devportal.DevCheckboxRow
 import com.midnight.kuira.core.designsystem.devportal.DevPortalModal
 import com.midnight.kuira.core.designsystem.devportal.DevRadioRow
@@ -29,13 +37,19 @@ fun DustWireframeWithDevControls(
     onOpenWireframeList: () -> Unit = {},
 ) {
     var state by remember { mutableStateOf(DustWireframeState.DEFAULT) }
+    var generationProgress by remember { mutableFloatStateOf(0.42f) }
     var lightMode by remember { mutableStateOf(false) }
     var modalOpen by remember { mutableStateOf(false) }
 
     val palette = if (lightMode) DuskPalette.LightMode else DuskPalette.DarkMode
 
     Box(modifier = Modifier.fillMaxSize()) {
-        DustWireframe(state = state, palette = palette, onBack = onBack)
+        DustWireframe(
+            state = state,
+            generationProgress = generationProgress,
+            palette = palette,
+            onBack = onBack,
+        )
 
         FloatingActionButton(
             onClick = { modalOpen = true },
@@ -64,6 +78,39 @@ fun DustWireframeWithDevControls(
                             label = s.name.lowercase().replace('_', '-'),
                             selected = s == state,
                             onClick = { state = s },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.padding(top = 16.dp))
+
+                DevStateSection(label = "GENERATION PROGRESS") {
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${(generationProgress * 100).toInt()}%",
+                                color = MidnightColors.Light,
+                                fontSize = 14.sp,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "Drag to preview vortex density",
+                                color = MidnightColors.LightMuted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Slider(
+                            value = generationProgress,
+                            onValueChange = { generationProgress = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = MidnightColors.Light,
+                                activeTrackColor = MidnightColors.LightSoft,
+                                inactiveTrackColor = MidnightColors.LightFaint,
+                            ),
                         )
                     }
                 }
