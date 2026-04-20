@@ -43,7 +43,7 @@ import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
 import com.midnight.kuira.dev.wireframes.shared.DuskProgressBar
-import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
 
@@ -339,7 +339,7 @@ private fun PendingContent(copy: DustStepCopy, palette: DuskPalette) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        RaramuriRunner(
+        LottieRunner(
             modifier = Modifier
                 .fillMaxWidth(DuskTokens.RunnerWidthFraction)
                 .height(DuskTokens.RunnerHeight),

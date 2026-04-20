@@ -49,7 +49,7 @@ import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.DuskSecondaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.StepIndicator
-import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 enum class OnboardingStep {
@@ -453,7 +453,7 @@ private fun CreatingScreen(palette: DuskPalette) {
             // Rarámuri runner — the "Running People" progress indicator.
             // Intentionally shown for 3+ seconds even if wallet creation
             // is instant. This is a brand moment, not just a spinner.
-            RaramuriRunner(
+            LottieRunner(
                 modifier = Modifier
                     .fillMaxWidth(DuskTokens.RunnerWidthFraction)
                     .height(DuskTokens.RunnerHeight),

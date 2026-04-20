@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.dev.wireframes.shared.DuskTokens
 import com.midnight.kuira.core.designsystem.effect.StarField
-import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
@@ -289,7 +289,7 @@ private fun PendingContent(state: ConfirmationState, palette: DuskPalette) {
     val copy = stepCopy(state) ?: return
 
     // Rarámuri runner — brand progress indicator
-    RaramuriRunner(
+    LottieRunner(
         modifier = Modifier
             .fillMaxWidth(DuskTokens.RunnerWidthFraction)
             .height(DuskTokens.RunnerHeight),
