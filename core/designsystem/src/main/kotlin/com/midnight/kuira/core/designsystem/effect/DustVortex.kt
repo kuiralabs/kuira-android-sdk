@@ -184,97 +184,96 @@ fun DustLifecycleGraph(
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val padding = 8f
-        val graphW = w - padding * 2
-        val graphH = h - padding * 2
-        val baseY = padding + graphH  // bottom of graph
-        val topY = padding             // top of graph
+        val pad = 8f
+        val gw = w - pad * 2
+        val gh = h - pad * 2
+        val baseY = pad + gh   // bottom
+        val topY = pad          // top (= cap)
 
-        // Axis lines (very faint)
+        // Key X positions for the full lifecycle curve
+        val rampEndX = pad + gw * 0.35f       // generation ramp ends
+        val plateauEndX = pad + gw * 0.55f    // cap plateau ends
+        val decayEndX = pad + gw * 0.90f      // decay ramp ends
+
+        // ── Full lifecycle reference curve (always visible, faint) ──
+        val refPath = Path().apply {
+            moveTo(pad, baseY)                   // start at zero
+            lineTo(rampEndX, topY)               // ramp up to cap
+            lineTo(plateauEndX, topY)            // plateau at cap
+            lineTo(decayEndX, baseY)             // decay back to zero
+        }
+        drawPath(
+            path = refPath,
+            color = color.copy(alpha = 0.12f),
+            style = Stroke(width = 1.5f, cap = StrokeCap.Round),
+        )
+
+        // Cap label (faint, right side)
         drawLine(
-            color = color.copy(alpha = 0.15f),
-            start = Offset(padding, baseY),
-            end = Offset(padding + graphW, baseY),
+            color = color.copy(alpha = 0.08f),
+            start = Offset(pad, topY),
+            end = Offset(pad + gw, topY),
             strokeWidth = 1f,
         )
-        drawLine(
-            color = color.copy(alpha = 0.15f),
-            start = Offset(padding, baseY),
-            end = Offset(padding, topY),
-            strokeWidth = 1f,
-        )
 
-        // Cap line (dashed effect — just a faint horizontal)
+        // Axis
         drawLine(
             color = color.copy(alpha = 0.1f),
-            start = Offset(padding, topY),
-            end = Offset(padding + graphW, topY),
+            start = Offset(pad, baseY),
+            end = Offset(pad + gw, baseY),
             strokeWidth = 1f,
         )
 
-        // Generation curve path
-        val curvePath = Path()
-        curvePath.moveTo(padding, baseY)
+        // ── Active curve (bright, shows current position) ──
+        val activePath = Path()
+        activePath.moveTo(pad, baseY)
 
-        // Ramp up (0% → 100% of generation)
-        val rampEndX = padding + graphW * 0.5f // ramp takes first 50% of x-axis
-        val rampEndY = topY // reaches cap
-        curvePath.lineTo(
-            padding + graphW * 0.5f * p,
-            baseY - graphH * p,
-        )
+        val dotX: Float
+        val dotY: Float
 
-        // If at 100%, show plateau
-        if (p >= 1f) {
-            curvePath.lineTo(rampEndX, rampEndY)
-            if (isDecaying) {
-                // Plateau until decay point
-                val decayStartX = rampEndX + graphW * 0.1f
-                curvePath.lineTo(decayStartX, rampEndY)
-                // Decay ramp down
-                val dp = decayProgress.coerceIn(0f, 1f)
-                curvePath.lineTo(
-                    decayStartX + graphW * 0.35f * dp,
-                    rampEndY + graphH * dp,
-                )
-            } else {
-                // Plateau continues
-                curvePath.lineTo(padding + graphW * 0.85f, rampEndY)
+        if (!isDecaying) {
+            // Generation phase: ramp from 0 to current progress
+            val currentX = pad + gw * 0.35f * p
+            val currentY = baseY - gh * p
+            activePath.lineTo(currentX, currentY)
+            dotX = currentX
+            dotY = currentY
+
+            // If at cap, extend the plateau
+            if (p >= 1f) {
+                val plateauX = pad + gw * 0.45f // show some plateau
+                activePath.lineTo(plateauX, topY)
+                dotX // stays at plateau edge visually
             }
+        } else {
+            // Full ramp + plateau + partial decay
+            activePath.lineTo(rampEndX, topY)          // full ramp
+            activePath.lineTo(plateauEndX, topY)        // full plateau
+            val dp = decayProgress.coerceIn(0f, 1f)
+            val decayX = plateauEndX + (decayEndX - plateauEndX) * dp
+            val decayY = topY + gh * dp
+            activePath.lineTo(decayX, decayY)
+            dotX = decayX
+            dotY = decayY
         }
 
         drawPath(
-            path = curvePath,
-            color = color.copy(alpha = 0.6f),
-            style = Stroke(width = 2f, cap = StrokeCap.Round),
+            path = activePath,
+            color = color.copy(alpha = 0.7f),
+            style = Stroke(width = 2.5f, cap = StrokeCap.Round),
         )
 
-        // Current position dot
-        val dotX: Float
-        val dotY: Float
-        if (p < 1f) {
-            dotX = padding + graphW * 0.5f * p
-            dotY = baseY - graphH * p
-        } else if (isDecaying) {
-            val decayStartX = rampEndX + graphW * 0.1f
-            val dp = decayProgress.coerceIn(0f, 1f)
-            dotX = decayStartX + graphW * 0.35f * dp
-            dotY = rampEndY + graphH * dp
-        } else {
-            dotX = padding + graphW * 0.7f // on the plateau
-            dotY = topY
-        }
-
-        // Dot glow
+        // ── Current position dot ──
+        // Glow
         drawCircle(
-            color = color.copy(alpha = 0.2f),
-            radius = 8f,
+            color = color.copy(alpha = 0.25f),
+            radius = 10f,
             center = Offset(dotX, dotY),
         )
         // Dot
         drawCircle(
-            color = color.copy(alpha = 0.9f),
-            radius = 4f,
+            color = color.copy(alpha = 0.95f),
+            radius = 4.5f,
             center = Offset(dotX, dotY),
         )
     }

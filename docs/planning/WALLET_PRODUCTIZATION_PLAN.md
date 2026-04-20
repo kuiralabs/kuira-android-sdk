@@ -808,8 +808,9 @@ cannot be submitted to the Play Store at all.
 | T1-19 | `MAINNET` enum case + Firebase Remote Config gate | Not in `MidnightNetwork` enum; no Firebase integration yet | Add `MAINNET` to the enum with endpoint URLs stubbed. Hide UI visibility (picker + badge) behind a Firebase Remote Config boolean `mainnet_enabled` (default `false`, refresh on app startup + once per hour). Flipping to `true` in the Firebase console enables mainnet without an app update. Requires Firebase project setup + Google Play Services dependency + Data Safety form update | 10–12h | **ship** |
 | T1-20 | MCP Bridge + structured JSON output (Agent Runtime seed, Pattern A pairing) | Zero infrastructure; CLI wallet has MCP Server prior art with 24 tools | Q5 Option C — minimal agent seed. Enables "Claude Desktop queries my wallet" demo (Scenario 1). Full Agent Runtime (4 remaining pillars) deferred to Phase 7 / v1.1 alongside CipherDefense | 20–25h | **ship** |
 | T1-21 | Incremental UTXO sync (persist `SyncStateManager` across launches, reorg-aware resume, fallback to full re-sync on indexer state loss) | `SubscriptionManager.checkAndHandleResyncNeeded` currently wipes the UTXO DB and replays from `transactionId = null` on every app launch — safe, but produces a zero-balance flicker + slow balance load every time the app opens. Dust cache is separate and works correctly. | High-priority optimization — incompatible with the premium-UX bar. Wallet startup should resume from last known tx ID; indexer signals reorg → invalidate back to fork point. Add a "Force re-sync" button in Settings for the user-escape case. | 8–12h | **ship** |
+| T1-22 | Dust mathematical simulator — interactive dev-portal tool that models the official Midnight dust lifecycle using real parameters from `midnightntwrk/midnight-ledger/spec/dust.md` | 8B.1 design sprint produced the DustVortex animation + DustLifecycleGraph with a manual slider. But the animation uses fake progress values, not real math. The production Dust screen needs values derived from actual generation/decay formulas. | Build a `DustSimulator` that computes: `value = min(initial + elapsed × rate, capacity)` for generation, `max(value_at_T - (now - T) × rate, 0)` for decay. Inputs: NIGHT amount, time elapsed, whether/when backing NIGHT was spent. Wire into the DustVortex + DustLifecycleGraph so the animation reflects real math. Dev-portal tool lets users play with scenarios ("500 NIGHT locked, 3 days in, spend half NIGHT at day 5 — what happens?"). Validates edge cases before production chain data is wired. | 6–8h | **ship** |
 
-**Tier 1 subtotal:** ~94–134h.
+**Tier 1 subtotal:** ~100–142h.
 
 ### Tier 2 — Should ship (premium UX bar)
 
@@ -1295,7 +1296,7 @@ Sequence within 8B.3:
 
 | Rows | Combined est. |
 |---|---|
-| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18, T1-21 | 112–144h |
+| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18, T1-21, T1-22 | 118–152h |
 
 **Deliverable:** feature-complete testnet wallet with polished L3 UX
 across every screen; wallet opens in under a second with cached
