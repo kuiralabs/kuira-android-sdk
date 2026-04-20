@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Kuira Wallet launcher icon foreground: minimalist shield + star symbol.
-  Placeholder design — refine with AI design tools (Midjourney/DALL-E)
-  per 10-app-icon.md spec. Must read at 48dp (smallest launcher size).
-
-  The symbol sits inside the 66dp safe zone (centered in 108dp canvas).
-  Adaptive icon masks (circle, squircle, rounded square) will crop the
-  outer area — keep all content inside the safe zone.
+  Kuira Wallet launcher icon foreground: geometric "K" monogram.
+  Constructed from clean straight lines — reads at 48dp launcher size.
+  Placeholder — refine with AI design tools per 10-app-icon.md spec.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -14,16 +10,20 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Shield outline — centered at (54, 56), sized to fit 66dp safe zone -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.5"
-        android:pathData="M54,24 L76,34 L76,56 Q76,72 54,82 Q32,72 32,56 L32,34 Z" />
-
-    <!-- Star dot — single point inside the shield, brand signature -->
+    <!-- Geometric K — within 66dp safe zone (21..87) -->
+    <!-- Vertical stem -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,50 m-3,0 a3,3 0,1 1,6 0 a3,3 0,1 1,-6 0" />
+        android:pathData="M38,28 L43,28 L43,80 L38,80 Z" />
+
+    <!-- Upper diagonal (top-right arm) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M43,52 L68,28 L73,28 L73,33 L47,56 Z" />
+
+    <!-- Lower diagonal (bottom-right leg) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M43,56 L47,52 L73,75 L73,80 L68,80 Z" />
 
 </vector>

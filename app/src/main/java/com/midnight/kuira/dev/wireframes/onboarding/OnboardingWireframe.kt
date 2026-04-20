@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.core.designsystem.effect.KuiraMaterializeFrame
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.DuskSecondaryButtonPaletted
@@ -106,19 +107,20 @@ private fun WelcomeScreen(palette: DuskPalette) {
                 .padding(horizontal = 16.dp)
                 .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
         ) {
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(0.4f))
 
-            // Label (type-label-tiny) — matches production onboarding
-            Text(
-                text = "WELCOME",
-                color = palette.LightMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.W400,
-                letterSpacing = 3.sp,
-            )
-            Spacer(modifier = Modifier.height(20.dp))
+            // KUIRA wordmark with sparkle + breathing glow
+            // Uses the same MaterializeEffect from the connector approval sheet
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                KuiraMaterializeFrame(progress = 1f)
+            }
 
-            // Headline — matches production style
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Headline
             Text(
                 text = "your phone is\nyour hardware wallet",
                 color = palette.Light,
