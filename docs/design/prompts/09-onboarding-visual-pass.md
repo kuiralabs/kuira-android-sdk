@@ -1,138 +1,282 @@
-# Screen — Onboarding visual pass (T1-8 scope, token audit)
+# Screen — Onboarding flow (T1-8 visual pass + new "All set" screen)
 
 ## 1. GOAL
 
-Audit the existing onboarding screens (welcome, create wallet,
-biometric setup, success) and align them to the Dusk design system
-tokens established in `_prefix.md`. NOT a redesign — the IA, copy,
-and flow are already shipped. This is a visual consistency sweep.
+Linear wizard for first-launch wallet creation. Five screens, each
+with one job. Biometric-only auth (no passcode in v1.0). Ends with
+Terms/Privacy agreement before entering Balance.
 
 ## 2. SITEMAP POSITION
 
 - `from:` App first launch (no wallet exists)
 - `to:` Recovery phrase view (08, post-creation) · Balance (01, after
-  onboarding completes)
+  "All set" completion)
 
 ## 3. STATES
 
-Onboarding is a linear wizard. Each step is its own composable. No
-canonical state system applies — the steps ARE the states.
+Onboarding is a linear wizard. Each step is its own composable.
 
 | State           | Applies?  | Notes                                       |
 |-----------------|-----------|---------------------------------------------|
-| `default`       | ✓         | Each step in the wizard is a "default" state|
+| `default`       | ✓         | Each step in the wizard                     |
 | `loading-first` | n/a       |                                             |
 | `syncing`       | n/a       |                                             |
 | `empty`         | n/a       |                                             |
 | `no-results`    | n/a       |                                             |
-| `error`         | ✓         | Wallet creation can fail (keygen error)     |
+| `error`         | ✓         | Wallet creation failure (rare)              |
 | `offline`       | n/a       | Wallet creation is local                    |
-| `pending`       | ✓         | Wallet creation in progress (brief)         |
-| `success`       | ✓         | Creation complete — transitions to phrase view |
+| `pending`       | ✓         | Seed generation in progress (~2s)           |
+| `success`       | n/a       | Handled by "All set" screen (step 5)        |
 
 ## 4. LAYOUT
 
-The onboarding flow already uses `MaterializeEffect` and the Dusk
-star background. The visual pass ensures:
-
-### Token audit checklist
+### v1.0 onboarding flow
 
 ```
-CHECK  RULE                                    CURRENT STATUS
-──────────────────────────────────────────────────────────────
-[ ]    All text uses type-* tokens             Verify each Text composable
-[ ]    All spacing uses space-* tokens         Verify each Spacer/padding
-[ ]    All colors use palette tokens           Verify no hardcoded Color()
-[ ]    All radii use radius-* tokens           Verify RoundedCornerShape calls
-[ ]    All icons use icon-* scale              Verify Modifier.size() calls
-[ ]    Buttons use DuskPrimaryButton           Verify no raw Material Button
-       (or DuskPrimaryButtonPaletted)
-[ ]    Touch targets ≥ 48dp                    Verify all clickable elements
-[ ]    GlassPanel on hero content              Verify star-protection on titles
-[ ]    Light mode renders correctly             Test with DuskPalette.LightMode
-[ ]    StarField uses palette-aware params      Verify color + alpha params
+Step 1: WELCOME
+Step 2: BIOMETRIC SETUP
+Step 3: CREATING (spinner, ~2s)
+Step 4: RECOVERY PHRASE (spec 08)
+Step 5: ALL SET (new — Terms/Privacy + completion)
+→ Balance
 ```
 
-### Screens to audit
+### Step 1 — Welcome
 
-1. **Welcome** — app logo + "Welcome to Kuira" headline + "Create
-   wallet" CTA. Check: headline uses type-headline-md, button uses
-   DuskPrimaryButton, star background present.
+```
+[DuskScaffold] — ambient StarField
 
-2. **Create wallet** — biometric enrollment prompt + progress.
-   Check: step indicators use type-detail, progress text uses
-   type-body.
+— flex — (center content vertically)
 
-3. **Biometric setup** — system biometric prompt (no Dusk control)
-   + pre/post UI. Check: explanation text uses type-detail in
-   LightMuted, CTA uses DuskPrimaryButton.
+[GlassPanel — hero, contentPadding = 24dp]
+  [App symbol]   icon from 10-app-icon.md, rendered at 64dp, Light
+  space-20
+  headline       "KUIRA"           (type-headline-md, Light, centered,
+                                    letter-spacing 3sp)
+  space-8
+  detail         "Your private wallet on Midnight"
+                                   (type-detail, LightMuted, centered)
 
-4. **Success** — "Wallet created" confirmation + MaterializeEffect.
-   Check: headline uses type-headline-sm, detail uses type-detail,
-   check icon uses icon-32 in Light (no green), transition to
-   recovery phrase view (08).
+— flex —
 
-### What to change vs what to leave
+[Action stack]
+  DuskPrimaryButtonPaletted  "Create wallet"          (full-width)
+  space-8
+  DuskSecondaryButtonPaletted "Import existing wallet" (full-width)
 
-- **Change:** any hardcoded `Color()`, `fontSize`, `fontWeight`, or
-  `dp` value that should be a design-system token
-- **Change:** any `MaterialTheme.colorScheme.*` reference → Dusk
-  palette token
-- **Leave:** the flow structure, copy strings, and navigation — those
-  are shipped and working
-- **Leave:** system chrome (biometric dialog, status bar) — not Dusk
-  controlled
+space-24 above safe-area-insets.bottom
+```
+
+### Step 2 — Biometric setup
+
+```
+[DuskScaffold]
+
+[Top bar] 56dp
+  [icon-24 back]
+  "Secure your wallet"   (type-body, Light)
+
+— flex — (center content vertically)
+
+[Centered content — no GlassPanel (simple icon + text)]
+  icon-64        (Icons.Filled.Fingerprint, Light, centered)
+  space-20
+  headline       "Enable biometrics"    (type-headline-sm, Light, centered)
+  space-8
+  detail         "Secure your wallet with your face or
+                  fingerprint. Required for sending and
+                  viewing your recovery phrase."
+                                        (type-detail, LightMuted, centered)
+
+— flex —
+
+[Action stack]
+  DuskPrimaryButtonPaletted  "Enable biometrics"  (full-width)
+  space-8
+  (no "Not now" — biometric is required in Kuira, not optional)
+
+space-24 above safe-area-insets.bottom
+```
+
+### Step 3 — Creating
+
+```
+[DuskScaffold]
+
+(no top bar — non-dismissible)
+
+— flex — (center)
+
+[GlassPanel — hero, contentPadding = 24dp]
+  StepIndicator
+    step label     "Creating wallet"    (type-body, Light, centered)
+    detail hint    "Generating keys…"   (type-detail, LightMuted, centered)
+
+— flex —
+
+space-24 above safe-area-insets.bottom
+```
+
+### Step 4 — Recovery phrase
+
+See `08-recovery-phrase.md` with `isOnboardingEntry = true` variant.
+User must check "I understand" checkbox before proceeding.
+
+### Step 5 — All set (NEW)
+
+```
+[DuskScaffold]
+
+(no top bar — no back from here)
+
+— flex — (center)
+
+icon-32        (Icons.Filled.Check, SuccessText, centered)
+space-20
+headline       "You're all set"        (type-headline-sm, Light, centered)
+space-8
+detail         "Your wallet is ready and only you
+                control the keys."     (type-detail, LightMuted, centered)
+
+— flex —
+
+[Terms/Privacy]  (type-caption, LightMuted, centered)
+  "By tapping the button below, you agree to our"
+  "Terms of Service" (Light, underlined, tappable → browser)
+  "and"
+  "Privacy Policy" (Light, underlined, tappable → browser)
+
+space-16
+
+DuskPrimaryButtonPaletted  "Let's go"  (full-width)
+
+space-24 above safe-area-insets.bottom
+```
 
 ## 5. INTERACTIONS
 
-No interaction changes. The audit is visual only.
+| Element              | Gesture | Result                                      |
+|----------------------|---------|---------------------------------------------|
+| Create wallet        | Tap     | → Step 2 (biometric setup)                  |
+| Import existing      | Tap     | → Seed restore flow (existing)              |
+| Enable biometrics    | Tap     | System biometric prompt → on success: Step 3 |
+| Back (Step 2)        | Tap     | → Step 1                                    |
+| Checkbox (Step 4)    | Tap     | Toggle; enables Continue button              |
+| Continue (Step 4)    | Tap     | Sets recovery_phrase_viewed → Step 5         |
+| Terms of Service     | Tap     | Open browser (GitHub Pages hosted doc)       |
+| Privacy Policy       | Tap     | Open browser (GitHub Pages hosted doc)       |
+| Let's go (Step 5)    | Tap     | → Balance (01); onboarding complete          |
 
 ## 6. MOTION
 
-Verify existing `MaterializeEffect` on the welcome/success screens
-uses `motion-emphasize` (500ms). No new motion added.
+- Step 1 entry: `MaterializeEffect` on the app symbol
+  (`motion-emphasize`).
+- Step transitions: `motion-standard` (nav push/pop).
+- Step 3 spinner: StepIndicator label uses existing crossfade
+  (`motion-fast`).
+- Step 5 check icon: scale-from-97% (`motion-emphasize`) — same
+  treatment as Send Confirmation success.
+- Reduce-motion: all snap to end state.
 
 ## 7. HAPTICS
 
-Verify wallet-creation success triggers `haptic-confirm`. No new
-haptics added.
+| Trigger                    | Token            |
+|----------------------------|------------------|
+| Create wallet / Import     | `haptic-tap`     |
+| Biometric success          | `haptic-confirm` |
+| Wallet created (Step 3→4)  | `haptic-confirm` |
+| Let's go (Step 5)          | `haptic-confirm` |
+| Checkbox toggle            | `haptic-tap`     |
 
 ## 8. COPY
 
-No copy changes. Existing strings are shipped.
+Exact strings; do not rewrite.
+
+### Step 1
+
+- Headline: `KUIRA`
+- Detail: `Your private wallet on Midnight`
+- Primary: `Create wallet`
+- Secondary: `Import existing wallet`
+
+### Step 2
+
+- Top bar: `Secure your wallet`
+- Headline: `Enable biometrics`
+- Detail: `Secure your wallet with your face or fingerprint. Required for sending and viewing your recovery phrase.`
+- Button: `Enable biometrics`
+
+### Step 3
+
+- Step label: `Creating wallet`
+- Detail hint: `Generating keys…`
+
+### Step 4
+
+- See 08-recovery-phrase.md §8
+
+### Step 5
+
+- Headline: `You're all set`
+- Detail: `Your wallet is ready and only you control the keys.`
+- Terms link: `Terms of Service`
+- Privacy link: `Privacy Policy`
+- Prefix: `By tapping the button below, you agree to our`
+- Button: `Let's go`
 
 ## 9. A11Y
 
-Verify:
-- All icon-only buttons have content descriptions
-- Touch targets ≥ 48dp on all interactive elements
-- Focus order reads top-to-bottom
-- Dynamic type scales all text
+- Focus order: sequential through each step's content, top to bottom.
+- Step 5 Terms/Privacy links: announced as "Terms of Service, link"
+  and "Privacy Policy, link."
+- All buttons 48dp minimum.
+- Dynamic type scales all text.
+- Biometric prompt: system chrome handles its own a11y.
+- Step 3 spinner: announce "Creating wallet" on entry.
 
 ## 10. VISUAL LOCKED
 
-- This is a TOKEN AUDIT, not a redesign. Do not change the IA,
-  flow structure, or screen count.
-- Every existing screen MUST render correctly in BOTH dark and light
-  mode after the audit.
-- `ErrorText` is not expected on onboarding screens (wallet creation
-  errors are operational, not financial danger).
+- Dusk palette only. SuccessText on the Step 5 check icon. No other
+  color.
+- Step 1 uses a GlassPanel around the symbol+headline for
+  star-protection. Steps 2 and 5 do NOT use GlassPanel — icon + text
+  sit on the StarField (simple screens, minimal content, stars add
+  texture without competing).
+- Step 3 reuses StepIndicator in a GlassPanel (same as Send
+  Confirmation pending and Dust registration pending).
+- No passcode step in v1.0. Biometric is mandatory, not optional.
+  There is no "Not now" on the biometric screen — unlike Solflare,
+  Kuira requires biometric for seed encryption.
+- Terms/Privacy links use Light color + underline for the tappable
+  text, LightMuted for the surrounding copy.
 
 ## 11. PRODUCT LOCKED
 
-- Onboarding flow is shipped and working. The visual pass does NOT
-  change the biometric enrollment flow, wallet creation steps, or
-  navigation sequence.
-- After the visual pass, onboarding should transition seamlessly to
-  the recovery phrase view (08) for first-time phrase display.
+- Onboarding is shown ONCE — after wallet creation, it never appears
+  again (unless wallet is wiped from Settings).
+- Biometric enrollment is MANDATORY. The user cannot skip it. Seed
+  encryption requires a hardware-backed biometric key.
+- "Import existing wallet" leads to a seed-phrase restore flow
+  (existing code, not redesigned in this spec).
+- Step 4 (recovery phrase) sets `recovery_phrase_viewed = true` which
+  permanently hides the backup banner on Balance.
+- Step 5 Terms/Privacy agreement is implicit — tapping "Let's go"
+  constitutes acceptance. No explicit checkbox for Terms (the
+  recovery phrase checkbox in Step 4 is the only checkbox).
+- Terms and Privacy Policy are hosted on GitHub Pages (per T1-11
+  decision). URLs are runtime-configurable.
 
 ## 12. NEW COMPONENTS
 
-None. This audit applies existing Dusk components and tokens to
-existing screens. If a screen needs a component that doesn't exist
-yet, flag it as a new component in this section during implementation.
+No new components. The flow reuses:
+
+- `StepIndicator` (Step 3 — wallet creation progress)
+- `DuskPrimaryButtonPaletted` / `DuskSecondaryButtonPaletted`
+- `GlassPanel` (Steps 1, 3)
+- `WordGrid` (Step 4, from 08-recovery-phrase §12)
+- App symbol icon (from 10-app-icon.md)
 
 ---
 
-End of Onboarding visual pass spec. No new frames — the deliverable
-is the audit checklist completed + code changes that pass the checks.
+End of Onboarding spec. Ship paired dark + light frames for each
+step (1–5).
