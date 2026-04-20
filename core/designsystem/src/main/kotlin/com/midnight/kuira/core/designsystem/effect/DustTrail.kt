@@ -65,7 +65,7 @@ fun DustTrail(
     Canvas(modifier = modifier) {
         // Ground line = bottom of the composable (runner's floor).
         // Particles spawn at ground level and puff upward + behind.
-        val startX = size.width * 0.55f  // foot strike point
+        val startX = size.width * 0.35f  // behind the runner's feet
         val groundY = size.height * 0.92f // near the very bottom — the floor
 
         particles.forEach { p ->
