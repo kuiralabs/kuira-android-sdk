@@ -317,7 +317,7 @@ private fun SuccessContent(palette: DuskPalette) {
             Icon(
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
-                tint = palette.Light,
+                tint = palette.SuccessText,
                 modifier = Modifier.size(32.dp),
             )
             Spacer(modifier = Modifier.height(20.dp))

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.FloatingActionButton
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.midnight.kuira.core.designsystem.devportal.DevCheckboxRow
 import com.midnight.kuira.core.designsystem.devportal.DevPortalModal
+import com.midnight.kuira.core.designsystem.devportal.DevRadioRow
 import com.midnight.kuira.core.designsystem.devportal.DevStateSection
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
@@ -27,13 +29,14 @@ fun ReceiveWireframeWithDevControls(
     onBack: () -> Unit = {},
     onOpenWireframeList: () -> Unit = {},
 ) {
+    var state by remember { mutableStateOf(ReceiveWireframeState.DEFAULT) }
     var lightMode by remember { mutableStateOf(false) }
     var modalOpen by remember { mutableStateOf(false) }
 
     val palette = if (lightMode) DuskPalette.LightMode else DuskPalette.DarkMode
 
     Box(modifier = Modifier.fillMaxSize()) {
-        ReceiveWireframe(palette = palette, onBack = onBack)
+        ReceiveWireframe(state = state, palette = palette, onBack = onBack)
 
         FloatingActionButton(
             onClick = { modalOpen = true },
@@ -56,6 +59,18 @@ fun ReceiveWireframeWithDevControls(
                 onOpenWireframeList()
             },
             stateControls = {
+                DevStateSection(label = "STATE") {
+                    ReceiveWireframeState.entries.forEach { s ->
+                        DevRadioRow(
+                            label = s.name.lowercase().replace('_', '-'),
+                            selected = s == state,
+                            onClick = { state = s },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.padding(top = 16.dp))
+
                 DevStateSection(label = "OPTIONS") {
                     DevCheckboxRow(
                         label = "Light mode",

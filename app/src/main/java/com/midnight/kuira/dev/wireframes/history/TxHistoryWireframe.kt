@@ -2,6 +2,7 @@ package com.midnight.kuira.dev.wireframes.history
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,7 @@ import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
+import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
 
 enum class TxHistoryScreen { LIST, DETAIL }
 
@@ -231,20 +233,47 @@ private fun LoadingContent(palette: DuskPalette) {
     Spacer(modifier = Modifier.size(12.dp))
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
         repeat(3) { i ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.7f)
-                        .height(16.dp)
-                        .background(palette.LightBarely),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    ShimmerBlock(height = 20.dp, widthFraction = 0.25f, palette = palette)
+                    ShimmerBlock(height = 20.dp, widthFraction = 0.3f, palette = palette)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    ShimmerBlock(height = 14.dp, widthFraction = 0.4f, palette = palette)
+                    ShimmerBlock(height = 14.dp, widthFraction = 0.2f, palette = palette)
+                }
             }
             if (i < 2) SettingsDivider(palette = palette)
+        }
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    ShimmerBlock(height = 14.dp, widthFraction = 0.3f, palette = palette)
+    Spacer(modifier = Modifier.size(12.dp))
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
+        repeat(2) { i ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                ShimmerBlock(height = 20.dp, widthFraction = 0.5f, palette = palette)
+                Spacer(modifier = Modifier.height(8.dp))
+                ShimmerBlock(height = 14.dp, widthFraction = 0.35f, palette = palette)
+            }
+            if (i < 1) SettingsDivider(palette = palette)
         }
     }
 }

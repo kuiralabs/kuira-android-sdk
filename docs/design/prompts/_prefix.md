@@ -115,7 +115,7 @@ Elevated surface          VoidSoft          0xFF0A0A0A
 Card surface              VoidElevated      0xFF111111
 Primary fg / icons        Light             0xFFFFFFFF
 Secondary text            LightSoft         0xCCFFFFFF   80%
-Tertiary / small label    LightMuted        0x66FFFFFF   40%
+Tertiary / small label    LightMuted        0x80FFFFFF   50%
 Separator / disabled      LightFaint        0x33FFFFFF   20%
 Input bg / pressed        LightBarely       0x1AFFFFFF   10%
 Star bright               StarBright        0xCCFFFFFF   = LightSoft
@@ -124,6 +124,7 @@ Primary button fill       Confirm           0xFFFFFFFF   = Light
 Secondary button fill     ConfirmSurface    0x1AFFFFFF   = LightBarely
 Cancel / reject text      RejectText        0x66FFFFFF   = LightMuted
 Financial danger          ErrorText         0xFFFF4444   red — see rules below
+Positive status           SuccessText       0xFF4CAF50   green — see rules below
 ```
 
 ## PALETTE — LIGHT MODE (design target)
@@ -142,7 +143,7 @@ VoidSoft          0xFFFFFFFF
 VoidElevated      0xFFFAFAFA
 Light             0xFF000000
 LightSoft         0xCC000000
-LightMuted        0x66000000
+LightMuted        0x80000000
 LightFaint        0x33000000
 LightBarely       0x0A000000     4% black (lighter than dark-mode's 10%)
 StarBright        0x33000000     stars quieter on light bg
@@ -151,29 +152,35 @@ Confirm           0xFF000000
 ConfirmSurface    0x0A000000
 RejectText        0x66000000
 ErrorText         0xFFCC0000     darker red on light bg for contrast
+SuccessText       0xFF2E7D32     darker green on light bg for contrast
 ```
 
-### `ErrorText` usage rules
+### `ErrorText` + `SuccessText` usage rules
 
-`ErrorText` is the ONLY color token in the palette. It exists because
-financial safety signals must be unmistakable — dimming to `LightMuted`
-is ambiguous (could mean loading, disabled, or low emphasis).
+`ErrorText` and `SuccessText` are the ONLY color tokens in the palette.
+They exist because status signals must be unmistakable — monochrome
+dimming is ambiguous (could mean loading, disabled, or low emphasis).
 
-**Where it applies:**
+**`ErrorText` (red) applies to:**
 - Amount hero number when amount > available balance
 - Amount error caption ("Insufficient balance")
 - Destructive confirmation highlights (e.g., "WIPE" challenge text)
 - Insufficient-fee warnings on review/summary screens
+- "Failed" status text in Tx History
 
-**Where it does NOT apply:**
+**`SuccessText` (green) applies to:**
+- Check icon on success heroes (Send Confirmation, Dust registration)
+- "Confirmed" status text in Tx History
+- Sync-complete indicators
+
+**Where NEITHER applies:**
 - Buttons (still `Confirm` / `ConfirmSurface` opposite-pole)
 - Input borders (still `LightFaint` → `Light` opacity flip)
-- General form validation (wrong address prefix = `LightMuted` caption,
-  not `ErrorText` — that's a "fix this" hint, not a danger signal)
-- Icons, badges, or decorative elements
-- Success states (no green — check glyph in `Light` + headline is enough)
+- General form validation (wrong address prefix = `LightMuted` caption)
+- Decorative elements, badges, or icons outside status contexts
+- "Pending" status (uses `LightMuted` — neutral, no color)
 
-**The principle:** color only for financial danger. Everything else
+**The principle:** color only for status signals. Everything else
 uses contrast and weight.
 
 Button text in light mode: primary button fill (`Confirm`) is dark
@@ -202,13 +209,13 @@ opacity, not weight.
 ```
 TOKEN                    sp   LETTER-SP  LINE-HT  WEIGHT  DEFAULT COLOR
 ──────────────────────────────────────────────────────────────────────────
-type-label-tiny          11   3sp        14sp     W400    LightMuted (40%)
+type-label-tiny          11   3sp        14sp     W400    LightMuted (50%)
 type-headline-sm         18   0          24sp     W300    Light (100%)
 type-headline-md         22   0          28sp     W300    Light (100%)
 type-numeric-hero        44   −1         48sp     W200    Light (100%)
-type-detail              13   0          18sp     W400    LightMuted (40%)
+type-detail              13   0          18sp     W400    LightMuted (50%)
 type-body                14   0          20sp     W300    Light (100%)
-type-caption             12   0          16sp     W400    LightMuted (40%)
+type-caption             12   0          16sp     W400    LightMuted (50%)
 type-mono                12   0          16sp     W400    Light (mono font)
 type-input               14   0          20sp     W300    Light (100%)
 type-input-placeholder   14   0          20sp     W300    LightFaint (20%)

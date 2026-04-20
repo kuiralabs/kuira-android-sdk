@@ -43,6 +43,7 @@ import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
 import com.midnight.kuira.dev.wireframes.shared.DuskProgressBar
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
+import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
 
 enum class DustWireframeState {
     DEFAULT,
@@ -257,26 +258,31 @@ private fun LoadingContent(palette: DuskPalette) {
             letterSpacing = 3.sp,
         )
         Spacer(modifier = Modifier.height(20.dp))
-        // Shimmer placeholder
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.6f)
-                .height(48.dp)
-                .background(palette.LightBarely),
-        )
+        ShimmerBlock(height = 48.dp, widthFraction = 0.6f, palette = palette)
+        Spacer(modifier = Modifier.height(4.dp))
+        ShimmerBlock(height = 20.dp, widthFraction = 0.25f, palette = palette)
     }
 
     Spacer(modifier = Modifier.height(32.dp))
 
-    SettingsSectionHeader(label = "STATUS", palette = palette)
+    SettingsSectionHeader(label = "GENERATION", palette = palette)
     Spacer(modifier = Modifier.size(12.dp))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
-        SettingsRow(label = "NIGHT backing", rightValue = "…", readOnly = true, palette = palette)
-        SettingsDivider(palette = palette)
-        SettingsRow(label = "Generation", rightValue = "…", readOnly = true, palette = palette)
-        SettingsDivider(palette = palette)
-        SettingsRow(label = "Generation rate", rightValue = "…", readOnly = true, palette = palette)
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+        ShimmerBlock(height = 16.dp, widthFraction = 0.5f, palette = palette)
+        Spacer(modifier = Modifier.height(12.dp))
+        ShimmerBlock(height = 6.dp, widthFraction = 1f, palette = palette)
+        Spacer(modifier = Modifier.height(12.dp))
+        ShimmerBlock(height = 12.dp, widthFraction = 0.4f, palette = palette)
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    SettingsSectionHeader(label = "BACKING", palette = palette)
+    Spacer(modifier = Modifier.size(12.dp))
+
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+        ShimmerBlock(height = 20.dp, widthFraction = 0.7f, palette = palette)
     }
 }
 
@@ -348,7 +354,7 @@ private fun SuccessContent(palette: DuskPalette) {
             Icon(
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
-                tint = palette.Light,
+                tint = palette.SuccessText,
                 modifier = Modifier.size(32.dp),
             )
             Spacer(modifier = Modifier.height(20.dp))

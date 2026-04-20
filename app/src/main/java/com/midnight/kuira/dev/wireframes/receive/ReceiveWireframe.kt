@@ -44,9 +44,13 @@ import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
+import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
+
+enum class ReceiveWireframeState { DEFAULT, LOADING_FIRST }
 
 @Composable
 fun ReceiveWireframe(
+    state: ReceiveWireframeState = ReceiveWireframeState.DEFAULT,
     palette: DuskPalette = DuskPalette.DarkMode,
     onBack: () -> Unit = {},
 ) {
@@ -160,33 +164,48 @@ fun ReceiveWireframe(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        // QR placeholder — white square with "QR" text
-                        Box(
-                            modifier = Modifier
-                                .size(200.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(androidx.compose.ui.graphics.Color.White)
-                                .clickable { showFullScreenQR = true },
-                            contentAlignment = Alignment.Center,
-                        ) {
+                        if (state == ReceiveWireframeState.LOADING_FIRST) {
+                            // Shimmer QR placeholder
+                            ShimmerBlock(
+                                height = 200.dp,
+                                widthFraction = 1f,
+                                palette = palette,
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            ShimmerBlock(
+                                height = 32.dp,
+                                widthFraction = 0.8f,
+                                palette = palette,
+                            )
+                        } else {
+                            // QR placeholder — white square with "QR" text
+                            Box(
+                                modifier = Modifier
+                                    .size(200.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(androidx.compose.ui.graphics.Color.White)
+                                    .clickable { showFullScreenQR = true },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "QR",
+                                    color = androidx.compose.ui.graphics.Color.Black,
+                                    fontSize = 32.sp,
+                                    fontWeight = FontWeight.W200,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            // Address display
                             Text(
-                                text = "QR",
-                                color = androidx.compose.ui.graphics.Color.Black,
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.W200,
+                                text = currentAddress,
+                                color = palette.LightMuted,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.W400,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 16.sp,
+                                textAlign = TextAlign.Center,
                             )
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        // Address display
-                        Text(
-                            text = currentAddress,
-                            color = palette.LightMuted,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.W400,
-                            fontFamily = FontFamily.Monospace,
-                            lineHeight = 16.sp,
-                            textAlign = TextAlign.Center,
-                        )
                     }
                 }
 

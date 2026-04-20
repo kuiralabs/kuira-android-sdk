@@ -82,7 +82,7 @@ fun ErrorCard(
             Icon(
                 imageVector = Icons.Filled.ErrorOutline,
                 contentDescription = null,
-                tint = palette.Light,
+                tint = palette.ErrorText,
                 modifier = Modifier
                     .size(20.dp)
                     .padding(top = 2.dp),
