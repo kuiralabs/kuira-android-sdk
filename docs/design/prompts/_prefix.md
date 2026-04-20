@@ -437,7 +437,7 @@ already defines one with the right shape:
   QuickActionCircle, AddressChip
 - **02-send §12:** TokenModeCard, AmountHeroInput, RecipientChip
 - **03-send-confirmation §12:** StepIndicator, ErrorCard
-- **04-dust §12:** (no new — reuses StepIndicator, ErrorCard, SettingsRow)
+- **04-dust §12:** DustVortex, DustLifecycleGraph
 - **05-settings §12:** SettingsSectionHeader, SettingsRow (reused across
   multiple screens), DangerRow, ConfirmationSheet, NetworkPicker
 - **06-tx-history §12:** TxRow, TxTypeBadge

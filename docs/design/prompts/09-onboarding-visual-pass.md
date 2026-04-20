@@ -26,18 +26,20 @@ Onboarding is a linear wizard. Each step is its own composable.
 | `error`         | ✓         | Wallet creation failure (rare)              |
 | `offline`       | n/a       | Wallet creation is local                    |
 | `pending`       | ✓         | Seed generation in progress (~2s)           |
-| `success`       | n/a       | Handled by "All set" screen (step 5)        |
+| `success`       | n/a       | Handled by "All set" screen (step 7)        |
 
 ## 4. LAYOUT
 
-### v1.0 onboarding flow
+### v1.0 onboarding flow (7 steps)
 
 ```
 Step 1: WELCOME
-Step 2: BIOMETRIC SETUP
-Step 3: CREATING (spinner, ~2s)
-Step 4: RECOVERY PHRASE (spec 08)
-Step 5: ALL SET (new — Terms/Privacy + completion)
+Step 2: ENTER PASSCODE (6-digit PIN, custom numpad)
+Step 3: CONFIRM PASSCODE (re-enter to verify)
+Step 4: BIOMETRIC SETUP (optional upgrade over passcode)
+Step 5: CREATING (RunnerWithDust animation, ~3s intentional)
+Step 6: RECOVERY PHRASE (spec 08, onboarding variant)
+Step 7: ALL SET (Terms/Privacy + completion)
 → Balance
 ```
 
@@ -48,14 +50,16 @@ Step 5: ALL SET (new — Terms/Privacy + completion)
 
 — flex — (center content vertically)
 
-[GlassPanel — hero, contentPadding = 24dp]
-  [App symbol]   icon from 10-app-icon.md, rendered at 64dp, Light
-  space-20
-  headline       "KUIRA"           (type-headline-md, Light, centered,
-                                    letter-spacing 3sp)
-  space-8
-  detail         "Your private wallet on Midnight"
-                                   (type-detail, LightMuted, centered)
+[KuiraMaterializeFrame]  — animated KUIRA wordmark with sparkle +
+                           breathing glow (48sp, W300, white with
+                           shadow glow). Brand hero — first impression.
+space-32
+  [Tagline]      "Where night protects the day."
+                                   (type-headline-sm, LightSoft, centered,
+                                    letter-spacing 1sp)
+                 — from the Rarámuri belief that the soul is active
+                   at night. Kuira derives from their language;
+                   Midnight is the blockchain.
 
 — flex —
 
@@ -67,7 +71,36 @@ Step 5: ALL SET (new — Terms/Privacy + completion)
 space-24 above safe-area-insets.bottom
 ```
 
-### Step 2 — Biometric setup
+### Step 2 — Enter passcode
+
+```
+[DuskScaffold]
+
+[Top bar] 56dp
+  [icon-24 back]
+  "Enter new passcode"   (type-body, Light)
+
+— flex — (center vertically)
+
+[6 dots]  — centered row, space-16 between dots
+  PasscodeDotSize (16dp) circles. Filled (Light) for entered digits,
+  unfilled (LightFaint) for remaining.
+
+— flex —
+
+[Custom numpad]  — 3×4 grid, centered
+  NumpadButtonSize (72dp) circles, LightBarely bg, CircleShape.
+  Digits 1-9, 0, backspace icon. Tapping fills dots.
+
+space-24 above safe-area-insets.bottom
+```
+
+### Step 3 — Confirm passcode
+
+Same layout as Step 2 with title "Confirm passcode". If mismatch,
+dots flash briefly + haptic-tap + clear. User re-enters.
+
+### Step 4 — Biometric setup
 
 ```
 [DuskScaffold]
@@ -93,12 +126,13 @@ space-24 above safe-area-insets.bottom
 [Action stack]
   DuskPrimaryButtonPaletted  "Enable biometrics"  (full-width)
   space-8
-  (no "Not now" — biometric is required in Kuira, not optional)
+  space-8
+  DuskSecondaryButtonPaletted  "Not now"  (skip — passcode remains primary auth)
 
 space-24 above safe-area-insets.bottom
 ```
 
-### Step 3 — Creating
+### Step 5 — Creating
 
 ```
 [DuskScaffold]
@@ -107,22 +141,27 @@ space-24 above safe-area-insets.bottom
 
 — flex — (center)
 
-[GlassPanel — hero, contentPadding = 24dp]
-  StepIndicator
-    step label     "Creating wallet"    (type-body, Light, centered)
-    detail hint    "Generating keys…"   (type-detail, LightMuted, centered)
+[RunnerWithDust]  — Rarámuri runner + canyon dust trail
+  Lottie animation tinted to palette.Light, centered.
+  Intentionally shown for ≥3 seconds (brand moment).
+
+space-32
+
+[StepIndicator — centered, no GlassPanel]
+  step label     "Creating wallet"    (type-body, Light)
+  detail hint    "Generating keys…"   (type-detail, LightMuted)
 
 — flex —
 
 space-24 above safe-area-insets.bottom
 ```
 
-### Step 4 — Recovery phrase
+### Step 6 — Recovery phrase
 
 See `08-recovery-phrase.md` with `isOnboardingEntry = true` variant.
 User must check "I understand" checkbox before proceeding.
 
-### Step 5 — All set (NEW)
+### Step 7 — All set
 
 ```
 [DuskScaffold]
@@ -162,10 +201,10 @@ space-24 above safe-area-insets.bottom
 | Enable biometrics    | Tap     | System biometric prompt → on success: Step 3 |
 | Back (Step 2)        | Tap     | → Step 1                                    |
 | Checkbox (Step 4)    | Tap     | Toggle; enables Continue button              |
-| Continue (Step 4)    | Tap     | Sets recovery_phrase_viewed → Step 5         |
+| Continue (Step 6)    | Tap     | Sets recovery_phrase_viewed → Step 7         |
 | Terms of Service     | Tap     | Open browser (GitHub Pages hosted doc)       |
 | Privacy Policy       | Tap     | Open browser (GitHub Pages hosted doc)       |
-| Let's go (Step 5)    | Tap     | → Balance (01); onboarding complete          |
+| Let's go (Step 7)    | Tap     | → Balance (01); onboarding complete          |
 
 ## 6. MOTION
 
@@ -194,28 +233,33 @@ Exact strings; do not rewrite.
 
 ### Step 1
 
-- Headline: `KUIRA`
-- Detail: `Your private wallet on Midnight`
+- Wordmark: `KUIRA` (KuiraMaterializeFrame, animated)
+- Tagline: `Where night protects the day.`
 - Primary: `Create wallet`
 - Secondary: `Import existing wallet`
 
-### Step 2
+### Steps 2 + 3
+
+- Top bar (Step 2): `Enter new passcode`
+- Top bar (Step 3): `Confirm passcode`
+
+### Step 4
 
 - Top bar: `Secure your wallet`
 - Headline: `Enable biometrics`
 - Detail: `Secure your wallet with your face or fingerprint. Required for sending and viewing your recovery phrase.`
 - Button: `Enable biometrics`
 
-### Step 3
+### Step 5
 
 - Step label: `Creating wallet`
 - Detail hint: `Generating keys…`
 
-### Step 4
+### Step 6
 
 - See 08-recovery-phrase.md §8
 
-### Step 5
+### Step 7
 
 - Headline: `You're all set`
 - Detail: `Your wallet is ready and only you control the keys.`

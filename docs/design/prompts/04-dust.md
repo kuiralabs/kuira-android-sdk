@@ -1,11 +1,12 @@
-# Screen — Dust (balance + registration CTA, T1-8 redesign)
+# Screen — Dust (balance + vortex animation + lifecycle graph, T1-8 redesign)
 
 ## 1. GOAL
 
-Show DUST token balance, generation progress, NIGHT backing amount,
-and a registration CTA for wallets that haven't registered their dust
-tank. The registration flow runs a multi-step state machine
-(build → prove → seal → submit) with live progress.
+Show DUST token balance and a living visualization of the dust
+generation process. The canyon dust vortex densifies as the tank
+fills; a lifecycle graph below shows the generation ramp, cap
+plateau, and decay curve from the official Midnight dust spec.
+Registration CTA for wallets that haven't registered their tank.
 
 ## 2. SITEMAP POSITION
 
@@ -51,21 +52,44 @@ space-32 top spacing
 
 space-32
 
-SettingsSectionHeader "STATUS"
+SettingsSectionHeader "GENERATION"
 space-12
 
-[GlassPanel — contentPadding = 0.dp]
-  SettingsRow (readOnly = true)
-    label       "NIGHT backing"
-    rightValue  "<format-amount-night> NIGHT"
-  divider
-  SettingsRow (readOnly = true)
-    label       "Generation"
-    rightValue  "<percent>%"     (e.g., "42%")
-  divider
-  SettingsRow (readOnly = true)
-    label       "Generation rate"
-    rightValue  "<rate> DUST/block"
+[GlassPanel — contentPadding = 16dp]
+
+  [DustVortex — 160dp height, centered]
+    60 particles orbiting in slow spiral. Density = generation
+    progress (0% sparse → 100% dense serene cloud with center glow).
+    During decay: density reverses (vortex disperses).
+    color = palette.Light (monochrome, palette-aware).
+
+  space-16
+
+  [Status label + percentage]
+    Row: label ("Generating" / "At capacity" / "Decaying" / "Depleted")
+         + percentage right-aligned.
+    "Decaying" label uses ErrorText (red).
+
+  space-8
+
+  [DuskProgressBar]
+    progress = generation% (or 1−decay% during decay)
+
+  space-16
+
+  [DustLifecycleGraph — 48dp height]
+    Thin white line showing the full lifecycle curve as faint
+    reference (ramp → cap plateau → decay ramp). Active portion
+    bright with glowing dot at current position. Matches the
+    official Midnight dust spec (midnightntwrk/midnight-ledger/
+    spec/dust.md): linear generation up to cap, linear decay
+    after backing NIGHT is spent.
+
+  space-12
+
+  [Rate + backing row]
+    Row: "<rate> DUST/block" left + "<amount> NIGHT locked" right
+    (type-caption, LightMuted)
 
 space-24 above safe-area-insets.bottom
 ```
@@ -105,8 +129,14 @@ STATUS rows show shimmer for right values.
 
 space-48 top spacing
 
-[GlassPanel — hero, contentPadding = 24dp]
-  StepIndicator
+[RunnerWithDust — centered, Rarámuri runner + canyon dust trail]
+  Lottie animation (run_man_run.lottie) tinted to palette.Light
+  via SrcIn blend. DustTrail particles kick up behind the feet.
+  Brand progress indicator used across all pending states.
+
+space-32
+
+[StepIndicator — centered]
     step label     (type-body, Light, centered)
     detail hint    (type-detail, LightMuted, centered)
 
@@ -306,7 +336,12 @@ Exact strings; do not rewrite.
 
 ## 12. NEW COMPONENTS
 
-No new components. This screen reuses:
+| Component           | Shape                                                                    |
+|---------------------|--------------------------------------------------------------------------|
+| `DustVortex`        | Canyon dust vortex animation. 60 particles orbiting in a slow spiral (8s rotation). Density controlled by `progress` (0..1). At 0%: sparse faint dots. At 50%: visible swirl + center glow. At 100%: dense, stable, serene cloud with bright pulsing core. Particles tighten orbits + slow down as progress increases (calm equilibrium). During decay: pass `1 - decayProgress` to reverse the visual. Color: single tint via `palette.Light`. |
+| `DustLifecycleGraph`| Minimal line chart showing the official Midnight dust lifecycle curve. Full curve drawn as faint reference (ramp → cap plateau → decay). Active portion drawn bright. Glowing dot at current position. Params: `progress`, `isDecaying`, `decayProgress`. Matches `midnightntwrk/midnight-ledger/spec/dust.md` — linear generation up to cap, linear decay after backing NIGHT spent. |
+
+This screen also reuses:
 
 - `StepIndicator` (from 03-send-confirmation §12) for registration
   progress
