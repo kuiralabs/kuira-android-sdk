@@ -2,6 +2,7 @@ package com.midnight.kuira.dev.wireframes.dust
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ import com.midnight.kuira.dev.wireframes.send.StepIndicator
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
+import com.midnight.kuira.dev.wireframes.shared.DuskProgressBar
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 enum class DustWireframeState {
@@ -157,6 +159,7 @@ private fun TopBar(palette: DuskPalette, backEnabled: Boolean, onBack: () -> Uni
 private fun DefaultContent(palette: DuskPalette) {
     Spacer(modifier = Modifier.height(32.dp))
 
+    // Hero balance
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
         Text(
             text = "DUST BALANCE",
@@ -186,15 +189,58 @@ private fun DefaultContent(palette: DuskPalette) {
 
     Spacer(modifier = Modifier.height(32.dp))
 
-    SettingsSectionHeader(label = "STATUS", palette = palette)
+    // Generation progress — the visual heartbeat of the screen.
+    // Shows how close the next dust payout is.
+    SettingsSectionHeader(label = "GENERATION", palette = palette)
+    Spacer(modifier = Modifier.size(12.dp))
+
+    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 16.dp) {
+        // Progress label + percentage
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Next payout",
+                color = palette.Light,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.W300,
+                lineHeight = 20.sp,
+            )
+            Text(
+                text = "42%",
+                color = palette.LightSoft,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.W300,
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        // Progress bar
+        DuskProgressBar(
+            progress = 0.42f,
+            palette = palette,
+            height = 6.dp,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        // Rate detail
+        Text(
+            text = "0.001 DUST/block",
+            color = palette.LightMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.W400,
+            lineHeight = 16.sp,
+        )
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    // Backing info
+    SettingsSectionHeader(label = "BACKING", palette = palette)
     Spacer(modifier = Modifier.size(12.dp))
 
     GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 0.dp) {
-        SettingsRow(label = "NIGHT backing", rightValue = "1,234.567890 NIGHT", readOnly = true, palette = palette)
-        SettingsDivider(palette = palette)
-        SettingsRow(label = "Generation", rightValue = "42%", readOnly = true, palette = palette)
-        SettingsDivider(palette = palette)
-        SettingsRow(label = "Generation rate", rightValue = "0.001 DUST/block", readOnly = true, palette = palette)
+        SettingsRow(label = "NIGHT locked", rightValue = "1,234.567890 NIGHT", readOnly = true, palette = palette)
     }
 }
 

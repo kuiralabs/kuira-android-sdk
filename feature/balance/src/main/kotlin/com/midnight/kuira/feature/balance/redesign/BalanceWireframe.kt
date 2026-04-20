@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -284,6 +285,47 @@ private fun BalanceHero(state: WireframeState, palette: DuskPalette) {
         lineHeight = 18.sp,
         modifier = Modifier.animateContentSize(),
     )
+
+    // Sync progress bar — visible during syncing state.
+    // Shows indexer sync progress as a visual bar + percentage.
+    if (state == WireframeState.SYNCING) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "Syncing",
+                color = palette.LightMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W400,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "68%",
+                color = palette.LightSoft,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W400,
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Progress bar: LightBarely track, LightSoft fill
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(palette.LightBarely),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction = 0.68f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(palette.LightSoft),
+            )
+        }
+    }
 
     // Error retry row
     if (state == WireframeState.ERROR) {
