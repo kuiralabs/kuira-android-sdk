@@ -44,7 +44,7 @@ fun DustTrail(
             DustParticle(
                 phaseOffset = Random.nextFloat(),
                 driftX = -(Random.nextFloat() * 0.6f + 0.1f), // drift LEFT (behind runner)
-                driftY = -(Random.nextFloat() * 0.4f + 0.1f), // drift UP from ground
+                driftY = -(Random.nextFloat() * 0.5f + 0.1f), // drift UP from ground
                 size = Random.nextFloat() * 5f + 3f,           // 3..8 dp — cloud-like puffs
                 lifetime = Random.nextFloat() * 0.3f + 0.7f,
             )
@@ -66,7 +66,7 @@ fun DustTrail(
         // Ground line = bottom of the composable (runner's floor).
         // Particles spawn at ground level and puff upward + behind.
         val startX = size.width * 0.35f  // behind the runner's feet
-        val groundY = size.height * 0.92f // near the very bottom — the floor
+        val groundY = size.height * 0.80f // near the very bottom — the floor
 
         particles.forEach { p ->
             val t = ((cycle + p.phaseOffset) % 1f) / p.lifetime
