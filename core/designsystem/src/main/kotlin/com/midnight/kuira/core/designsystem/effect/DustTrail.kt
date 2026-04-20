@@ -43,10 +43,10 @@ fun DustTrail(
         List(particleCount) {
             DustParticle(
                 phaseOffset = Random.nextFloat(),
-                driftX = Random.nextFloat() * 2f - 1f,   // -1..1 horizontal drift
-                driftY = -(Random.nextFloat() * 0.5f + 0.3f), // upward drift
-                size = Random.nextFloat() * 2f + 1f,      // 1..3 dp radius
-                lifetime = Random.nextFloat() * 0.4f + 0.6f, // 0.6..1.0 of cycle
+                driftX = -(Random.nextFloat() * 0.8f + 0.2f), // drift LEFT (behind runner)
+                driftY = -(Random.nextFloat() * 0.3f + 0.1f), // slight upward
+                size = Random.nextFloat() * 3f + 2f,           // 2..5 dp radius (bigger)
+                lifetime = Random.nextFloat() * 0.3f + 0.7f,   // 0.7..1.0 of cycle
             )
         }
     }
@@ -63,26 +63,25 @@ fun DustTrail(
     )
 
     Canvas(modifier = modifier) {
-        val cx = size.width * 0.5f
-        val footY = size.height * 0.75f // particles originate from foot level
+        // Particles originate from the right-center (runner's feet)
+        // and trail LEFT behind the runner — like canyon dust.
+        val startX = size.width * 0.6f  // slightly right of center (foot strike)
+        val footY = size.height * 0.7f
 
         particles.forEach { p ->
-            // Each particle's local progress within its lifetime,
-            // offset by its random phase so they stagger.
             val t = ((cycle + p.phaseOffset) % 1f) / p.lifetime
-            if (t > 1f) return@forEach // particle is in its "dead" phase
+            if (t > 1f) return@forEach
 
-            val alpha = maxAlpha * (1f - t) // fade out over lifetime
-            val x = cx + p.driftX * size.width * 0.3f * t
-            val y = footY + p.driftY * size.height * 0.4f * t
+            val alpha = maxAlpha * (1f - t * t) // quadratic fade — visible longer
+            val x = startX + p.driftX * size.width * 0.7f * t  // long trail behind
+            val y = footY + p.driftY * size.height * 0.5f * t
 
-            // Slight wobble for organic feel
-            val wobble = sin(t * 6.28f * 2f) * 2f
+            val wobble = sin(t * 6.28f * 2f) * 3f
 
             drawCircle(
                 color = color.copy(alpha = alpha),
-                radius = p.size * (1f - t * 0.5f), // shrink slightly as they fade
-                center = Offset(x + wobble, y),
+                radius = p.size * (1f - t * 0.3f),
+                center = Offset(x + wobble, y + wobble * 0.5f),
             )
         }
     }

@@ -22,12 +22,12 @@ fun RunnerWithDust(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        // Dust behind the runner
+        // Dust trailing behind the runner — visible, long trail
         DustTrail(
             modifier = Modifier.matchParentSize(),
             color = color,
-            particleCount = 12,
-            maxAlpha = 0.25f,
+            particleCount = 18,
+            maxAlpha = 0.6f,
         )
         // Runner on top
         LottieRunner(
