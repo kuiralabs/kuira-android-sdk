@@ -42,6 +42,7 @@ import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
 import com.midnight.kuira.dev.wireframes.shared.DuskProgressBar
+import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 import com.midnight.kuira.feature.balance.redesign.ShimmerBlock
 
@@ -333,7 +334,17 @@ private fun EmptyContent(palette: DuskPalette) {
 private fun PendingContent(copy: DustStepCopy, palette: DuskPalette) {
     Spacer(modifier = Modifier.height(48.dp))
 
-    GlassPanel(tint = palette.contentPanel, border = palette.LightFaint, contentPadding = 24.dp) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        RaramuriRunner(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(120.dp),
+            color = palette.Light,
+        )
+        Spacer(modifier = Modifier.height(32.dp))
         StepIndicator(
             stepLabel = copy.label,
             detailHint = copy.detail,

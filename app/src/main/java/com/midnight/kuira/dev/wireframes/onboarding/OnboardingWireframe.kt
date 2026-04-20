@@ -48,6 +48,7 @@ import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.dev.wireframes.send.DuskPrimaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.DuskSecondaryButtonPaletted
 import com.midnight.kuira.dev.wireframes.send.StepIndicator
+import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
 import com.midnight.kuira.feature.balance.redesign.DuskPalette
 
 enum class OnboardingStep {
@@ -448,17 +449,33 @@ private fun CreatingScreen(palette: DuskPalette) {
         ) {
             Spacer(modifier = Modifier.weight(1f))
 
-            GlassPanel(
-                tint = palette.contentPanel,
-                border = palette.LightFaint,
-                contentPadding = 24.dp,
-            ) {
-                StepIndicator(
-                    stepLabel = "Creating wallet",
-                    detailHint = "Generating keys\u2026",
-                    palette = palette,
-                )
-            }
+            // Rarámuri runner — the "Running People" progress indicator.
+            // Intentionally shown for 3+ seconds even if wallet creation
+            // is instant. This is a brand moment, not just a spinner.
+            RaramuriRunner(
+                modifier = Modifier
+                    .fillMaxWidth(0.4f)
+                    .height(120.dp),
+                color = palette.Light,
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = "Creating wallet",
+                color = palette.Light,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.W300,
+                lineHeight = 20.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Generating keys\u2026",
+                color = palette.LightMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.W400,
+                lineHeight = 18.sp,
+            )
 
             Spacer(modifier = Modifier.weight(1f))
         }

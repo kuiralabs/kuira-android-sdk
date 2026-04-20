@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
+import com.midnight.kuira.dev.wireframes.shared.RaramuriRunner
 import com.midnight.kuira.dev.wireframes.settings.SettingsDivider
 import com.midnight.kuira.dev.wireframes.settings.SettingsRow
 import com.midnight.kuira.dev.wireframes.settings.SettingsSectionHeader
@@ -285,17 +286,22 @@ private fun PendingContent(state: ConfirmationState, palette: DuskPalette) {
     Spacer(modifier = Modifier.height(48.dp))
 
     val copy = stepCopy(state) ?: return
-    GlassPanel(
-        tint = palette.contentPanel,
-        border = palette.LightFaint,
-        contentPadding = 24.dp,
-    ) {
-        StepIndicator(
-            stepLabel = copy.label,
-            detailHint = copy.detail,
-            palette = palette,
-        )
-    }
+
+    // Rarámuri runner — brand progress indicator
+    RaramuriRunner(
+        modifier = Modifier
+            .fillMaxWidth(0.4f)
+            .height(120.dp),
+        color = palette.Light,
+    )
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    StepIndicator(
+        stepLabel = copy.label,
+        detailHint = copy.detail,
+        palette = palette,
+    )
 }
 
 // ── Success ──
