@@ -120,20 +120,28 @@ private fun WelcomeScreen(palette: DuskPalette) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Headline
+            // Headline — centered to match wordmark
             Text(
                 text = "your phone is\nyour hardware wallet",
                 color = palette.Light,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.W300,
                 lineHeight = 28.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Bullet features
-            BulletLine("Your keys never leave this device", palette)
-            BulletLine("Secured by biometric + passcode", palette)
-            BulletLine("Private by default — powered by Midnight", palette)
+            // Detail — single centered line instead of bullet list
+            Text(
+                text = "Private keys secured by biometric.\nPowered by Midnight.",
+                color = palette.LightMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.W400,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(modifier = Modifier.height(48.dp))
 
