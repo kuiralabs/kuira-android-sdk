@@ -120,14 +120,17 @@ private fun WelcomeScreen(palette: DuskPalette) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Tagline — short, powerful, no explanation needed
+            // Tagline — from Rarámuri belief that the soul is active
+            // at night while the body sleeps. "Kuira" derives from
+            // Rarámuri language; "Midnight" is the blockchain.
+            // The night protects what matters.
             Text(
-                text = "YOUR KEYS.\nYOUR MIDNIGHT.",
-                color = palette.Light,
-                fontSize = 22.sp,
+                text = "Where night protects the day.",
+                color = palette.LightSoft,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.W300,
-                lineHeight = 32.sp,
-                letterSpacing = 2.sp,
+                lineHeight = 24.sp,
+                letterSpacing = 1.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
