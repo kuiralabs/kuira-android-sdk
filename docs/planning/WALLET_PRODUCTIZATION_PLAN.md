@@ -1,7 +1,7 @@
 # Wallet Productization Plan (Phase 8B)
 
-**Status:** Drafting — strategic decisions in progress (grill-me session)
-**Last updated:** 2026-04-12
+**Status:** Active — 8B.0 (R8) ✅ | 8B.1 (design sprint) ✅ | **8B.3 (core UI) next**
+**Last updated:** 2026-04-20
 **Supersedes:** The 10-15h "Settings, app store readiness" line in `PLAN.md`
 
 ---
@@ -61,24 +61,27 @@ permanently deletes your funds when you drop your phone.
 
 ---
 
-## Codebase reality check (as of 2026-04-12)
+## Codebase reality check
 
-Before any 8B planning, these are the verified facts about what's
-actually built. Several of them change the scope of what's commonly
-called "polish".
+**Original snapshot (2026-04-12)** with **current status (2026-04-20)**:
 
-| Area | State | Implication for 8B |
+| Area | State (Apr 12) | Current (Apr 20) |
 |---|---|---|
-| App icon | Default Android Studio green droid (never branded) | Needs asset design — not just a checkbox |
-| R8 / ProGuard | `isMinifyEnabled = false` — release build has never been minified | **High risk:** Rust FFI symbols, QuickJS JNI, and Hilt KSP all have R8 failure modes that won't be known until we turn it on |
-| Default network | `MidnightNetwork.UNDEPLOYED` (localnet) | The current APK literally cannot work on Play Store — it talks to `127.0.0.1` via `adb reverse`. Must change before any release. |
-| Transaction history | Zero infrastructure (no repo method, no DB query, no screen). UTXO DB has raw data | Build from scratch if we want it, not polish an existing screen |
-| QR code | No dependency, no code | Build from scratch |
-| Dusk design system | 1 of 4 screens (`OnboardingScreen` only). `BalanceScreen` / `SendScreen` / `DustScreen` use raw Material 3 | "Apply Dusk consistently" is ~3 screen rewrites, not a tweak |
-| Backup | `core:backup` module was scoped in `WALLET_AUTH_ONBOARDING_PLAN.md` §2 but never built. Only a docstring reference remains in `SeedVault` | See backup story options |
-| Settings screen | Does not exist (no route, no VM, no file) | Build from scratch |
-| Network picker UI | `NetworkSelectorBar` exists in the app shell and can switch networks (requires app restart) | Half-built — need to migrate into Settings and handle restart gracefully |
-| Play Store compliance | No privacy policy, no terms, no data safety declaration | All must be authored before submission |
+| App icon | Default green droid | ✅ K monogram placeholder (adaptive icon XML) |
+| R8 / ProGuard | `isMinifyEnabled = false` | ✅ R8 on, shrink on, proguard rules working (8B.0 done) |
+| Default network | `UNDEPLOYED` (localnet) | Unchanged — needs T1-19 (deferred to 8B.5) |
+| Transaction history | Zero infrastructure | **Wireframe designed** (06-tx-history) — production build in 8B.3 |
+| QR code | No dependency, no code | **Wireframe designed** (07-receive) — production build in 8B.3 |
+| Dusk design system | 1 of 4 screens (OnboardingScreen only) | ✅ Full design system in wireframes: DuskTokens, DuskPalette (ErrorText, SuccessText, LightMuted 50%), 22+ reusable components, 9 interactive wireframes in dev portal |
+| Backup | `core:backup` never built | Unchanged — manual mnemonic only (v1.0 decision: Option A) |
+| Settings screen | Does not exist | **Wireframe designed** (05-settings) — production build first in 8B.3 |
+| Network picker UI | `NetworkSelectorBar` in app shell | Unchanged — Settings build (8B.3 #1) retires it |
+| Play Store compliance | Nothing | Unchanged — deferred to 8B.5 |
+| Send flow | Single-form screen | **Wireframe designed** as 3-screen wizard (02-send) — production build in 8B.3 |
+| Onboarding | Functional but basic | **Wireframe designed** as 7-step flow with passcode + KUIRA wordmark (09-onboarding) |
+| Dust screen | Functional, raw Material 3 | **Wireframe designed** with DustVortex + DustLifecycleGraph (04-dust) |
+| Splash | None | ✅ Branded cold-start theme wired (API 31+) |
+| Lottie runner | N/A | ✅ Rarámuri runner + DustTrail as brand progress indicator across all pending states |
 
 ---
 
@@ -1170,20 +1173,23 @@ middle, Option A cedes the narrative.
 
 | Aggregate | Range |
 |---|---|
-| Tier 1 only | ~94–134h |
-| Tier 1 + half of Tier 2 | ~115–160h |
-| Tier 1 + all of Tier 2 | ~130–180h |
+| Tier 1 only | ~100–142h |
+| Tier 1 + half of Tier 2 | ~121–168h |
+| Tier 1 + all of Tier 2 | ~136–188h |
 
 **Original PLAN.md estimate:** 10–15h. Reality: **10× that** for Tier 1 alone.
 
-**Biggest unknown:** T1-13 (R8). If minification breaks the Rust FFI or
-QuickJS bridge in non-trivial ways, it can balloon by 20–40h of
-symbol-retention-rule debugging. De-risk **early** in 8B — do not save
-it for release week.
+**Biggest risk (resolved):** ~~T1-13 (R8)~~ — R8 passed first try.
+No JNI/FFI breakage. This was the #1 unknown; it's gone.
 
-**Biggest time sink:** T1-5 (Transaction History) + T1-6 (Receive QR) +
-T1-8 (Dusk everywhere) together are ~45–50h of UI work that cannot be
-parallelized cleanly by one developer.
+**Biggest remaining risk:** the wireframe → production conversion.
+9 screens to build in 8B.3. The wireframes are comprehensive but
+production code needs: ViewModels, repositories, Room DAOs (Tx History),
+real data binding, navigation integration, and testing.
+
+**Biggest time sink:** T1-5 (Transaction History, needs Room DAO) +
+T1-6 (Receive, needs QR generation + URI parser) + Send wizard
+(3 screens, new navigation flow) together are ~50-60h.
 
 ---
 
@@ -1199,109 +1205,48 @@ Notation:
   marked "parallel to".
 - **Gates** — `gate:` means this subphase blocks later work until done.
 
-### [0] 8B.0 — Week-1 de-risk
+### [0] 8B.0 — Week-1 de-risk ✅ DONE
 
-**Gate: unknown R8 behavior.** Must happen before any UI investment.
-The worst case for R8 breakage (20-40h debugging Rust FFI / QuickJS
-symbol tables) must be discovered in week 1, not week 12.
+R8 passed first try. Debug 79 MB → release 37 MB (54% reduction).
+See retrospective notes in git history. Firebase project setup
+deferred to 8B.5.
 
-| Task | Rows | Est. | Status |
-|---|---|---|---|
-| Enable R8 + `proguard-android-optimize.txt` + resource shrinking in the release build; build a release APK; install on device; fix whatever breaks; write the `proguard-rules.pro` set we can trust | T1-13 | 8–24h | **✅ Done 2026-04-13** |
-| Firebase project creation + Remote Config setup (just the infra, no code use yet) | T1-19 infra | 2h | ⏳ User-action pending (Firebase console) |
+### [1] 8B.1 — Design sprint ✅ DONE
 
-**Deliverable:** release APK with `isMinifyEnabled = true` installs
-and runs on device; Firebase project exists and `mainnet_enabled`
-boolean flag is declared (default `false`).
+Delivered 2026-04-15 → 2026-04-20. Far exceeded the original 6–8h
+estimate — became a full design system + wireframe sprint:
 
-**Actual 8B.0 outcome (retrospective):**
-- **R8 passed first try.** Speculative keep-rules derived from a
-  codebase survey (67 `external fun` declarations across 11 FFI
-  classes) were correct on first attempt — no iteration on the
-  proguard rules required. Release APK builds in ~44s incremental.
-- **Size win:** debug 79 MB → release 37 MB (54% reduction).
-- **One unrelated release-build issue surfaced** (commit `ee5fef0`):
-  Android's default release network security policy blocks cleartext
-  HTTP. Our UNDEPLOYED network uses `http://127.0.0.1:8088`. Fixed
-  by adding `app/src/main/res/xml/network_security_config.xml` that
-  permits cleartext for `127.0.0.1` / `10.0.2.2` / `localhost` only
-  (HTTPS required for everything else, matching production
-  expectations).
-- **One latent bug surfaced in runtime testing** (logged as task #86
-  for 8B.3 fix): `WalletAddressCache` stores addresses with the
-  network prefix embedded from onboarding-time, so switching network
-  leaves the wallet using the wrong-prefix address against the new
-  indexer. This belongs in T1-4 / T1-17 network picker migration.
-  Workaround for ongoing testing: `adb shell pm clear com.midnight.kuira`
-  and re-onboard on the target network.
-- **Build artefacts:**
-  - `./gradlew :app:assembleRelease` → signed release APK
-  - Release signing falls back to debug keystore when
-    `rootProject/release.keystore` is absent (drops in seamlessly
-    when T1-14 lands)
-  - Mapping file at `app/build/outputs/mapping/release/mapping.txt`
-    (~58 MB) ready for Crashlytics auto-upload in 8B.2
-
-### [1] 8B.1 — Design sprint (parallel to 8B.2)
-
-**Gate: no Compose work starts until IA spec is approved.**
-AI-assisted but engineer-driven, per T1-8 resolution.
-
-| Task | Rows | Est. |
-|---|---|---|
-| Competitive study (Rainbow, Phantom, Trust Wallet, MetaMask Mobile); AI-assisted wireframes per screen (BalanceScreen, SendScreen, DustScreen, SettingsScreen, TxHistoryScreen, ReceiveScreen); per-screen IA spec written into this plan doc; token + new-component inventory | T1-8 design | 3–4h |
-| App icon concept generation (AI drafts of pure-symbol marks in Dusk palette); splash animation storyboard reusing `MaterializeEffect` | T1-7 concepts | 3–4h |
-
-**Deliverable:** every screen has an agreed wireframe in this plan
-doc; icon/splash direction green-lit.
-
-### [1] 8B.2 — Infrastructure features (parallel to 8B.1)
-
-**Gate: downstream UI work (8B.3) cannot wire Firebase features or
-test signed-release flows until this is done.**
-
-| Task | Rows | Est. |
-|---|---|---|
-| Production signing keystore generation + secure storage + release `signingConfigs` in `build.gradle.kts` + Play App Signing setup | T1-14 | 4h |
-| Firebase Remote Config client code + `mainnet_enabled` flag fetch/cache/apply logic + `MAINNET` enum case with stubbed URLs + BuildConfig flag as local override for tests | T1-19 code | 8–10h |
-| Firebase Crashlytics integration + auto-upload mapping files for deobfuscation + test that stack traces land in Firebase console | T2-6 | 1h (incremental) |
-
-**Deliverable:** release builds signed with production key, crashes
-appear in Firebase Crashlytics with readable stack traces,
-`mainnet_enabled = false` hides MAINNET from the network picker.
+- 11 AI-consumable IA specs (`docs/design/prompts/`)
+- 9 interactive Compose wireframes in dev portal with state/palette toggles
+- 22+ reusable components (DuskTokens, DuskPalette with ErrorText/SuccessText)
+- Brand elements: Rarámuri runner (Lottie), DustVortex, "Where night protects the day" tagline, K monogram icon, KuiraMaterializeFrame
+- Competitive study: Phantom (Send flow), Solflare (onboarding), 1AM (sync progress)
+- Key design decisions: 3-screen Send wizard, 7-step onboarding with passcode, label/value emphasis flip, LightMuted 50% readability bump
 
 ### [2] 8B.3 — Core UI + features
 
-**The biggest block.** All Level 3 Compose work, new screens, and
-feature wiring. Order inside the subphase: incremental sync + Settings
-first (the former unblocks "wallet opens fast" UX that every screen
-observes; the latter hosts other rows), then screen-by-screen.
+**The biggest block.** Convert each wireframe into a production
+screen. T1-21 (incremental UTXO sync) is already done — every
+screen gets fast-open UX from day 1.
 
-Sequence within 8B.3:
-1. **Incremental UTXO sync (T1-21)** — persist `SyncStateManager`
-   across launches, reorg-aware resume, "Force re-sync" escape hatch.
-   **Do this first** so every downstream screen gets the fast-open UX
-   and the zero-balance flicker is gone before we invest in the L3
-   visual polish. 8-12h.
-2. Settings screen skeleton + navigation wiring (T1-1)
-3. Developer toggle + network picker inside Settings (T1-17, T1-4)
-4. Environment badge in top nav bar (T1-16)
-5. Recovery phrase view + non-dismissible home banner (T1-2)
-6. Wipe wallet (T1-3)
-7. Proof server config UI (T1-18)
-8. Send confirmation screen (T1-15)
-9. Transaction history + detail drill-in + explorer link (T1-5)
-10. Receive screen + QR + `midnight:` URI parser + intent-filter (T1-6)
-11. Level 3 Dusk redesign applied across all existing screens (T1-8 Compose implementation)
+Each row = one wireframe spec → one production screen. Order is
+dependency-driven (Settings first because it retires NetworkSelectorBar
+and hosts dev-mode toggle that other screens depend on).
 
-| Rows | Combined est. |
-|---|---|
-| T1-1, T1-2, T1-3, T1-4, T1-5, T1-6, T1-8, T1-15, T1-16, T1-17, T1-18, T1-21, T1-22 | 118–152h |
+| # | Screen (wireframe spec) | Old task IDs absorbed | Status |
+|---|---|---|---|
+| 1 | **05 Settings** — SettingsScreen + ViewModel. Network picker (dev-gated), wipe wallet, dev toggle, env badge, proof-server config, force re-sync | T1-1, T1-3, T1-4, T1-16, T1-17, T1-18 | ⬜ |
+| 2 | **01 Balance** — Dusk redesign. DuskPalette, GlassPanel, QuickActionCircles, sync progress bar, star-protection. Wire settings icon | T1-8 (balance) | ⬜ |
+| 3 | **02 Send wizard** — 3-screen flow (Token+Mode → Recipient → Amount hero). USD swap. Replaces single-form SendScreen | T1-8 (send) | ⬜ |
+| 4 | **03 Send Confirmation** — Receipt-hero review → biometric → RunnerWithDust state machine → success/error | T1-15 | ⬜ |
+| 5 | **08 Recovery Phrase** — 24-word WordGrid + FLAG_SECURE + biometric gate. Onboarding variant. Backup banner on Balance | T1-2 | ⬜ |
+| 6 | **06 Tx History + Detail** — Day-grouped TxRow list + detail drill-in + explorer link. Room DAO for local cache | T1-5 | ⬜ |
+| 7 | **07 Receive** — QR generation + address tabs + midnight: URI encoding + ActionPill row + FullScreenQR. Intent-filter | T1-6 | ⬜ |
+| 8 | **04 Dust** — Dusk redesign. DustVortex + DustLifecycleGraph + RunnerWithDust registration + mathematical simulator | T1-8 (dust), T1-22 | ⬜ |
+| 9 | **09 Onboarding** — 7-step flow: KUIRA wordmark → passcode → biometric → RunnerWithDust creating → recovery phrase → all set (Terms/Privacy) | T1-8 (onboarding) | ⬜ |
 
-**Deliverable:** feature-complete testnet wallet with polished L3 UX
-across every screen; wallet opens in under a second with cached
-balance (T1-21); dark mode verified via `MaterialTheme.colorScheme`
-audit; baseline a11y (content descriptions, 48dp touch targets).
+**Deliverable:** feature-complete testnet wallet with L3 Dusk UX
+across every screen. Dark + light mode. Baseline a11y.
 
 ### [3] 8B.4 — Agent seed + Tier 2 quick wins
 
@@ -1317,18 +1262,22 @@ audit; baseline a11y (content descriptions, 48dp touch targets).
 **Deliverable:** Claude Desktop can connect over LAN and query wallet
 (Scenario 1); Settings is complete.
 
-### [4] 8B.5 — Release assets + compliance
+### [4] 8B.5 — Release pipeline + compliance
 
 **Dependency:** 8B.3 must be done (screenshots need polished UI).
+Absorbs former 8B.2 infrastructure tasks (keystore, Firebase, mainnet enum).
 
 | Task | Rows | Est. |
 |---|---|---|
-| Icon vector refinement (AI draft → Figma/Inkscape), adaptive icon layers, animated splash implementation using Splash Screen API + `MaterializeEffect` | T1-7 impl | 5–6h |
-| Privacy policy + Terms of Use drafted; reviewed round 1 → revisions → round 2 → revisions (multi-round per T1-11 resolution); published to GitHub Pages | T1-11 | 4h drafting + ~4–8h review |
-| Play Store listing copy (respecting the content restrictions from the compliance cheat sheet); screenshots of every major screen in light + dark mode; feature graphic (1024×500); Data Safety form answers per the cheat sheet; Financial Features Declaration with "Software wallet (non-custodial)" checked | T1-12 | 4h |
+| Production signing keystore generation + secure storage + Play App Signing | T1-14 | 4h |
+| Firebase project + Crashlytics + auto-upload mapping | T2-6, T1-19 infra | 3h |
+| MAINNET enum + Remote Config gate code | T1-19 code | 8–10h |
+| Icon vector refinement (AI draft → Figma/Inkscape), animated splash with Splash Screen API + `MaterializeEffect` | T1-7 impl | 5–6h |
+| Privacy policy + Terms of Use drafted + GitHub Pages + multi-round review | T1-11 | 4h drafting + ~4–8h review |
+| Play Store listing copy, screenshots (light + dark), feature graphic, Data Safety form, Financial Features Declaration | T1-12 | 4h |
 
-**Deliverable:** Play Console submission package assembled and
-staged; legal text public at stable URLs.
+**Deliverable:** Shippable release build; Play Console submission
+package assembled and staged; legal text public at stable URLs.
 
 ### [5] 8B.6 — Final hardening
 
@@ -1369,31 +1318,25 @@ from a snapshot repo. Full GA polish deferred to Phase 8C.
 ### Subphase dependency graph
 
 ```
-        ┌──► 8B.1 (design) ──┐
-8B.0 ───┤                    ├──► 8B.3 (core UI) ──► 8B.4 ──► 8B.5 ──► 8B.6 ──► 8B.7
-        └──► 8B.2 (infra)   ─┘                                              (14 days)
-
-SDK alpha track — runs parallel to everything in 8B, no gate.
+8B.0 (R8) ✅ ──► 8B.1 (design) ✅ ──► 8B.3 (core UI) ──► 8B.4 ──► 8B.5 ──► 8B.6 ──► 8B.7
+                                       9 screens              │       release    hardening  (14 days)
+                                                              │       pipeline
+                                                              └── SDK alpha (parallel, no gate)
 ```
 
-### Calendar estimate (one engineer, full-time)
+### Calendar estimate (remaining work, one engineer)
 
-| Subphase | Eng. hours | Calendar weeks (1 dev, ~30 productive h/wk) |
+| Subphase | Eng. hours | Status |
 |---|---|---|
-| 8B.0 de-risk | 10–26h | 0.5–1 |
-| 8B.1 design (parallel) | 6–8h | 0.25 |
-| 8B.2 infra (parallel) | 13–15h | 0.5 |
-| 8B.3 core UI | 112–144h | 4–5 |
-| 8B.4 agent seed + T2 | 26–31h | 1 |
-| 8B.5 release assets | 17–22h | 0.75 |
-| 8B.6 Play Integrity | 6–8h | 0.25 |
-| 8B.7 closed beta + submit | 8–12h + 14 calendar days | 3 (gate-bound) |
-| SDK alpha (parallel) | 18–20h | — (absorbed into gaps) |
-| **Total** | **~188–242h** | **~10–14 calendar weeks** |
-
-Realistic ship date: **2.5–3.5 months** from kickoff for a single
-full-time engineer, assuming no R8 worst-case and no Play Store
-rejection round-trip.
+| ~~8B.0 de-risk~~ | ~~10–26h~~ | ✅ Done |
+| ~~8B.1 design~~ | ~~6–8h~~ (actual: ~40h) | ✅ Done |
+| 8B.3 core UI (9 screens) | ~100–130h | ⬜ Next |
+| 8B.4 agent seed + T2 | 26–31h | ⬜ |
+| 8B.5 release pipeline + compliance | 28–36h | ⬜ |
+| 8B.6 Play Integrity | 6–8h | ⬜ |
+| 8B.7 closed beta + submit | 8–12h + 14 calendar days | ⬜ |
+| SDK alpha (parallel) | 18–20h | ⬜ |
+| **Remaining** | **~186–237h** | |
 
 ---
 
