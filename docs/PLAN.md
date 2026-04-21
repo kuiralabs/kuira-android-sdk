@@ -113,7 +113,24 @@ productization plan doc. Summary of the ordered subphases:
 |----------|-------|-------------|
 | 8B.0 | **Week-1 de-risk** — R8 / ProGuard enablement (T1-13) | ✅ **Done** — R8 on, shrink on, proguard rules configured, no JNI/FFI breakage |
 | 8B.1 | **Design sprint** — AI-assisted wireframes, per-screen IA specs, Compose wireframes with dev portal, brand elements, DuskTokens | ✅ **Done** — 11 specs, 9 wireframes, Rarámuri runner, DustVortex, 7-step onboarding |
-| 8B.3 | **Core UI + features** — Settings screen (T1-1); Level 3 Dusk redesign across all screens (T1-8 impl); Recovery phrase + banner (T1-2); Wipe wallet (T1-3); Network picker migration (T1-4); Tx history + detail + explorer link (T1-5); Receive + `midnight:` URI + intent-filter (T1-6); Send confirmation (T1-15); Environment badge (T1-16); Developer toggle (T1-17); Proof-server config (T1-18); Dust mathematical simulator (T1-22) | Feature-complete testnet wallet with L3 UX |
+| 8B.3 | **Core UI + features** — build production screens from wireframes. See per-screen breakdown below. | Feature-complete testnet wallet with L3 UX |
+
+### 8B.3 per-screen breakdown
+
+Each row = one wireframe → one production screen. Order is
+recommended build sequence (dependency-driven).
+
+| # | Screen (wireframe) | Tasks absorbed | What to build | Status |
+|---|---|---|---|---|
+| 1 | **05 Settings** | T1-1, T1-3, T1-4, T1-16, T1-17, T1-18 | Production SettingsScreen + SettingsViewModel. Retires NetworkSelectorBar. Includes: network picker (dev-gated), wipe wallet flow, dev-mode toggle, environment badge, proof-server config, force re-sync. | ⬜ |
+| 2 | **01 Balance** | T1-8 (balance) | Dusk redesign of BalanceScreen. Apply DuskPalette, GlassPanel, QuickActionCircles, sync progress bar, star-protection. Wire settings icon → Settings. | ⬜ |
+| 3 | **02 Send (3-screen wizard)** | T1-8 (send) | Replace single-form SendScreen with Token+Mode → Recipient → Amount hero wizard. USD swap toggle. DuskInputField for address. | ⬜ |
+| 4 | **03 Send Confirmation** | T1-15 | New screen: receipt-hero review → biometric → state machine (RunnerWithDust) → success/error. Wire from Send wizard. | ⬜ |
+| 5 | **08 Recovery Phrase** | T1-2 | New screen: 24-word WordGrid + FLAG_SECURE + biometric gate. Onboarding variant with "I understand" checkbox. Backup banner on Balance. | ⬜ |
+| 6 | **06 Tx History + Detail** | T1-5 | New screens: day-grouped list (TxRow, TxTypeBadge) + detail drill-in with explorer link. Room DAO for local cache. | ⬜ |
+| 7 | **07 Receive** | T1-6 | New screen: QR generation, address tabs, midnight: URI encoding, ActionPill row (copy/share/expand), FullScreenQR overlay. Intent-filter registration. | ⬜ |
+| 8 | **04 Dust** | T1-8 (dust), T1-22 | Dusk redesign of DustScreen. DustVortex + DustLifecycleGraph + RunnerWithDust on registration. Mathematical simulator. | ⬜ |
+| 9 | **09 Onboarding** | T1-8 (onboarding) | Redesign existing onboarding to 7-step flow: KUIRA wordmark → passcode → biometric → creating (RunnerWithDust) → recovery phrase → all set (Terms/Privacy). | ⬜ |
 | 8B.4 | **Agent seed + Tier 2 quick wins** — MCP Bridge + Pattern A pairing + structured JSON (T1-20); About (T2-2); Biometric test (T2-3); Faucet link (T2-4) | Claude-Desktop-queries-wallet demo works; full Settings surface complete |
 | 8B.5 | **Release pipeline + compliance** — Production keystore (T1-14); Firebase project + Crashlytics (T2-6); MAINNET enum + Remote Config gate (T1-19); Final icon + splash (T1-7); Privacy policy + Terms (T1-11); Play Store listing + screenshots (T1-12) | Shippable release build + submission-ready artifacts |
 | 8B.6 | **Final hardening** — Play Integrity API integration (T2-9) | Pre-submission security gate |
