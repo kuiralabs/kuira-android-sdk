@@ -1,5 +1,8 @@
 package com.midnight.kuira.feature.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -18,6 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,32 +33,43 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
+import com.midnight.kuira.core.network.MidnightNetwork
+import kotlinx.coroutines.launch
 
-// Sizing tokens — mirrors DuskTokens from the wireframes.
-// TODO: when DuskPalette moves to core:designsystem, import
-//       DuskTokens directly instead of these local aliases.
+// Sizing tokens (mirrors DuskTokens)
 private val TopBarHeight = 56.dp
 private val RowMinHeight = 56.dp
-private val Space4 = 4.dp
 private val Space8 = 8.dp
 private val Space12 = 12.dp
 private val Space16 = 16.dp
@@ -60,23 +77,14 @@ private val Space24 = 24.dp
 private val Space32 = 32.dp
 private val Icon16 = 16.dp
 private val Icon24 = 24.dp
+private val RadiusMd = 12.dp
 
-/**
- * Production Settings screen. Mirrors the wireframe in
- * `05-settings.md` / `SettingsWireframe.kt` but wired to real data
- * via [SettingsViewModel].
- *
- * Uses [MidnightColors] (dark-mode only for v1.0). When DuskPalette
- * moves to `core:designsystem`, this screen will adopt it for
- * light-mode support.
- *
- * TODO (8B.3 follow-ups):
- * - ConfirmationSheet for wipe + force-resync
- * - NetworkPicker bottom sheet
- * - Proof server URL edit field (DuskInputField)
- * - Wire last-sync timestamp from SyncStateManager
- * - Promote DuskPalette + wireframe SettingsRow to core:designsystem
- */
+// External URLs
+private const val URL_LICENSE = "https://github.com/nel349/kuira-android-wallet/blob/main/LICENSE"
+private const val URL_GITHUB = "https://github.com/nel349/kuira-android-wallet"
+private const val URL_SUPPORT = "https://github.com/nel349/kuira-android-wallet/issues"
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit = {},
@@ -85,8 +93,34 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    // Sheet states
+    var showNetworkPicker by remember { mutableStateOf(false) }
+    var showWipeConfirmation by remember { mutableStateOf(false) }
+    var showResyncConfirmation by remember { mutableStateOf(false) }
+    var showProofServerEditor by remember { mutableStateOf(false) }
+    var wipeChallenge by remember { mutableStateOf("") }
+
+    fun openUrl(url: String) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    fun triggerBiometricTest() {
+        val activity = context as? FragmentActivity ?: return
+        scope.launch {
+            try {
+                val seed = viewModel.testBiometric(activity)
+                seed?.wipe()
+                Toast.makeText(context, "Biometric OK", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "Biometric failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -149,7 +183,7 @@ fun SettingsScreen(
                         label = "Network",
                         value = uiState.network.name,
                         readOnly = !uiState.devModeUnlocked,
-                        onClick = { /* TODO: open NetworkPicker sheet */ },
+                        onClick = { showNetworkPicker = true },
                     )
                     SettingsDividerItem()
                     SettingsRowItem(
@@ -174,13 +208,13 @@ fun SettingsScreen(
                         SettingsRowItem(
                             label = "Proof server",
                             value = uiState.proofServerUrl,
-                            onClick = { /* TODO: open proof server URL editor */ },
+                            onClick = { showProofServerEditor = true },
                         )
                         SettingsDividerItem()
                         DangerRowItem(
                             label = "Force re-sync",
                             leadingIcon = Icons.Filled.Sync,
-                            onClick = { viewModel.onForceResync() },
+                            onClick = { showResyncConfirmation = true },
                         )
                         SettingsDividerItem()
                         SettingsRowItem(
@@ -209,17 +243,15 @@ fun SettingsScreen(
                     SettingsRowItem(
                         leadingIcon = Icons.Filled.Fingerprint,
                         label = "Test biometric",
-                        onClick = { /* TODO: trigger biometric test + toast */ },
+                        onClick = { triggerBiometricTest() },
                     )
                     SettingsDividerItem()
                     DangerRowItem(
                         label = "Wipe wallet",
                         leadingIcon = Icons.Filled.DeleteForever,
                         onClick = {
-                            // TODO: open ConfirmationSheet with "type WIPE" challenge
-                            // On confirm:
-                            //   viewModel.onWipeWallet()
-                            //   onWipeComplete()
+                            wipeChallenge = ""
+                            showWipeConfirmation = true
                         },
                     )
                 }
@@ -234,12 +266,11 @@ fun SettingsScreen(
                     border = MidnightColors.LightFaint,
                     contentPadding = 0.dp,
                 ) {
-                    // Version row: readOnly-looking but tappable for 7-tap unlock
                     SettingsRowItem(
                         label = "Version",
                         value = uiState.versionName,
                         readOnly = true,
-                        alwaysClickable = true, // 7-tap dev-mode unlock
+                        alwaysClickable = true,
                         onClick = { viewModel.onVersionTapped() },
                     )
                     SettingsDividerItem()
@@ -252,19 +283,307 @@ fun SettingsScreen(
                     SettingsDividerItem()
                     SettingsRowItem(
                         label = "License",
-                        onClick = { /* TODO: open browser */ },
+                        onClick = { openUrl(URL_LICENSE) },
                     )
                     SettingsDividerItem()
                     SettingsRowItem(
                         label = "GitHub",
-                        onClick = { /* TODO: open browser */ },
+                        onClick = { openUrl(URL_GITHUB) },
                     )
                     SettingsDividerItem()
                     SettingsRowItem(
                         label = "Support",
-                        onClick = { /* TODO: open browser */ },
+                        onClick = { openUrl(URL_SUPPORT) },
                     )
                 }
+            }
+        }
+    }
+
+    // ── Bottom sheets ──
+
+    // Network picker
+    if (showNetworkPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showNetworkPicker = false },
+            containerColor = MidnightColors.VoidElevated,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
+                Text(
+                    text = "SELECT NETWORK",
+                    color = MidnightColors.LightMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.W400,
+                    letterSpacing = 3.sp,
+                )
+                Spacer(modifier = Modifier.height(Space16))
+                MidnightNetwork.entries.forEach { network ->
+                    val isSelected = network == uiState.network
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = RowMinHeight)
+                            .clickable {
+                                viewModel.onNetworkSelected(network)
+                                showNetworkPicker = false
+                            }
+                            .padding(horizontal = Space16, vertical = Space12),
+                    ) {
+                        Text(
+                            text = network.name,
+                            color = if (isSelected) MidnightColors.Light else MidnightColors.LightSoft,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.W400 else FontWeight.W300,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isSelected) {
+                            Text(
+                                text = "✓",
+                                color = MidnightColors.Light,
+                                fontSize = 16.sp,
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(Space32))
+            }
+        }
+    }
+
+    // Wipe confirmation
+    if (showWipeConfirmation) {
+        ModalBottomSheet(
+            onDismissRequest = { showWipeConfirmation = false },
+            containerColor = MidnightColors.VoidElevated,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
+                Text(
+                    text = "Wipe wallet?",
+                    color = MidnightColors.Light,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.W300,
+                )
+                Spacer(modifier = Modifier.height(Space8))
+                Text(
+                    text = "This erases your seed, keys, and cached state from this device. You can only restore with your recovery phrase.",
+                    color = MidnightColors.LightSoft,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.W300,
+                    lineHeight = 20.sp,
+                )
+                Spacer(modifier = Modifier.height(Space16))
+                Text(
+                    text = "Type WIPE to confirm",
+                    color = MidnightColors.LightMuted,
+                    fontSize = 13.sp,
+                )
+                Spacer(modifier = Modifier.height(Space8))
+                // Challenge input
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = RowMinHeight)
+                        .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                        .padding(horizontal = Space16, vertical = Space12),
+                ) {
+                    if (wipeChallenge.isEmpty()) {
+                        Text(
+                            text = "WIPE",
+                            color = MidnightColors.LightFaint,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.W300,
+                        )
+                    }
+                    BasicTextField(
+                        value = wipeChallenge,
+                        onValueChange = { wipeChallenge = it },
+                        textStyle = TextStyle(
+                            color = MidnightColors.Light,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.W300,
+                        ),
+                        cursorBrush = SolidColor(MidnightColors.Light),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(modifier = Modifier.height(Space16))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    // Cancel
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                            .clickable { showWipeConfirmation = false },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.width(Space8))
+                    // Confirm
+                    val canWipe = wipeChallenge.equals("WIPE", ignoreCase = false)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(
+                                if (canWipe) MidnightColors.Light else MidnightColors.LightBarely,
+                                RoundedCornerShape(RadiusMd),
+                            )
+                            .clickable(enabled = canWipe) {
+                                showWipeConfirmation = false
+                                viewModel.onWipeWallet()
+                                onWipeComplete()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Wipe wallet",
+                            color = if (canWipe) MidnightColors.Void else MidnightColors.LightMuted,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(Space32))
+            }
+        }
+    }
+
+    // Force re-sync confirmation
+    if (showResyncConfirmation) {
+        ModalBottomSheet(
+            onDismissRequest = { showResyncConfirmation = false },
+            containerColor = MidnightColors.VoidElevated,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
+                Text(
+                    text = "Force re-sync?",
+                    color = MidnightColors.Light,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.W300,
+                )
+                Spacer(modifier = Modifier.height(Space8))
+                Text(
+                    text = "This clears cached transactions and re-syncs from the indexer. Takes a few seconds on a warm stack.",
+                    color = MidnightColors.LightSoft,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.W300,
+                    lineHeight = 20.sp,
+                )
+                Spacer(modifier = Modifier.height(Space16))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                            .clickable { showResyncConfirmation = false },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.width(Space8))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(MidnightColors.Light, RoundedCornerShape(RadiusMd))
+                            .clickable {
+                                showResyncConfirmation = false
+                                viewModel.onForceResync()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Re-sync", color = MidnightColors.Void, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(modifier = Modifier.height(Space32))
+            }
+        }
+    }
+
+    // Proof server URL editor
+    if (showProofServerEditor) {
+        var editUrl by remember { mutableStateOf(uiState.proofServerUrl) }
+        ModalBottomSheet(
+            onDismissRequest = { showProofServerEditor = false },
+            containerColor = MidnightColors.VoidElevated,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
+                Text(
+                    text = "Proof server URL",
+                    color = MidnightColors.Light,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.W300,
+                )
+                Spacer(modifier = Modifier.height(Space8))
+                Text(
+                    text = "Enter a custom proof server URL or leave blank to use the network default.",
+                    color = MidnightColors.LightSoft,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+                Spacer(modifier = Modifier.height(Space16))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = RowMinHeight)
+                        .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                        .padding(horizontal = Space16, vertical = Space12),
+                ) {
+                    if (editUrl.isEmpty()) {
+                        Text(
+                            text = "http://localhost:6300",
+                            color = MidnightColors.LightFaint,
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    BasicTextField(
+                        value = editUrl,
+                        onValueChange = { editUrl = it },
+                        textStyle = TextStyle(
+                            color = MidnightColors.Light,
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace,
+                        ),
+                        cursorBrush = SolidColor(MidnightColors.Light),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(modifier = Modifier.height(Space16))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                            .clickable { showProofServerEditor = false },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.width(Space8))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(MidnightColors.Light, RoundedCornerShape(RadiusMd))
+                            .clickable {
+                                viewModel.onProofServerUrlChanged(editUrl)
+                                showProofServerEditor = false
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Save", color = MidnightColors.Void, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(modifier = Modifier.height(Space32))
             }
         }
     }
@@ -283,14 +602,6 @@ private fun SectionHeader(label: String) {
     )
 }
 
-/**
- * Settings row following the label/value emphasis rule:
- * - readOnly: label LightSoft (80%), value Light (100%) — data pops
- * - navigational: label Light (100%), value LightSoft (80%) — label pops
- *
- * [alwaysClickable] overrides readOnly's non-interactive behavior
- * (used for the Version row which looks readOnly but needs 7-tap).
- */
 @Composable
 private fun SettingsRowItem(
     label: String,
@@ -308,7 +619,6 @@ private fun SettingsRowItem(
     val resolvedTrailing = trailingIcon
         ?: if (showChevron) Icons.AutoMirrored.Filled.ArrowForward else null
 
-    // Label/value emphasis flip per spec
     val labelColor = if (readOnly) MidnightColors.LightSoft else MidnightColors.Light
     val valueColor = if (readOnly) MidnightColors.Light else MidnightColors.LightSoft
 

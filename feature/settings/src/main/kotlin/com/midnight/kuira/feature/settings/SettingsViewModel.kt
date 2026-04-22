@@ -1,7 +1,10 @@
 package com.midnight.kuira.feature.settings
 
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.network.NetworkRepository
@@ -26,6 +29,7 @@ class SettingsViewModel @Inject constructor(
     private val networkRepository: NetworkRepository,
     private val devModeRepository: DevModeRepository,
     private val proofServerRepository: ProofServerRepository,
+    private val seedVault: SeedVault,
     private val wipeWalletUseCase: WipeWalletUseCase,
     @Named("buildType") private val buildType: String,
     @Named("versionName") private val versionName: String,
@@ -94,7 +98,18 @@ class SettingsViewModel @Inject constructor(
 
     fun onForceResync() {
         // TODO: wire to SubscriptionManager.startSubscription(forceFullResync = true)
-        // Needs the current wallet address from WalletAddressCache
+        // Needs the current wallet address from WalletAddressCache.
+        // For now the confirmation sheet shows; the actual resync
+        // action will be wired when SubscriptionManager is injectable.
+    }
+
+    /**
+     * Trigger a biometric test. Returns the seed on success (caller
+     * must wipe it), throws on failure. Requires Activity context
+     * for the biometric prompt — passed as parameter, NOT stored.
+     */
+    suspend fun testBiometric(activity: FragmentActivity): PlaintextSeed? {
+        return seedVault.loadSeed(activity)
     }
 
     fun onWipeWallet() {
