@@ -7,15 +7,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.core.auth.AuthenticationFailedException
 import com.midnight.kuira.core.auth.AuthenticationLockedOutException
@@ -29,10 +20,8 @@ import com.midnight.kuira.feature.onboarding.WalletAddressDeriver
 import com.midnight.kuira.feature.onboarding.WalletGate
 import com.midnight.kuira.navigation.AppNavigation
 import com.midnight.kuira.service.ConnectorService
-import com.midnight.kuira.ui.components.NetworkSelectorBar
 import com.midnight.kuira.core.designsystem.theme.KuiraTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.system.exitProcess
 
@@ -76,40 +65,13 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         ConnectorService.start(this)
         setContent {
-            val selectedNetwork by networkRepository.selectedNetworkFlow.collectAsState(
-                initial = MidnightNetwork.DEFAULT
-            )
-            val scope = rememberCoroutineScope()
-
             KuiraTheme {
                 // Gate the whole app behind the onboarding flow. On first launch
                 // (or after a wallet reset), WalletGate shows OnboardingScreen
                 // until the user creates or restores a wallet. Once a seed is
                 // persisted, the content slot renders the normal app navigation.
-                // Explicit @MainActivity to make the Activity reference unambiguous
-                // (inside setContent the surrounding `this` could change if someone
-                // wraps the lambda in a different scope)
                 WalletGate(activity = this@MainActivity) {
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize()
-                    ) { innerPadding ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        ) {
-                            NetworkSelectorBar(
-                                selectedNetwork = selectedNetwork,
-                                onNetworkSelected = { network ->
-                                    scope.launch {
-                                        switchNetwork(network)
-                                    }
-                                }
-                            )
-                            HorizontalDivider()
-                            AppNavigation()
-                        }
-                    }
+                    AppNavigation()
                 }
             }
         }
