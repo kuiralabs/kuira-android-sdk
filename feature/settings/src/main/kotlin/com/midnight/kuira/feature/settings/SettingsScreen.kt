@@ -83,6 +83,7 @@ private val RadiusMd = 12.dp
 // Create a public repo (e.g., nel349/kuira-wallet-site), push docs/public/
 // contents, enable GitHub Pages → these URLs go live.
 private const val PAGES_BASE_URL = "https://nel349.github.io/kuira-wallet-site"
+// Repo: https://github.com/nel349/kuira-wallet-site
 private const val URL_LICENSE = "$PAGES_BASE_URL/license.html"
 private const val URL_PRIVACY = "$PAGES_BASE_URL/privacy.html"
 private const val URL_TERMS = "$PAGES_BASE_URL/terms.html"
