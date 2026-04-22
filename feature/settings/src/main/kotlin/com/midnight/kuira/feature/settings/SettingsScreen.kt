@@ -79,9 +79,13 @@ private val Icon16 = 16.dp
 private val Icon24 = 24.dp
 private val RadiusMd = 12.dp
 
-// External URLs
-private const val URL_LICENSE = "https://github.com/nel349/kuira-android-wallet/blob/main/LICENSE"
-private const val URL_GITHUB = "https://github.com/nel349/kuira-android-wallet"
+// External URLs — update the BASE_URL when GitHub Pages is deployed.
+// Create a public repo (e.g., nel349/kuira-wallet-site), push docs/public/
+// contents, enable GitHub Pages → these URLs go live.
+private const val PAGES_BASE_URL = "https://nel349.github.io/kuira-wallet-site"
+private const val URL_LICENSE = "$PAGES_BASE_URL/license.html"
+private const val URL_PRIVACY = "$PAGES_BASE_URL/privacy.html"
+private const val URL_TERMS = "$PAGES_BASE_URL/terms.html"
 private const val URL_SUPPORT = "https://github.com/nel349/kuira-android-wallet/issues"
 
 @OptIn(ExperimentalMaterial3Api::class)
