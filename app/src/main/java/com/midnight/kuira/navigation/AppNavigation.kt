@@ -19,6 +19,7 @@ import com.midnight.kuira.dev.wireframes.send.SendConfirmationWireframeWithDevCo
 import com.midnight.kuira.dev.wireframes.send.SendWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.settings.SettingsWireframeWithDevControls
 import com.midnight.kuira.feature.balance.BalanceScreen
+import com.midnight.kuira.feature.settings.SettingsScreen
 import com.midnight.kuira.feature.balance.redesign.BalanceWireframeWithDevControls
 import com.midnight.kuira.feature.dust.DustScreen
 import com.midnight.kuira.feature.send.SendMode
@@ -36,6 +37,7 @@ sealed class Screen(val route: String) {
     data object RecoveryPhraseWireframe : Screen("recovery-phrase-wireframe")
     data object OnboardingWireframe : Screen("onboarding-wireframe")
     data object Balance : Screen("balance")
+    data object Settings : Screen("settings")
 
     // Send screen takes an optional mode hint ("unshielded" or "shielded").
     // BalanceScreen can pass this to pre-select the mode when the user taps
@@ -182,17 +184,34 @@ fun AppNavigation(
             ) {
                 BalanceScreen(
                     onNavigateToSend = {
-                        // SendScreen reads the active address from WalletAddressCache
-                        // based on its own mode toggle. Per-mode pre-selection from
-                        // the balance cards is deferred — when wired, pass a SendMode
-                        // through a separate per-mode callback.
                         navController.navigate(Screen.Send.createRoute())
                     },
                     onNavigateToDust = { address ->
                         navController.navigate(Screen.Dust.createRoute(address))
-                    }
+                    },
+                    onNavigateToSettings = {
+                        navController.navigate(Screen.Settings.route)
+                    },
                 )
             }
+        }
+
+        // Settings Screen (production — 8B.3)
+        composable(route = Screen.Settings.route) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToRecoveryPhrase = {
+                    // TODO: navigate to Screen.RecoveryPhrase when built
+                },
+                onWipeComplete = {
+                    // After wipe, pop entire back stack to root.
+                    // WalletGate will detect no seed and show onboarding.
+                    navController.popBackStack(
+                        route = Screen.Balance.route,
+                        inclusive = true,
+                    )
+                },
+            )
         }
 
         // Send Screen — mode-driven. The optional `mode` query arg is used

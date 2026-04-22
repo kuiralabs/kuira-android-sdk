@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,7 +76,8 @@ fun BalanceScreen(
     // Per-mode send buttons on the balance cards are a deferred UX improvement
     // that can be wired as an additional callback when needed.
     onNavigateToSend: (() -> Unit)? = null,
-    onNavigateToDust: ((String) -> Unit)? = null
+    onNavigateToDust: ((String) -> Unit)? = null,
+    onNavigateToSettings: (() -> Unit)? = null,
 ) {
     val balanceState by viewModel.balanceState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
@@ -152,6 +154,17 @@ fun BalanceScreen(
                                 imageVector = Icons.Default.Send,
                                 contentDescription = "Send Transaction",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    // Settings gear icon
+                    onNavigateToSettings?.let { navigateToSettings ->
+                        IconButton(onClick = navigateToSettings) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Open settings",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                         }
                     }
