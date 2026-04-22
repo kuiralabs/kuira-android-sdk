@@ -186,6 +186,78 @@ fun <Name>Screen(
 [ ] Biometric operations pass Activity as parameter (not stored)
 ```
 
+## Network-aware architecture (8B.3 pattern)
+
+Feature modules that depend on network services MUST use reactive
+reconnection — NOT app restart, NOT Compose `key()`, NOT manual
+invalidation.
+
+### Repository pattern for network-dependent data
+
+```kotlin
+@Singleton
+class SomeRepository @Inject constructor(
+    private val networkRepository: NetworkRepository,
+    private val clientFactory: NetworkClientFactory,
+) {
+    // flatMapLatest: when network changes, old Flow is cancelled
+    // automatically, new client connects to new network. Zero
+    // manual lifecycle management.
+    val dataState: Flow<DataState> = networkRepository
+        .selectedNetworkFlow
+        .flatMapLatest { network ->
+            val client = clientFactory.create(network)
+            client.subscribe()  // returns Flow<DataState>
+        }
+}
+```
+
+### NetworkClientFactory
+
+Replaces Hilt singleton clients. Clients are created per-network,
+not per-app-lifetime. The factory reads `NetworkConfig` for URLs.
+
+```kotlin
+@Singleton
+class NetworkClientFactory @Inject constructor(
+    private val proofServerRepository: ProofServerRepository,
+) {
+    fun createIndexerClient(network: MidnightNetwork): IndexerClient {
+        val config = NetworkConfig.forNetwork(network)
+        return IndexerClient(config.indexerWsUrl)
+    }
+
+    fun createNodeClient(network: MidnightNetwork): NodeRpcClient {
+        val config = NetworkConfig.forNetwork(network)
+        return NodeRpcClient(config.nodeRpcUrl)
+    }
+
+    fun createProofClient(network: MidnightNetwork): ProofServerClient {
+        val url = proofServerRepository.getUrl()
+            ?: NetworkConfig.forNetwork(network).proofServerUrl
+        return ProofServerClient(url)
+    }
+}
+```
+
+### Why this pattern
+
+- **Scalable**: add a new network-dependent service → just add a
+  `flatMapLatest` in its repository. No plumbing elsewhere.
+- **No restart**: network switch is seamless. User stays on the
+  same screen, data refreshes underneath.
+- **Testable**: inject a fake `NetworkRepository` that emits
+  test networks. No Activity, no Context, no process management.
+- **Compose-agnostic**: the pattern lives in the data layer.
+  Works for any UI framework, not coupled to Compose lifecycle.
+
+### What NOT to do
+
+- `finishAffinity() + exitProcess(0)` — hard kill, bad UX
+- `key(network) { AppNavigation() }` — workaround, destroys all state
+- `NetworkServiceHolder.invalidate()` — manual lifecycle, fragile
+- Hilt `@Singleton` on network-bound clients — can't swap at runtime
+
 ## Design system rules (from 8B.1 sprint)
 
 - All spacing: `DuskTokens.Space*` (never inline dp)
