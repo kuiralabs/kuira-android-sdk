@@ -3,7 +3,6 @@ package com.midnight.kuira.feature.settings
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletAddressCache
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Orchestrates a full wallet wipe. Clears wallet-specific data ONLY
@@ -13,13 +12,14 @@ import javax.inject.Singleton
  * After [execute], the app has no seed → [WalletGate] shows
  * onboarding on the next navigation to root.
  *
+ * Stateless — no @Singleton needed. Hilt creates on demand.
+ *
  * Call sequence matters:
  * 1. Cancel active subscriptions (caller's responsibility — ViewModel
  *    cancels before calling this)
  * 2. Delete seed (the crown jewel)
  * 3. Clear derived data (addresses, UTXOs, sync state)
  */
-@Singleton
 class WipeWalletUseCase @Inject constructor(
     private val seedVault: SeedVault,
     private val walletAddressCache: WalletAddressCache,

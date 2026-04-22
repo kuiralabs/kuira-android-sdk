@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Key
@@ -32,6 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,17 +47,35 @@ import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
+// Sizing tokens — mirrors DuskTokens from the wireframes.
+// TODO: when DuskPalette moves to core:designsystem, import
+//       DuskTokens directly instead of these local aliases.
+private val TopBarHeight = 56.dp
+private val RowMinHeight = 56.dp
+private val Space4 = 4.dp
+private val Space8 = 8.dp
+private val Space12 = 12.dp
+private val Space16 = 16.dp
+private val Space24 = 24.dp
+private val Space32 = 32.dp
+private val Icon16 = 16.dp
+private val Icon24 = 24.dp
+
 /**
  * Production Settings screen. Mirrors the wireframe in
  * `05-settings.md` / `SettingsWireframe.kt` but wired to real data
  * via [SettingsViewModel].
  *
+ * Uses [MidnightColors] (dark-mode only for v1.0). When DuskPalette
+ * moves to `core:designsystem`, this screen will adopt it for
+ * light-mode support.
+ *
  * TODO (8B.3 follow-ups):
- * - ConfirmationSheet for wipe + force-resync (currently just calls VM)
- * - NetworkPicker bottom sheet (currently shows network as read-only)
+ * - ConfirmationSheet for wipe + force-resync
+ * - NetworkPicker bottom sheet
  * - Proof server URL edit field (DuskInputField)
  * - Wire last-sync timestamp from SyncStateManager
- * - Wire git commit hash from BuildConfig
+ * - Promote DuskPalette + wireframe SettingsRow to core:designsystem
  */
 @Composable
 fun SettingsScreen(
@@ -82,18 +105,18 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(TopBarHeight)
+                    .padding(horizontal = Space16),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back to balance",
                     tint = MidnightColors.Light,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(Icon24)
                         .clickable { onBack() },
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(Space16))
                 Text(
                     text = "Settings",
                     color = MidnightColors.Light,
@@ -108,14 +131,14 @@ fun SettingsScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + 24.dp),
+                    .padding(horizontal = Space16)
+                    .padding(bottom = navBarPadding.calculateBottomPadding() + Space24),
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Space16))
 
                 // ── NETWORK ──
                 SectionHeader("NETWORK")
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Space12))
                 GlassPanel(
                     tint = MidnightColors.VoidElevated,
                     border = MidnightColors.LightFaint,
@@ -137,12 +160,12 @@ fun SettingsScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(Space32))
 
                 // ── DEVELOPER OPTIONS (conditional) ──
                 if (uiState.devModeUnlocked) {
                     SectionHeader("DEVELOPER OPTIONS")
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(Space12))
                     GlassPanel(
                         tint = MidnightColors.VoidElevated,
                         border = MidnightColors.LightFaint,
@@ -151,7 +174,6 @@ fun SettingsScreen(
                         SettingsRowItem(
                             label = "Proof server",
                             value = uiState.proofServerUrl,
-                            readOnly = false,
                             onClick = { /* TODO: open proof server URL editor */ },
                         )
                         SettingsDividerItem()
@@ -167,12 +189,12 @@ fun SettingsScreen(
                             readOnly = true,
                         )
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(Space32))
                 }
 
                 // ── SECURITY ──
                 SectionHeader("SECURITY")
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Space12))
                 GlassPanel(
                     tint = MidnightColors.VoidElevated,
                     border = MidnightColors.LightFaint,
@@ -181,7 +203,7 @@ fun SettingsScreen(
                     SettingsRowItem(
                         leadingIcon = Icons.Filled.Key,
                         label = "View recovery phrase",
-                        onClick = { onNavigateToRecoveryPhrase() },
+                        onClick = onNavigateToRecoveryPhrase,
                     )
                     SettingsDividerItem()
                     SettingsRowItem(
@@ -195,25 +217,29 @@ fun SettingsScreen(
                         leadingIcon = Icons.Filled.DeleteForever,
                         onClick = {
                             // TODO: open ConfirmationSheet with "type WIPE" challenge
-                            // On confirm: viewModel.onWipeWallet() then onWipeComplete()
+                            // On confirm:
+                            //   viewModel.onWipeWallet()
+                            //   onWipeComplete()
                         },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(Space32))
 
                 // ── ABOUT ──
                 SectionHeader("ABOUT")
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Space12))
                 GlassPanel(
                     tint = MidnightColors.VoidElevated,
                     border = MidnightColors.LightFaint,
                     contentPadding = 0.dp,
                 ) {
+                    // Version row: readOnly-looking but tappable for 7-tap unlock
                     SettingsRowItem(
                         label = "Version",
                         value = uiState.versionName,
                         readOnly = true,
+                        alwaysClickable = true, // 7-tap dev-mode unlock
                         onClick = { viewModel.onVersionTapped() },
                     )
                     SettingsDividerItem()
@@ -244,7 +270,7 @@ fun SettingsScreen(
     }
 }
 
-// ── Private composables (Settings-internal, not shared) ──
+// ── Private composables ──
 
 @Composable
 private fun SectionHeader(label: String) {
@@ -257,16 +283,32 @@ private fun SectionHeader(label: String) {
     )
 }
 
+/**
+ * Settings row following the label/value emphasis rule:
+ * - readOnly: label LightSoft (80%), value Light (100%) — data pops
+ * - navigational: label Light (100%), value LightSoft (80%) — label pops
+ *
+ * [alwaysClickable] overrides readOnly's non-interactive behavior
+ * (used for the Version row which looks readOnly but needs 7-tap).
+ */
 @Composable
 private fun SettingsRowItem(
     label: String,
     value: String? = null,
     valueMono: Boolean = false,
     readOnly: Boolean = false,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    alwaysClickable: Boolean = false,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    contentDesc: String? = null,
     onClick: () -> Unit = {},
 ) {
-    val isClickable = !readOnly
+    val isClickable = !readOnly || alwaysClickable || trailingIcon != null
+    val showChevron = !readOnly && trailingIcon == null
+    val resolvedTrailing = trailingIcon
+        ?: if (showChevron) Icons.AutoMirrored.Filled.ArrowForward else null
+
+    // Label/value emphasis flip per spec
     val labelColor = if (readOnly) MidnightColors.LightSoft else MidnightColors.Light
     val valueColor = if (readOnly) MidnightColors.Light else MidnightColors.LightSoft
 
@@ -274,18 +316,22 @@ private fun SettingsRowItem(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = RowMinHeight)
             .then(if (isClickable) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .then(
+                if (contentDesc != null) Modifier.semantics { this.contentDescription = contentDesc }
+                else Modifier,
+            )
+            .padding(horizontal = Space16, vertical = Space16),
     ) {
         if (leadingIcon != null) {
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
                 tint = MidnightColors.Light,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(Icon24),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Space12))
         }
         Text(
             text = label,
@@ -305,13 +351,13 @@ private fun SettingsRowItem(
                 fontFamily = if (valueMono) FontFamily.Monospace else FontFamily.Default,
             )
         }
-        if (isClickable) {
-            Spacer(modifier = Modifier.width(8.dp))
+        if (resolvedTrailing != null) {
+            Spacer(modifier = Modifier.width(Space8))
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack, // TODO: use ArrowForward
+                imageVector = resolvedTrailing,
                 contentDescription = null,
                 tint = MidnightColors.LightMuted,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(Icon16),
             )
         }
     }
@@ -320,12 +366,13 @@ private fun SettingsRowItem(
 @Composable
 private fun DangerRowItem(
     label: String,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    leadingIcon: ImageVector,
     onClick: () -> Unit,
 ) {
     SettingsRowItem(
         label = label,
         leadingIcon = leadingIcon,
+        contentDesc = "Destructive action, $label",
         onClick = onClick,
     )
 }
@@ -335,6 +382,6 @@ private fun SettingsDividerItem() {
     HorizontalDivider(
         color = MidnightColors.LightFaint,
         thickness = 1.dp,
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = Modifier.padding(horizontal = Space16),
     )
 }
