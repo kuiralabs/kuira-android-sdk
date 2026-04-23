@@ -38,7 +38,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +63,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
 import kotlinx.coroutines.launch
 
@@ -77,6 +78,7 @@ private val Space24 = 24.dp
 private val Space32 = 32.dp
 private val Icon16 = 16.dp
 private val Icon24 = 24.dp
+private val ButtonHeight = 48.dp
 private val RadiusMd = 12.dp
 
 // External URLs — update the BASE_URL when GitHub Pages is deployed.
@@ -85,8 +87,6 @@ private val RadiusMd = 12.dp
 private const val PAGES_BASE_URL = "https://nel349.github.io/kuira-wallet-site"
 // Repo: https://github.com/nel349/kuira-wallet-site
 private const val URL_LICENSE = "$PAGES_BASE_URL/license.html"
-private const val URL_PRIVACY = "$PAGES_BASE_URL/privacy.html"
-private const val URL_TERMS = "$PAGES_BASE_URL/terms.html"
 private const val URL_GITHUB = "https://github.com/nel349/kuira-android-wallet"
 private const val URL_SUPPORT = "https://github.com/nel349/kuira-android-wallet/issues"
 
@@ -122,7 +122,9 @@ fun SettingsScreen(
                 val seed = viewModel.testBiometric(activity)
                 seed?.wipe()
                 Toast.makeText(context, "Biometric OK", Toast.LENGTH_SHORT).show()
-            } catch (_: Exception) {
+            } catch (e: AuthenticationCancelledException) {
+                // User dismissed — not an error, no toast
+            } catch (e: Exception) {
                 Toast.makeText(context, "Biometric failed", Toast.LENGTH_SHORT).show()
             }
         }
@@ -414,44 +416,17 @@ fun SettingsScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(Space16))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    // Cancel
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
-                            .clickable { showWipeConfirmation = false },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
-                    }
-                    Spacer(modifier = Modifier.width(Space8))
-                    // Confirm
-                    val canWipe = wipeChallenge.equals("WIPE", ignoreCase = false)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(
-                                if (canWipe) MidnightColors.Light else MidnightColors.LightBarely,
-                                RoundedCornerShape(RadiusMd),
-                            )
-                            .clickable(enabled = canWipe) {
-                                showWipeConfirmation = false
-                                viewModel.onWipeWallet()
-                                onWipeComplete()
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Wipe wallet",
-                            color = if (canWipe) MidnightColors.Void else MidnightColors.LightMuted,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
+                val canWipe = wipeChallenge.equals("WIPE", ignoreCase = false)
+                SheetButtonRow(
+                    onCancel = { showWipeConfirmation = false },
+                    onConfirm = {
+                        showWipeConfirmation = false
+                        viewModel.onWipeWallet()
+                        onWipeComplete()
+                    },
+                    confirmText = "Wipe wallet",
+                    confirmEnabled = canWipe,
+                )
                 Spacer(modifier = Modifier.height(Space32))
             }
         }
@@ -479,32 +454,14 @@ fun SettingsScreen(
                     lineHeight = 20.sp,
                 )
                 Spacer(modifier = Modifier.height(Space16))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
-                            .clickable { showResyncConfirmation = false },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
-                    }
-                    Spacer(modifier = Modifier.width(Space8))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(MidnightColors.Light, RoundedCornerShape(RadiusMd))
-                            .clickable {
-                                showResyncConfirmation = false
-                                viewModel.onForceResync()
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Re-sync", color = MidnightColors.Void, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
+                SheetButtonRow(
+                    onCancel = { showResyncConfirmation = false },
+                    onConfirm = {
+                        showResyncConfirmation = false
+                        viewModel.onForceResync()
+                    },
+                    confirmText = "Re-sync",
+                )
                 Spacer(modifier = Modifier.height(Space32))
             }
         }
@@ -533,10 +490,10 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = RowMinHeight)
-                        .clickable { selectedMode = com.midnight.kuira.core.compact.proving.ProvingMode.LOCAL }
+                        .clickable { selectedMode = ProvingMode.LOCAL }
                         .padding(horizontal = Space16, vertical = Space12),
                 ) {
-                    val isLocal = selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.LOCAL
+                    val isLocal = selectedMode == ProvingMode.LOCAL
                     Text(
                         text = "Local (on-device)",
                         color = if (isLocal) MidnightColors.Light else MidnightColors.LightSoft,
@@ -566,10 +523,10 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = RowMinHeight)
-                        .clickable { selectedMode = com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE }
+                        .clickable { selectedMode = ProvingMode.REMOTE }
                         .padding(horizontal = Space16, vertical = Space12),
                 ) {
-                    val isRemote = selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE
+                    val isRemote = selectedMode == ProvingMode.REMOTE
                     Text(
                         text = "Remote server",
                         color = if (isRemote) MidnightColors.Light else MidnightColors.LightSoft,
@@ -590,7 +547,7 @@ fun SettingsScreen(
                 )
 
                 // URL input (only when REMOTE selected)
-                if (selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE) {
+                if (selectedMode == ProvingMode.REMOTE) {
                     Spacer(modifier = Modifier.height(Space16))
                     Box(
                         modifier = Modifier
@@ -624,32 +581,14 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(Space16))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
-                            .clickable { showProofServerEditor = false },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
-                    }
-                    Spacer(modifier = Modifier.width(Space8))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(MidnightColors.Light, RoundedCornerShape(RadiusMd))
-                            .clickable {
-                                viewModel.onProvingModeChanged(selectedMode, editUrl)
-                                showProofServerEditor = false
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Save", color = MidnightColors.Void, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
+                SheetButtonRow(
+                    onCancel = { showProofServerEditor = false },
+                    onConfirm = {
+                        viewModel.onProvingModeChanged(selectedMode, editUrl)
+                        showProofServerEditor = false
+                    },
+                    confirmText = "Save",
+                )
                 Spacer(modifier = Modifier.height(Space32))
             }
         }
@@ -752,6 +691,46 @@ private fun DangerRowItem(
         contentDesc = "Destructive action, $label",
         onClick = onClick,
     )
+}
+
+@Composable
+private fun SheetButtonRow(
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmText: String,
+    confirmEnabled: Boolean = true,
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(ButtonHeight)
+                .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                .clickable(onClick = onCancel),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
+        }
+        Spacer(modifier = Modifier.width(Space8))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(ButtonHeight)
+                .background(
+                    if (confirmEnabled) MidnightColors.Light else MidnightColors.LightBarely,
+                    RoundedCornerShape(RadiusMd),
+                )
+                .clickable(enabled = confirmEnabled, onClick = onConfirm),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = confirmText,
+                color = if (confirmEnabled) MidnightColors.Void else MidnightColors.LightMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
 }
 
 @Composable
