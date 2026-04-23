@@ -188,7 +188,6 @@ fun SettingsScreen(
                         leadingIcon = Icons.Filled.Language,
                         label = "Network",
                         value = uiState.network.name,
-                        readOnly = !uiState.devModeUnlocked,
                         onClick = { showNetworkPicker = true },
                     )
                     SettingsDividerItem()
