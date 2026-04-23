@@ -202,30 +202,46 @@ object IndexerModule {
         @ApplicationContext context: Context,
         indexerClient: IndexerClient,
         utxoManager: UtxoManager,
-        syncStateManager: SyncStateManager
+        syncStateManager: SyncStateManager,
+        networkRepository: com.midnight.kuira.core.network.NetworkRepository,
     ): SubscriptionManagerFactory {
-        return SubscriptionManagerFactory(context, indexerClient, utxoManager, syncStateManager)
+        return SubscriptionManagerFactory(context, indexerClient, utxoManager, syncStateManager, networkRepository)
     }
 }
 
 /**
  * Factory for creating SubscriptionManager instances.
  *
- * Use this instead of directly injecting SubscriptionManager to avoid singleton scope issues.
+ * Network-aware: creates a fresh [IndexerClient] for the currently-selected
+ * network so subscriptions connect to the correct indexer after a network
+ * switch in Settings. Falls back to the injected singleton client when the
+ * network hasn't changed.
  */
 class SubscriptionManagerFactory(
     private val context: Context,
-    private val indexerClient: IndexerClient,
+    private val defaultIndexerClient: IndexerClient,
     private val utxoManager: UtxoManager,
-    private val syncStateManager: SyncStateManager
+    private val syncStateManager: SyncStateManager,
+    private val networkRepository: com.midnight.kuira.core.network.NetworkRepository? = null,
 ) {
     /**
-     * Create a new SubscriptionManager instance.
+     * Create a new SubscriptionManager for the currently-selected network.
      *
      * Each instance should manage subscription for ONE address.
      * Collect the subscription flow in a ViewModel-scoped coroutine.
      */
     fun create(): SubscriptionManager {
-        return SubscriptionManager(context, indexerClient, utxoManager, syncStateManager)
+        val client = resolveIndexerClient()
+        return SubscriptionManager(context, client, utxoManager, syncStateManager)
+    }
+
+    private fun resolveIndexerClient(): IndexerClient {
+        val repo = networkRepository ?: return defaultIndexerClient
+        val network = repo.getSelectedNetworkBlocking()
+        val config = com.midnight.kuira.core.network.NetworkConfig.forNetwork(network)
+        return com.midnight.kuira.core.indexer.api.IndexerClientImpl(
+            baseUrl = config.indexerBaseUrl,
+            developmentMode = config.developmentMode,
+        )
     }
 }
