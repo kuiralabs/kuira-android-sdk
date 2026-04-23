@@ -510,8 +510,9 @@ fun SettingsScreen(
         }
     }
 
-    // Proof server URL editor
+    // Proof server mode + URL editor
     if (showProofServerEditor) {
+        var selectedMode by remember { mutableStateOf(uiState.provingMode) }
         var editUrl by remember { mutableStateOf(uiState.remoteProofServerUrl) }
         ModalBottomSheet(
             onDismissRequest = { showProofServerEditor = false },
@@ -519,48 +520,109 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
                 Text(
-                    text = "Proof server URL",
+                    text = "Proof server",
                     color = MidnightColors.Light,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.W300,
                 )
-                Spacer(modifier = Modifier.height(Space8))
-                Text(
-                    text = "Enter a custom proof server URL or leave blank to use the network default.",
-                    color = MidnightColors.LightSoft,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
                 Spacer(modifier = Modifier.height(Space16))
-                Box(
+
+                // LOCAL option
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = RowMinHeight)
-                        .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                        .clickable { selectedMode = com.midnight.kuira.core.compact.proving.ProvingMode.LOCAL }
                         .padding(horizontal = Space16, vertical = Space12),
                 ) {
-                    if (editUrl.isEmpty()) {
-                        Text(
-                            text = "http://localhost:6300",
-                            color = MidnightColors.LightFaint,
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
+                    val isLocal = selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.LOCAL
+                    Text(
+                        text = "Local (on-device)",
+                        color = if (isLocal) MidnightColors.Light else MidnightColors.LightSoft,
+                        fontSize = 14.sp,
+                        fontWeight = if (isLocal) FontWeight.W400 else FontWeight.W300,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isLocal) {
+                        Text("✓", color = MidnightColors.Light, fontSize = 16.sp)
+                    }
+                }
+                Text(
+                    text = "Generate ZK proofs on your phone. No server needed.",
+                    color = MidnightColors.LightMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(horizontal = Space16),
+                )
+
+                Spacer(modifier = Modifier.height(Space8))
+                HorizontalDivider(color = MidnightColors.LightFaint, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(Space8))
+
+                // REMOTE option
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = RowMinHeight)
+                        .clickable { selectedMode = com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE }
+                        .padding(horizontal = Space16, vertical = Space12),
+                ) {
+                    val isRemote = selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE
+                    Text(
+                        text = "Remote server",
+                        color = if (isRemote) MidnightColors.Light else MidnightColors.LightSoft,
+                        fontSize = 14.sp,
+                        fontWeight = if (isRemote) FontWeight.W400 else FontWeight.W300,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isRemote) {
+                        Text("✓", color = MidnightColors.Light, fontSize = 16.sp)
+                    }
+                }
+                Text(
+                    text = "Send proofs to an external server. Faster but requires network.",
+                    color = MidnightColors.LightMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(horizontal = Space16),
+                )
+
+                // URL input (only when REMOTE selected)
+                if (selectedMode == com.midnight.kuira.core.compact.proving.ProvingMode.REMOTE) {
+                    Spacer(modifier = Modifier.height(Space16))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = RowMinHeight)
+                            .background(MidnightColors.LightBarely, RoundedCornerShape(RadiusMd))
+                            .padding(horizontal = Space16, vertical = Space12),
+                    ) {
+                        if (editUrl.isEmpty()) {
+                            Text(
+                                text = "http://localhost:6300",
+                                color = MidnightColors.LightFaint,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                        BasicTextField(
+                            value = editUrl,
+                            onValueChange = { editUrl = it },
+                            textStyle = TextStyle(
+                                color = MidnightColors.Light,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                            cursorBrush = SolidColor(MidnightColors.Light),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    BasicTextField(
-                        value = editUrl,
-                        onValueChange = { editUrl = it },
-                        textStyle = TextStyle(
-                            color = MidnightColors.Light,
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
-                        ),
-                        cursorBrush = SolidColor(MidnightColors.Light),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
+
                 Spacer(modifier = Modifier.height(Space16))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Box(
@@ -580,7 +642,7 @@ fun SettingsScreen(
                             .height(48.dp)
                             .background(MidnightColors.Light, RoundedCornerShape(RadiusMd))
                             .clickable {
-                                viewModel.onProofServerUrlChanged(editUrl)
+                                viewModel.onProvingModeChanged(selectedMode, editUrl)
                                 showProofServerEditor = false
                             },
                         contentAlignment = Alignment.Center,

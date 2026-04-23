@@ -90,15 +90,12 @@ class SettingsViewModel @Inject constructor(
         _localState.update { it.copy(versionTapCount = 0) }
     }
 
-    fun onProofServerUrlChanged(url: String) {
+    fun onProvingModeChanged(mode: ProvingMode, remoteUrl: String) {
         viewModelScope.launch {
-            if (url.isBlank()) {
-                // Blank URL → switch back to local proving
-                proofServerRepository.setProvingMode(ProvingMode.LOCAL)
-                proofServerRepository.setRemoteUrl(null)
-            } else {
-                proofServerRepository.setProvingMode(ProvingMode.REMOTE)
-                proofServerRepository.setRemoteUrl(url)
+            proofServerRepository.setProvingMode(mode)
+            when (mode) {
+                ProvingMode.LOCAL -> proofServerRepository.setRemoteUrl(null)
+                ProvingMode.REMOTE -> proofServerRepository.setRemoteUrl(remoteUrl.ifBlank { null })
             }
         }
     }
