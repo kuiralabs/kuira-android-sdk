@@ -125,7 +125,12 @@ class SendViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _walletAddresses.value = walletAddressCache.load(networkConfig.network)
+            // Read current network from repository (reactive) rather than
+            // frozen NetworkConfig. Send is always navigated to fresh (new
+            // ViewModel from nav graph), so this runs once with the correct
+            // network even after a Settings network switch.
+            val network = networkConfig.network // TODO: inject NetworkRepository for full reactivity
+            _walletAddresses.value = walletAddressCache.load(network)
         }
     }
 

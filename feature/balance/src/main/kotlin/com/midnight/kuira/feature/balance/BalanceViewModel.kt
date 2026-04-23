@@ -19,7 +19,9 @@ import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkClientFactory
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -77,7 +79,9 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     private val shieldedRepository: ShieldedRepository,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val formatter: BalanceFormatter,
-    private val networkConfig: NetworkConfig,
+    private val networkRepository: NetworkRepository,
+    private val networkClientFactory: NetworkClientFactory,
+    private val networkConfig: NetworkConfig, // TODO: remove once all usages migrated to networkRepository
     private val walletAddressCache: WalletAddressCache,
     private val seedVault: SeedVault,
     private val clock: Clock = Clock.systemDefaultZone()
@@ -103,18 +107,25 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     val walletAddresses: StateFlow<AddressCacheState> = _walletAddresses.asStateFlow()
 
     init {
+        // Observe selected network reactively. When user switches
+        // network in Settings, this emits the new network → we reload
+        // the cached address → restart the subscription. No app restart.
         viewModelScope.launch {
-            val loaded = walletAddressCache.load(networkConfig.network)
-            Log.d(TAG, "WalletAddressCache.load(${networkConfig.network.name}) returned: " +
-                "unshielded=${loaded?.unshieldedAddress}, " +
-                "shielded=${loaded?.shieldedAddress?.take(20)}...")
-            _walletAddresses.value = if (loaded != null) {
-                AddressCacheState.Found(loaded)
-            } else {
-                Log.w(TAG, "No cached wallet address for ${networkConfig.network.name} — " +
-                    "onboarding may not have saved it for this network, or we haven't " +
-                    "derived it after a network switch yet. UI should show empty state.")
-                AddressCacheState.Empty
+            networkRepository.selectedNetworkFlow.collect { network ->
+                Log.d(TAG, "Network changed to ${network.name}, reloading address cache")
+                val loaded = walletAddressCache.load(network)
+                Log.d(TAG, "WalletAddressCache.load(${network.name}) returned: " +
+                    "unshielded=${loaded?.unshieldedAddress}, " +
+                    "shielded=${loaded?.shieldedAddress?.take(20)}...")
+                _walletAddresses.value = if (loaded != null) {
+                    AddressCacheState.Found(loaded)
+                    // Auto-reload balances for the new network
+                    loadBalances(loaded.unshieldedAddress)
+                    AddressCacheState.Found(loaded)
+                } else {
+                    Log.w(TAG, "No cached wallet address for ${network.name}")
+                    AddressCacheState.Empty
+                }
             }
         }
     }
@@ -164,10 +175,11 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
             is AddressCacheState.Loading,
             is AddressCacheState.Empty -> {
                 // Try to reload — onboarding may have just completed, or we
-                // may have just finished deriving addresses for a new network
-                // after a network switch.
+                // may have just finished deriving addresses for a new network.
+                // Read current network from repository (reactive, not frozen config).
                 viewModelScope.launch {
-                    val loaded = walletAddressCache.load(networkConfig.network)
+                    val network = networkRepository.getSelectedNetworkBlocking()
+                    val loaded = walletAddressCache.load(network)
                     if (loaded != null) {
                         _walletAddresses.value = AddressCacheState.Found(loaded)
                         loadBalances(loaded.unshieldedAddress)
