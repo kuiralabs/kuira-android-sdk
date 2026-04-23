@@ -45,8 +45,7 @@ class SettingsViewModel @Inject constructor(
         proofServerRepository.customUrl,
         _localState,
     ) { network, devMode, customProofUrl, local ->
-        val config = NetworkConfig.forNetwork(network)
-        val proofUrl = customProofUrl ?: config.proofServerUrl
+        val proofUrl = customProofUrl ?: "Local (on-device)"
 
         SettingsUiState(
             network = network,
