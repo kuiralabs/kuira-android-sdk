@@ -5,9 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
-import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.network.NetworkRepository
+
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Named
@@ -42,16 +43,16 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         networkRepository.selectedNetworkFlow,
         devModeRepository.isUnlocked,
-        proofServerRepository.customUrl,
+        proofServerRepository.provingMode,
+        proofServerRepository.remoteUrl,
         _localState,
-    ) { network, devMode, customProofUrl, local ->
-        val proofUrl = customProofUrl ?: PROOF_SERVER_LOCAL
-
+    ) { network, devMode, provingMode, remoteUrl, local ->
         SettingsUiState(
             network = network,
             lastSyncAgo = "12s ago", // TODO: wire to SyncStateManager timestamp
             devModeUnlocked = devMode,
-            proofServerUrl = proofUrl,
+            provingMode = provingMode,
+            remoteProofServerUrl = remoteUrl ?: "",
             buildType = buildType,
             commitHash = gitHash,
             versionName = versionName,
@@ -91,7 +92,14 @@ class SettingsViewModel @Inject constructor(
 
     fun onProofServerUrlChanged(url: String) {
         viewModelScope.launch {
-            proofServerRepository.setCustomUrl(url.ifBlank { null })
+            if (url.isBlank()) {
+                // Blank URL → switch back to local proving
+                proofServerRepository.setProvingMode(ProvingMode.LOCAL)
+                proofServerRepository.setRemoteUrl(null)
+            } else {
+                proofServerRepository.setProvingMode(ProvingMode.REMOTE)
+                proofServerRepository.setRemoteUrl(url)
+            }
         }
     }
 

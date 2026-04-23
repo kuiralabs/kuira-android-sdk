@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,29 +18,41 @@ private val Context.proofServerDataStore: DataStore<Preferences> by preferencesD
 )
 
 /**
- * Persists the user-configurable proof server URL. When null,
- * the app uses the default URL from [NetworkConfig]. NOT cleared
- * on wallet wipe — proof server is an app preference.
+ * Persists the proving mode and optional remote proof server URL.
  *
- * URL changes take effect on the next proving operation (the
- * reactive network architecture picks up the new URL via the Flow).
+ * Architecture:
+ * - [ProvingMode.LOCAL] → on-device proving, no URL needed (default)
+ * - [ProvingMode.REMOTE] → requires [remoteUrl] to be set
+ *
+ * NOT cleared on wallet wipe — this is an app preference.
  */
 @Singleton
 class ProofServerRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val key = stringPreferencesKey("proof_server_url")
+    private val modeKey = stringPreferencesKey("proving_mode")
+    private val urlKey = stringPreferencesKey("proof_server_url")
 
-    /** Emits the custom URL or null (= use network default). */
-    val customUrl: Flow<String?> = context.proofServerDataStore.data
-        .map { prefs -> prefs[key] }
+    val provingMode: Flow<ProvingMode> = context.proofServerDataStore.data
+        .map { prefs ->
+            prefs[modeKey]?.let { ProvingMode.valueOf(it) } ?: ProvingMode.DEFAULT
+        }
 
-    suspend fun setCustomUrl(url: String?) {
+    val remoteUrl: Flow<String?> = context.proofServerDataStore.data
+        .map { prefs -> prefs[urlKey] }
+
+    suspend fun setProvingMode(mode: ProvingMode) {
+        context.proofServerDataStore.edit { prefs ->
+            prefs[modeKey] = mode.name
+        }
+    }
+
+    suspend fun setRemoteUrl(url: String?) {
         context.proofServerDataStore.edit { prefs ->
             if (url.isNullOrBlank()) {
-                prefs.remove(key)
+                prefs.remove(urlKey)
             } else {
-                prefs[key] = url
+                prefs[urlKey] = url
             }
         }
     }

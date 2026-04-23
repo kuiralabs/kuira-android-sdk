@@ -212,7 +212,7 @@ fun SettingsScreen(
                     ) {
                         SettingsRowItem(
                             label = "Proof server",
-                            value = uiState.proofServerUrl,
+                            value = uiState.proofServerDisplay,
                             onClick = { showProofServerEditor = true },
                         )
                         SettingsDividerItem()
@@ -512,7 +512,7 @@ fun SettingsScreen(
 
     // Proof server URL editor
     if (showProofServerEditor) {
-        var editUrl by remember { mutableStateOf(uiState.proofServerUrl) }
+        var editUrl by remember { mutableStateOf(uiState.remoteProofServerUrl) }
         ModalBottomSheet(
             onDismissRequest = { showProofServerEditor = false },
             containerColor = MidnightColors.VoidElevated,
