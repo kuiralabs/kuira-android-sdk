@@ -10,6 +10,7 @@ import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
@@ -85,8 +86,8 @@ class SendViewModelTest {
             provingKeyManager = provingKeyManager,
             subscriptionManagerFactory = subscriptionManagerFactory,
             syncStateManager = syncStateManager,
-            networkRepository = mock<com.midnight.kuira.core.network.NetworkRepository>().also {
-                org.mockito.kotlin.whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
+            networkRepository = mock<NetworkRepository>().also {
+                whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
             },
             seedVault = seedVault,
             walletAddressCache = walletAddressCache,

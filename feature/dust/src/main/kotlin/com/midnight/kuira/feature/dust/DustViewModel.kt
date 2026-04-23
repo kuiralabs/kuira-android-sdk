@@ -20,7 +20,6 @@ import com.midnight.kuira.core.ledger.api.TransactionSerializer
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
 import com.midnight.kuira.core.ledger.model.UtxoSpend
-import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.network.NetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,7 +66,6 @@ class DustViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val currentNetwork = networkRepository.getSelectedNetworkBlocking()
-    private val currentNetworkConfig = NetworkConfig.forNetwork(currentNetwork)
 
     private val _state = MutableStateFlow<DustUiState>(DustUiState.Idle)
     val state: StateFlow<DustUiState> = _state.asStateFlow()

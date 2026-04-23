@@ -1,6 +1,9 @@
 package com.midnight.kuira.core.ledger.di
 
 import com.midnight.kuira.core.indexer.api.IndexerClient
+import com.midnight.kuira.core.indexer.api.IndexerClientImpl
+import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
@@ -13,6 +16,7 @@ import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 import com.midnight.kuira.core.ledger.fee.FeeCalculator
 import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import android.content.Context
 import dagger.Module
 import dagger.Provides
@@ -140,11 +144,11 @@ object LedgerModule {
         proofServerClient: ProofServerClient,
         indexerClient: IndexerClient,
         serializer: TransactionSerializer,
-        utxoManager: com.midnight.kuira.core.indexer.utxo.UtxoManager,
+        utxoManager: UtxoManager,
         dustActionsBuilder: DustActionsBuilder,
-        dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository,
+        dustRepository: DustRepository,
         provingKeyManager: ProvingKeyManager,
-        networkRepository: com.midnight.kuira.core.network.NetworkRepository,
+        networkRepository: NetworkRepository,
     ): TransactionSubmitter {
         return TransactionSubmitter(
             nodeRpcClient = nodeRpcClient,
@@ -157,11 +161,12 @@ object LedgerModule {
             provingKeyManager = provingKeyManager,
             networkClientProvider = TransactionSubmitter.NetworkClientProvider {
                 val network = networkRepository.getSelectedNetworkBlocking()
-                val config = com.midnight.kuira.core.network.NetworkConfig.forNetwork(network)
-                TransactionSubmitter.NetworkClients(
+                val config = NetworkConfig.forNetwork(network)
+                TransactionSubmitter.ResolvedClients(
+                    networkId = network.name,
                     node = NodeRpcClientImpl(nodeUrl = config.nodeRpcUrl, developmentMode = config.developmentMode),
                     proofServer = ProofServerClientImpl(proofServerUrl = config.proofServerUrl, developmentMode = config.developmentMode),
-                    indexer = com.midnight.kuira.core.indexer.api.IndexerClientImpl(baseUrl = config.indexerBaseUrl, developmentMode = config.developmentMode),
+                    indexer = IndexerClientImpl(baseUrl = config.indexerBaseUrl, developmentMode = config.developmentMode),
                 )
             },
         )

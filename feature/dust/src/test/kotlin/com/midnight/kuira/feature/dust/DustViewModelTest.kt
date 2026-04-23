@@ -6,6 +6,7 @@ import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.database.UtxoState
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -92,8 +93,8 @@ class DustViewModelTest {
             nodeRpcClient = nodeRpcClient,
             utxoManager = utxoManager,
             seedVault = seedVault,
-            networkRepository = mock<com.midnight.kuira.core.network.NetworkRepository>().also {
-                org.mockito.kotlin.whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
+            networkRepository = mock<NetworkRepository>().also {
+                whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
             },
         )
     }
@@ -265,7 +266,7 @@ class DustViewModelTest {
                 || state.message.contains("check dust status")
         )
         // Sync must NOT have run — we bailed before touching the repository.
-        org.mockito.kotlin.verifyNoInteractions(dustRepository)
+        verifyNoInteractions(dustRepository)
     }
 
     // ========================================================================

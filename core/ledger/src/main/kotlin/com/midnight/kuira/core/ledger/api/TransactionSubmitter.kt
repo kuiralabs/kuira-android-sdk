@@ -3,6 +3,7 @@ package com.midnight.kuira.core.ledger.api
 import android.util.Log
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
+import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.crypto.proving.LocalProver
 import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
@@ -49,7 +50,7 @@ class TransactionSubmitter(
     private val serializer: TransactionSerializer,
     private val utxoManager: UtxoManager,
     private val dustActionsBuilder: DustActionsBuilder? = null,
-    private val dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository? = null,
+    private val dustRepository: DustRepository? = null,
     private val provingKeyManager: ProvingKeyManager? = null,
     /** Current proving mode — LOCAL or REMOTE. Defaults to LOCAL when keys are available. */
     @Volatile var provingMode: ProvingMode = ProvingMode.DEFAULT,
@@ -68,19 +69,49 @@ class TransactionSubmitter(
      * currently-selected network.
      */
     fun interface NetworkClientProvider {
-        fun provide(): NetworkClients
+        fun provide(): ResolvedClients
     }
 
-    data class NetworkClients(
+    /**
+     * Clients bound to a specific network, identified by [networkId].
+     * The [networkId] is used for cache-invalidation: when the user
+     * switches networks in Settings, the next [resolveClients] call
+     * detects the name change and creates fresh HTTP clients.
+     */
+    data class ResolvedClients(
+        val networkId: String,
         val node: NodeRpcClient,
         val proofServer: ProofServerClient,
         val indexer: IndexerClient,
     )
 
-    /** Resolve the clients to use — fresh per-network if provider is set, otherwise frozen singletons. */
-    private fun resolveClients(): NetworkClients {
-        return networkClientProvider?.provide()
-            ?: NetworkClients(nodeRpcClient, proofServerClient, indexerClient)
+    /** Cached clients for the currently-selected network. */
+    @Volatile private var cachedResolved: ResolvedClients? = null
+
+    /**
+     * Resolve the clients to use for this transaction.
+     *
+     * Caches per-network — only creates fresh HTTP clients when the
+     * selected network has changed (different [ResolvedClients.networkId]).
+     * Old clients are not explicitly closed (Ktor HttpClient is lightweight
+     * and GC-safe), but reusing avoids connection-pool proliferation.
+     *
+     * **Thread safety:** The `@Volatile` field plus the immutable
+     * [ResolvedClients] data class is sufficient for v1.0 where
+     * transactions are submitted one at a time. If concurrent
+     * submissions ever become necessary, guard this method with a lock.
+     */
+    private fun resolveClients(): ResolvedClients {
+        val provider = networkClientProvider
+            ?: return ResolvedClients("default", nodeRpcClient, proofServerClient, indexerClient)
+
+        val current = cachedResolved
+        val fresh = provider.provide()
+        if (current != null && current.networkId == fresh.networkId) {
+            return current // same network — reuse cached clients
+        }
+        cachedResolved = fresh
+        return fresh
     }
 
     /** Which proving mode was used for the last transaction (for display). */

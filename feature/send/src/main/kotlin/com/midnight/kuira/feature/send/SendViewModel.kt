@@ -102,6 +102,11 @@ class SendViewModel @Inject constructor(
     private val utxoManager: UtxoManager,
     private val transactionSubmitter: TransactionSubmitter,
     private val serializer: TransactionSerializer,
+    // TODO(network-migration): This indexerClient is a frozen singleton injected at
+    //  startup. It points at whichever network was selected when the app launched.
+    //  For full reactive-network support, it should be resolved per-call via a
+    //  factory (like TransactionSubmitter.NetworkClientProvider), but that requires
+    //  SubscriptionManagerFactory to also use the factory pattern — a deeper refactor.
     private val indexerClient: IndexerClient,
     private val dustRepository: DustRepository,
     private val shieldedRepository: ShieldedRepository,
