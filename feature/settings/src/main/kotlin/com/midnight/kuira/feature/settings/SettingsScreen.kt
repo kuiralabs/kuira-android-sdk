@@ -332,8 +332,15 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .heightIn(min = RowMinHeight)
                             .clickable {
-                                viewModel.onNetworkSelected(network)
-                                showNetworkPicker = false
+                                val activity = context as? FragmentActivity
+                                scope.launch {
+                                    val success = viewModel.onNetworkSelected(network, activity)
+                                    if (success) {
+                                        showNetworkPicker = false
+                                    } else {
+                                        Toast.makeText(context, "Network switch cancelled", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                             .padding(horizontal = Space16, vertical = Space12),
                     ) {

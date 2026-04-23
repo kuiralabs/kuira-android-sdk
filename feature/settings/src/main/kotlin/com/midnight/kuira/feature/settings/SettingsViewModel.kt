@@ -31,6 +31,7 @@ class SettingsViewModel @Inject constructor(
     private val devModeRepository: DevModeRepository,
     private val proofServerRepository: ProofServerRepository,
     private val seedVault: SeedVault,
+    private val networkSwitchUseCase: NetworkSwitchUseCase,
     private val wipeWalletUseCase: WipeWalletUseCase,
     @Named("buildType") private val buildType: String,
     @Named("versionName") private val versionName: String,
@@ -66,13 +67,18 @@ class SettingsViewModel @Inject constructor(
 
     // ── Actions ──
 
-    fun onNetworkSelected(network: MidnightNetwork) {
-        viewModelScope.launch {
-            networkRepository.setSelectedNetwork(network)
-            // Reactive architecture: selectedNetworkFlow emits →
-            // all repositories reconnect via flatMapLatest.
-            // No restart needed.
-        }
+    /**
+     * Switch to a different network. Requires [activity] for biometric
+     * if addresses need derivation for the target network.
+     *
+     * Returns true if the switch succeeded, false if cancelled/failed.
+     */
+    suspend fun onNetworkSelected(
+        network: MidnightNetwork,
+        activity: FragmentActivity?,
+    ): Boolean {
+        val result = networkSwitchUseCase.execute(network, activity)
+        return result.isSuccess
     }
 
     fun onVersionTapped() {

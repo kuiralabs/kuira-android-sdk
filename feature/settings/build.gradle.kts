@@ -37,6 +37,7 @@ dependencies {
     implementation(project(":core:indexer"))
     implementation(project(":core:crypto"))
     implementation(project(":core:wallet"))
+    implementation(project(":feature:onboarding")) // WalletAddressDeriver for network switching
 
     // Android + Coroutines
     implementation(libs.androidx.core.ktx)
