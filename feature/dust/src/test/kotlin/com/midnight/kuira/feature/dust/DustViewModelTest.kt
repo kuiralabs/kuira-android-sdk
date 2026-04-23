@@ -4,6 +4,8 @@ import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.database.UtxoState
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -90,9 +92,7 @@ class DustViewModelTest {
             nodeRpcClient = nodeRpcClient,
             utxoManager = utxoManager,
             seedVault = seedVault,
-            networkConfig = com.midnight.kuira.core.network.NetworkConfig.forNetwork(
-                com.midnight.kuira.core.network.MidnightNetwork.PREPROD,
-            ),
+            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
         )
     }
 

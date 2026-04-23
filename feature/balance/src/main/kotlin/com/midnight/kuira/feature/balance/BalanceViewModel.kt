@@ -18,9 +18,7 @@ import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
-import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkClientFactory
-import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.network.NetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -81,7 +79,6 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
     private val formatter: BalanceFormatter,
     private val networkRepository: NetworkRepository,
     private val networkClientFactory: NetworkClientFactory,
-    private val networkConfig: NetworkConfig, // TODO: remove once all usages migrated to networkRepository
     private val walletAddressCache: WalletAddressCache,
     private val seedVault: SeedVault,
     private val clock: Clock = Clock.systemDefaultZone()
@@ -118,8 +115,6 @@ class BalanceViewModel @RequiresApi(Build.VERSION_CODES.O)
                     "unshielded=${loaded?.unshieldedAddress}, " +
                     "shielded=${loaded?.shieldedAddress?.take(20)}...")
                 _walletAddresses.value = if (loaded != null) {
-                    AddressCacheState.Found(loaded)
-                    // Auto-reload balances for the new network
                     loadBalances(loaded.unshieldedAddress)
                     AddressCacheState.Found(loaded)
                 } else {

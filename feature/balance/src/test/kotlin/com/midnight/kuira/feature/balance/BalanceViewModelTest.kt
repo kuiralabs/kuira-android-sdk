@@ -7,7 +7,6 @@ import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
-import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -58,7 +57,6 @@ class BalanceViewModelTest {
     private lateinit var seedVault: com.midnight.kuira.core.auth.SeedVault
     private lateinit var networkRepository: com.midnight.kuira.core.network.NetworkRepository
     private lateinit var networkClientFactory: com.midnight.kuira.core.network.NetworkClientFactory
-    private lateinit var testNetworkConfig: NetworkConfig
 
     private val testAddress = "mn_addr_testnet1test123"
     private val testDispatcher = StandardTestDispatcher()
@@ -80,7 +78,6 @@ class BalanceViewModelTest {
 
         formatter = BalanceFormatter()
         fakeClock = FakeClock(Instant.parse("2026-01-17T10:00:00Z"))
-        testNetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD)
         shieldedRepository = mock()
         walletAddressCache = mock()
         seedVault = mock()
@@ -107,7 +104,6 @@ class BalanceViewModelTest {
         formatter = formatter,
         networkRepository = networkRepository,
         networkClientFactory = networkClientFactory,
-        networkConfig = testNetworkConfig,
         walletAddressCache = walletAddressCache,
         seedVault = seedVault,
         clock = fakeClock,
