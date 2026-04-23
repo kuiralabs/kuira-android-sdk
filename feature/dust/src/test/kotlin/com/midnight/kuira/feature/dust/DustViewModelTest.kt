@@ -90,6 +90,9 @@ class DustViewModelTest {
             nodeRpcClient = nodeRpcClient,
             utxoManager = utxoManager,
             seedVault = seedVault,
+            networkConfig = com.midnight.kuira.core.network.NetworkConfig.forNetwork(
+                com.midnight.kuira.core.network.MidnightNetwork.PREPROD,
+            ),
         )
     }
 

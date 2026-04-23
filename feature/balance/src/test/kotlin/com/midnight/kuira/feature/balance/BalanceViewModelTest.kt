@@ -56,6 +56,8 @@ class BalanceViewModelTest {
     private lateinit var shieldedRepository: com.midnight.kuira.core.indexer.repository.ShieldedRepository
     private lateinit var walletAddressCache: com.midnight.kuira.core.auth.WalletAddressCache
     private lateinit var seedVault: com.midnight.kuira.core.auth.SeedVault
+    private lateinit var networkRepository: com.midnight.kuira.core.network.NetworkRepository
+    private lateinit var networkClientFactory: com.midnight.kuira.core.network.NetworkClientFactory
     private lateinit var testNetworkConfig: NetworkConfig
 
     private val testAddress = "mn_addr_testnet1test123"
@@ -82,6 +84,13 @@ class BalanceViewModelTest {
         shieldedRepository = mock()
         walletAddressCache = mock()
         seedVault = mock()
+        networkRepository = mock()
+        networkClientFactory = mock()
+        // Default: emit the test network
+        whenever(networkRepository.selectedNetworkFlow).thenReturn(
+            kotlinx.coroutines.flow.flowOf(MidnightNetwork.PREPROD)
+        )
+        whenever(networkRepository.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
         viewModel = buildViewModel()
     }
 
@@ -96,6 +105,8 @@ class BalanceViewModelTest {
         shieldedRepository = shieldedRepository,
         subscriptionManagerFactory = subscriptionManagerFactory,
         formatter = formatter,
+        networkRepository = networkRepository,
+        networkClientFactory = networkClientFactory,
         networkConfig = testNetworkConfig,
         walletAddressCache = walletAddressCache,
         seedVault = seedVault,
