@@ -6,6 +6,9 @@ import com.midnight.kuira.core.network.MidnightNetwork
  * UI state for the Settings screen. Always [Content] — Settings
  * has no loading or error states (all data is local).
  */
+/** Display label when proof server is local (on-device proving). */
+const val PROOF_SERVER_LOCAL = "Local (on-device)"
+
 data class SettingsUiState(
     /** Current selected network. */
     val network: MidnightNetwork = MidnightNetwork.DEFAULT,
