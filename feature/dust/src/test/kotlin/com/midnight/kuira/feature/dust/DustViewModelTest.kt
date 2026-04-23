@@ -92,7 +92,9 @@ class DustViewModelTest {
             nodeRpcClient = nodeRpcClient,
             utxoManager = utxoManager,
             seedVault = seedVault,
-            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
+            networkRepository = mock<com.midnight.kuira.core.network.NetworkRepository>().also {
+                org.mockito.kotlin.whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
+            },
         )
     }
 

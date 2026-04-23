@@ -53,7 +53,35 @@ class TransactionSubmitter(
     private val provingKeyManager: ProvingKeyManager? = null,
     /** Current proving mode — LOCAL or REMOTE. Defaults to LOCAL when keys are available. */
     @Volatile var provingMode: ProvingMode = ProvingMode.DEFAULT,
+    /**
+     * Optional: provides the current network for creating fresh clients
+     * per-transaction. When set, nodeRpcClient/proofServerClient/indexerClient
+     * are used as fallbacks only if the network hasn't changed since startup.
+     * Part of the reactive network architecture (Option C migration).
+     */
+    private val networkClientProvider: NetworkClientProvider? = null,
 ) {
+
+    /**
+     * Functional interface for resolving network-aware clients.
+     * Injected by the Hilt module; creates fresh clients for the
+     * currently-selected network.
+     */
+    fun interface NetworkClientProvider {
+        fun provide(): NetworkClients
+    }
+
+    data class NetworkClients(
+        val node: NodeRpcClient,
+        val proofServer: ProofServerClient,
+        val indexer: IndexerClient,
+    )
+
+    /** Resolve the clients to use — fresh per-network if provider is set, otherwise frozen singletons. */
+    private fun resolveClients(): NetworkClients {
+        return networkClientProvider?.provide()
+            ?: NetworkClients(nodeRpcClient, proofServerClient, indexerClient)
+    }
 
     /** Which proving mode was used for the last transaction (for display). */
     var lastProvingMode: ProvingMode = provingMode
@@ -85,7 +113,7 @@ class TransactionSubmitter(
             ProvingMode.REMOTE -> {
                 Log.d(TAG, "Proving via remote proof server")
                 lastProvingMode = ProvingMode.REMOTE
-                proofServerClient.proveTransaction(unprovenTxHex)
+                resolveClients().proofServer.proveTransaction(unprovenTxHex)
             }
         }
     }
@@ -161,7 +189,7 @@ class TransactionSubmitter(
         Log.d(TAG, "Submitting transaction via WebSocket and waiting for finalization...")
 
         val finalizationResult = try {
-            nodeRpcClient.submitAndWaitForFinalization(finalizedTxHex, timeoutMs)
+            resolveClients().node.submitAndWaitForFinalization(finalizedTxHex, timeoutMs)
         } catch (e: TransactionRejected) {
             // Check if this is a stale UTXO error (error 115)
             if (e.isStaleUtxo) {
@@ -476,7 +504,7 @@ class TransactionSubmitter(
             Log.d(TAG, "Submitting transaction via WebSocket and waiting for finalization...")
 
             val finalizationResult = try {
-                nodeRpcClient.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
+                resolveClients().node.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
             } catch (e: TransactionRejected) {
                 // Don't save dust state - it's still clean on disk
                 if (e.isStaleUtxo) {
@@ -612,7 +640,7 @@ class TransactionSubmitter(
             ?: throw IllegalStateException("Sealing returned null")
 
         // Step 3: Submit finalized transaction
-        return nodeRpcClient.submitTransaction(finalizedTxHex)
+        return resolveClients().node.submitTransaction(finalizedTxHex)
     }
 
     /**
@@ -713,7 +741,7 @@ class TransactionSubmitter(
         Log.d(TAG, "Submitting shielded transaction and waiting for finalization...")
 
         val finalizationResult = try {
-            nodeRpcClient.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
+            resolveClients().node.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
         } catch (e: TransactionRejected) {
             return SubmissionResult.Failed(
                 txHash = e.txHash,

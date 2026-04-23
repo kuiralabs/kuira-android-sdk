@@ -21,6 +21,7 @@ import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,8 +63,11 @@ class DustViewModel @Inject constructor(
     private val nodeRpcClient: NodeRpcClient,
     private val utxoManager: UtxoManager,
     private val seedVault: SeedVault,
-    private val networkConfig: NetworkConfig,
+    private val networkRepository: NetworkRepository,
 ) : ViewModel() {
+
+    private val currentNetwork = networkRepository.getSelectedNetworkBlocking()
+    private val currentNetworkConfig = NetworkConfig.forNetwork(currentNetwork)
 
     private val _state = MutableStateFlow<DustUiState>(DustUiState.Idle)
     val state: StateFlow<DustUiState> = _state.asStateFlow()
@@ -227,7 +231,7 @@ class DustViewModel @Inject constructor(
                     dustPublicKeyHex = dustPublicKeyHex,
                     utxosJson = utxosJson,
                     ttlMillis = ttl,
-                    networkId = networkConfig.network.rustNetworkId,
+                    networkId = currentNetwork.rustNetworkId,
                 ) ?: throw IllegalStateException("Failed to build dust registration transaction")
                 Log.d(TAG, "Registration tx built: ${scaleHex.length} hex chars")
 

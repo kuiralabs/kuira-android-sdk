@@ -16,6 +16,7 @@ import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.di.SubscriptionManagerFactory
 import com.midnight.kuira.core.network.NetworkConfig
+import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -107,7 +108,7 @@ class SendViewModel @Inject constructor(
     private val provingKeyManager: ProvingKeyManager,
     private val subscriptionManagerFactory: SubscriptionManagerFactory,
     private val syncStateManager: SyncStateManager,
-    private val networkConfig: NetworkConfig,
+    private val networkRepository: NetworkRepository,
     private val seedVault: SeedVault,
     private val walletAddressCache: WalletAddressCache,
 ) : ViewModel() {
@@ -120,17 +121,18 @@ class SendViewModel @Inject constructor(
      * UI observes this to populate the FROM field based on the active
      * [SendMode]. Addresses are public, so no biometric is needed.
      */
+    // Current network — read from repository at construction time.
+    // Send gets a fresh ViewModel on each navigation, so this is always
+    // the current network (not a stale startup value).
+    private val currentNetwork = networkRepository.getSelectedNetworkBlocking()
+    private val currentNetworkConfig = NetworkConfig.forNetwork(currentNetwork)
+
     private val _walletAddresses = MutableStateFlow<WalletAddresses?>(null)
     val walletAddresses: StateFlow<WalletAddresses?> = _walletAddresses.asStateFlow()
 
     init {
         viewModelScope.launch {
-            // Read current network from repository (reactive) rather than
-            // frozen NetworkConfig. Send is always navigated to fresh (new
-            // ViewModel from nav graph), so this runs once with the correct
-            // network even after a Settings network switch.
-            val network = networkConfig.network // TODO: inject NetworkRepository for full reactivity
-            _walletAddresses.value = walletAddressCache.load(network)
+            _walletAddresses.value = walletAddressCache.load(currentNetwork)
         }
     }
 
@@ -139,17 +141,17 @@ class SendViewModel @Inject constructor(
      * Pre-filled into the Send screen so you can test end-to-end without
      * typing a 90-character bech32 address.
      */
-    val defaultTestRecipient: String = BOB_UNSHIELDED_ADDRESSES[networkConfig.network.addressPrefix] ?: ""
+    val defaultTestRecipient: String = BOB_UNSHIELDED_ADDRESSES[currentNetwork.addressPrefix] ?: ""
 
     /** Default test recipient — Bob's shielded address for the current network. */
-    val defaultShieldedRecipient: String = BOB_SHIELDED_ADDRESSES[networkConfig.network.addressPrefix] ?: ""
+    val defaultShieldedRecipient: String = BOB_SHIELDED_ADDRESSES[currentNetwork.addressPrefix] ?: ""
 
     /** Whether proving mode is set to LOCAL — observable for Compose recomposition. */
     private val _isLocalProving = MutableStateFlow(transactionSubmitter.provingMode == ProvingMode.LOCAL)
     val isLocalProvingEnabled: StateFlow<Boolean> = _isLocalProving.asStateFlow()
 
     /** Proof server URL for display when in remote mode. */
-    val proofServerUrl: String = networkConfig.proofServerUrl
+    val proofServerUrl: String = currentNetworkConfig.proofServerUrl
 
     /** Toggle between local and remote proving. */
     fun toggleProvingMode() {
@@ -685,7 +687,7 @@ class SendViewModel @Inject constructor(
                     state.use { activeState ->
                         val nightTokenType = "0".repeat(64) // all zeros for NIGHT
                         val ttlMs = System.currentTimeMillis() + 3600_000
-                        val networkId = networkConfig.network.name.lowercase()
+                        val networkId = currentNetwork.name.lowercase()
 
                         // Step 1: Build shielded offer (select coins → spend → outputs → offer)
                         val transferResult = ZswapTransferBuilder.buildTransfer(
@@ -1150,7 +1152,7 @@ class SendViewModel @Inject constructor(
         // recipient addresses, NOT signing secrets — the wallet signs with
         // whatever seed the user onboarded into SeedVault.
         //
-        // Keys are the network's address prefix so `networkConfig.network.addressPrefix`
+        // Keys are the network's address prefix so `currentNetwork.addressPrefix`
         // looks up the correct one.
         val BOB_UNSHIELDED_ADDRESSES = mapOf(
             "mn_addr_preprod" to "mn_addr_preprod1z7qzgsxnqg2h5pc3t7l84s4q7swqfxqcjxqc5nawq93f8r832fwsev7kky",

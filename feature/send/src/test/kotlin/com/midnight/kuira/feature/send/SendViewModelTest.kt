@@ -85,7 +85,9 @@ class SendViewModelTest {
             provingKeyManager = provingKeyManager,
             subscriptionManagerFactory = subscriptionManagerFactory,
             syncStateManager = syncStateManager,
-            networkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREPROD),
+            networkRepository = mock<com.midnight.kuira.core.network.NetworkRepository>().also {
+                org.mockito.kotlin.whenever(it.getSelectedNetworkBlocking()).thenReturn(MidnightNetwork.PREPROD)
+            },
             seedVault = seedVault,
             walletAddressCache = walletAddressCache,
         )

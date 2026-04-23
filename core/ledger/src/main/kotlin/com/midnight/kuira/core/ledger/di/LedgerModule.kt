@@ -127,7 +127,12 @@ object LedgerModule {
         return ProvingKeyManager(context)
     }
 
-    /** Provide TransactionSubmitter singleton — orchestrates prove → seal → submit. */
+    /**
+     * Provide TransactionSubmitter singleton with network-aware client resolution.
+     * The [NetworkClientProvider] creates fresh clients for the currently-selected
+     * network on each transaction, so network switches in Settings take effect
+     * without app restart.
+     */
     @Provides
     @Singleton
     fun provideTransactionSubmitter(
@@ -139,6 +144,7 @@ object LedgerModule {
         dustActionsBuilder: DustActionsBuilder,
         dustRepository: com.midnight.kuira.core.indexer.repository.DustRepository,
         provingKeyManager: ProvingKeyManager,
+        networkRepository: com.midnight.kuira.core.network.NetworkRepository,
     ): TransactionSubmitter {
         return TransactionSubmitter(
             nodeRpcClient = nodeRpcClient,
@@ -149,6 +155,15 @@ object LedgerModule {
             dustActionsBuilder = dustActionsBuilder,
             dustRepository = dustRepository,
             provingKeyManager = provingKeyManager,
+            networkClientProvider = TransactionSubmitter.NetworkClientProvider {
+                val network = networkRepository.getSelectedNetworkBlocking()
+                val config = com.midnight.kuira.core.network.NetworkConfig.forNetwork(network)
+                TransactionSubmitter.NetworkClients(
+                    node = NodeRpcClientImpl(nodeUrl = config.nodeRpcUrl, developmentMode = config.developmentMode),
+                    proofServer = ProofServerClientImpl(proofServerUrl = config.proofServerUrl, developmentMode = config.developmentMode),
+                    indexer = com.midnight.kuira.core.indexer.api.IndexerClientImpl(baseUrl = config.indexerBaseUrl, developmentMode = config.developmentMode),
+                )
+            },
         )
     }
 }
