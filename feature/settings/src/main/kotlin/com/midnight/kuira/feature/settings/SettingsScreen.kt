@@ -4,7 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -204,7 +207,8 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(Space32))
 
                 // ── DEVELOPER OPTIONS (conditional) ──
-                if (uiState.devModeUnlocked) {
+                // Developer options always visible — our audience is developers.
+                run {
                     SectionHeader("DEVELOPER OPTIONS")
                     Spacer(modifier = Modifier.height(Space12))
                     GlassPanel(
@@ -492,32 +496,11 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(Space16))
 
                 // LOCAL option
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = RowMinHeight)
-                        .clickable { selectedMode = ProvingMode.LOCAL }
-                        .padding(horizontal = Space16, vertical = Space12),
-                ) {
-                    val isLocal = selectedMode == ProvingMode.LOCAL
-                    Text(
-                        text = "Local (on-device)",
-                        color = if (isLocal) MidnightColors.Light else MidnightColors.LightSoft,
-                        fontSize = 14.sp,
-                        fontWeight = if (isLocal) FontWeight.W400 else FontWeight.W300,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (isLocal) {
-                        Text("✓", color = MidnightColors.Light, fontSize = 16.sp)
-                    }
-                }
-                Text(
-                    text = "Generate ZK proofs on your phone. No server needed.",
-                    color = MidnightColors.LightMuted,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.padding(horizontal = Space16),
+                RadioOption(
+                    label = "Local (on-device)",
+                    description = "Generate ZK proofs on your phone. No server needed.",
+                    isSelected = selectedMode == ProvingMode.LOCAL,
+                    onClick = { selectedMode = ProvingMode.LOCAL },
                 )
 
                 Spacer(modifier = Modifier.height(Space8))
@@ -525,32 +508,11 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(Space8))
 
                 // REMOTE option
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = RowMinHeight)
-                        .clickable { selectedMode = ProvingMode.REMOTE }
-                        .padding(horizontal = Space16, vertical = Space12),
-                ) {
-                    val isRemote = selectedMode == ProvingMode.REMOTE
-                    Text(
-                        text = "Remote server",
-                        color = if (isRemote) MidnightColors.Light else MidnightColors.LightSoft,
-                        fontSize = 14.sp,
-                        fontWeight = if (isRemote) FontWeight.W400 else FontWeight.W300,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (isRemote) {
-                        Text("✓", color = MidnightColors.Light, fontSize = 16.sp)
-                    }
-                }
-                Text(
-                    text = "Send proofs to an external server. Faster but requires network.",
-                    color = MidnightColors.LightMuted,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.padding(horizontal = Space16),
+                RadioOption(
+                    label = "Remote server",
+                    description = "Send proofs to an external server. Faster but requires network.",
+                    isSelected = selectedMode == ProvingMode.REMOTE,
+                    onClick = { selectedMode = ProvingMode.REMOTE },
                 )
 
                 // URL input (only when REMOTE selected)
@@ -747,4 +709,68 @@ private fun SettingsDividerItem() {
         thickness = 1.dp,
         modifier = Modifier.padding(horizontal = Space16),
     )
+}
+
+/** Radio option with circle indicator + label + description. */
+@Composable
+private fun RadioOption(
+    label: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = RowMinHeight)
+            .background(
+                if (isSelected) MidnightColors.LightBarely else Color.Transparent,
+                RoundedCornerShape(RadiusMd),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = Space16, vertical = Space12),
+    ) {
+        // Radio circle
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(
+                    color = if (isSelected) MidnightColors.Light else Color.Transparent,
+                    shape = CircleShape,
+                )
+                .then(
+                    if (!isSelected) Modifier.border(
+                        width = 2.dp,
+                        color = MidnightColors.LightFaint,
+                        shape = CircleShape,
+                    ) else Modifier
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(MidnightColors.Void, CircleShape),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(Space12))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = if (isSelected) MidnightColors.Light else MidnightColors.LightSoft,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.W400 else FontWeight.W300,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                color = MidnightColors.LightMuted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+    }
 }
