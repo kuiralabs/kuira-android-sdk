@@ -334,7 +334,7 @@ fun SettingsScreen(
                             .clickable {
                                 val activity = context as? FragmentActivity
                                 scope.launch {
-                                    val success = viewModel.onNetworkSelected(network, activity)
+                                    val success = viewModel.switchNetwork(network, activity)
                                     if (success) {
                                         showNetworkPicker = false
                                     } else {

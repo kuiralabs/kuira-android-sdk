@@ -68,17 +68,15 @@ class SettingsViewModel @Inject constructor(
     // ── Actions ──
 
     /**
-     * Switch to a different network. Requires [activity] for biometric
-     * if addresses need derivation for the target network.
-     *
-     * Returns true if the switch succeeded, false if cancelled/failed.
+     * Switch to a different network. Derives addresses if needed
+     * (biometric required). Returns true on success, false if
+     * cancelled or failed.
      */
-    suspend fun onNetworkSelected(
+    suspend fun switchNetwork(
         network: MidnightNetwork,
         activity: FragmentActivity?,
     ): Boolean {
-        val result = networkSwitchUseCase.execute(network, activity)
-        return result.isSuccess
+        return networkSwitchUseCase.execute(network, activity).isSuccess
     }
 
     fun onVersionTapped() {

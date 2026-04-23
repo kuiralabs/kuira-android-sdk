@@ -6,6 +6,9 @@ import com.midnight.kuira.core.auth.WalletAddressCache
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkRepository
 import com.midnight.kuira.feature.onboarding.WalletAddressDeriver
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -60,13 +63,23 @@ class NetworkSwitchUseCase @Inject constructor(
         return try {
             val plaintextSeed = seedVault.loadSeed(activity)
             try {
-                val addresses = WalletAddressDeriver.derive(plaintextSeed.bip39Seed, target)
-                walletAddressCache.save(target, addresses)
+                // CPU-bound crypto: derive on Default, not Main
+                val addresses = withContext(Dispatchers.Default) {
+                    WalletAddressDeriver.derive(plaintextSeed.bip39Seed, target)
+                }
+                // IO: persist to DataStore
+                withContext(Dispatchers.IO) {
+                    walletAddressCache.save(target, addresses)
+                }
             } finally {
                 plaintextSeed.wipe()
             }
-            networkRepository.setSelectedNetwork(target)
+            withContext(Dispatchers.IO) {
+                networkRepository.setSelectedNetwork(target)
+            }
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e // never swallow — structured concurrency requires propagation
         } catch (e: Exception) {
             Result.failure(e)
         }
