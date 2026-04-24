@@ -1,4 +1,4 @@
-# Screen — Balance (home)
+# Screen — Balance (Assets tab root)
 
 ## 1. GOAL
 
@@ -7,9 +7,10 @@ balances on the current network and can tap Receive or Send.
 
 ## 2. SITEMAP POSITION
 
-- `from:` Splash · Onboarding Success · app resume
-- `to:` Send · Receive · Tx History (via hero drill-in) ·
-  Dust (via DUST row) · Settings · Recovery phrase view (via backup banner)
+- **Tab:** Assets (tab root screen)
+- `from:` Bottom nav (Assets tab) · app resume (if last-active tab)
+- `to:` Send · Receive · Dust (push within Assets tab) ·
+  Recovery phrase view (via backup banner, push)
 
 ## 3. STATES
 
@@ -47,7 +48,7 @@ screens use the standard button pattern.
 [Top bar] 56dp · bg Void · border-bottom 1dp LightFaint
   [icon-24 kuira-glyph]  "Kuira" (type-body, Light)
   — flex —
-  [NetworkBadge]                      [icon-24 settings]  (48dp tap)
+  [NetworkBadge]
 
 space-16 (screen horizontal inset throughout)
 
@@ -132,7 +133,6 @@ Identical to `default`. Differences:
 | Backup banner     | Tap         | Recovery phrase view (biometric-gated)                         |
 | Send circle       | Tap         | Send screen                                                    |
 | Receive circle    | Tap         | Receive screen                                                 |
-| Settings icon     | Tap         | Settings screen                                                |
 | Error "Retry"     | Tap         | Triggers sync (error state only)                               |
 
 ## 6. MOTION
@@ -179,11 +179,10 @@ Exact strings; do not rewrite.
 
 ## 9. A11Y
 
-- Focus order (system back not applicable at home): settings icon →
-  NetworkBadge (if tappable in dev mode) → banner (if present) → hero →
-  DUST row → SHIELDED row → Send circle → Receive circle → AddressChip
+- Focus order (tab root — no back arrow): NetworkBadge (if tappable
+  in dev mode) → banner (if present) → hero → DUST row → SHIELDED row →
+  Send circle → Receive circle → AddressChip
 - Content descriptions:
-  - settings icon: `Open settings`
   - NetworkBadge: `Current network, <name>`
   - banner: `Back up your recovery phrase. Double tap to view.`
   - hero: `<amount> NIGHT balance`
@@ -234,8 +233,9 @@ Exact strings; do not rewrite.
 - Shielded row shows `locked — tap to unlock` if the shielded key is
   not decrypted this session. Decryption is session-scoped, not
   persistent.
-- Network picker in the top bar (tapping NetworkBadge) is dev-mode
-  only. Non-dev users see NetworkBadge as read-only.
+- Network picker is in Settings tab (not on this screen). NetworkBadge
+  on Balance is read-only — shows current network, not a picker.
+- Bottom nav bar visible on this screen (tab root).
 
 ## 12. NEW COMPONENTS
 

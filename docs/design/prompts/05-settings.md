@@ -1,15 +1,16 @@
-# Screen — Settings (host screen, T1-1)
+# Screen — Settings (Settings tab root, T1-1)
 
 ## 1. GOAL
 
-Configure wallet-wide preferences, review network + security, access
+Configure sigil-wide preferences, review network + security, access
 destructive actions behind gates. Host screen for T1-1.
 
 ## 2. SITEMAP POSITION
 
-- `from:` Balance (top-bar settings icon)
-- `to:` Recovery phrase view · Wipe wallet flow · Network picker sheet ·
-  External: GitHub · License · Support mailto
+- **Tab:** Settings (tab root screen)
+- `from:` Bottom nav (Settings tab)
+- `to:` Recovery phrase view · Wipe flow (push within Settings tab) ·
+  Network picker sheet · External: GitHub · License · Support
 
 ## 3. STATES
 
@@ -128,7 +129,7 @@ space-32   (sectioned-list rhythm — inter-section gap to SECURITY)
 
 | Element                    | Gesture       | Result                                                  |
 |----------------------------|---------------|---------------------------------------------------------|
-| Back arrow                 | Tap           | Pop to Balance                                          |
+| App glyph (tab root)       | —             | No action — Settings is a tab root, no back arrow       |
 | Network row                | Tap (dev-mode)| Bottom-sheet network picker (Preprod / Preview / Mainnet-disabled) |
 | Network row                | Tap (non-dev) | No-op; row is informational                             |
 | View recovery phrase       | Tap           | Biometric prompt → Recovery phrase view (FLAG_SECURE)   |
@@ -243,6 +244,8 @@ Exact strings; do not rewrite.
 - Proof-server row is a placeholder in v1.0 first pass per the
   deferred decision in `WALLET_PRODUCTIZATION_PLAN.md` — row is
   visible (explains what exists) but non-editable.
+- Bottom nav bar visible on this screen (tab root).
+- No back arrow — top bar shows app glyph (tab root behavior).
 
 ## 12. NEW COMPONENTS
 

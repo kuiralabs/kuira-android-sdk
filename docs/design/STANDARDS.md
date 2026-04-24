@@ -1,4 +1,4 @@
-# Design standards — Kuira Wallet
+# Design standards — Kuira
 
 Single source of truth for every token and rule referenced by the
 screen prompts under `prompts/`. Screen prompts reference tokens **by
@@ -222,7 +222,7 @@ UI strings, never cute about errors.
 | Status bar        | Transparent. Icons = `Light` in dark mode, `Void` in light mode. |
 | Top bar height    | 56dp                                                             |
 | Top bar bg        | `Void` · border-bottom 1dp `LightFaint`                          |
-| Bottom nav        | **none** — this app does not have a bottom nav                   |
+| Bottom nav        | 4 tabs: **My Sigil** · **Assets** · **Activity** · **Settings**. Visible on tab root screens only; hides on pushed sub-screens. Height 56dp. Bg `VoidSoft` · border-top 1dp `LightFaint`. Active tab icon `Light` (100%), inactive `LightMuted` (50%). |
 | FAB               | **none** — primary actions live in `DuskButtonRow` at the bottom |
 | Soft keyboard     | `adjustResize`. Content scrolls so the focused field sits above the keyboard with `space-24` breathing room. |
 | System back       | Always wired. Never intercepted except on multi-step destructive flows. |
@@ -245,6 +245,7 @@ UI strings, never cute about errors.
 
 | Component               | Used by                                  | Priority |
 |-------------------------|------------------------------------------|----------|
+| `BottomNavBar`          | All tab root screens (My Sigil, Assets, Activity, Settings) | P0 |
 | `NetworkBadge`          | Balance · Settings · Receive header · top bar (T1-16) | P0 |
 | `BackupBanner`          | Balance (conditional)                    | P0       |
 | `BalanceHero`           | Balance                                  | P0       |
@@ -263,11 +264,15 @@ UI strings, never cute about errors.
 | `SettingsSectionHeader` | Settings                                 | P1       |
 | `DangerRow`             | Settings · Wipe flow                     | P1       |
 | `NetworkPicker`         | Settings (bottom sheet)                  | P1       |
-| `MnemonicGrid`          | Recovery phrase view                     | P0       |
+| `WordGrid`              | Recovery phrase view                     | P0       |
 | `WarningBlock`          | Recovery phrase view · Tx failure        | P0       |
 | `QRCodeCanvas`          | Receive                                  | P1       |
-| `FullScreenQrSheet`     | Receive                                  | P1       |
+| `FullScreenQR`          | Receive                                  | P1       |
 | `ToastPill`             | App-wide confirmations                   | P0       |
+| `SigilStatusCard`       | My Sigil (compact balance hero)          | P0       |
+| `ConnectedAppRow`       | My Sigil (connected apps list)           | P1       |
+| `DelegationBadge`       | My Sigil (delegation tier pill)          | P1       |
+| `SectionHeader`         | My Sigil (reusable section label)        | P0       |
 
 ## 15. File & wireframe deliverable rules
 

@@ -10,9 +10,10 @@ Registration CTA for wallets that haven't registered their tank.
 
 ## 2. SITEMAP POSITION
 
+- **Tab:** Assets (push from Balance)
 - `from:` Balance (DUST row tap)
-- `to:` Balance (back arrow) · Tx History filtered to DUST
-  (via hero tap, once T1-5 supports filtering)
+- `to:` Balance (back arrow) · Activity tab filtered to DUST
+  (via hero tap, once filtering is supported)
 
 ## 3. STATES
 

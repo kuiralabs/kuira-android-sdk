@@ -2,9 +2,13 @@
 
 ## ROLE
 
-You are designing a MOBILE PHONE screen for the Kuira Wallet Android
-app. Portrait only, single-hand reachable, 412 × 892 dp viewport
-(Pixel 7 class). This is NOT a tablet, desktop, or web app.
+You are designing a MOBILE PHONE screen for Kuira — a private Sigil
+for the Midnight ecosystem. Kuira is NOT a wallet. It is a sigil:
+a private digital identity that authenticates, delegates, and protects
+across all Midnight apps. The wallet features (balance, send, receive)
+are one facet ("Assets") of the sigil. Portrait only, single-hand
+reachable, 412 × 892 dp viewport (Pixel 7 class). This is NOT a
+tablet, desktop, or web app.
 
 You are NOT redesigning the brand. The visual language is already set.
 Your job: produce a wireframe for ONE screen that matches the existing
@@ -30,9 +34,30 @@ Every shipped screen follows this template. New screens MUST match it:
                space-8
                DuskSecondaryButton (full-width)
                — OR DuskButtonRow: secondary left + primary right —
+
+  ─── (tab root screens only) ───
+  BOTTOM NAV   BottomNavBar: My Sigil | Assets | Activity | Settings
+               56dp, VoidSoft bg, 1dp LightFaint top border
+               Active tab = Light, inactive = LightMuted
 ```
 
 Deviate from this template only with a stated reason.
+
+## APP NAVIGATION
+
+Kuira uses a 4-tab bottom navigation bar:
+
+| Tab | Icon | Root screen | Contains |
+|-----|------|-------------|----------|
+| My Sigil | sigil mark | Sigil dashboard | Connected apps, state, policies |
+| Assets | stack/coins | Balance | Send, Receive, Dust (push nav) |
+| Activity | clock/list | Tx History | Tx Detail (push nav) |
+| Settings | gear | Settings | Recovery phrase, Wipe flow (push nav) |
+
+**My Sigil is the start destination (home).** The bottom nav bar is
+visible on tab root screens ONLY. When the user pushes into a
+sub-screen (Send, Tx Detail, etc.), the bottom nav hides and a back
+arrow appears in the top bar. Each tab maintains its own back stack.
 
 ## AMBIENT STAR BACKGROUND (always present)
 
@@ -66,7 +91,7 @@ faint dots to signal the texture is present.
 Height: 56dp (fixed platform chrome — not a space-* token)
 Background: Void
 Border-bottom: 1dp LightFaint hairline
-Left slot: icon-24 back arrow (if not home) OR icon-24 app glyph (home)
+Left slot: icon-24 back arrow (if not tab root) OR icon-24 app glyph (tab roots)
              Success state may replace arrow with "Done" text (type-body, Light)
 Center slot: optional title (type-body, Light)
 Right slot: 1-2 icon-24 actions (48dp tap each)
@@ -74,7 +99,9 @@ Right slot: 1-2 icon-24 actions (48dp tap each)
              state the deviation reason in §10 VISUAL LOCKED
 ```
 
-Home screen (Balance) has no back arrow. All other screens do.
+Tab root screens (My Sigil, Balance, Activity, Settings) have no back
+arrow — they show the app glyph. All pushed sub-screens have a back
+arrow.
 
 ## SHAPES
 
@@ -446,6 +473,8 @@ already defines one with the right shape:
 - **09-onboarding-visual-pass §12:** none (audit, not new components)
 - **10-app-icon §12:** none (asset deliverable)
 - **11-splash §12:** none (uses existing MaterializeEffect)
+- **12-my-sigil §12:** SigilStatusCard, ConnectedAppRow, DelegationBadge
+- **13-activity §12:** (extends 06-tx-history with agent audit entries)
 
 ## MODES × STATES
 

@@ -13,9 +13,10 @@ all live here.
 
 ## 2. SITEMAP POSITION
 
+- **Tab:** Assets (push from Send)
 - `from:` Send flow Screen 2c (Review text-button)
-- `to:` Balance on dismiss · Tx History detail (via "View in history"
-  once T1-5 is built) · Send flow Screen 2a (via "Send another")
+- `to:` Balance on dismiss · Activity tab Tx Detail (via "View in
+  history") · Send flow Screen 2a (via "Send another")
 
 ## 3. STATES
 

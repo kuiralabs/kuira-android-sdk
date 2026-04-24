@@ -2,14 +2,14 @@
 
 ## 1. GOAL
 
-Design a launcher icon for the Kuira Wallet that works at every
+Design a launcher icon for Kuira that works at every
 Android adaptive-icon size (48dp to 108dp), follows the Dusk palette,
 and conveys "privacy + blockchain" without text.
 
 ## 2. SITEMAP POSITION
 
 - `from:` Android launcher · Recent apps · notification tray
-- `to:` App launch → Splash (11) → Balance (01)
+- `to:` App launch → Splash (11) → Main tabs (My Sigil home)
 
 ## 3. STATES
 
@@ -85,7 +85,7 @@ n/a — no text in the icon. App label shown by the launcher is `Kuira`
 
 ## 9. A11Y
 
-- Content description for the launcher icon: `Kuira Wallet`
+- Content description for the launcher icon: `Kuira`
   (set via `android:icon` accessibility attributes in the manifest).
 
 ## 10. VISUAL LOCKED

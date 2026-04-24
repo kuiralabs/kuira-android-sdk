@@ -17,6 +17,7 @@ biometric + submit + success/error.
 
 ## 2. SITEMAP POSITION
 
+- **Tab:** Assets (push from Balance)
 - `from:` Balance (Send quick-action circle) · inbound `midnight:`
   URI deeplink (can skip to 2b or 2c with prefilled fields)
 - `to:` Send Confirmation (03, via "Review" on Screen 2c) ·

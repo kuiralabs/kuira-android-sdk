@@ -1,8 +1,11 @@
-# Kuira Wallet — Design documentation
+# Kuira — Design documentation
 
 Index for everything under `docs/design/`. This is the human-facing
 entry point. AI agents consume `STANDARDS.md` + one `prompts/<screen>.md`
 at a time.
+
+**Product framing:** Kuira is a Sigil for Midnight — not a wallet.
+See `docs/planning/KUIRA_IDENTITY_VISION.md` for the full concept.
 
 ---
 
@@ -25,6 +28,8 @@ at a time.
 | `prompts/09-onboarding-pass.md` | Onboarding visual-consistency audit spec      |
 | `prompts/10-icon.md`            | App icon concepts spec                        |
 | `prompts/11-splash.md`          | Splash animation storyboard spec              |
+| `prompts/12-my-sigil.md`        | My Sigil tab (home) — sigil dashboard spec    |
+| `prompts/13-activity.md`        | Activity tab — tx history + audit log spec    |
 | `wireframes/<screen>/<mode>-<state>.png` | AI-produced mocks land here          |
 
 ---
@@ -55,19 +60,21 @@ at a time.
 | `🏗 Implementing` | Compose work in flight                  |
 | `✔ Shipped`   | On `main`, L3 applied                     |
 
-| # | Screen                   | Status        | Notes                                                   |
-|---|--------------------------|---------------|---------------------------------------------------------|
-| 01 | Balance                  | 🎨 Drafting   | Canonical example — review shape before doing others    |
-| 02 | Send                     | 📝 Pending     | Not yet written                                         |
-| 03 | Send Confirmation        | 📝 Pending     |                                                         |
-| 04 | Dust                     | 📝 Pending     |                                                         |
-| 05 | Settings                 | 📝 Pending     | Hosts Network picker, Wipe flow sub-frames              |
-| 06 | Tx History + Detail      | 📝 Pending     | Pair                                                    |
-| 07 | Receive                  | 📝 Pending     | Includes Full-screen QR sub-frame                       |
-| 08 | Recovery phrase          | 📝 Pending     |                                                         |
-| 09 | Onboarding visual pass   | 📝 Pending     | Audit, no new screens                                   |
-| 10 | App icon                 | 📝 Pending     | Asset generation, not a screen                          |
-| 11 | Splash animation         | 📝 Pending     | Storyboard                                              |
+| # | Tab | Screen                   | Status        | Notes                                                   |
+|---|-----|--------------------------|---------------|---------------------------------------------------------|
+| 01 | Assets | Balance               | 🎨 Drafting   | Assets tab root — canonical example                     |
+| 02 | Assets | Send                  | 📝 Stub     | Push from Balance                                       |
+| 03 | Assets | Send Confirmation     | 📝 Stub     | Push from Send                                          |
+| 04 | Assets | Dust                  | 📝 Stub     | Push from Balance                                       |
+| 05 | Settings | Settings            | 📝 Stub     | Settings tab root. Network picker, Wipe flow sub-frames |
+| 06 | Activity | Tx History + Detail | 📝 Stub     | Activity tab root + pushed detail. Pair                 |
+| 07 | Assets | Receive               | 📝 Stub     | Push from Balance. Includes Full-screen QR              |
+| 08 | Settings | Recovery phrase     | 📝 Stub     | Push from Settings                                      |
+| 09 | — | Onboarding visual pass   | 📝 Stub     | "Forge your Sigil." Audit, no new screens               |
+| 10 | — | App icon                 | 📝 Stub     | Asset generation, not a screen                          |
+| 11 | — | Splash animation         | 📝 Stub     | Storyboard                                              |
+| 12 | My Sigil | My Sigil dashboard | 📝 Stub     | Home tab. Connected apps, sigil status, delegation      |
+| 13 | Activity | Activity (expanded)| 📝 Stub     | Extends 06 with agent audit log, approval log           |
 
 ---
 

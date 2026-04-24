@@ -1,18 +1,19 @@
-# Screen — Tx History + Detail (T1-5, day-grouped activity list)
+# Screen — Activity (Activity tab root, T1-5, day-grouped activity list)
 
 ## 1. GOAL
 
-Show all wallet transactions grouped by day, with type badges
-(unshielded, shielded, dust, contract), lifecycle state (pending,
-confirmed, failed), and a detail drill-in per transaction with an
-external explorer link.
+Show all sigil activity grouped by day: transactions (unshielded,
+shielded, dust, contract), lifecycle state (pending, confirmed, failed),
+and a detail drill-in per entry. Future: agent audit log entries and
+delegation approval events also appear here.
 
 ## 2. SITEMAP POSITION
 
-- `from:` Balance (hero tap) · Send Confirmation ("View in history") ·
-  Dust (hero tap, filtered to DUST — stub: unfiltered until v1.1+)
-- `to:` Tx Detail (row tap) · External explorer (detail link) ·
-  Balance (back arrow)
+- **Tab:** Activity (tab root screen)
+- `from:` Bottom nav (Activity tab) · Send Confirmation ("View in
+  history" deep-links to this tab)
+- `to:` Tx Detail (row tap, push within Activity tab) ·
+  External explorer (detail link, browser)
 
 ## 3. STATES
 
@@ -191,7 +192,7 @@ space-24 above safe-area-insets.bottom
 
 | Element        | Gesture | Result                                          |
 |----------------|---------|--------------------------------------------------|
-| Back arrow     | Tap     | Pop to Balance                                   |
+| App glyph (tab root) | —  | No action — Activity is a tab root, no back arrow |
 | TxRow          | Tap     | Navigate to Tx Detail for that transaction       |
 | Error "Retry"  | Tap     | Trigger indexer re-fetch                         |
 
@@ -309,6 +310,9 @@ Exact strings; do not rewrite.
   implementation.
 - No filter / search in v1.0 (deferred to v1.1+).
 - Tx Detail shows actual fee paid (not the estimate from Confirmation).
+- Bottom nav bar visible on this screen (tab root).
+- No back arrow — top bar shows app glyph (tab root behavior).
+- Tx Detail is a pushed sub-screen — bottom nav hides, back arrow appears.
 
 ## 12. NEW COMPONENTS
 

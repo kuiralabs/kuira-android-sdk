@@ -1,16 +1,16 @@
-# Screen — Onboarding flow (T1-8 visual pass + new "All set" screen)
+# Screen — Onboarding flow (T1-8 visual pass + "Forge your Sigil")
 
 ## 1. GOAL
 
-Linear wizard for first-launch wallet creation. Five screens, each
+Linear wizard for first-launch sigil creation. Five screens, each
 with one job. Biometric-only auth (no passcode in v1.0). Ends with
-Terms/Privacy agreement before entering Balance.
+Terms/Privacy agreement before entering the main app (My Sigil tab).
 
 ## 2. SITEMAP POSITION
 
-- `from:` App first launch (no wallet exists)
-- `to:` Recovery phrase view (08, post-creation) · Balance (01, after
-  "All set" completion)
+- `from:` App first launch (no sigil exists)
+- `to:` Recovery phrase view (08, post-creation) · Main tabs (My Sigil
+  home, after "All set" completion)
 
 ## 3. STATES
 

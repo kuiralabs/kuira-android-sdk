@@ -8,6 +8,7 @@ payment URI so any Kuira-compatible sender can scan-to-prefill.
 
 ## 2. SITEMAP POSITION
 
+- **Tab:** Assets (push from Balance)
 - `from:` Balance (Receive quick-action circle)
 - `to:` Balance (back arrow) · share sheet (system) · full-screen QR
   (tap QR to expand)

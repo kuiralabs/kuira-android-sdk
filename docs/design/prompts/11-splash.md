@@ -3,15 +3,15 @@
 ## 1. GOAL
 
 Animated splash screen using the Android 12+ Splash Screen API. Shows
-the app icon symbol + "KUIRA" wordmark, then transitions to Balance.
-Total duration ≤ 800ms. The splash is the first thing the user sees —
-it sets the brand tone.
+the app icon symbol + "KUIRA" wordmark, then transitions to the main
+app. Total duration ≤ 800ms. The splash is the first thing the user
+sees — it sets the brand tone.
 
 ## 2. SITEMAP POSITION
 
 - `from:` App cold start · process restart
-- `to:` Balance (01) on existing wallet · Onboarding (09) on first
-  launch
+- `to:` Main tabs (My Sigil home) on existing sigil · Onboarding (09)
+  on first launch
 
 ## 3. STATES
 
@@ -105,8 +105,8 @@ None. Splash is passive — no user action, no feedback.
 
 ## 9. A11Y
 
-- Screen reader: announce `Kuira Wallet, loading` during splash,
-  then announce the target screen (Balance or Onboarding) on arrival.
+- Screen reader: announce `Kuira, loading` during splash,
+  then announce the target screen (My Sigil or Onboarding) on arrival.
 - Reduce-motion: all animation skipped; static icon + immediate
   transition.
 - No interactive elements — no touch targets to audit.

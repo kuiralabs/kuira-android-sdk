@@ -9,11 +9,12 @@ Settings at any time.
 
 ## 2. SITEMAP POSITION
 
+- **Tab:** Settings (push from Settings) or Assets (push from backup banner)
 - `from:` Settings ("View recovery phrase" row, biometric-gated) ·
   Balance (backup banner, biometric-gated) ·
   Onboarding post-creation flow (first display)
-- `to:` Settings (back arrow) · Balance (if entered from onboarding,
-  after "I understand" confirmation)
+- `to:` Previous screen (back arrow) · Main tabs (if entered from
+  onboarding, after "I understand" confirmation)
 
 ## 3. STATES
 
