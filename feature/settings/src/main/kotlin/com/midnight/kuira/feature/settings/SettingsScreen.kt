@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -28,7 +27,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Fingerprint
@@ -96,7 +94,6 @@ private const val URL_SUPPORT = "https://github.com/nel349/kuira-android-wallet/
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit = {},
     onNavigateToRecoveryPhrase: () -> Unit = {},
     onWipeComplete: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -105,7 +102,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
-    val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
 
     // Sheet states
     var showNetworkPicker by remember { mutableStateOf(false) }
@@ -145,7 +141,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(top = statusBarPadding.calculateTopPadding()),
         ) {
-            // Top bar
+            // Top bar — tab root (no back arrow)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -153,15 +149,6 @@ fun SettingsScreen(
                     .height(TopBarHeight)
                     .padding(horizontal = Space16),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to balance",
-                    tint = MidnightColors.Light,
-                    modifier = Modifier
-                        .size(Icon24)
-                        .clickable { onBack() },
-                )
-                Spacer(modifier = Modifier.width(Space16))
                 Text(
                     text = "Settings",
                     color = MidnightColors.Light,
@@ -177,7 +164,7 @@ fun SettingsScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Space16)
-                    .padding(bottom = navBarPadding.calculateBottomPadding() + Space24),
+                    .padding(bottom = Space24),
             ) {
                 Spacer(modifier = Modifier.height(Space16))
 

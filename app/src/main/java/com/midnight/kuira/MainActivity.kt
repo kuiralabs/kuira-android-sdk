@@ -13,7 +13,7 @@ import com.midnight.kuira.core.designsystem.theme.KuiraTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
- * Main entry point for Kuira Wallet. Hosts the WalletGate → AppNavigation composition.
+ * Main entry point for Kuira. Hosts the WalletGate → AppNavigation composition.
  */
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -26,11 +26,11 @@ class MainActivity : FragmentActivity() {
         setContent {
             KuiraTheme {
                 // Gate the whole app behind the onboarding flow. On first launch
-                // (or after a wallet reset), WalletGate shows OnboardingScreen
-                // until the user creates or restores a wallet. Once a seed is
-                // persisted, the content slot renders the normal app navigation.
-                WalletGate(activity = this@MainActivity) {
-                    AppNavigation()
+                // (or after a wallet wipe), WalletGate shows OnboardingScreen
+                // until the user forges a sigil. Once a seed is persisted, the
+                // content slot renders the 4-tab navigation.
+                WalletGate(activity = this@MainActivity) { onWalletWiped ->
+                    AppNavigation(onWalletWiped = onWalletWiped)
                 }
             }
         }

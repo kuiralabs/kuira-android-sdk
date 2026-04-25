@@ -70,6 +70,15 @@ class WalletGateViewModel @Inject constructor(
     fun onWalletCreated() {
         _state.value = WalletGateState.Ready
     }
+
+    /**
+     * Called after a wallet wipe completes. Flips the gate back to [WalletGateState.NoWallet]
+     * so the onboarding flow re-appears. The NavHost inside AppNavigation exits composition
+     * and recomposes fresh when the user forges a new sigil.
+     */
+    fun onWalletWiped() {
+        _state.value = WalletGateState.NoWallet
+    }
 }
 
 /**
@@ -83,8 +92,8 @@ class WalletGateViewModel @Inject constructor(
  * ```kotlin
  * setContent {
  *     KuiraTheme {
- *         WalletGate(activity = this) {
- *             AppNavigation()
+ *         WalletGate(activity = this) { onWalletWiped ->
+ *             AppNavigation(onWalletWiped = onWalletWiped)
  *         }
  *     }
  * }
@@ -93,12 +102,14 @@ class WalletGateViewModel @Inject constructor(
  * @param activity The hosting FragmentActivity — required by BiometricPrompt
  *   inside the onboarding flow.
  * @param content The actual app content, shown only after a wallet exists.
+ *   Receives an `onWalletWiped` callback that flips the gate back to
+ *   [WalletGateState.NoWallet] after a wallet wipe.
  */
 @Composable
 fun WalletGate(
     activity: FragmentActivity,
     viewModel: WalletGateViewModel = hiltViewModel(),
-    content: @Composable () -> Unit,
+    content: @Composable (onWalletWiped: () -> Unit) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -119,7 +130,7 @@ fun WalletGate(
             )
         }
         WalletGateState.Ready -> {
-            content()
+            content { viewModel.onWalletWiped() }
         }
     }
 }
