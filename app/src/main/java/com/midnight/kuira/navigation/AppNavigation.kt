@@ -1,13 +1,9 @@
 package com.midnight.kuira.navigation
 
-import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -29,10 +25,10 @@ import com.midnight.kuira.dev.wireframes.send.SendWireframeWithDevControls
 import com.midnight.kuira.dev.wireframes.settings.SettingsWireframeWithDevControls
 import com.midnight.kuira.feature.balance.BalanceScreen
 import com.midnight.kuira.feature.balance.redesign.BalanceWireframeWithDevControls
+import com.midnight.kuira.dev.BalanceWithDevPortalFab
 import com.midnight.kuira.feature.dust.DustScreen
 import com.midnight.kuira.feature.send.SendMode
 import com.midnight.kuira.feature.send.SendScreen
-import com.midnight.kuira.dev.BalanceWithDevPortalFab
 import com.midnight.kuira.feature.settings.SettingsScreen
 import com.midnight.kuira.placeholder.ActivityPlaceholderScreen
 import com.midnight.kuira.placeholder.MySigilPlaceholderScreen
@@ -87,7 +83,6 @@ private val TAB_ROOT_ROUTES = setOf(
     Screen.Settings.route,
 )
 
-@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
@@ -98,17 +93,13 @@ fun AppNavigation(
     val currentGraphRoute = navBackStackEntry?.destination?.parent?.route
     val showBottomBar = currentRoute in TAB_ROOT_ROUTES
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Screen.MySigilGraph.route,
-            // Reserve space for bottom bar on tab root screens so content
-            // doesn't get clipped. Sub-screens use the full height.
-            modifier = if (showBottomBar) {
-                Modifier.padding(bottom = BottomNavBarContentHeight)
-            } else {
-                Modifier
-            },
+            // Column + weight(1f): NavHost fills space above the bottom bar.
+            // When the bar is hidden (sub-screens), NavHost gets the full height.
+            modifier = Modifier.weight(1f),
         ) {
             // ================================================================
             // Tab 1: My Sigil (home)
@@ -328,7 +319,6 @@ fun AppNavigation(
                         restoreState = true
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }

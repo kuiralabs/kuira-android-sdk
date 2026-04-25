@@ -1,5 +1,5 @@
-// This file is part of Kuira Wallet.
-// Copyright (C) 2025 Kuira Wallet
+// This file is part of Kuira.
+// Copyright (C) 2025 Kuira
 // SPDX-License-Identifier: Apache-2.0
 
 package com.midnight.kuira.feature.onboarding
