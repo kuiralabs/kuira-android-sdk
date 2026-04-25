@@ -48,16 +48,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import com.midnight.kuira.core.designsystem.theme.DuskTypography
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -151,9 +149,8 @@ fun SettingsScreen(
             ) {
                 Text(
                     text = "Settings",
+                    style = DuskTypography.body,
                     color = MidnightColors.Light,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.W300,
                 )
             }
             HorizontalDivider(color = MidnightColors.LightFaint, thickness = 1.dp)
@@ -309,10 +306,8 @@ fun SettingsScreen(
             Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
                 Text(
                     text = "SELECT NETWORK",
+                    style = DuskTypography.labelTiny,
                     color = MidnightColors.LightMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.W400,
-                    letterSpacing = 3.sp,
                 )
                 Spacer(modifier = Modifier.height(Space16))
                 MidnightNetwork.entries.forEach { network ->
@@ -337,16 +332,15 @@ fun SettingsScreen(
                     ) {
                         Text(
                             text = network.name,
+                            style = DuskTypography.body,
                             color = if (isSelected) MidnightColors.Light else MidnightColors.LightSoft,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.W400 else FontWeight.W300,
                             modifier = Modifier.weight(1f),
                         )
                         if (isSelected) {
                             Text(
                                 text = "✓",
+                                style = DuskTypography.body,
                                 color = MidnightColors.Light,
-                                fontSize = 16.sp,
                             )
                         }
                     }
@@ -365,23 +359,20 @@ fun SettingsScreen(
             Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
                 Text(
                     text = "Wipe wallet?",
+                    style = DuskTypography.headlineSm,
                     color = MidnightColors.Light,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.W300,
                 )
                 Spacer(modifier = Modifier.height(Space8))
                 Text(
                     text = "This erases your seed, keys, and cached state from this device. You can only restore with your recovery phrase.",
+                    style = DuskTypography.body,
                     color = MidnightColors.LightSoft,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.W300,
-                    lineHeight = 20.sp,
                 )
                 Spacer(modifier = Modifier.height(Space16))
                 Text(
                     text = "Type WIPE to confirm",
+                    style = DuskTypography.detail,
                     color = MidnightColors.LightMuted,
-                    fontSize = 13.sp,
                 )
                 Spacer(modifier = Modifier.height(Space8))
                 // Challenge input
@@ -395,19 +386,14 @@ fun SettingsScreen(
                     if (wipeChallenge.isEmpty()) {
                         Text(
                             text = "WIPE",
+                            style = DuskTypography.inputPlaceholder,
                             color = MidnightColors.LightFaint,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.W300,
                         )
                     }
                     BasicTextField(
                         value = wipeChallenge,
                         onValueChange = { wipeChallenge = it },
-                        textStyle = TextStyle(
-                            color = MidnightColors.Light,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.W300,
-                        ),
+                        textStyle = DuskTypography.input.copy(color = MidnightColors.Light),
                         cursorBrush = SolidColor(MidnightColors.Light),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -439,17 +425,14 @@ fun SettingsScreen(
             Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
                 Text(
                     text = "Force re-sync?",
+                    style = DuskTypography.headlineSm,
                     color = MidnightColors.Light,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.W300,
                 )
                 Spacer(modifier = Modifier.height(Space8))
                 Text(
                     text = "This clears cached transactions and re-syncs from the indexer. Takes a few seconds on a warm stack.",
+                    style = DuskTypography.body,
                     color = MidnightColors.LightSoft,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.W300,
-                    lineHeight = 20.sp,
                 )
                 Spacer(modifier = Modifier.height(Space16))
                 SheetButtonRow(
@@ -476,9 +459,8 @@ fun SettingsScreen(
             Column(modifier = Modifier.padding(horizontal = Space16, vertical = Space16)) {
                 Text(
                     text = "Proof server",
+                    style = DuskTypography.headlineSm,
                     color = MidnightColors.Light,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.W300,
                 )
                 Spacer(modifier = Modifier.height(Space16))
 
@@ -515,19 +497,14 @@ fun SettingsScreen(
                         if (editUrl.isEmpty()) {
                             Text(
                                 text = "http://localhost:6300",
+                                style = DuskTypography.mono,
                                 color = MidnightColors.LightFaint,
-                                fontSize = 14.sp,
-                                fontFamily = FontFamily.Monospace,
                             )
                         }
                         BasicTextField(
                             value = editUrl,
                             onValueChange = { editUrl = it },
-                            textStyle = TextStyle(
-                                color = MidnightColors.Light,
-                                fontSize = 14.sp,
-                                fontFamily = FontFamily.Monospace,
-                            ),
+                            textStyle = DuskTypography.mono.copy(color = MidnightColors.Light),
                             cursorBrush = SolidColor(MidnightColors.Light),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             singleLine = true,
@@ -557,10 +534,8 @@ fun SettingsScreen(
 private fun SectionHeader(label: String) {
     Text(
         text = label,
+        style = DuskTypography.labelTiny,
         color = MidnightColors.LightMuted,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.W400,
-        letterSpacing = 3.sp,
     )
 }
 
@@ -607,20 +582,15 @@ private fun SettingsRowItem(
         }
         Text(
             text = label,
+            style = DuskTypography.body,
             color = labelColor,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.W300,
-            lineHeight = 20.sp,
             modifier = Modifier.weight(1f),
         )
         if (value != null) {
             Text(
                 text = value,
+                style = if (valueMono) DuskTypography.mono else DuskTypography.body,
                 color = valueColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.W300,
-                lineHeight = 20.sp,
-                fontFamily = if (valueMono) FontFamily.Monospace else FontFamily.Default,
             )
         }
         if (resolvedTrailing != null) {
@@ -665,7 +635,7 @@ private fun SheetButtonRow(
                 .clickable(onClick = onCancel),
             contentAlignment = Alignment.Center,
         ) {
-            Text("Cancel", color = MidnightColors.LightMuted, fontSize = 13.sp)
+            Text("Cancel", style = DuskTypography.detail, color = MidnightColors.LightMuted)
         }
         Spacer(modifier = Modifier.width(Space8))
         Box(
@@ -681,9 +651,8 @@ private fun SheetButtonRow(
         ) {
             Text(
                 text = confirmText,
+                style = DuskTypography.detail.copy(fontWeight = FontWeight.Medium),
                 color = if (confirmEnabled) MidnightColors.Void else MidnightColors.LightMuted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
             )
         }
     }
@@ -747,16 +716,14 @@ private fun RadioOption(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
+                style = DuskTypography.body,
                 color = if (isSelected) MidnightColors.Light else MidnightColors.LightSoft,
-                fontSize = 14.sp,
-                fontWeight = if (isSelected) FontWeight.W400 else FontWeight.W300,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
+                style = DuskTypography.caption,
                 color = MidnightColors.LightMuted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
             )
         }
     }

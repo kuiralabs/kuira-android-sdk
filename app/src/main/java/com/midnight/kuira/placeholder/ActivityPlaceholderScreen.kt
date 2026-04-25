@@ -9,9 +9,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.theme.DuskTypography
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 /**
@@ -34,22 +33,18 @@ fun ActivityPlaceholderScreen(
         ) {
             Text(
                 text = "ACTIVITY",
+                style = DuskTypography.labelTiny,
                 color = MidnightColors.LightMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.W400,
-                letterSpacing = 3.sp,
             )
             Text(
                 text = "No activity yet",
+                style = DuskTypography.headlineSm,
                 color = MidnightColors.Light,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.W300,
             )
             Text(
                 text = "Transactions and delegations will appear here",
+                style = DuskTypography.detail,
                 color = MidnightColors.LightMuted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.W400,
             )
         }
     }

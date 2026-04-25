@@ -9,10 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.theme.DuskTypography
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 
 /** Content height of the bottom nav bar. */
@@ -53,9 +53,7 @@ fun KuiraBottomNavBar(
                 label = {
                     Text(
                         text = tab.label,
-                        fontSize = 11.sp,
-                        fontWeight = if (selected) FontWeight.W400 else FontWeight.W300,
-                        lineHeight = 14.sp,
+                        style = DuskTypography.labelTiny.copy(letterSpacing = 0.sp),
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
