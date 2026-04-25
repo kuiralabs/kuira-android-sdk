@@ -1,0 +1,390 @@
+# Midnight Kicks — Penalty Shootout on Midnight
+
+**Status:** Planning
+**Last updated:** 2026-04-24
+**Target:** FIFA World Cup 2026 (June 11 - July 19)
+
+---
+
+## What is Midnight Kicks?
+
+A PvP penalty shootout game for Android, built on the Midnight
+blockchain. Two players, five rounds, real stakes (PREPROD NIGHT).
+Unity 3D graphics with Midnight ZK proofs under the hood.
+
+The game IS a ZK problem: shooter commits a direction, keeper commits
+a direction, neither sees the other's choice until a ZK circuit
+verifies both commitments and discloses the result. No server. No
+trusted third party. The contract is the referee.
+
+## Why
+
+1. **Teaser for Midnight mobile.** Show the ecosystem what's coming
+   before Kuira ships — a real game people play, not a demo.
+2. **SDK validation.** Battle-test compact-engine, connector, and
+   local proof server with real users before Kuira depends on them.
+3. **World Cup timing.** Natural virality — people want penalty
+   shootout games during the tournament.
+4. **Trojan horse for ZK.** Players don't know they're using zero-
+   knowledge proofs. They just know nobody can cheat. Technology
+   that disappears into the experience is the best demo.
+5. **Open-source play.** Only the SDK connector is open-sourced.
+   Other developers see how to build a Midnight dApp on Android.
+   The full Kuira stack stays proprietary.
+
+## Game mechanics
+
+### The match
+
+- **2 players**, matched via QR code scan or shared link
+- **5 rounds** per match (standard penalty shootout)
+- Both players act as shooter AND keeper (alternating roles)
+- Players alternate roles each round
+- If tied after 5: sudden death
+
+### Batch submission — one transaction per player
+
+Each player submits ALL 5 choices in a single transaction. No
+per-round waiting. The circuit compares all 5 rounds at once. Then
+Unity plays the full match as a cinematic replay — zero blockchain
+latency during the action.
+
+```
+1. CHOICE PHASE — both players pick simultaneously
+   Shooter picks all 5 directions: [L, C, R, L, R]
+   Keeper picks all 5 directions:  [R, L, R, C, L]
+   Each submits ONE transaction (commit all 5 + nonces)
+
+2. PROVE PHASE — one ZK circuit runs
+   Circuit compares all 5 rounds at once
+   Results: [GOAL, SAVE, GOAL, GOAL, SAVE] → 3-2
+   Single proof, single verification
+
+3. REPLAY PHASE — Unity plays the match
+   Stadium intro, crowd noise (masks any remaining latency)
+   Round 1: ball flight... GOAL! (1-0)
+   Round 2: ball flight... SAVE! (1-0)
+   Round 3: ball flight... GOAL! (2-0)
+   Round 4: ball flight... GOAL! (2-1)  ← opponent's turn
+   Round 5: ball flight... SAVE! (3-2)  ← match result
+   Full drama. Zero waiting. Pure football.
+```
+
+**Why batch is better than per-round:**
+
+| Aspect | Per-round | Batch |
+|--------|-----------|-------|
+| Transactions per match | 20 (5 rounds × 2 players × 2 ops) | 2 (one per player) |
+| Proof time felt by user | 5× during gameplay | Once, before replay |
+| Gas cost | 20× | 2× |
+| UX during rounds | Interrupted, "blockchain-y" | Cinematic, pure football |
+| Cheating possible | No | No |
+
+The single proof time (5-10 seconds) is masked by a stadium flyover,
+player walk-out, and crowd buildup — feels like a real broadcast
+intro, not a loading screen.
+
+### Sudden death — batches of 5
+
+If tied after regulation (e.g., 3-3), sudden death begins. Both
+players submit another batch of 5 choices. The circuit evaluates
+round-by-round and STOPS at the first decisive round:
+
+```
+SD Round 1: both score   → continue
+SD Round 2: both miss    → continue
+SD Round 3: P1 scores, P2 misses → P1 WINS
+SD Rounds 4-5: never revealed (unnecessary)
+```
+
+**ZK property:** unrevealed sudden death rounds stay private. The
+circuit only discloses results up to the decisive round. The opponent
+never learns your strategy for rounds that didn't matter.
+
+If still tied after a sudden death batch → another batch of 5.
+Repeat until resolved.
+
+### Why this can't be cheated
+
+- Each player commits all choices before the other reveals. The
+  commitment is a hash of the 5 choices + nonces, stored as private
+  state in a single transaction.
+- The ZK circuit proves the revealed choices match the commitments
+  without exposing the raw choices to the opponent.
+- A player who committed [L,C,R,L,R] cannot later claim [R,R,R,R,R].
+  The proof would fail.
+- No server sees both players' choices. The contract verifies.
+
+## Stakes
+
+- **PREPROD NIGHT** — not real money, but real blockchain interaction.
+  Each match has a configurable stake (default: 1 NIGHT).
+- Winner takes the pot. Draw = both get their stake back.
+- Proves the payment flow works: stake → escrow in contract → payout
+  to winner.
+- When mainnet launches, the same contract works with real NIGHT.
+
+## Matchmaking
+
+Simple, no central server required:
+
+### QR code (in-person)
+```
+Player A: opens Midnight Kicks → "Create Match" → shows QR code
+Player B: scans QR code → joins match
+Both: see each other's address (short format), match begins
+```
+
+### Shared link (remote)
+```
+Player A: "Create Match" → generates midnight://kicks?match=<id>
+Player A: shares link via any messaging app
+Player B: taps link → Midnight Kicks opens → joins match
+```
+
+Both methods use the Kuira Connector deep link transport pattern
+(`midnight://` URI scheme). The match ID is a contract instance
+address on PREPROD.
+
+## Architecture
+
+```
+Midnight Kicks (Android app)
+│
+├── Unity (game layer — Unity as a Library / UaaL)
+│   ├── 3D stadium, goal, ball, players
+│   ├── Shooter aiming UI (drag to aim)
+│   ├── Keeper positioning UI (drag to dive)
+│   ├── Ball flight + save/goal animations
+│   ├── Match lobby, score display, result screen
+│   ├── Leaderboard UI
+│   └── UaaL bridge → sends/receives events to Kotlin
+│
+├── Kotlin (blockchain layer — native Android)
+│   ├── compact-engine (SDK)
+│   │   ├── Contract deployment (create match)
+│   │   ├── Circuit execution (commit choice, reveal, compare)
+│   │   ├── Local proof generation (on-device)
+│   │   └── Transaction submission
+│   │
+│   ├── connector (subset)
+│   │   ├── QR code generation + scanning
+│   │   ├── Deep link handling (midnight://kicks?match=...)
+│   │   └── Player pairing protocol
+│   │
+│   ├── network
+│   │   ├── Indexer client (PREPROD)
+│   │   ├── Node RPC client (PREPROD)
+│   │   └── Network config (hardcoded to PREPROD)
+│   │
+│   └── UaaL bridge → receives/sends events to Unity
+│
+└── Compact contract (deployed on PREPROD)
+    ├── Private state
+    │   ├── p1Choices: Field[5] (all 5 directions, hidden)
+    │   ├── p2Choices: Field[5] (all 5 directions, hidden)
+    │   ├── p1Nonces: Field[5] (commitment randomness)
+    │   ├── p2Nonces: Field[5] (commitment randomness)
+    │   └── sdChoices/Nonces: Field[5] (sudden death batches)
+    ├── Ledger (public)
+    │   ├── matchId: Bytes
+    │   ├── player1: Bytes (address)
+    │   ├── player2: Bytes (address)
+    │   ├── score1: Counter
+    │   ├── score2: Counter
+    │   ├── roundResults: Bytes[5] (GOAL/SAVE per round)
+    │   ├── sdRoundResults: Bytes[5] (sudden death, partial)
+    │   ├── decisiveRound: Counter (SD stops here)
+    │   ├── winner: Bytes (address, zero if in progress)
+    │   ├── stake: Uint
+    │   └── state: enum (WAITING, COMMITTING, PROVING, REPLAY, SD, COMPLETE)
+    ├── Circuits
+    │   ├── createMatch(stake) → deploy, escrow stake
+    │   ├── joinMatch() → escrow stake
+    │   ├── commitBatch(directions[5], nonces[5]) → hash all 5
+    │   ├── resolveRegulation() → compare all 5, score + results
+    │   ├── commitSuddenDeath(directions[5], nonces[5]) → hash
+    │   ├── resolveSuddenDeath() → round-by-round until decisive
+    │   └── claimPayout() → winner withdraws pot
+    └── Witnesses
+        ├── generateBatchCommitment(directions[5], nonces[5]) → hash
+        └── checkDecisiveRound(results[5]) → first round with winner
+```
+
+## Unity ↔ Kotlin bridge (UaaL)
+
+Unity as a Library (UaaL) lets Unity run as an Android View inside
+a native Android app. Communication:
+
+### Kotlin → Unity
+```kotlin
+// Send events to Unity game objects
+UnityPlayer.UnitySendMessage(
+    "GameManager",        // Unity GameObject name
+    "OnMatchJoined",      // Method name
+    matchId,              // String payload (JSON)
+)
+```
+
+### Unity → Kotlin
+```csharp
+// Unity C# calls Android native
+AndroidJavaObject bridge = new AndroidJavaObject("com.midnight.kicks.UnityBridge");
+bridge.Call("onAllChoicesSubmitted", choicesJson); // all 5 at once
+```
+
+### Event flow for a full match
+```
+Unity                          Kotlin                    Midnight
+  │                              │                          │
+  │  ── CHOICE PHASE ──          │                          │
+  ├─ Player picks 5 dirs ───────►│                          │
+  │  [L, C, R, L, R]            │                          │
+  │                              ├─ commitBatch([5]) ──────►│
+  │                              │  (builds tx, proves)     │
+  │                              │◄─── tx confirmed ────────┤
+  │◄── "WaitingForOpponent" ─────┤                          │
+  │   (show "waiting..." UI)     │                          │
+  │                              │◄─── opponent committed ──┤
+  │                              │                          │
+  │  ── PROVE PHASE ──           │                          │
+  │◄── "MatchReady" ─────────────┤                          │
+  │   (stadium intro, flyover,   ├─ resolveRegulation() ───►│
+  │    crowd noise, walk-out)    │  (single ZK circuit)     │
+  │   (5-10 sec feels like TV)   │◄─── 5 results ──────────┤
+  │                              │                          │
+  │  ── REPLAY PHASE ──          │                          │
+  │◄── "PlayReplay([results])" ──┤                          │
+  │   Round 1: GOAL! (1-0)      │                          │
+  │   Round 2: SAVE! (1-0)      │                          │
+  │   Round 3: GOAL! (2-0)      │                          │
+  │   Round 4: GOAL! (2-1)      │                          │
+  │   Round 5: SAVE! (3-2)      │                          │
+  │   MATCH RESULT: P1 WINS     │                          │
+  │                              │                          │
+  │  ── SUDDEN DEATH (if tied) ──│                          │
+  │   (back to choice phase)     │                          │
+```
+
+## Proof time = broadcast intro
+
+On-device ZK proof generation takes 5-10 seconds. With batch
+submission, this happens ONCE per match (not per round). The wait
+is masked by a stadium flyover, crowd buildup, players walking out
+of the tunnel — feels like a real TV broadcast intro.
+
+Then the replay plays uninterrupted. Five rounds of pure football
+drama with zero loading. The blockchain is invisible.
+
+## Kuira module reuse
+
+| Kuira module | Midnight Kicks usage | Open-sourced? |
+|-------------|---------------------|---------------|
+| `core:compact-engine` | Contract calls, proving, runtime | No (SDK binary) |
+| `core:connector` (subset) | QR pairing, deep links | Yes (SDK connector) |
+| `core:network` | Indexer + Node RPC clients | No |
+| `core:crypto` | Key derivation for match signing | No |
+| Local proof server | On-device ZK proving | No (bundled) |
+
+The app ships as a single APK with all Kuira modules bundled. The
+SDK connector source is open so other devs can build their own
+Midnight Android dApps using the same pairing pattern.
+
+## What gets validated
+
+Every feature Midnight Kicks exercises is a feature Kuira depends on:
+
+| Feature | Kicks validates | Kuira benefits |
+|---------|----------------|----------------|
+| On-device proving | Proof time on real hardware | Proof server reliability |
+| Contract deployment | Deploy from mobile | dApp interactions |
+| Private state | Commit-reveal pattern | Shielded transactions |
+| Transaction flow | Build → prove → submit | Send flow |
+| QR pairing | Match joining | dApp connector |
+| Deep links | `midnight://kicks?...` | `midnight://connect?...` |
+| PREPROD network | Real blockchain ops | Network switching |
+| Key management | Match signing keys | Wallet key management |
+| User feedback | App Store reviews | UX insights |
+
+## Standalone app structure
+
+```
+midnight-kicks/              (new repo)
+├── app/                     (Android app module)
+│   ├── src/main/
+│   │   ├── java/.../kicks/
+│   │   │   ├── MainActivity.kt
+│   │   │   ├── UnityBridge.kt
+│   │   │   ├── match/
+│   │   │   │   ├── MatchViewModel.kt
+│   │   │   │   ├── MatchRepository.kt
+│   │   │   │   └── MatchState.kt
+│   │   │   ├── pairing/
+│   │   │   │   ├── QrScanScreen.kt
+│   │   │   │   └── LinkHandler.kt
+│   │   │   └── leaderboard/
+│   │   │       └── LeaderboardViewModel.kt
+│   │   └── AndroidManifest.xml
+│   └── build.gradle.kts
+│
+├── unity/                   (Unity project — exported as UaaL)
+│   ├── Assets/
+│   │   ├── Scripts/
+│   │   │   ├── GameManager.cs
+│   │   │   ├── ShooterController.cs
+│   │   │   ├── KeeperController.cs
+│   │   │   ├── BallPhysics.cs
+│   │   │   └── AndroidBridge.cs
+│   │   ├── Scenes/
+│   │   │   ├── MainMenu.unity
+│   │   │   ├── Stadium.unity
+│   │   │   └── Results.unity
+│   │   ├── Models/       (3D assets)
+│   │   ├── Animations/
+│   │   └── Materials/
+│   └── ProjectSettings/
+│
+├── contract/                (Compact smart contract)
+│   ├── src/
+│   │   └── penalty.compact
+│   ├── tests/
+│   └── package.json
+│
+├── libs/                    (pre-built Kuira SDK modules)
+│   ├── compact-engine.aar
+│   ├── connector-sdk.aar
+│   ├── network.aar
+│   └── crypto.aar
+│
+└── docs/
+    ├── ARCHITECTURE.md
+    └── SDK_INTEGRATION.md
+```
+
+## Key references
+
+- Unity as a Library: https://docs.unity3d.com/Manual/UnityasaLibrary-Android.html
+- Kuira compact-engine SDK: `core:compact-engine/`
+- Kuira Connector: `core:connector/`
+- Compact language: Midnight SDK docs
+- PREPROD network config: `core:network/NetworkConfig.kt`
+- QR + deep link patterns: `core:connector/transport/`
+- Existing Compact example: `examples:bboard/` (BBoard contract)
+
+## Relationship to Kuira
+
+Midnight Kicks is NOT part of the Kuira codebase. It's a separate
+repo that consumes Kuira modules as pre-built AARs. This is
+intentional:
+
+1. **Proves the SDK works standalone** — if Kicks can't build without
+   the full Kuira repo, the SDK isn't self-contained enough.
+2. **Tests the module boundary** — forces clean APIs between modules.
+3. **Separate release cycle** — Kicks ships on its own timeline.
+4. **Open-source boundary** — Kicks repo can be public (or partially
+   public) without exposing Kuira internals.
+
+After Kicks ships, the open-sourced connector SDK + documentation
+become the "Build on Midnight (Android)" developer story. Other
+devs follow the same pattern: Unity/native app + connector SDK +
+pre-built compact-engine AAR.
