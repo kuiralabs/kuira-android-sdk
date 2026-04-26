@@ -254,7 +254,11 @@ Kuira has a solid foundation with ~185.5 hours invested:
 
 **What's remaining:**
 - Agent Runtime (Phase 7) — on-chain agent authorization via Compact contracts
-- Production Polish (Phase 8) — onboarding, settings, app store readiness
+- Production Polish (Phase 8) — settings ✅ shipped, remaining 8B.3 screens in progress
+- Midnight Android SDK — single AAR, embedded wallet, passkey identity (see `MIDNIGHT_KICKS_PLAN.md`)
+- Passkey + DID implementation — CredentialManager integration, `did:key` derivation
+- PRF-based recovery — encrypted cloud backup, zero-seed onboarding
+- Midnight Kicks — first SDK consumer, World Cup 2026 target
 - Agent Store infrastructure (Phases 9+)
 - Dust sync optimization (10min → 30s)
 
@@ -275,21 +279,35 @@ Kuira has a solid foundation with ~185.5 hours invested:
 
 ### Gaps: What Needs to Change
 
-| Gap | Current State | Charles's Vision | Impact on Kuira |
-|-----|---------------|-----------------|----------------|
-| **Account Abstraction** | MVP seed phrase input | Keys in TEE, never user-accessible, social recovery | Must migrate to TEE key storage + recovery service |
-| **Intent System** | Direct transaction building | CAKE/APSS framework, solvers handle execution | Needs intent submission API, solver discovery |
-| **Capacity Exchange** | DUST-only fee payment | Pay in anything (stablecoins, BTC, credit card) | Integrate capacity exchange when available |
-| **Midnight Passport / DID** | No identity features | Selective disclosure, universal DID, ZK compliance | DID/VC integration for compliant transactions |
-| **MOS / dApp Layer** | No dApp hosting | WASM dApps, one-click install, keychain isolation | Embed WASM runtime or WebView for MOS dApps |
-| **Multi-chain Keys** | Midnight-only derivation | Single seed → wallets for any chain | Extend key derivation for cross-chain support |
-| **Keychain Isolation** | Single account model | Work/Home/Play/Funky with plausible deniability | New derivation architecture, per-keychain dApp contexts |
+| Gap | Current State (April 2026) | Charles's Vision | Status |
+|-----|---------------------------|-----------------|--------|
+| **Account Abstraction** | **Passkey + PRF architecture designed.** Root passkey (P-256, TEE) authorizes secp256k1 access keys via self-verifiable keyAuthorization. Recovery via PRF-encrypted cloud backup. No seed phrase in default flow. | Keys in TEE, never user-accessible, social recovery | **Path clear** — see `IDENTITY_INVESTIGATION.md` |
+| **DID / Identity** | **`did:key` from root passkey decided.** One DID per user (sigil identity). Interop with rvcas midnightOS Passkeys investigated. | Selective disclosure, universal DID, ZK compliance | **Path clear** — implementation needed |
+| **Sigil (product framing)** | **"Kuira is a Sigil" — documented.** Three facets: Identity, Authority, State. 4-tab bottom nav shipped (My Sigil / Assets / Activity / Settings). Vocabulary, SDK naming, connector protocol designed. | "You shouldn't need a wallet" (CTO) | **Shipped** (docs + nav) — see `KUIRA_IDENTITY_VISION.md` |
+| **Midnight Android SDK** | **Architecture designed.** Single AAR packaging all 5 core modules. Embedded wallet (no external process). Two-tier identity (standalone → Kuira-enhanced). Midnight Kicks is first consumer. | Developer-friendly mobile SDK | **Path clear** — see `MIDNIGHT_KICKS_PLAN.md` |
+| **Intent System** | Direct transaction building | CAKE/APSS framework, solvers handle execution | **Waiting** — needs Midnight protocol specs |
+| **Capacity Exchange** | DUST-only fee payment | Pay in anything (stablecoins, BTC, credit card) | **Waiting** — needs Midnight protocol support |
+| **MOS / dApp Layer** | No dApp hosting | WASM dApps, one-click install, keychain isolation | **Waiting** — needs MOS spec availability |
+| **Multi-chain Keys** | Midnight-only derivation | Single seed → wallets for any chain | **Deferred** — focus on Midnight first |
+| **Keychain Isolation** | Single account model | Work/Home/Play/Funky with plausible deniability | **Deferred** — per-dApp access keys are a step toward this |
 
 ### Key Insight
 
-Charles is describing a world where **the wallet IS the operating system** for Midnight. Not just send/receive — it hosts dApps, manages keychains, handles intents, runs WASM. The wallet that does this best on Android wins.
+Charles is describing a world where **the wallet IS the operating system** for Midnight. Not just send/receive — it hosts dApps, manages keychains, handles intents, runs WASM.
 
-This aligns perfectly with the Kuira vision of being **the best AI/agent/game devEx wallet**. The difference is we can get there first by building the developer infrastructure (connectors, APIs, SDKs) while the MOS specs are still being finalized.
+**Update (April 2026):** Kuira is no longer a "wallet" — it's a
+**Sigil**: a private digital identity that authenticates, delegates,
+and protects across all Midnight apps. The wallet features (balance,
+send, receive) are one facet. The core product is identity management,
+delegation policies, and encrypted state across all dApps.
+
+The Midnight Android SDK lets dApps exist standalone without Kuira.
+Kuira is the upgrade — TEE-hardened keys, biometric gates, cross-app
+sigil management. Midnight Kicks (World Cup 2026) is the first SDK
+consumer, validating the developer experience before Kuira ships.
+
+See: `KUIRA_IDENTITY_VISION.md`, `MIDNIGHT_KICKS_PLAN.md`,
+`IDENTITY_INVESTIGATION.md`.
 
 ### Mainnet Launch Changes the Timeline
 
