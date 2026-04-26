@@ -396,8 +396,10 @@ or automatic proving key installation.
 |---------|---------------|----------------|
 | Match pairing (QR + deep link) | Two players find each other | Becomes the connector-sdk pairing pattern |
 | Batch circuit calls | 5 choices committed in one tx | Proves batch witness patterns work |
-| On-chain state polling | Wait for opponent's commit | Subscription/polling pattern for SDK |
+| Contract state subscription | Wait for opponent's commit in real-time | SDK needs a contract state observer (adapter over existing indexer WebSocket subscription infrastructure) |
+| Contract deployment from SDK | Each match = new contract instance | SDK deploy API for mobile-first dApps |
 | Simple onboarding (no seed phrase) | Generate keys, start playing | Validates the "no wallet needed" UX |
+| PRF-encrypted recovery | Player restores on new device | Validates the zero-seed recovery path |
 
 ---
 
