@@ -409,9 +409,9 @@ fix before SDK GA.
 
 | Gap | Impact | Fix needed |
 |-----|--------|-----------|
-| **Connector has 5 internal deps** | Can't ship connector as standalone AAR. `ConnectedAPIHandler` imports from core:crypto, core:indexer, core:ledger, core:network, core:wallet. | Extract transport layers (WebSocket, Binder, JsBridge) + QR pairing into a standalone `connector-sdk` module with interface-based deps |
+| **Connector has stale Gradle deps** | `build.gradle.kts` lists 5 internal modules (crypto, indexer, ledger, network, wallet) but the source code only imports `core:network.NetworkConfig`. The handler uses interfaces/lambdas for everything else. The stale deps prevent shipping a clean AAR — remove them from Gradle and the connector is already standalone. | Remove unused deps from `core:connector/build.gradle.kts`. Verify build passes with only `core:network`. |
 | **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
-| **No QR pairing in SDK** | Kicks uses QR/link to match players. The QR logic is in the connector but coupled to wallet internals. | Extract QR generation + scanning + deep link handling into connector-sdk |
+| **No QR pairing in SDK** | Kicks uses QR/link to match players. QR generation/scanning is not in the connector — it only handles WebSocket/Binder/JsBridge transports. | Build QR + deep link pairing as a new lightweight module or directly in Kicks |
 | **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
 | **No simple key generation** | External dev needs full HDWallet + BIP-39 + BIP-32 path derivation just to get a signing key. High friction. | Add `MidnightKeyPair.generate()` convenience API — one-liner for a new keypair |
 
