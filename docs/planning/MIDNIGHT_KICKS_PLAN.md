@@ -276,19 +276,36 @@ of the tunnel — feels like a real TV broadcast intro.
 Then the replay plays uninterrupted. Five rounds of pure football
 drama with zero loading. The blockchain is invisible.
 
-## Kuira module reuse
+## The Midnight Android SDK
 
-| Kuira module | Midnight Kicks usage | Open-sourced? |
-|-------------|---------------------|---------------|
-| `core:compact-engine` | Contract calls, proving, runtime | No (SDK binary) |
-| `core:connector` (subset) | QR pairing, deep links | Yes (SDK connector) |
-| `core:network` | Indexer + Node RPC clients | No |
-| `core:crypto` | Key derivation for match signing | No |
-| Local proof server | On-device ZK proving | No (bundled) |
+Midnight Kicks is the first consumer of the Midnight Android SDK.
+The SDK is not a side artifact for the game — it's the product.
+Kicks validates it, then every Midnight dApp on Android uses it.
 
-The app ships as a single APK with all Kuira modules bundled. The
-SDK connector source is open so other devs can build their own
-Midnight Android dApps using the same pairing pattern.
+```
+midnight-sdk (published artifact)
+├── Public: MidnightSdk, MidnightWallet, MidnightContract, MidnightConfig
+├── Internal: compact-engine, crypto, indexer, ledger, network
+├── Native: libkuira_crypto_ffi.so (arm64-v8a, x86_64)
+└── Source: lives in kuira-android-wallet repo, published as AAR
+```
+
+| Component | Source module | Ships in SDK? | Open-sourced? |
+|-----------|-------------|---------------|---------------|
+| Circuit execution + proving | `core:compact-engine` | ✅ | SDK binary |
+| Key derivation + signing | `core:crypto` | ✅ | SDK binary |
+| UTXO tracking | `core:indexer` | ✅ | SDK binary |
+| Tx balancing + submission | `core:ledger` | ✅ | SDK binary |
+| Network config | `core:network` | ✅ | SDK binary |
+| SDK facade (MidnightSdk, MidnightWallet) | New thin layer | ✅ | SDK binary |
+| Connector (pairing, transports) | `core:connector` | Separate | Yes (open-source) |
+
+The SDK AAR ships as a binary. The connector SDK ships separately
+as open source so devs can see the pairing + transport patterns.
+
+Kuira Wallet itself consumes the same SDK — it's just a more
+capable consumer (TEE keys, biometric gates, sigil management,
+cross-app state). The SDK is the foundation for both.
 
 ## What gets validated
 
@@ -436,15 +453,96 @@ every Midnight dApp on Android can embed.
 
 ### What this means for the SDK
 
-The lightweight wallet module is the missing piece. Today, a dApp
-developer must either:
-- Import full `core:crypto` with BIP-39/32 and run a seed phrase
-  onboarding (too heavy for a game)
-- Or require Kuira to be installed (blocks adoption)
+Today a dApp developer must either:
+- Import 5 modules, wire Hilt, manage UTXO tracking manually, AND
+  require Kuira or `mn serve` running as the wallet backend
+- Or require Kuira installed on the device (blocks adoption)
 
-The lightweight module gives developers a third option:
-`MidnightWallet.create(context)` → ready to sign transactions.
-One line. No ceremony. Kuira upgrades the experience when present.
+The solution: **one SDK AAR that packages everything.**
+
+#### Developer experience (target)
+
+```kotlin
+// build.gradle.kts — ONE dependency
+implementation("midnight:sdk:1.0")
+```
+
+```kotlin
+// Create SDK instance — configures network, indexer, node
+val midnight = MidnightSdk.create(context) {
+    network = MidnightNetwork.PREPROD
+}
+
+// Create or load wallet — keys in Android Keystore, no seed phrase
+val wallet = midnight.wallet()
+
+// Connect to a contract
+val contract = midnight.contract {
+    contractJs = assets.open("penalty.js")
+    address = contractAddress
+    witness("secret") { WitnessResult(null, wallet.secretKey) }
+    coinPublicKey = wallet.coinPublicKey
+}
+
+// Execute circuit — wallet handles balancing + signing + submission
+val receipt = contract.call("commitBatch", choices) { stage ->
+    updateUI(stage)  // Fetching → Executing → Proving → Balancing → Submitting
+}
+
+// Read state
+val state = midnight.queryState(contractAddress)
+```
+
+No Hilt. No 5 module imports. No external wallet process. No
+`walletUrl`. Three objects: `MidnightSdk`, `wallet`, `contract`.
+One `call()` does everything.
+
+#### What's inside the AAR
+
+```
+midnight-sdk.aar
+├── Public API (what developers see)
+│   ├── MidnightSdk        — entry point, builder DSL
+│   ├── MidnightWallet     — key gen + UTXO tracking + balancing + signing
+│   ├── MidnightContract   — circuit execution + proving (existing)
+│   ├── MidnightConfig     — network endpoints (existing)
+│   ├── ContractCallStage  — progress tracking (existing)
+│   └── ContractCallException — error types (existing)
+│
+├── Internals (hidden from developer)
+│   ├── core:compact-engine — QuickJS runtime, contract execution
+│   ├── core:crypto         — HDWallet, Schnorr, Rust FFI + native .so
+│   ├── core:indexer        — UtxoManager, IndexerClient, SubscriptionManager
+│   ├── core:ledger         — TransactionSubmitter, NodeRpcClient, ProofServerClient
+│   └── core:network        — NetworkConfig, endpoint resolution
+│
+└── Native libraries
+    ├── arm64-v8a/libkuira_crypto_ffi.so
+    └── x86_64/libkuira_crypto_ffi.so
+```
+
+The 5 existing Kuira modules ARE the SDK. They just need a thin
+facade (`MidnightSdk` + `MidnightWallet`) and packaging as a
+single AAR. No new crypto, no new FFI, no new protocol code.
+
+#### Tier 1 → Tier 2 upgrade path
+
+When Kuira is installed on the device, `MidnightSdk` detects it
+and transparently upgrades:
+
+```kotlin
+// Same code, no changes by the developer
+val midnight = MidnightSdk.create(context) {
+    network = MidnightNetwork.PREPROD
+}
+
+// Internally:
+// - If Kuira NOT installed → uses embedded MidnightWallet (Tier 1)
+// - If Kuira IS installed → delegates to Kuira's connector (Tier 2)
+//   → TEE-backed keys, biometric gate, sigil identity, My Sigil tab
+```
+
+The developer writes Tier 1 code. Tier 2 happens automatically.
 
 ---
 
@@ -514,7 +612,7 @@ BBoard app                    Kuira / mn serve (REQUIRED)
 | **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
 | **No QR pairing in SDK** | Kicks uses QR/link to match players. QR generation/scanning is not in the connector — it only handles WebSocket/Binder/JsBridge transports. | Build QR + deep link pairing as a new lightweight module or directly in Kicks |
 | **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
-| **No lightweight wallet for standalone dApps** | `MidnightContract.call()` requires `walletUrl` — an external wallet process (Kuira or `mn serve`) for balancing + signing + submission. A standalone dApp can't transact without a wallet running. This is the biggest gap. | Ship a lightweight wallet module: `MidnightWallet.create(context)` that handles key generation (Android Keystore), UTXO tracking, transaction balancing, signing, and submission — all embedded. No external wallet needed. No seed phrase. When Kuira is installed, dApp upgrades to sigil-backed identity. |
+| **SDK requires external wallet process** | `MidnightContract.call()` requires `walletUrl` — an external wallet (Kuira or `mn serve`) for balancing + signing + submission. A standalone dApp can't transact without it. This is the biggest gap. | Package a single `midnight-sdk.aar` that bundles all 5 core modules (compact-engine, crypto, indexer, ledger, network) behind a thin facade: `MidnightSdk.create()` + `MidnightWallet` + `MidnightContract`. The wallet operations run embedded — no external process. This IS the Midnight Android SDK. |
 
 ### What Kicks builds that Kuira doesn't have yet
 
