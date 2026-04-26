@@ -319,57 +319,14 @@ Every feature Midnight Kicks exercises is a feature Kuira depends on:
 | Key management | Match signing keys | Wallet key management |
 | User feedback | App Store reviews | UX insights |
 
-## Standalone app structure
+## Repo structure
 
-```
-midnight-kicks/              (new repo)
-├── app/                     (Android app module)
-│   ├── src/main/
-│   │   ├── java/.../kicks/
-│   │   │   ├── MainActivity.kt
-│   │   │   ├── UnityBridge.kt
-│   │   │   ├── match/
-│   │   │   │   ├── MatchViewModel.kt
-│   │   │   │   ├── MatchRepository.kt
-│   │   │   │   └── MatchState.kt
-│   │   │   ├── pairing/
-│   │   │   │   ├── QrScanScreen.kt
-│   │   │   │   └── LinkHandler.kt
-│   │   │   └── leaderboard/
-│   │   │       └── LeaderboardViewModel.kt
-│   │   └── AndroidManifest.xml
-│   └── build.gradle.kts
-│
-├── unity/                   (Unity project — exported as UaaL)
-│   ├── Assets/
-│   │   ├── Scripts/
-│   │   │   ├── GameManager.cs
-│   │   │   ├── ShooterController.cs
-│   │   │   ├── KeeperController.cs
-│   │   │   ├── BallPhysics.cs
-│   │   │   └── AndroidBridge.cs
-│   │   ├── Scenes/
-│   │   │   ├── MainMenu.unity
-│   │   │   ├── Stadium.unity
-│   │   │   └── Results.unity
-│   │   ├── Models/       (3D assets)
-│   │   ├── Animations/
-│   │   └── Materials/
-│   └── ProjectSettings/
-│
-├── contract/                (Compact smart contract)
-│   ├── src/
-│   │   └── penalty.compact
-│   ├── tests/
-│   └── package.json
-│
-├── libs/                    (Midnight Android SDK)
-│   └── midnight-sdk.aar    (single AAR — all modules bundled)
-│
-└── docs/
-    ├── ARCHITECTURE.md
-    └── SDK_INTEGRATION.md
-```
+Separate repo: `midnight-kicks/`. Three main areas:
+- **app/** — Android app (Kotlin + Compose + UaaL integration)
+- **unity/** — Unity project (exported as UaaL module)
+- **contract/** — Compact smart contract source
+
+File structure documented in README at release time, not here.
 
 ## Key references
 
