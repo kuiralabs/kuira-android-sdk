@@ -403,6 +403,44 @@ or automatic proving key installation.
 
 ---
 
+## Progress tracker
+
+- [ ] **Phase 1 — Compact contract**
+  - [ ] Write penalty.compact (commit-reveal, batch, sudden death)
+  - [ ] Deploy to PREPROD
+  - [ ] Test full match lifecycle + timeout forfeit
+- [ ] **Phase 2 — Midnight Android SDK**
+  - [ ] MidnightSdk facade + MidnightWallet (embedded tx pipeline)
+  - [ ] Contract deployment API
+  - [ ] Proving key auto-download
+  - [ ] Passkey identity (CredentialManager + did:key + keyAuthorization)
+  - [ ] PRF-encrypted cloud backup
+  - [ ] Validate: BBoard works without mn serve
+- [ ] **Phase 3 — Unity game**
+  - [ ] Buy + strip penalty template
+  - [ ] Batch choice UI (pick 5 directions)
+  - [ ] Replay system (play 5 rounds from JSON)
+  - [ ] Stadium intro cinematic (masks proof latency)
+  - [ ] Export as UaaL module
+- [ ] **Phase 4 — Android app (native layer)**
+  - [ ] Onboarding (passkey → biometric → play)
+  - [ ] Matchmaking (QR + deep link)
+  - [ ] SDK wiring (contract calls + state subscription)
+  - [ ] UaaL bridge (Kotlin ↔ Unity)
+  - [ ] Results + leaderboard screens
+- [ ] **Phase 5 — Integration + polish**
+  - [ ] E2E on two physical devices
+  - [ ] Proof latency tuning
+  - [ ] Error handling (disconnect, timeout, proof failure)
+  - [ ] APK size audit (< 100MB target)
+  - [ ] Play Store listing
+- [ ] **Phase 6 — Release**
+  - [ ] Closed beta
+  - [ ] Open beta
+  - [ ] Announce (World Cup timing)
+
+---
+
 ## Implementation plan
 
 ### Phase 1: Compact contract
