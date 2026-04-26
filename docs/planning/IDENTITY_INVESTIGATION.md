@@ -177,87 +177,62 @@ model discards the WebAuthn signature and stores only metadata.
 
 ## Decisions needed
 
-### 1. Access key curve: P-256 or secp256k1?
+### 1. Access key curve — DECIDED: secp256k1 now, advocate P-256
 
-rvcas uses P-256 for both. Midnight needs secp256k1 for blockchain
-signing. Options:
+Access key is secp256k1 because that's what Midnight accepts today.
+The access key directly signs Midnight transactions — no extra layers.
 
-- **A: Access key is secp256k1.** Directly signs Midnight transactions.
-  DID uses secp256k1 multicodec prefix (`0xe7`). Diverges from rvcas
-  format but is immediately useful on-chain.
-- **B: Access key is P-256 (match rvcas).** Requires a third key layer
-  for blockchain signing (passkey P-256 → access key P-256 → signing
-  key secp256k1). More complex, but interoperable with rvcas.
-- **C: Both.** Access key is P-256 for identity/DID interop. A
-  secp256k1 signing key is derived or generated alongside it, linked
-  by the same keyAuthorization. The DID is P-256, the blockchain key
-  is secp256k1.
+**Action item:** Advocate to Midnight team for P-256 signature
+support at the protocol level. When Midnight supports P-256, the
+passkey could sign transactions directly (eliminating the access key
+layer entirely). This is the Clave/zkSync model and the best possible
+UX. Until then, secp256k1 access keys bridge the gap.
 
-**Recommendation:** A — access key is secp256k1. Simplest, immediately
-useful. DID interop with rvcas can be handled by supporting both
-multicodec prefixes in DID resolution. The ecosystem hasn't
-standardized yet — we can help set the direction.
+### 2. keyAuthorization — DECIDED: self-verifiable
 
-### 2. keyAuthorization: what does the root key sign?
+The root key (P-256 passkey, in TEE) directly signs a payload that
+authorizes the secp256k1 access key. The signature is included in the
+authorization record. Anyone with the root public key can verify the
+authorization cryptographically — no server trust required.
 
-The payload the P-256 root key signs to authorize a secp256k1
-access key. Proposed structure:
+This is strictly better than rvcas's model, where the server verifies
+the WebAuthn ceremony and then discards the signature, storing only
+metadata. Their model requires trusting `passkeys.rvcas.dev`. Ours
+is self-certifying.
 
-```
-{
-  "action": "authorize-access-key",
-  "rootPublicKey": "<compressed P-256 hex>",
-  "accessKeyPublicKey": "<compressed secp256k1 hex>",
-  "accessKeyCurve": "secp256k1",
-  "scope": ["midnight:sign", "midnight:read"],
-  "authorizedAt": <unix timestamp ms>,
-  "expiresAt": <unix timestamp ms or null>
-}
-```
+### 3. DID — DECIDED: one DID per user, from the root passkey
 
-The P-256 signature over this JSON (SHA-256 hash → ECDSA sign in TEE)
-is the self-verifiable authorization. Anyone with the root public key
-can verify it. No server needed.
+A DID (Decentralized Identifier) is a unique ID derived from a
+public key. The `did:key` format encodes the key directly:
+`did:key:z<base58btc(multicodec_prefix || compressed_pubkey)>`.
 
-### 3. DID derivation: from which key?
+rvcas derives the DID from the access key, which means a new DID for
+every dApp connection — fragmented identity. That's wrong for the
+sigil model.
 
-rvcas derives the DID from the access key. Options:
+**One DID per user, derived from the root passkey.** This is the
+sigil — one identity, stable across all dApps. Access keys are
+subordinate permissions, not separate identities. The DID doesn't
+change when you connect to a new dApp.
 
-- **A: DID from access key.** Matches rvcas. The DID represents the
-  dApp-scoped identity. Multiple DIDs per user (one per dApp).
-- **B: DID from root passkey.** The DID represents the user's root
-  identity. One DID per user, stable across dApps. Access keys are
-  subordinate.
-- **C: Both.** Root DID (from passkey) + per-dApp access DIDs. The
-  keyAuthorization links them.
+### 4. Recovery — DECIDED: encrypted cloud backup, seed as escape hatch
 
-**Recommendation:** C — both. Root DID is the sigil identity (stable,
-cross-app). Access DIDs are per-dApp (scoped, revocable). This maps
-cleanly to the sigil model: one sigil, many delegations.
+When a device is lost, the passkey syncs to the new device via Google
+Password Manager automatically. But secp256k1 access keys and app
+state are device-local — they don't sync.
 
-### 4. Recovery: what happens when the device is lost?
+**Ship with:** encrypted cloud backup via Google Block Store or
+Google Drive. Passkey authenticates → download encrypted blob →
+decrypt → access keys restored. Seed phrase stays as a power-user
+escape hatch (not the primary recovery path).
 
-What syncs automatically:
-- Passkey (P-256) → Google Password Manager sync ✅
-
-What does NOT sync:
-- secp256k1 access keys (device-local)
-- Android Keystore keys
-- App internal state
-
-Options:
-- **Encrypted cloud backup:** Passkey authenticates → download
-  encrypted blob from Block Store / GDrive → decrypt with PRF-derived
-  key or passkey-authenticated server key
-- **Re-derivation from seed:** If the user backed up a seed phrase,
-  access keys can be re-derived on the new device
-- **Passkey-only recovery (future):** If PRF extension stabilizes on
-  Android, the passkey's PRF output can deterministically derive
-  secp256k1 keys. No seed needed. But PRF support is still maturing.
-
-**Recommendation:** Ship with encrypted cloud backup (Phase 8C).
-Investigate PRF-based re-derivation as a future path. Keep seed
-phrase as a power-user escape hatch.
+**Future investigation: PRF extension.** PRF (Pseudo-Random Function)
+is a WebAuthn extension that derives a deterministic secret from the
+passkey during authentication. If the passkey syncs, the PRF output
+is identical on the new device — enabling decryption of cloud backups
+without remembering anything. PRF works in Chrome on Android today
+but native CredentialManager support is still maturing. Investigate
+when Android stabilizes this.
 
 ---
 
