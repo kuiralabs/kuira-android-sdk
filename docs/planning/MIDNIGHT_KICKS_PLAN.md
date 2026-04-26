@@ -149,128 +149,39 @@ Pairing is built directly in Kicks — no connector SDK needed.
 
 ## Architecture
 
-```
-Midnight Kicks (Android app)
-│
-├── Unity (game layer — Unity as a Library / UaaL)
-│   ├── 3D stadium, goal, ball, players
-│   ├── Shooter aiming UI (drag to aim)
-│   ├── Keeper positioning UI (drag to dive)
-│   ├── Ball flight + save/goal animations
-│   ├── Match lobby, score display, result screen
-│   ├── Leaderboard UI
-│   └── UaaL bridge → sends/receives events to Kotlin
-│
-├── Kotlin (blockchain layer — native Android)
-│   ├── midnight-sdk.aar (single dependency)
-│   │   ├── MidnightSdk — entry point, config
-│   │   ├── MidnightWallet — key gen, UTXO tracking, balancing, signing
-│   │   ├── MidnightContract — circuit execution, proving, submission
-│   │   └── All internals bundled (crypto, indexer, ledger, network)
-│   │
-│   ├── Pairing (built in Kicks)
-│   │   ├── QR code generation + scanning (CameraX)
-│   │   ├── Deep link handling (midnight://kicks?match=...)
-│   │   └── Contract-based matchmaking (match ID = contract address)
-│   │
-│   └── UaaL bridge → receives/sends events to Unity
-│
-└── Compact contract (deployed on PREPROD)
-    ├── Private state
-    │   ├── p1Choices: Field[5] (all 5 directions, hidden)
-    │   ├── p2Choices: Field[5] (all 5 directions, hidden)
-    │   ├── p1Nonces: Field[5] (commitment randomness)
-    │   ├── p2Nonces: Field[5] (commitment randomness)
-    │   └── sdChoices/Nonces: Field[5] (sudden death batches)
-    ├── Ledger (public)
-    │   ├── matchId: Bytes
-    │   ├── player1: Bytes (address)
-    │   ├── player2: Bytes (address)
-    │   ├── score1: Counter
-    │   ├── score2: Counter
-    │   ├── roundResults: Bytes[5] (GOAL/SAVE per round)
-    │   ├── sdRoundResults: Bytes[5] (sudden death, partial)
-    │   ├── decisiveRound: Counter (SD stops here)
-    │   ├── winner: Bytes (address, zero if in progress)
-    │   ├── stake: Uint
-    │   └── state: enum (WAITING, COMMITTING, PROVING, REPLAY, SD, COMPLETE)
-    ├── Circuits
-    │   ├── createMatch(stake) → deploy, escrow stake
-    │   ├── joinMatch() → escrow stake
-    │   ├── commitBatch(directions[5], nonces[5]) → hash all 5
-    │   ├── resolveRegulation() → compare all 5, score + results
-    │   ├── commitSuddenDeath(directions[5], nonces[5]) → hash
-    │   ├── resolveSuddenDeath() → round-by-round until decisive
-    │   └── claimPayout() → winner withdraws pot
-    └── Witnesses
-        ├── generateBatchCommitment(directions[5], nonces[5]) → hash
-        └── checkDecisiveRound(results[5]) → first round with winner
-```
+Three layers, cleanly separated:
 
-## Unity ↔ Kotlin bridge (UaaL)
+- **Unity (game layer)** — 3D stadium, ball physics, animations,
+  choice UI, replay system. Renders full-screen via UaaL. Knows
+  nothing about blockchain.
+- **Kotlin (blockchain layer)** — Midnight Android SDK for contract
+  interaction, pairing logic (QR + deep links), UaaL bridge for
+  passing events to/from Unity.
+- **Compact contract (on-chain)** — deployed on PREPROD. Manages
+  match state, commit-reveal, scoring, stakes, payouts.
 
-Unity as a Library (UaaL) lets Unity run as an Android View inside
-a native Android app. Communication:
+### Contract concepts
 
-### Kotlin → Unity
-```kotlin
-// Send events to Unity game objects
-UnityPlayer.UnitySendMessage(
-    "GameManager",        // Unity GameObject name
-    "OnMatchJoined",      // Method name
-    matchId,              // String payload (JSON)
-)
-```
+- **Private state:** each player's 5 choices + nonces (hidden)
+- **Public ledger:** match participants, scores, round results,
+  winner, stake amount, match phase
+- **Circuits:** create match (deploy + escrow), join, commit batch,
+  resolve regulation, commit/resolve sudden death, claim payout
+- **Witnesses:** generate commitment hash, find decisive SD round
 
-### Unity → Kotlin
-```csharp
-// Unity C# calls Android native
-AndroidJavaObject bridge = new AndroidJavaObject("com.midnight.kicks.UnityBridge");
-bridge.Call("onAllChoicesSubmitted", choicesJson); // all 5 at once
-```
+### Unity ↔ Kotlin bridge
 
-### Event flow for a full match
-```
-Unity                          Kotlin                    Midnight
-  │                              │                          │
-  │  ── CHOICE PHASE ──          │                          │
-  ├─ Player picks 5 dirs ───────►│                          │
-  │  [L, C, R, L, R]            │                          │
-  │                              ├─ commitBatch([5]) ──────►│
-  │                              │  (builds tx, proves)     │
-  │                              │◄─── tx confirmed ────────┤
-  │◄── "WaitingForOpponent" ─────┤                          │
-  │   (show "waiting..." UI)     │                          │
-  │                              │◄─── opponent committed ──┤
-  │                              │                          │
-  │  ── PROVE PHASE ──           │                          │
-  │◄── "MatchReady" ─────────────┤                          │
-  │   (stadium intro, flyover,   ├─ resolveRegulation() ───►│
-  │    crowd noise, walk-out)    │  (single ZK circuit)     │
-  │   (5-10 sec feels like TV)   │◄─── 5 results ──────────┤
-  │                              │                          │
-  │  ── REPLAY PHASE ──          │                          │
-  │◄── "PlayReplay([results])" ──┤                          │
-  │   Round 1: GOAL! (1-0)      │                          │
-  │   Round 2: SAVE! (1-0)      │                          │
-  │   Round 3: GOAL! (2-0)      │                          │
-  │   Round 4: GOAL! (2-1)      │                          │
-  │   Round 5: SAVE! (3-2)      │                          │
-  │   MATCH RESULT: P1 WINS     │                          │
-  │                              │                          │
-  │  ── SUDDEN DEATH (if tied) ──│                          │
-  │   (back to choice phase)     │                          │
-```
+UaaL renders Unity full-screen as an Android Activity. Communication
+is JSON strings both directions — Kotlin sends match results to
+Unity for replay, Unity sends player choices to Kotlin for
+blockchain submission. The bridge is simple message passing.
 
-## Proof time = broadcast intro
+### Proof latency = broadcast intro
 
-On-device ZK proof generation takes 5-10 seconds. With batch
-submission, this happens ONCE per match (not per round). The wait
-is masked by a stadium flyover, crowd buildup, players walking out
-of the tunnel — feels like a real TV broadcast intro.
-
-Then the replay plays uninterrupted. Five rounds of pure football
-drama with zero loading. The blockchain is invisible.
+On-device proving happens ONCE per match (batch). The 5-10 second
+wait is masked by a stadium flyover / crowd buildup / player walk-out
+— feels like a real TV broadcast intro, not a loading screen. Then
+the replay plays uninterrupted.
 
 ## The Midnight Android SDK
 
@@ -278,26 +189,12 @@ Midnight Kicks is the first consumer of the Midnight Android SDK.
 The SDK is not a side artifact for the game — it's the product.
 Kicks validates it, then every Midnight dApp on Android uses it.
 
-```
-midnight-sdk (published artifact)
-├── Public: MidnightSdk, MidnightWallet, MidnightContract, MidnightConfig
-├── Internal: compact-engine, crypto, indexer, ledger, network
-├── Native: libkuira_crypto_ffi.so (arm64-v8a, x86_64)
-└── Source: lives in kuira-android-wallet repo, published as AAR
-```
+**One dependency, one AAR.** Bundles all 5 existing Kuira core
+modules (compact-engine, crypto, indexer, ledger, network) behind
+a thin facade. Native .so included. Ships as a binary AAR.
 
-| Component | Source module | Ships in SDK? | Open-sourced? |
-|-----------|-------------|---------------|---------------|
-| Circuit execution + proving | `core:compact-engine` | ✅ | SDK binary |
-| Key derivation + signing | `core:crypto` | ✅ | SDK binary |
-| UTXO tracking | `core:indexer` | ✅ | SDK binary |
-| Tx balancing + submission | `core:ledger` | ✅ | SDK binary |
-| Network config | `core:network` | ✅ | SDK binary |
-| SDK facade (MidnightSdk, MidnightWallet) | New thin layer | ✅ | SDK binary |
-| Connector (pairing, transports) | `core:connector` | Separate | Yes (open-source) |
-
-The SDK AAR ships as a binary. The connector SDK ships separately
-as open source so devs can see the pairing + transport patterns.
+**The connector SDK ships separately** as open source — for dApps
+that need wallet-to-dApp integration patterns (transports, pairing).
 
 Kuira Wallet itself consumes the same SDK — it's just a more
 capable consumer (TEE keys, biometric gates, sigil management,
@@ -366,132 +263,27 @@ need a wallet to use Midnight apps."
 
 ### Tier 1 — Standalone (Kuira NOT installed)
 
-```
-Midnight Kicks (standalone)
-├── Midnight Android SDK (midnight-sdk.aar — single dependency)
-│   ├── MidnightSdk.create(context) { network = PREPROD }
-│   ├── MidnightWallet — key gen, UTXO tracking, balancing, signing
-│   ├── MidnightContract — circuit execution, proving, submission
-│   └── Everything embedded — no external wallet process
-├── Pairing built in Kicks (QR + deep links)
-├── Player identity = MidnightWallet keypair (Android Keystore)
-└── Works completely independently — no other app needed
-```
+SDK embedded in the dApp. Generates its own keys (Android Keystore),
+tracks UTXOs, balances/signs/submits transactions — all internally.
+No external wallet process. No seed phrase. Player identity is a
+keypair managed by the SDK. Works completely independently.
 
 ### Tier 2 — Enhanced (Kuira IS installed)
 
-```
-Midnight Kicks (Kuira-enhanced)
-├── Discovers Kuira via Android intent / CredentialManager
-├── Kuira provides TEE-backed keys (sigil identity)
-│   ├── StrongBox / hardware-backed key storage
-│   ├── Biometric gate for transaction approval
-│   └── Cross-app identity — same sigil across all dApps
-├── Connector delegates to Kuira's connector service
-├── Match appears in "My Sigil" tab as connected app
-├── Match history tied to sigil identity (portable)
-└── Player gets: better security, unified identity, state browser
-```
+SDK detects Kuira on the device and transparently delegates to it.
+Player gets TEE-backed keys (sigil identity), biometric approval,
+cross-app identity, and their match appears in the My Sigil tab.
+No code change in the dApp — the upgrade is automatic.
 
-### What this means for Kicks development
+### What this means
 
-Kicks ships with the lightweight wallet module for Tier 1. Tier 2
-is automatic when Kuira is installed — no extra code in Kicks.
-The lightweight wallet module becomes a reusable SDK artifact that
-every Midnight dApp on Android can embed.
-
-### What this means for the SDK
-
-Today a dApp developer must either:
-- Import 5 modules, wire Hilt, manage UTXO tracking manually, AND
-  require Kuira or `mn serve` running as the wallet backend
-- Or require Kuira installed on the device (blocks adoption)
-
-The solution: **one SDK AAR that packages everything.**
-
-#### Developer experience (target)
-
-```kotlin
-// build.gradle.kts — ONE dependency
-implementation("midnight:sdk:1.0")
-```
-
-```kotlin
-// Create SDK instance — configures network, indexer, node
-val midnight = MidnightSdk.create(context) {
-    network = MidnightNetwork.PREPROD
-}
-
-// Create or load wallet — keys in Android Keystore, no seed phrase
-val wallet = midnight.wallet()
-
-// Connect to a contract
-val contract = midnight.contract {
-    contractJs = assets.open("penalty.js")
-    address = contractAddress
-    witness("secret") { WitnessResult(null, wallet.secretKey) }
-    coinPublicKey = wallet.coinPublicKey
-}
-
-// Execute circuit — wallet handles balancing + signing + submission
-val receipt = contract.call("commitBatch", choices) { stage ->
-    updateUI(stage)  // Fetching → Executing → Proving → Balancing → Submitting
-}
-
-// Read state
-val state = midnight.queryState(contractAddress)
-```
-
-No Hilt. No 5 module imports. No external wallet process. No
-`walletUrl`. Three objects: `MidnightSdk`, `wallet`, `contract`.
-One `call()` does everything.
-
-#### What's inside the AAR
-
-```
-midnight-sdk.aar
-├── Public API (what developers see)
-│   ├── MidnightSdk        — entry point, builder DSL
-│   ├── MidnightWallet     — key gen + UTXO tracking + balancing + signing
-│   ├── MidnightContract   — circuit execution + proving (existing)
-│   ├── MidnightConfig     — network endpoints (existing)
-│   ├── ContractCallStage  — progress tracking (existing)
-│   └── ContractCallException — error types (existing)
-│
-├── Internals (hidden from developer)
-│   ├── core:compact-engine — QuickJS runtime, contract execution
-│   ├── core:crypto         — HDWallet, Schnorr, Rust FFI + native .so
-│   ├── core:indexer        — UtxoManager, IndexerClient, SubscriptionManager
-│   ├── core:ledger         — TransactionSubmitter, NodeRpcClient, ProofServerClient
-│   └── core:network        — NetworkConfig, endpoint resolution
-│
-└── Native libraries
-    ├── arm64-v8a/libkuira_crypto_ffi.so
-    └── x86_64/libkuira_crypto_ffi.so
-```
-
-The 5 existing Kuira modules ARE the SDK. They just need a thin
-facade (`MidnightSdk` + `MidnightWallet`) and packaging as a
-single AAR. No new crypto, no new FFI, no new protocol code.
-
-#### Tier 1 → Tier 2 upgrade path
-
-When Kuira is installed on the device, `MidnightSdk` detects it
-and transparently upgrades:
-
-```kotlin
-// Same code, no changes by the developer
-val midnight = MidnightSdk.create(context) {
-    network = MidnightNetwork.PREPROD
-}
-
-// Internally:
-// - If Kuira NOT installed → uses embedded MidnightWallet (Tier 1)
-// - If Kuira IS installed → delegates to Kuira's connector (Tier 2)
-//   → TEE-backed keys, biometric gate, sigil identity, My Sigil tab
-```
-
-The developer writes Tier 1 code. Tier 2 happens automatically.
+- **For Kicks:** ships with Tier 1. Tier 2 is free when Kuira exists.
+- **For the SDK:** one AAR packages all 5 existing Kuira core modules
+  behind a thin facade. The developer imports one dependency, creates
+  three objects (SDK, wallet, contract), and calls one method to
+  execute circuits. No Hilt, no external wallet, no `walletUrl`.
+- **For Kuira:** consumes the same SDK with added TEE keys, biometric
+  gates, and sigil management on top. The SDK is the foundation for both.
 
 ---
 
@@ -504,64 +296,29 @@ fix before SDK GA.
 ### What's ready (proven by BBoard example)
 
 BBoard (`examples/bboard`) is an Android dApp that executes ZK circuits
-and submits transactions. Two Gradle dependencies:
-```kotlin
-implementation(project(":core:compact-engine"))
-runtimeOnly(project(":core:crypto"))  // provides native .so
-```
-
-No Hilt. No Kuira internal modules. Clean developer pattern. BUT:
+and submits transactions. Uses only compact-engine + crypto modules.
+No Hilt, no Kuira internal modules. Clean developer pattern. BUT:
 **BBoard requires Kuira (or `mn serve`) running as the wallet backend.**
-The `walletUrl` in `MidnightConfig` points to the connector WebSocket.
-Without it, the Balancing and Submitting stages fail — the SDK needs
-an external wallet to provide UTXOs, sign, and submit.
+Circuit execution and proving run locally, but transaction balancing
+and submission need an external wallet process. BBoard also hardcodes
+a test key and requires manual proving key installation.
 
-```
-BBoard app                    Kuira / mn serve (REQUIRED)
-    │                              │
-    ├─ MidnightConfig(walletUrl) ─►│ WebSocket on :9932
-    │                              │
-    ├─ contract.call("post") ─────►│
-    │   Fetch state (indexer) ✅    │ (direct, no wallet needed)
-    │   Execute circuit ✅          │ (local QuickJS, no wallet)
-    │   Prove ✅                    │ (local Rust FFI, no wallet)
-    │   Balance tx ───────────────►│ wallet provides UTXOs + signs
-    │   Submit tx ────────────────►│ wallet submits to node
-    │                              │
-```
+**BBoard proves:** SDK config, contract handles, circuit execution,
+state reading, progress tracking, typed error handling.
 
-**What BBoard proves works (SDK side):**
-
-| Capability | Status | Pattern |
-|-----------|--------|---------|
-| SDK config | ✅ | `MidnightConfig.Builder(context).indexerUrl().walletUrl().networkId().build()` |
-| Contract handle | ✅ | `MidnightContract.create(config) { contractJs, address, witness, ... }` |
-| Circuit execution | ✅ | `contract.call("post", message) { stage -> updateUI(stage) }` |
-| State reading | ✅ | `config.queryState(contractAddress)` returns JSONArray |
-| Progress tracking | ✅ | `ContractCallStage` sealed class (Fetching → Executing → Proving → Balancing → Submitting) |
-| Error handling | ✅ | `ContractCallException` subtypes per stage |
-| Network presets | ✅ | `NetworkChoice` enum with URLs per environment |
-
-**What BBoard does NOT prove (wallet side):**
-
-| Capability | Status | Notes |
-|-----------|--------|-------|
-| Standalone operation | ❌ | Requires external wallet process for balancing + submission |
-| Key management | ❌ | Hardcoded `SECRET_KEY = ByteArray(32) { (it + 1).toByte() }` |
-| UTXO ownership | ❌ | Wallet provides UTXOs, not the dApp |
-| Transaction signing | ❌ | Wallet signs, not the dApp |
-| Contract deployment | ❌ | Must use `mn contract deploy` CLI |
-| Proving key install | ❌ | Manual `adb push` from `/data/local/tmp/` |
+**BBoard does NOT prove:** standalone operation, key management,
+UTXO ownership, transaction signing, contract deployment from mobile,
+or automatic proving key installation.
 
 ### What's blocked (needs work in Kuira first)
 
-| Gap | Impact | Fix needed |
-|-----|--------|-----------|
-| **Connector has stale Gradle deps** | `build.gradle.kts` lists 5 internal modules (crypto, indexer, ledger, network, wallet) but the source code only imports `core:network.NetworkConfig`. The handler uses interfaces/lambdas for everything else. The stale deps prevent shipping a clean AAR — remove them from Gradle and the connector is already standalone. | Remove unused deps from `core:connector/build.gradle.kts`. Verify build passes with only `core:network`. |
-| **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
-| **No QR pairing in SDK** | Kicks uses QR/link to match players. QR generation/scanning is not in the connector — it only handles WebSocket/Binder/JsBridge transports. | Build QR + deep link pairing as a new lightweight module or directly in Kicks |
-| **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
-| **SDK requires external wallet process** | `MidnightContract.call()` requires `walletUrl` — an external wallet (Kuira or `mn serve`) for balancing + signing + submission. A standalone dApp can't transact without it. This is the biggest gap. | Package a single `midnight-sdk.aar` that bundles all 5 core modules (compact-engine, crypto, indexer, ledger, network) behind a thin facade: `MidnightSdk.create()` + `MidnightWallet` + `MidnightContract`. The wallet operations run embedded — no external process. This IS the Midnight Android SDK. |
+| Gap | Impact |
+|-----|--------|
+| **SDK requires external wallet** | Biggest gap. Circuit execution + proving work locally, but balancing + signing + submission need a wallet process. The SDK needs an embedded wallet that handles the full tx pipeline internally. |
+| **No contract deployment from SDK** | Only the CLI can deploy. The SDK needs a deploy API for mobile-first dApps. |
+| **Proving keys not auto-downloadable** | Manual `adb push` isn't viable for Play Store. Need auto-download + cache on first launch. |
+| **No QR/link pairing** | Connector handles transports (WebSocket, Binder, JsBridge) but not matchmaking/pairing. Build in Kicks or as a reusable pattern. |
+| **Connector has stale Gradle deps** | 4 of 5 internal module deps are unused in source code. Easy cleanup — remove from build.gradle.kts. |
 
 ### What Kicks builds that Kuira doesn't have yet
 
@@ -576,170 +333,66 @@ BBoard app                    Kuira / mn serve (REQUIRED)
 
 ## Implementation plan
 
-### Phase 1: Compact contract (Week 1)
+### Phase 1: Compact contract
 
 The contract is the foundation — everything else builds on it.
 
-**Deliverable:** `penalty.compact` deployed on PREPROD, tested via
-BBoard-style harness.
+**Deliverable:** Penalty shootout contract deployed on PREPROD.
 
-```
-penalty.compact
-├── Ledger state
-│   ├── player1, player2: Bytes (addresses)
-│   ├── p1Committed, p2Committed: Boolean
-│   ├── score1, score2: Counter
-│   ├── roundResults: Bytes[5]
-│   ├── sdRoundResults: Bytes[5]
-│   ├── decisiveRound: Counter
-│   ├── winner: Bytes
-│   ├── stake: Uint
-│   └── phase: enum (WAITING, COMMITTED, RESOLVED, SD, COMPLETE)
-│
-├── Circuits
-│   ├── constructor(stake) → deploy match, escrow
-│   ├── join() → second player joins, escrow
-│   ├── commitBatch(hash) → store commitment hash
-│   ├── resolveRegulation(choices[5], nonces[5]) → reveal + compare
-│   ├── commitSuddenDeath(hash) → SD commitment
-│   ├── resolveSuddenDeath(choices[5], nonces[5]) → partial reveal
-│   └── claimPayout() → winner withdraws
-│
-└── Witnesses
-    ├── generateCommitmentHash(choices[5], nonces[5]) → hash
-    └── findDecisiveRound(p1Results[5], p2Results[5]) → round index
-```
+**Concepts:** Match lifecycle (create → join → commit → resolve →
+payout), batch commitment scheme (5 choices hashed together),
+regulation resolution (compare all 5), sudden death resolution
+(stop at decisive round), stake escrow + winner payout.
 
-**Tasks:**
-1. Write penalty.compact — circuits + witnesses + ledger
-2. Compile with Compact compiler → contract IIFE JS
-3. Deploy to PREPROD via mn CLI
-4. Test: create match → commit → resolve → verify results
-5. Test: draw → sudden death → resolve
+**Validated by:** create match → both commit → resolve → verify
+results → draw → sudden death → resolve.
 
-### Phase 2: Midnight Android SDK (Week 1-2, parallel with Phase 1)
+### Phase 2: Midnight Android SDK (parallel with Phase 1)
 
-Build the `MidnightSdk` facade + `MidnightWallet` class, package
-all 5 existing core modules into a single `midnight-sdk.aar`.
+**Deliverable:** Single AAR that a standalone app imports with one
+Gradle line. No external wallet process needed.
 
-**Deliverable:** `midnight-sdk.aar` that a standalone app imports
-with one Gradle line. No external wallet process needed.
+**Concepts:** Thin facade over existing 5 core modules. Embedded
+wallet (key gen, UTXO tracking, tx balancing, signing, submission)
+replaces the external wallet dependency. Auto-download proving keys
+on first launch. Native .so bundled in AAR.
 
-**Tasks:**
-1. **MidnightSdk facade** — thin entry point that wires
-   MidnightConfig, indexer, ledger, network internally. Builder DSL:
-   `MidnightSdk.create(context) { network = PREPROD }`.
-2. **MidnightWallet class** — key generation (Android Keystore),
-   UTXO tracking (wraps UtxoManager), transaction balancing (wraps
-   TransactionSubmitter), signing, submission. No seed phrase.
-   Replaces the `walletUrl` dependency — all operations embedded.
-3. **Wire MidnightContract.call()** — replace the WebSocket-to-wallet
-   balancing/submission path with direct calls to MidnightWallet.
-   The circuit execution + proving path is unchanged.
-4. **Proving key auto-download** — implement
-   `ProvingKeyManager.downloadFromNetwork(circuitNames)` so apps
-   don't need manual `adb push`. Cache in `context.filesDir`.
-5. **Bundle native .so** — pre-built `libkuira_crypto_ffi.so` for
-   arm64-v8a + x86_64 in the AAR's jniLibs.
-6. **Package as single AAR** — Gradle module that depends on all 5
-   core modules, exports only the public API surface (MidnightSdk,
-   MidnightWallet, MidnightContract, MidnightConfig, stage/error types).
-7. **Test with BBoard** — migrate BBoard example to use
-   `midnight-sdk.aar` instead of `core:compact-engine` + `walletUrl`.
-   If BBoard works without `mn serve`, the SDK is ready.
+**Validated by:** migrate BBoard to use the new SDK without
+`mn serve` running. If BBoard works standalone, the SDK is ready.
 
-### Phase 3: Unity game (Week 2-3)
-
-Buy a template, strip it, wire the bridge.
+### Phase 3: Unity game
 
 **Deliverable:** Unity project that plays a 5-round penalty replay
-from a JSON input, and collects 5 direction choices from the player.
+from JSON input, and collects 5 direction choices from the player.
 
-**Tasks:**
-1. **Buy template** — Penalty Kick Complete Game Template or
-   Football Penalty Shoot Controller 3D from Asset Store
-2. **Strip single-player AI** — remove keeper AI, score tracking,
-   progression system. Keep: stadium, players, ball, animations,
-   camera angles
-3. **Build choice UI** — player picks 5 directions before the match.
-   Carousel or grid: "Round 1: [L] [C] [R] → Round 2: ..."
-   Confirm button when all 5 are selected.
-4. **Build replay system** — `PlayReplay(string json)` receives
-   5 round results, plays each sequentially:
-   - Camera positions for each round
-   - Ball trajectory based on shooter direction
-   - Keeper dive based on keeper direction
-   - GOAL or SAVE animation
-   - Score overlay update
-   - 2-3 second pause between rounds
-5. **Build result screen** — winner celebration, final score,
-   "Play Again" button
-6. **Stadium intro** — 5-10 second cinematic (flyover, crowd noise)
-   to mask proof latency. Triggered by `ShowIntro()`.
-7. **Export as UaaL** — File → Build Settings → Android → Export
-   Project. This produces the `unityLibrary` module.
-8. **Test on Android** — standalone Unity app, hardcoded JSON results
+**Concepts:** Buy Asset Store template for 3D assets + animations.
+Strip single-player AI, build batch choice UI (pick 5 directions),
+build replay system (play 5 rounds from results JSON), build stadium
+intro cinematic (masks proof latency). Export as UaaL module.
 
-### Phase 4: Android app — native layer (Week 3-4)
-
-Compose screens + SDK wiring + UaaL integration.
+### Phase 4: Android app — native layer
 
 **Deliverable:** Working Android app that pairs two players, submits
 choices to PREPROD, and plays the match in Unity.
 
-**Tasks:**
-1. **Create repo** — `midnight-kicks/` with app module + libs/
-2. **Import UaaL** — add `unityLibrary` as module, wire in
-   `settings.gradle.kts`
-3. **Import SDK** — `implementation(files("libs/midnight-sdk.aar"))`
-   — single dependency
-4. **Onboarding screen** (Compose) — generate keypair, store locally.
-   No seed phrase — just biometric + auto-generated key. "Tap to
-   start playing."
-5. **Lobby screen** (Compose) — "Create Match" (shows QR + shareable
-   link) or "Join Match" (scan QR or paste link)
-6. **Match pairing** — deep link handler (`midnight://kicks?match=<addr>`),
-   QR scanner (CameraX), contract join() call
-7. **Choice bridge** — receive 5 directions from Unity via UaaL bridge,
-   call `commitBatch()` on the Compact contract
-8. **Waiting screen** (Compose) — "Waiting for opponent..." with
-   state polling. When both committed, call `resolveRegulation()`.
-9. **Prove + resolve** — single ZK proof, get 5 round results
-10. **Launch replay** — pass results JSON to Unity via
-    `UnitySendMessage("GameManager", "PlayReplay", json)`
-11. **Result screen** (Compose) — final score, on-chain tx link,
-    leaderboard position, "Play Again"
-12. **Leaderboard screen** (Compose) — query indexer for match
-    history, aggregate win/loss records
+**Concepts:** Compose screens (onboarding, lobby, waiting, results,
+leaderboard). UaaL integration for Unity game. SDK wiring for
+contract calls. QR + deep link pairing for matchmaking. State
+polling to detect when opponent has committed.
 
-### Phase 5: Integration + polish (Week 4-5)
+### Phase 5: Integration + polish
 
-End-to-end testing, UX polish, performance.
+**Concepts:** E2E testing on two physical devices. Proof latency
+tuning (adjust stadium intro to match real proof time). Error
+handling (network failures, opponent disconnect, proof failures).
+APK size audit (Unity + native .so — target < 100MB). Play Store
+listing prep.
 
-**Tasks:**
-1. **E2E test** — two physical devices, full flow: pair → choose →
-   prove → replay → result → payout
-2. **Proof latency tuning** — measure real proof time on target
-   devices (Pixel 7 class). Adjust stadium intro length.
-3. **Error handling** — network failures, opponent disconnect,
-   proof failures, timeout handling
-4. **Polish** — loading animations, haptic feedback, sound effects,
-   Dusk-themed Compose screens (Void bg, Light text)
-5. **Deep link testing** — `midnight://kicks?match=...` opens app
-   correctly from any messaging app
-6. **APK size audit** — Unity + native .so can bloat. Target < 100MB.
-7. **Play Store listing** — screenshots, description, privacy policy
+### Phase 6: Release
 
-### Phase 6: Release (Week 5-6)
-
-Ship before or during World Cup opening.
-
-**Tasks:**
-1. **Closed beta** — internal testing with Midnight team
-2. **Open beta** — Play Store open testing track
-3. **Announce** — blog post, social media, Midnight Discord
-4. **Monitor** — crash reports (Firebase Crashlytics), proof success
-   rates, match completion rates
+Ship before or during World Cup opening. Closed beta → open beta →
+announce → monitor (crash reports, proof success rates, match
+completion rates).
 
 ---
 
