@@ -146,13 +146,14 @@ direct inter-app communication (bound service, deep links).
 
 - **DRek social recovery:** Mentioned by Charles Hoskinson. No public
   spec. Don't build against it until a spec exists.
-- **PRF extension on Android:** Chrome supports it. Native
-  CredentialManager support is maturing. Could enable passkey-derived
-  encryption keys for cloud backup.
+- **PRF on native CredentialProvider:** PRF works in browser context
+  (Google Password Manager) with 100% success. When Kuira acts as a
+  CredentialProvider (Mode 2), need to verify PRF works through the
+  provider service flow, not just the client flow.
 - **Passkey-derived secp256k1 keys:** No standard. Math is
-  straightforward (PRF output → HKDF → secp256k1 scalar) but
-  requires a relying party for PRF, and determinism across devices
-  needs real-world testing.
+  straightforward (PRF output → HKDF → secp256k1 scalar). Could
+  eliminate the access key backup entirely — keys are re-derived
+  deterministically from the passkey on any device. Worth prototyping.
 
 ---
 
@@ -215,24 +216,40 @@ sigil — one identity, stable across all dApps. Access keys are
 subordinate permissions, not separate identities. The DID doesn't
 change when you connect to a new dApp.
 
-### 4. Recovery — DECIDED: encrypted cloud backup, seed as escape hatch
+### 4. Recovery — DECIDED: PRF + encrypted cloud backup
 
 When a device is lost, the passkey syncs to the new device via Google
 Password Manager automatically. But secp256k1 access keys and app
 state are device-local — they don't sync.
 
-**Ship with:** encrypted cloud backup via Google Block Store or
-Google Drive. Passkey authenticates → download encrypted blob →
-decrypt → access keys restored. Seed phrase stays as a power-user
-escape hatch (not the primary recovery path).
+**PRF (Pseudo-Random Function) is production-ready on Android.**
+Google Password Manager includes PRF by default. Community testing
+(Q1 2026, Corbado PRF Demo) shows 100% success rate on synced
+providers. Enpass, Bitwarden, and other credential managers have
+shipped PRF support. This is mature enough to ship.
 
-**Future investigation: PRF extension.** PRF (Pseudo-Random Function)
-is a WebAuthn extension that derives a deterministic secret from the
-passkey during authentication. If the passkey syncs, the PRF output
-is identical on the new device — enabling decryption of cloud backups
-without remembering anything. PRF works in Chrome on Android today
-but native CredentialManager support is still maturing. Investigate
-when Android stabilizes this.
+**Recovery flow (zero words, zero passwords):**
+1. Passkey syncs to new device (Google Password Manager, automatic)
+2. User authenticates with biometric (one tap)
+3. PRF extension produces same deterministic secret as original device
+4. Secret decrypts cloud backup (Block Store or Google Drive)
+5. secp256k1 access keys + app state restored
+6. Done. No seed phrase. No password. Just biometric.
+
+**Backup flow (on original device):**
+1. During key creation, PRF extension derives a symmetric encryption key
+2. Access keys + state encrypted with PRF-derived key
+3. Encrypted blob uploaded to Google Block Store or Google Drive
+4. Blob is useless without the passkey's PRF output
+
+**Seed phrase stays as a power-user escape hatch** — available in
+Settings for users who want full self-custody backup. But it's not
+the default path. Most users never see a seed phrase.
+
+**References:**
+- Corbado PRF blog: `https://www.corbado.com/blog/passkeys-prf-webauthn`
+- Yubico PRF developer guide: `https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/Developers_Guide_to_PRF.html`
+- Bitwarden PRF: `https://bitwarden.com/blog/prf-webauthn-and-its-role-in-passkeys/`
 
 ---
 
