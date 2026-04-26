@@ -405,10 +405,12 @@ or automatic proving key installation.
 
 ## Progress tracker
 
-- [ ] **Phase 1 — Compact contract**
-  - [ ] Write penalty.compact (commit-reveal, batch, sudden death)
-  - [ ] Deploy to PREPROD
-  - [ ] Test full match lifecycle + timeout forfeit
+- [x] **Phase 1 — Compact contract**
+  - [x] Write penalty.compact V2 (commit-reveal, batch, sudden death, timeout)
+  - [x] Deploy to undeployed (PREPROD blocked by dust — separate fix)
+  - [x] 27 tests (16 functional + 11 security exploit reproductions)
+  - [x] Security registry: 4 vulns documented, VULN-002 + VULN-003 fixed
+  - [x] CLI feedback: 5 friction points documented for mn maintainer
 - [ ] **Phase 2 — Midnight Android SDK**
   - [ ] MidnightSdk facade + MidnightWallet (embedded tx pipeline)
   - [ ] Contract deployment API
