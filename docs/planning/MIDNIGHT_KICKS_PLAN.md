@@ -275,15 +275,44 @@ Player gets TEE-backed keys (sigil identity), biometric approval,
 cross-app identity, and their match appears in the My Sigil tab.
 No code change in the dApp — the upgrade is automatic.
 
+### Identity primitives in the SDK (research)
+
+The SDK must generate identities that are **forward-compatible with
+the sigil model.** If a standalone dApp creates a throwaway keypair,
+there's no migration path when the player installs Kuira. But if
+the SDK uses the same identity primitives as Kuira from the start,
+the player's standalone identity IS their future sigil.
+
+| Primitive | SDK (Tier 1) | Kuira upgrade (Tier 2) |
+|-----------|-------------|----------------------|
+| **Passkey (P-256)** | Generate via Android CredentialManager. Stored in Keystore. | Promote to StrongBox/TEE. Add biometric gate. Sync via Google Password Manager. |
+| **DID** | Derive from passkey. Interoperable with rvcas midnightOS Passkeys format. | Manage in sigil dashboard. Show in My Sigil tab. |
+| **Access key delegation** | Generate per-dApp secp256k1 key, linked to passkey via keyAuthorization. | Manage delegation policies (silent/notify/approve tiers). Revocation from My Sigil. |
+
+**Status: all three are research phase.** Need to investigate:
+- CredentialManager provider registration for passkey generation
+- DID format interop with rvcas (`passkeys.rvcas.dev`)
+- keyAuthorization model (how the root passkey authorizes access keys)
+
+These primitives live in the SDK, not in Kuira. Kuira upgrades
+them — it doesn't own them. A standalone dApp generates a passkey,
+derives a DID, delegates an access key. Kuira wraps that with
+TEE-hardened storage, biometric gates, and cross-app management.
+
+See `docs/planning/KUIRA_IDENTITY_VISION.md` for the full sigil
+model and `memory/project_passkey_investigation.md` for the rvcas
+analysis.
+
 ### What this means
 
 - **For Kicks:** ships with Tier 1. Tier 2 is free when Kuira exists.
-- **For the SDK:** one AAR packages all 5 existing Kuira core modules
-  behind a thin facade. The developer imports one dependency, creates
-  three objects (SDK, wallet, contract), and calls one method to
-  execute circuits. No Hilt, no external wallet, no `walletUrl`.
-- **For Kuira:** consumes the same SDK with added TEE keys, biometric
-  gates, and sigil management on top. The SDK is the foundation for both.
+  Player identity created in Kicks carries over to Kuira seamlessly.
+- **For the SDK:** one AAR packages the 5 existing Kuira core modules
+  + identity primitives behind a thin facade. The developer imports
+  one dependency. No Hilt, no external wallet, no `walletUrl`.
+- **For Kuira:** consumes the same SDK with added TEE hardening,
+  biometric gates, and sigil management on top. The SDK is the
+  foundation for both.
 
 ---
 
