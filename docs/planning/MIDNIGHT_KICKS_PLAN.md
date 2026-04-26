@@ -388,3 +388,225 @@ After Kicks ships, the open-sourced connector SDK + documentation
 become the "Build on Midnight (Android)" developer story. Other
 devs follow the same pattern: Unity/native app + connector SDK +
 pre-built compact-engine AAR.
+
+---
+
+## SDK gap analysis
+
+Building Midnight Kicks as an external consumer exposes exactly what's
+missing for third-party developers. Every gap found here is a gap to
+fix before SDK GA.
+
+### What's ready (no work needed)
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `core:compact-engine` | ✅ Production-ready | MidnightConfig, MidnightContract, ProofProvider, ContractCallStage, error types — all clean public API. BBoard example proves the pattern works. |
+| `core:network` | ✅ Ready | MidnightNetwork enum, NetworkConfig factory, zero internal coupling |
+| `core:crypto` | ✅ Ready | HDWallet, key derivation, proving. Needs pre-built .so bundled |
+
+### What's blocked (needs work in Kuira first)
+
+| Gap | Impact | Fix needed |
+|-----|--------|-----------|
+| **Connector has 5 internal deps** | Can't ship connector as standalone AAR. `ConnectedAPIHandler` imports from core:crypto, core:indexer, core:ledger, core:network, core:wallet. | Extract transport layers (WebSocket, Binder, JsBridge) + QR pairing into a standalone `connector-sdk` module with interface-based deps |
+| **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
+| **No QR pairing in SDK** | Kicks uses QR/link to match players. The QR logic is in the connector but coupled to wallet internals. | Extract QR generation + scanning + deep link handling into connector-sdk |
+| **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
+| **No simple key generation** | External dev needs full HDWallet + BIP-39 + BIP-32 path derivation just to get a signing key. High friction. | Add `MidnightKeyPair.generate()` convenience API — one-liner for a new keypair |
+
+### What Kicks builds that Kuira doesn't have yet
+
+| Feature | Kicks needs it | Kuira benefits |
+|---------|---------------|----------------|
+| Match pairing (QR + deep link) | Two players find each other | Becomes the connector-sdk pairing pattern |
+| Batch circuit calls | 5 choices committed in one tx | Proves batch witness patterns work |
+| On-chain state polling | Wait for opponent's commit | Subscription/polling pattern for SDK |
+| Simple onboarding (no seed phrase) | Generate keys, start playing | Validates the "no wallet needed" UX |
+
+---
+
+## Implementation plan
+
+### Phase 1: Compact contract (Week 1)
+
+The contract is the foundation — everything else builds on it.
+
+**Deliverable:** `penalty.compact` deployed on PREPROD, tested via
+BBoard-style harness.
+
+```
+penalty.compact
+├── Ledger state
+│   ├── player1, player2: Bytes (addresses)
+│   ├── p1Committed, p2Committed: Boolean
+│   ├── score1, score2: Counter
+│   ├── roundResults: Bytes[5]
+│   ├── sdRoundResults: Bytes[5]
+│   ├── decisiveRound: Counter
+│   ├── winner: Bytes
+│   ├── stake: Uint
+│   └── phase: enum (WAITING, COMMITTED, RESOLVED, SD, COMPLETE)
+│
+├── Circuits
+│   ├── constructor(stake) → deploy match, escrow
+│   ├── join() → second player joins, escrow
+│   ├── commitBatch(hash) → store commitment hash
+│   ├── resolveRegulation(choices[5], nonces[5]) → reveal + compare
+│   ├── commitSuddenDeath(hash) → SD commitment
+│   ├── resolveSuddenDeath(choices[5], nonces[5]) → partial reveal
+│   └── claimPayout() → winner withdraws
+│
+└── Witnesses
+    ├── generateCommitmentHash(choices[5], nonces[5]) → hash
+    └── findDecisiveRound(p1Results[5], p2Results[5]) → round index
+```
+
+**Tasks:**
+1. Write penalty.compact — circuits + witnesses + ledger
+2. Compile with Compact compiler → contract IIFE JS
+3. Deploy to PREPROD via mn CLI
+4. Test: create match → commit → resolve → verify results
+5. Test: draw → sudden death → resolve
+
+### Phase 2: SDK packaging (Week 1-2, parallel with Phase 1)
+
+Make the SDK modules consumable as standalone AARs.
+
+**Deliverable:** `libs/` directory with 3 AARs that build without
+the full Kuira repo.
+
+**Tasks:**
+1. **compact-engine AAR** — run the existing SDK cleanup plan
+   (`KUIRA_IDENTITY_VISION.md` already has this scoped). Bundle
+   `libkuira_crypto_ffi.so` for arm64-v8a + x86_64. Remove
+   `core:crypto` dependency.
+2. **network AAR** — already clean, just `./gradlew :core:network:assembleRelease`
+3. **crypto AAR** — bundle native .so, export HDWallet + proving
+4. **Proving key strategy** — implement auto-download in
+   `ProvingKeyManager.downloadFromNetwork()` so Kicks doesn't need
+   manual key installation
+5. **Convenience API** — add `MidnightKeyPair.generate()` one-liner
+   for simple key creation without full BIP-39 onboarding
+
+### Phase 3: Unity game (Week 2-3)
+
+Buy a template, strip it, wire the bridge.
+
+**Deliverable:** Unity project that plays a 5-round penalty replay
+from a JSON input, and collects 5 direction choices from the player.
+
+**Tasks:**
+1. **Buy template** — Penalty Kick Complete Game Template or
+   Football Penalty Shoot Controller 3D from Asset Store
+2. **Strip single-player AI** — remove keeper AI, score tracking,
+   progression system. Keep: stadium, players, ball, animations,
+   camera angles
+3. **Build choice UI** — player picks 5 directions before the match.
+   Carousel or grid: "Round 1: [L] [C] [R] → Round 2: ..."
+   Confirm button when all 5 are selected.
+4. **Build replay system** — `PlayReplay(string json)` receives
+   5 round results, plays each sequentially:
+   - Camera positions for each round
+   - Ball trajectory based on shooter direction
+   - Keeper dive based on keeper direction
+   - GOAL or SAVE animation
+   - Score overlay update
+   - 2-3 second pause between rounds
+5. **Build result screen** — winner celebration, final score,
+   "Play Again" button
+6. **Stadium intro** — 5-10 second cinematic (flyover, crowd noise)
+   to mask proof latency. Triggered by `ShowIntro()`.
+7. **Export as UaaL** — File → Build Settings → Android → Export
+   Project. This produces the `unityLibrary` module.
+8. **Test on Android** — standalone Unity app, hardcoded JSON results
+
+### Phase 4: Android app — native layer (Week 3-4)
+
+Compose screens + SDK wiring + UaaL integration.
+
+**Deliverable:** Working Android app that pairs two players, submits
+choices to PREPROD, and plays the match in Unity.
+
+**Tasks:**
+1. **Create repo** — `midnight-kicks/` with app module + libs/
+2. **Import UaaL** — add `unityLibrary` as module, wire in
+   `settings.gradle.kts`
+3. **Import SDK AARs** — `libs/compact-engine.aar`, `network.aar`,
+   `crypto.aar`
+4. **Onboarding screen** (Compose) — generate keypair, store locally.
+   No seed phrase — just biometric + auto-generated key. "Tap to
+   start playing."
+5. **Lobby screen** (Compose) — "Create Match" (shows QR + shareable
+   link) or "Join Match" (scan QR or paste link)
+6. **Match pairing** — deep link handler (`midnight://kicks?match=<addr>`),
+   QR scanner (CameraX), contract join() call
+7. **Choice bridge** — receive 5 directions from Unity via UaaL bridge,
+   call `commitBatch()` on the Compact contract
+8. **Waiting screen** (Compose) — "Waiting for opponent..." with
+   state polling. When both committed, call `resolveRegulation()`.
+9. **Prove + resolve** — single ZK proof, get 5 round results
+10. **Launch replay** — pass results JSON to Unity via
+    `UnitySendMessage("GameManager", "PlayReplay", json)`
+11. **Result screen** (Compose) — final score, on-chain tx link,
+    leaderboard position, "Play Again"
+12. **Leaderboard screen** (Compose) — query indexer for match
+    history, aggregate win/loss records
+
+### Phase 5: Integration + polish (Week 4-5)
+
+End-to-end testing, UX polish, performance.
+
+**Tasks:**
+1. **E2E test** — two physical devices, full flow: pair → choose →
+   prove → replay → result → payout
+2. **Proof latency tuning** — measure real proof time on target
+   devices (Pixel 7 class). Adjust stadium intro length.
+3. **Error handling** — network failures, opponent disconnect,
+   proof failures, timeout handling
+4. **Polish** — loading animations, haptic feedback, sound effects,
+   Dusk-themed Compose screens (Void bg, Light text)
+5. **Deep link testing** — `midnight://kicks?match=...` opens app
+   correctly from any messaging app
+6. **APK size audit** — Unity + native .so can bloat. Target < 100MB.
+7. **Play Store listing** — screenshots, description, privacy policy
+
+### Phase 6: Release (Week 5-6)
+
+Ship before or during World Cup opening.
+
+**Tasks:**
+1. **Closed beta** — internal testing with Midnight team
+2. **Open beta** — Play Store open testing track
+3. **Announce** — blog post, social media, Midnight Discord
+4. **Monitor** — crash reports (Firebase Crashlytics), proof success
+   rates, match completion rates
+
+---
+
+## SDK friction log
+
+Track every friction point encountered while building Kicks. Each
+entry becomes a Kuira SDK improvement task.
+
+| # | Friction | Severity | SDK fix |
+|---|---------|----------|---------|
+| | (populate during implementation) | | |
+
+This log is the primary deliverable for the Kuira SDK team. If
+building Kicks is hard, building any Midnight dApp is hard.
+
+---
+
+## Decision log
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Batch vs per-round | Batch (5 choices, 1 tx) | 2 transactions per match vs 20. Cinematic replay vs interrupted gameplay. |
+| Sudden death | Batches of 5, stop at decisive round | Unrevealed rounds stay private (ZK property). No infinite single-round loops. |
+| Unity vs native rendering | Unity (UaaL) | 3D stadium, ball physics, cinematic cameras. Can't do this in Compose. |
+| Standalone vs inside Kuira | Standalone repo | Tests SDK boundaries. Separate release cycle. Open-source boundary. |
+| Connector approach | Extract lightweight pairing SDK | Full connector has 5 internal deps. Kicks only needs QR + deep links. |
+| Key management | Simple keypair generation | No seed phrase for a game. One-tap onboarding. "No wallet needed." |
+| Proving | On-device (local) | Proves the local prover works on real hardware. No server dependency. |
+| Network | PREPROD only | Real blockchain, test tokens. Same contract works on mainnet later. |
