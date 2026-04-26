@@ -25,3 +25,7 @@ htmlReport/
 release.keystore
 *.jks
 *.keystore
+
+# Separate repos with own git tracking
+examples/midnight-kicks/
+docs/security/
