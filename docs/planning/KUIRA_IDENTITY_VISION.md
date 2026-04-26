@@ -235,11 +235,19 @@ Zero words. Zero manual steps.
 24-word phrase: power-user escape hatch, not primary recovery path.
 ```
 
-**OPEN:** Passkeys sync via Google Password Manager, but access keys
-(secp256k1) are device-local. Cross-device access key recovery is
-unsolved — needs investigation in Phase 7+. Possible approaches:
-encrypted cloud backup of derived keys, or re-derivation from seed
-on new device (v1 path works today, passkey-only path needs research).
+**RESOLVED:** Access key recovery uses PRF (Pseudo-Random Function).
+PRF is a WebAuthn extension that derives a deterministic secret from
+the passkey during authentication. Google Password Manager supports
+PRF by default on Android (100% success rate, Q1 2026 testing).
+
+Recovery flow: passkey syncs to new device → user authenticates with
+biometric → PRF produces same deterministic secret → secret decrypts
+cloud backup (Block Store / GDrive) → secp256k1 access keys + state
+restored. Zero words. Zero passwords. Just biometric.
+
+24-word seed phrase remains as a power-user escape hatch only.
+
+See `docs/planning/IDENTITY_INVESTIGATION.md` for full details.
 
 ---
 
@@ -279,10 +287,10 @@ hold ("browser," "app," "tweet"):
 | Private state encryption | ✅ Built | KeyStorePrivateStateProvider (AES-256-GCM) |
 | Approval UI | ✅ Built | ConnectionApprovalActivity + ApprovalSheet |
 | Assets UI (wallet view) | ✅ Built | Balance, Send, Dust screens (8B.3 in progress) |
-| Passkey generation | ⬜ Research | Needs CredentialManager provider registration |
-| DID generation | ⬜ Research | Needs rvcas interop investigation |
-| Access key delegation | ⬜ Research | keyAuthorization model from rvcas |
-| Cloud state sync | ⬜ Planned | Block Store (8C) or GDrive encrypted blob |
+| Passkey generation | ✅ Decided | CredentialManager client (Tier 1, API 28+) / CredentialProvider (Tier 2, API 34+). See `IDENTITY_INVESTIGATION.md` |
+| DID generation | ✅ Decided | `did:key` from root passkey. One DID per user. Standard W3C format. |
+| Access key delegation | ✅ Decided | secp256k1 access key, self-verifiable keyAuthorization (P-256 root signs in TEE). Advocate P-256 to Midnight. |
+| Recovery (cloud) | ✅ Decided | PRF-encrypted cloud backup (Block Store / GDrive). Passkey syncs → biometric → PRF decrypts. Zero words. |
 | My Sigil screen | ⬜ Design | Sigil dashboard — connected apps + state browser |
 | Per-app policies | ⬜ Phase 7 | Policy Engine (Agent Runtime pillar 3) |
 | MCP Bridge | ⬜ Phase 7 | Agent Runtime pillar 1 |
@@ -293,10 +301,11 @@ hold ("browser," "app," "tweet"):
 
 | Phase | Delivers |
 |-------|---------|
-| 8B (current) | Assets screens, reactive network, Settings |
-| 8C | Cloud backup (Block Store), SDK GA |
+| 8B (current) | Assets screens, reactive network, Settings, 4-tab bottom nav |
+| SDK | Midnight Android SDK — single AAR, embedded wallet, passkey identity, PRF recovery. Midnight Kicks is first consumer. |
+| 8C | Cloud backup (PRF-encrypted Block Store / GDrive), SDK GA |
 | 7 v1.1 | MCP Bridge, Agent Mode, Policy Engine — the authority facet |
-| 7+ | CredentialManager provider, passkey generation, DID interop |
+| 7+ | CredentialProvider (Kuira as system-level passkey provider, API 34+) |
 | 9+ | My Sigil screen, per-app policies UI, sigil dashboard |
 
 ---
@@ -313,6 +322,7 @@ hold ("browser," "app," "tweet"):
 - PrivateStateProvider: `core:compact-engine/.../state/`
 - Agent Store Vision: `docs/planning/AGENT_STORE_VISION.md`
 - Kuira Vision v1: `docs/planning/KUIRA_VISION_V1.md`
+- Identity investigation: `docs/planning/IDENTITY_INVESTIGATION.md`
 - Midnight Kicks plan: `docs/planning/MIDNIGHT_KICKS_PLAN.md`
 
 ---

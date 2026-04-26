@@ -125,6 +125,49 @@ Repeat until resolved.
   to winner.
 - When mainnet launches, the same contract works with real NIGHT.
 
+## DUST / gas strategy
+
+Transactions on Midnight require DUST for gas. New players need DUST
+before they can play. Options:
+
+- **PREPROD faucet:** Player taps "Get DUST" → app calls a PREPROD
+  faucet endpoint → DUST airdropped to their address. Friction-free
+  for a test network.
+- **Provider-pay model (future):** The game developer pre-generates
+  DUST and delegates it to players. Players pay zero gas — the
+  provider subsidizes. This is Midnight's native provider-pay model
+  via DUST delegation. Ideal for mainnet.
+
+For the PREPROD launch, faucet is simplest.
+
+## Timeout / disconnect handling
+
+What happens when a player commits but the opponent never does?
+
+- **Commitment timeout:** contract enforces a time window (e.g., 5
+  minutes) for both players to commit. If one player commits and the
+  other doesn't before the deadline, the committed player can claim
+  the full pot (opponent forfeits).
+- **Disconnect during replay:** replay is purely client-side (Unity
+  animation). No blockchain interaction during replay. If a player
+  closes the app mid-replay, the match result is already on-chain —
+  they can view it when they reopen.
+- **Opponent offline at match start:** if Player B never joins after
+  Player A creates the match, Player A can cancel and reclaim their
+  stake after a timeout.
+
+## Leaderboard
+
+On-chain, queryable via indexer. Each match result is a public ledger
+entry — wins, losses, and draws are verifiable.
+
+- **Data:** player address, wins, losses, draws, total matches, win
+  streak, total NIGHT won/lost
+- **Query:** indexer aggregates match contract events per player
+- **Display:** Compose screen in the native layer (not Unity)
+- **Verification:** anyone can verify any player's record on-chain —
+  no fake leaderboards possible. This is a Midnight differentiator.
+
 ## Matchmaking
 
 Simple, no central server required:
@@ -275,38 +318,31 @@ Player gets TEE-backed keys (sigil identity), biometric approval,
 cross-app identity, and their match appears in the My Sigil tab.
 No code change in the dApp — the upgrade is automatic.
 
-### Identity primitives in the SDK (research)
+### Identity primitives in the SDK — INVESTIGATED, DECIDED
 
-The SDK must generate identities that are **forward-compatible with
-the sigil model.** If a standalone dApp creates a throwaway keypair,
-there's no migration path when the player installs Kuira. But if
-the SDK uses the same identity primitives as Kuira from the start,
-the player's standalone identity IS their future sigil.
+The SDK generates identities that are **forward-compatible with the
+sigil model.** The player's standalone identity IS their future sigil.
+Full investigation results in `docs/planning/IDENTITY_INVESTIGATION.md`.
 
-| Primitive | SDK (Tier 1) | Kuira upgrade (Tier 2) |
-|-----------|-------------|----------------------|
-| **Passkey (P-256)** | Generate via Android CredentialManager. Stored in Keystore. | Promote to StrongBox/TEE. Add biometric gate. Sync via Google Password Manager. |
-| **DID** | Derive from passkey. Interoperable with rvcas midnightOS Passkeys format. | Manage in sigil dashboard. Show in My Sigil tab. |
-| **Access key delegation** | Generate per-dApp secp256k1 key, linked to passkey via keyAuthorization. | Manage delegation policies (silent/notify/approve tiers). Revocation from My Sigil. |
+| Primitive | Decision | SDK (Tier 1) | Kuira upgrade (Tier 2) |
+|-----------|----------|-------------|----------------------|
+| **Passkey (P-256)** | ✅ Decided | CredentialManager client (API 28+). Stored in Google Password Manager. | CredentialProvider (API 34+). TEE/StrongBox. Biometric gate. |
+| **DID** | ✅ Decided | `did:key` from root passkey. One DID per user (not per-dApp). | Manage in sigil dashboard. Show in My Sigil tab. |
+| **Access key** | ✅ Decided | secp256k1 (Midnight-compatible). Self-verifiable keyAuthorization signed by P-256 root. | Delegation policies (silent/notify/approve tiers). Revocation from My Sigil. |
+| **Recovery** | ✅ Decided | PRF-encrypted cloud backup. Passkey syncs → biometric → PRF decrypts backup. Zero words. | Same, with TEE-hardened key material. |
 
-**Status: all three are research phase.** Need to investigate:
-- CredentialManager provider registration for passkey generation
-- DID format interop with rvcas (`passkeys.rvcas.dev`)
-- keyAuthorization model (how the root passkey authorizes access keys)
+**Key correction from investigation:** rvcas uses P-256 for BOTH keys
+(not secp256k1). Their system is identity-only, not blockchain-signing.
+Our SDK bridges this gap with secp256k1 access keys. We advocate to
+Midnight team for P-256 protocol support (future).
 
-These primitives live in the SDK, not in Kuira. Kuira upgrades
-them — it doesn't own them. A standalone dApp generates a passkey,
-derives a DID, delegates an access key. Kuira wraps that with
-TEE-hardened storage, biometric gates, and cross-app management.
+**Our advantage over rvcas:** self-verifiable keyAuthorization (TEE
+signs directly, no server trust). rvcas discards the WebAuthn signature
+and stores only metadata — trust-the-server model.
 
-**Key references for this investigation:**
-- rvcas fake-app (consumer pattern): `git@github.com:rvcas/fake-app.git`
-- midnightOS Passkeys (identity provider): `https://passkeys.rvcas.dev`
-- midnightOS Passkeys embed endpoint: `https://passkeys.rvcas.dev/embed`
-- webauthx (WebAuthn wrapper, P-256): `npm:webauthx@0.1.0` (by wevm, wraps `ox/webauthn`)
-- Android CredentialManager API: `https://developer.android.com/identity/sign-in/credential-manager`
-- Kuira sigil model: `docs/planning/KUIRA_IDENTITY_VISION.md`
-- Prior rvcas analysis: `memory/project_passkey_investigation.md`
+These primitives live in the SDK, not in Kuira. Kuira upgrades them.
+
+**References:** `docs/planning/IDENTITY_INVESTIGATION.md` (full details)
 
 ### What this means
 
@@ -376,10 +412,17 @@ The contract is the foundation — everything else builds on it.
 **Concepts:** Match lifecycle (create → join → commit → resolve →
 payout), batch commitment scheme (5 choices hashed together),
 regulation resolution (compare all 5), sudden death resolution
-(stop at decisive round), stake escrow + winner payout.
+(stop at decisive round), stake escrow + winner payout, commitment
+timeout for disconnect protection.
+
+**Deployment model:** Each match = a new contract instance. The
+"Create Match" action deploys a fresh contract. This means the SDK
+needs contract deployment capability (not just calling existing
+contracts like BBoard). For Phase 1 testing, deploy via `mn` CLI.
+SDK deployment support is part of Phase 2.
 
 **Validated by:** create match → both commit → resolve → verify
-results → draw → sudden death → resolve.
+results → draw → sudden death → resolve → timeout forfeit.
 
 ### Phase 2: Midnight Android SDK (parallel with Phase 1)
 
@@ -389,7 +432,10 @@ Gradle line. No external wallet process needed.
 **Concepts:** Thin facade over existing 5 core modules. Embedded
 wallet (key gen, UTXO tracking, tx balancing, signing, submission)
 replaces the external wallet dependency. Auto-download proving keys
-on first launch. Native .so bundled in AAR.
+on first launch. Native .so bundled in AAR. Passkey identity
+(CredentialManager), `did:key` derivation, self-verifiable
+keyAuthorization, PRF-encrypted cloud backup for recovery. Contract
+deployment API (new — BBoard only reads existing contracts).
 
 **Validated by:** migrate BBoard to use the new SDK without
 `mn serve` running. If BBoard works standalone, the SDK is ready.
@@ -412,7 +458,9 @@ choices to PREPROD, and plays the match in Unity.
 **Concepts:** Compose screens (onboarding, lobby, waiting, results,
 leaderboard). UaaL integration for Unity game. SDK wiring for
 contract calls. QR + deep link pairing for matchmaking. State
-polling to detect when opponent has committed.
+polling to detect when opponent has committed. Onboarding is
+passkey creation → biometric → play. No seed phrase. PRF backup
+happens silently in the background after key creation.
 
 ### Phase 5: Integration + polish
 
@@ -452,7 +500,11 @@ building Kicks is hard, building any Midnight dApp is hard.
 | Sudden death | Batches of 5, stop at decisive round | Unrevealed rounds stay private (ZK property). No infinite single-round loops. |
 | Unity vs native rendering | Unity (UaaL) | 3D stadium, ball physics, cinematic cameras. Can't do this in Compose. |
 | Standalone vs inside Kuira | Standalone repo | Tests SDK boundaries. Separate release cycle. Open-source boundary. |
-| Pairing approach | Built in Kicks (QR + deep links) | Connector's transport layers (WebSocket, Binder, JsBridge) aren't needed for matchmaking. QR + deep links are simpler. Connector ships separately as open-source SDK for dApps that need wallet integration. |
-| Key management | MidnightWallet (embedded in SDK) | No seed phrase for a game. One-tap onboarding. SDK handles key gen, UTXO tracking, balancing, signing, submission internally. |
+| Pairing approach | Built in Kicks (QR + deep links) | Connector's transport layers aren't needed for matchmaking. QR + deep links are simpler. |
+| Access key curve | secp256k1 (advocate P-256 to Midnight) | Midnight accepts secp256k1 today. P-256 protocol support is the future goal. |
+| keyAuthorization | Self-verifiable (TEE signs directly) | Stronger than rvcas's server-attested model. No server trust needed. |
+| DID | One per user, from root passkey | Sigil = one identity. Per-dApp DIDs (rvcas model) fragment identity. |
+| Recovery | PRF-encrypted cloud backup | Zero words. Passkey syncs → biometric → PRF decrypts → restored. Seed as escape hatch only. |
+| DUST / gas | PREPROD faucet (provider-pay on mainnet) | Lowest friction for test network. Provider-pay is the mainnet model. |
 | Proving | On-device (local) | Proves the local prover works on real hardware. No server dependency. |
 | Network | PREPROD only | Real blockchain, test tokens. Same contract works on mainnet later. |
