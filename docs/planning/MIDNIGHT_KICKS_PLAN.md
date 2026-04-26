@@ -454,13 +454,57 @@ Building Midnight Kicks as an external consumer exposes exactly what's
 missing for third-party developers. Every gap found here is a gap to
 fix before SDK GA.
 
-### What's ready (no work needed)
+### What's ready (proven by BBoard example)
 
-| Module | Status | Notes |
-|--------|--------|-------|
-| `core:compact-engine` | ✅ Production-ready | MidnightConfig, MidnightContract, ProofProvider, ContractCallStage, error types — all clean public API. BBoard example proves the pattern works. |
-| `core:network` | ✅ Ready | MidnightNetwork enum, NetworkConfig factory, zero internal coupling |
-| `core:crypto` | ✅ Ready | HDWallet, key derivation, proving. Needs pre-built .so bundled |
+BBoard (`examples/bboard`) is an Android dApp that executes ZK circuits
+and submits transactions. Two Gradle dependencies:
+```kotlin
+implementation(project(":core:compact-engine"))
+runtimeOnly(project(":core:crypto"))  // provides native .so
+```
+
+No Hilt. No Kuira internal modules. Clean developer pattern. BUT:
+**BBoard requires Kuira (or `mn serve`) running as the wallet backend.**
+The `walletUrl` in `MidnightConfig` points to the connector WebSocket.
+Without it, the Balancing and Submitting stages fail — the SDK needs
+an external wallet to provide UTXOs, sign, and submit.
+
+```
+BBoard app                    Kuira / mn serve (REQUIRED)
+    │                              │
+    ├─ MidnightConfig(walletUrl) ─►│ WebSocket on :9932
+    │                              │
+    ├─ contract.call("post") ─────►│
+    │   Fetch state (indexer) ✅    │ (direct, no wallet needed)
+    │   Execute circuit ✅          │ (local QuickJS, no wallet)
+    │   Prove ✅                    │ (local Rust FFI, no wallet)
+    │   Balance tx ───────────────►│ wallet provides UTXOs + signs
+    │   Submit tx ────────────────►│ wallet submits to node
+    │                              │
+```
+
+**What BBoard proves works (SDK side):**
+
+| Capability | Status | Pattern |
+|-----------|--------|---------|
+| SDK config | ✅ | `MidnightConfig.Builder(context).indexerUrl().walletUrl().networkId().build()` |
+| Contract handle | ✅ | `MidnightContract.create(config) { contractJs, address, witness, ... }` |
+| Circuit execution | ✅ | `contract.call("post", message) { stage -> updateUI(stage) }` |
+| State reading | ✅ | `config.queryState(contractAddress)` returns JSONArray |
+| Progress tracking | ✅ | `ContractCallStage` sealed class (Fetching → Executing → Proving → Balancing → Submitting) |
+| Error handling | ✅ | `ContractCallException` subtypes per stage |
+| Network presets | ✅ | `NetworkChoice` enum with URLs per environment |
+
+**What BBoard does NOT prove (wallet side):**
+
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Standalone operation | ❌ | Requires external wallet process for balancing + submission |
+| Key management | ❌ | Hardcoded `SECRET_KEY = ByteArray(32) { (it + 1).toByte() }` |
+| UTXO ownership | ❌ | Wallet provides UTXOs, not the dApp |
+| Transaction signing | ❌ | Wallet signs, not the dApp |
+| Contract deployment | ❌ | Must use `mn contract deploy` CLI |
+| Proving key install | ❌ | Manual `adb push` from `/data/local/tmp/` |
 
 ### What's blocked (needs work in Kuira first)
 
@@ -470,7 +514,7 @@ fix before SDK GA.
 | **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
 | **No QR pairing in SDK** | Kicks uses QR/link to match players. QR generation/scanning is not in the connector — it only handles WebSocket/Binder/JsBridge transports. | Build QR + deep link pairing as a new lightweight module or directly in Kicks |
 | **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
-| **No lightweight wallet for standalone dApps** | External dev needs full HDWallet + BIP-39 + BIP-32 + seed phrase onboarding just to get a signing key. dApps should work standalone without Kuira. | Ship a lightweight wallet module: `MidnightWallet.create(context)` — generates keypair, stores in Android Keystore, signs transactions. No seed phrase. When Kuira is installed, dApp upgrades to sigil-backed identity seamlessly. |
+| **No lightweight wallet for standalone dApps** | `MidnightContract.call()` requires `walletUrl` — an external wallet process (Kuira or `mn serve`) for balancing + signing + submission. A standalone dApp can't transact without a wallet running. This is the biggest gap. | Ship a lightweight wallet module: `MidnightWallet.create(context)` that handles key generation (Android Keystore), UTXO tracking, transaction balancing, signing, and submission — all embedded. No external wallet needed. No seed phrase. When Kuira is installed, dApp upgrades to sigil-backed identity. |
 
 ### What Kicks builds that Kuira doesn't have yet
 
