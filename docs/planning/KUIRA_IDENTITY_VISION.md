@@ -303,14 +303,17 @@ hold ("browser," "app," "tweet"):
 
 ## Key references
 
-- rvcas fake-app: `git@github.com:rvcas/fake-app.git`
-- midnightOS Passkeys: `passkeys.rvcas.dev`
-- webauthx: `npm:webauthx@0.1.0` (by wevm, wraps `ox/webauthn`)
+- rvcas fake-app (consumer pattern): `git@github.com:rvcas/fake-app.git`
+- midnightOS Passkeys (identity provider): `https://passkeys.rvcas.dev`
+- midnightOS Passkeys embed endpoint: `https://passkeys.rvcas.dev/embed`
+- webauthx (P-256 WebAuthn wrapper): `npm:webauthx@0.1.0` (by wevm, wraps `ox/webauthn`)
+- Android CredentialManager API: `https://developer.android.com/identity/sign-in/credential-manager`
 - Midnight CTO working group: rethinking onboarding, "no wallet needed"
 - Kuira Connector: `core:connector/` (4 transports, approval UI)
 - PrivateStateProvider: `core:compact-engine/.../state/`
 - Agent Store Vision: `docs/planning/AGENT_STORE_VISION.md`
 - Kuira Vision v1: `docs/planning/KUIRA_VISION_V1.md`
+- Midnight Kicks plan: `docs/planning/MIDNIGHT_KICKS_PLAN.md`
 
 ---
 

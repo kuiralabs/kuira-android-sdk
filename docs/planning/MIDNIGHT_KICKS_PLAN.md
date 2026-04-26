@@ -299,9 +299,14 @@ them — it doesn't own them. A standalone dApp generates a passkey,
 derives a DID, delegates an access key. Kuira wraps that with
 TEE-hardened storage, biometric gates, and cross-app management.
 
-See `docs/planning/KUIRA_IDENTITY_VISION.md` for the full sigil
-model and `memory/project_passkey_investigation.md` for the rvcas
-analysis.
+**Key references for this investigation:**
+- rvcas fake-app (consumer pattern): `git@github.com:rvcas/fake-app.git`
+- midnightOS Passkeys (identity provider): `https://passkeys.rvcas.dev`
+- midnightOS Passkeys embed endpoint: `https://passkeys.rvcas.dev/embed`
+- webauthx (WebAuthn wrapper, P-256): `npm:webauthx@0.1.0` (by wevm, wraps `ox/webauthn`)
+- Android CredentialManager API: `https://developer.android.com/identity/sign-in/credential-manager`
+- Kuira sigil model: `docs/planning/KUIRA_IDENTITY_VISION.md`
+- Prior rvcas analysis: `memory/project_passkey_investigation.md`
 
 ### What this means
 
