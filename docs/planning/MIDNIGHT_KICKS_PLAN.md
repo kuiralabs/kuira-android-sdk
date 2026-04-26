@@ -391,6 +391,63 @@ pre-built compact-engine AAR.
 
 ---
 
+## Two-tier identity: standalone + Kuira-enhanced
+
+Midnight dApps exist standalone. Kuira is the upgrade, not the
+prerequisite. This is core to the Kuira vision — "you shouldn't
+need a wallet to use Midnight apps."
+
+### Tier 1 — Standalone (Kuira NOT installed)
+
+```
+Midnight Kicks (standalone)
+├── Lightweight wallet module (embedded)
+│   ├── MidnightWallet.create(context) — one-liner
+│   ├── Generates keypair (secp256k1)
+│   ├── Stores in Android Keystore (basic hardware backing)
+│   ├── Signs transactions locally
+│   └── No seed phrase, no BIP-39, no onboarding ceremony
+├── Connector runs locally inside Kicks
+├── Player manages their own identity
+└── Works completely independently — no other app needed
+```
+
+### Tier 2 — Enhanced (Kuira IS installed)
+
+```
+Midnight Kicks (Kuira-enhanced)
+├── Discovers Kuira via Android intent / CredentialManager
+├── Kuira provides TEE-backed keys (sigil identity)
+│   ├── StrongBox / hardware-backed key storage
+│   ├── Biometric gate for transaction approval
+│   └── Cross-app identity — same sigil across all dApps
+├── Connector delegates to Kuira's connector service
+├── Match appears in "My Sigil" tab as connected app
+├── Match history tied to sigil identity (portable)
+└── Player gets: better security, unified identity, state browser
+```
+
+### What this means for Kicks development
+
+Kicks ships with the lightweight wallet module for Tier 1. Tier 2
+is automatic when Kuira is installed — no extra code in Kicks.
+The lightweight wallet module becomes a reusable SDK artifact that
+every Midnight dApp on Android can embed.
+
+### What this means for the SDK
+
+The lightweight wallet module is the missing piece. Today, a dApp
+developer must either:
+- Import full `core:crypto` with BIP-39/32 and run a seed phrase
+  onboarding (too heavy for a game)
+- Or require Kuira to be installed (blocks adoption)
+
+The lightweight module gives developers a third option:
+`MidnightWallet.create(context)` → ready to sign transactions.
+One line. No ceremony. Kuira upgrades the experience when present.
+
+---
+
 ## SDK gap analysis
 
 Building Midnight Kicks as an external consumer exposes exactly what's
@@ -413,7 +470,7 @@ fix before SDK GA.
 | **No contract deployment from SDK** | Kicks needs to deploy the penalty contract. Currently only the `mn` CLI deploys. MidnightContract assumes an existing `address`. | Add `MidnightContract.deploy(config, contractJs, constructorArgs)` to compact-engine |
 | **No QR pairing in SDK** | Kicks uses QR/link to match players. QR generation/scanning is not in the connector — it only handles WebSocket/Binder/JsBridge transports. | Build QR + deep link pairing as a new lightweight module or directly in Kicks |
 | **Proving keys not bundled** | Developer must manually download proving keys. BBoard example copies from `/data/local/tmp/`. Not viable for Play Store app. | Add `ProvingKeyManager.downloadFromNetwork(circuitNames)` or bundle keys in AAR |
-| **No simple key generation** | External dev needs full HDWallet + BIP-39 + BIP-32 path derivation just to get a signing key. High friction. | Add `MidnightKeyPair.generate()` convenience API — one-liner for a new keypair |
+| **No lightweight wallet for standalone dApps** | External dev needs full HDWallet + BIP-39 + BIP-32 + seed phrase onboarding just to get a signing key. dApps should work standalone without Kuira. | Ship a lightweight wallet module: `MidnightWallet.create(context)` — generates keypair, stores in Android Keystore, signs transactions. No seed phrase. When Kuira is installed, dApp upgrades to sigil-backed identity seamlessly. |
 
 ### What Kicks builds that Kuira doesn't have yet
 
