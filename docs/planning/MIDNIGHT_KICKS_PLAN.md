@@ -1,7 +1,7 @@
 # Midnight Kicks — Penalty Shootout on Midnight
 
 **Status:** Planning
-**Last updated:** 2026-04-24
+**Last updated:** 2026-04-25
 **Target:** FIFA World Cup 2026 (June 11 - July 19)
 
 ---
@@ -28,9 +28,10 @@ trusted third party. The contract is the referee.
 4. **Trojan horse for ZK.** Players don't know they're using zero-
    knowledge proofs. They just know nobody can cheat. Technology
    that disappears into the experience is the best demo.
-5. **Open-source play.** Only the SDK connector is open-sourced.
-   Other developers see how to build a Midnight dApp on Android.
-   The full Kuira stack stays proprietary.
+5. **Open-source play.** The connector SDK is open-sourced for
+   dApp-to-wallet integration. The Midnight Android SDK ships as a
+   binary AAR. Other developers see the pattern: one dependency,
+   three objects, one `call()`. The full Kuira stack stays proprietary.
 
 ## Game mechanics
 
@@ -142,9 +143,9 @@ Player A: shares link via any messaging app
 Player B: taps link → Midnight Kicks opens → joins match
 ```
 
-Both methods use the Kuira Connector deep link transport pattern
-(`midnight://` URI scheme). The match ID is a contract instance
-address on PREPROD.
+Both methods use standard Android deep links (`midnight://` URI
+scheme). The match ID is the deployed contract address on PREPROD.
+Pairing is built directly in Kicks — no connector SDK needed.
 
 ## Architecture
 
@@ -161,21 +162,16 @@ Midnight Kicks (Android app)
 │   └── UaaL bridge → sends/receives events to Kotlin
 │
 ├── Kotlin (blockchain layer — native Android)
-│   ├── compact-engine (SDK)
-│   │   ├── Contract deployment (create match)
-│   │   ├── Circuit execution (commit choice, reveal, compare)
-│   │   ├── Local proof generation (on-device)
-│   │   └── Transaction submission
+│   ├── midnight-sdk.aar (single dependency)
+│   │   ├── MidnightSdk — entry point, config
+│   │   ├── MidnightWallet — key gen, UTXO tracking, balancing, signing
+│   │   ├── MidnightContract — circuit execution, proving, submission
+│   │   └── All internals bundled (crypto, indexer, ledger, network)
 │   │
-│   ├── connector (subset)
-│   │   ├── QR code generation + scanning
+│   ├── Pairing (built in Kicks)
+│   │   ├── QR code generation + scanning (CameraX)
 │   │   ├── Deep link handling (midnight://kicks?match=...)
-│   │   └── Player pairing protocol
-│   │
-│   ├── network
-│   │   ├── Indexer client (PREPROD)
-│   │   ├── Node RPC client (PREPROD)
-│   │   └── Network config (hardcoded to PREPROD)
+│   │   └── Contract-based matchmaking (match ID = contract address)
 │   │
 │   └── UaaL bridge → receives/sends events to Unity
 │
@@ -367,11 +363,8 @@ midnight-kicks/              (new repo)
 │   ├── tests/
 │   └── package.json
 │
-├── libs/                    (pre-built Kuira SDK modules)
-│   ├── compact-engine.aar
-│   ├── connector-sdk.aar
-│   ├── network.aar
-│   └── crypto.aar
+├── libs/                    (Midnight Android SDK)
+│   └── midnight-sdk.aar    (single AAR — all modules bundled)
 │
 └── docs/
     ├── ARCHITECTURE.md
@@ -418,14 +411,13 @@ need a wallet to use Midnight apps."
 
 ```
 Midnight Kicks (standalone)
-├── Lightweight wallet module (embedded)
-│   ├── MidnightWallet.create(context) — one-liner
-│   ├── Generates keypair (secp256k1)
-│   ├── Stores in Android Keystore (basic hardware backing)
-│   ├── Signs transactions locally
-│   └── No seed phrase, no BIP-39, no onboarding ceremony
-├── Connector runs locally inside Kicks
-├── Player manages their own identity
+├── Midnight Android SDK (midnight-sdk.aar — single dependency)
+│   ├── MidnightSdk.create(context) { network = PREPROD }
+│   ├── MidnightWallet — key gen, UTXO tracking, balancing, signing
+│   ├── MidnightContract — circuit execution, proving, submission
+│   └── Everything embedded — no external wallet process
+├── Pairing built in Kicks (QR + deep links)
+├── Player identity = MidnightWallet keypair (Android Keystore)
 └── Works completely independently — no other app needed
 ```
 
@@ -668,25 +660,36 @@ penalty.compact
 4. Test: create match → commit → resolve → verify results
 5. Test: draw → sudden death → resolve
 
-### Phase 2: SDK packaging (Week 1-2, parallel with Phase 1)
+### Phase 2: Midnight Android SDK (Week 1-2, parallel with Phase 1)
 
-Make the SDK modules consumable as standalone AARs.
+Build the `MidnightSdk` facade + `MidnightWallet` class, package
+all 5 existing core modules into a single `midnight-sdk.aar`.
 
-**Deliverable:** `libs/` directory with 3 AARs that build without
-the full Kuira repo.
+**Deliverable:** `midnight-sdk.aar` that a standalone app imports
+with one Gradle line. No external wallet process needed.
 
 **Tasks:**
-1. **compact-engine AAR** — run the existing SDK cleanup plan
-   (`KUIRA_IDENTITY_VISION.md` already has this scoped). Bundle
-   `libkuira_crypto_ffi.so` for arm64-v8a + x86_64. Remove
-   `core:crypto` dependency.
-2. **network AAR** — already clean, just `./gradlew :core:network:assembleRelease`
-3. **crypto AAR** — bundle native .so, export HDWallet + proving
-4. **Proving key strategy** — implement auto-download in
-   `ProvingKeyManager.downloadFromNetwork()` so Kicks doesn't need
-   manual key installation
-5. **Convenience API** — add `MidnightKeyPair.generate()` one-liner
-   for simple key creation without full BIP-39 onboarding
+1. **MidnightSdk facade** — thin entry point that wires
+   MidnightConfig, indexer, ledger, network internally. Builder DSL:
+   `MidnightSdk.create(context) { network = PREPROD }`.
+2. **MidnightWallet class** — key generation (Android Keystore),
+   UTXO tracking (wraps UtxoManager), transaction balancing (wraps
+   TransactionSubmitter), signing, submission. No seed phrase.
+   Replaces the `walletUrl` dependency — all operations embedded.
+3. **Wire MidnightContract.call()** — replace the WebSocket-to-wallet
+   balancing/submission path with direct calls to MidnightWallet.
+   The circuit execution + proving path is unchanged.
+4. **Proving key auto-download** — implement
+   `ProvingKeyManager.downloadFromNetwork(circuitNames)` so apps
+   don't need manual `adb push`. Cache in `context.filesDir`.
+5. **Bundle native .so** — pre-built `libkuira_crypto_ffi.so` for
+   arm64-v8a + x86_64 in the AAR's jniLibs.
+6. **Package as single AAR** — Gradle module that depends on all 5
+   core modules, exports only the public API surface (MidnightSdk,
+   MidnightWallet, MidnightContract, MidnightConfig, stage/error types).
+7. **Test with BBoard** — migrate BBoard example to use
+   `midnight-sdk.aar` instead of `core:compact-engine` + `walletUrl`.
+   If BBoard works without `mn serve`, the SDK is ready.
 
 ### Phase 3: Unity game (Week 2-3)
 
@@ -731,8 +734,8 @@ choices to PREPROD, and plays the match in Unity.
 1. **Create repo** — `midnight-kicks/` with app module + libs/
 2. **Import UaaL** — add `unityLibrary` as module, wire in
    `settings.gradle.kts`
-3. **Import SDK AARs** — `libs/compact-engine.aar`, `network.aar`,
-   `crypto.aar`
+3. **Import SDK** — `implementation(files("libs/midnight-sdk.aar"))`
+   — single dependency
 4. **Onboarding screen** (Compose) — generate keypair, store locally.
    No seed phrase — just biometric + auto-generated key. "Tap to
    start playing."
@@ -805,7 +808,7 @@ building Kicks is hard, building any Midnight dApp is hard.
 | Sudden death | Batches of 5, stop at decisive round | Unrevealed rounds stay private (ZK property). No infinite single-round loops. |
 | Unity vs native rendering | Unity (UaaL) | 3D stadium, ball physics, cinematic cameras. Can't do this in Compose. |
 | Standalone vs inside Kuira | Standalone repo | Tests SDK boundaries. Separate release cycle. Open-source boundary. |
-| Connector approach | Extract lightweight pairing SDK | Full connector has 5 internal deps. Kicks only needs QR + deep links. |
-| Key management | Simple keypair generation | No seed phrase for a game. One-tap onboarding. "No wallet needed." |
+| Pairing approach | Built in Kicks (QR + deep links) | Connector's transport layers (WebSocket, Binder, JsBridge) aren't needed for matchmaking. QR + deep links are simpler. Connector ships separately as open-source SDK for dApps that need wallet integration. |
+| Key management | MidnightWallet (embedded in SDK) | No seed phrase for a game. One-tap onboarding. SDK handles key gen, UTXO tracking, balancing, signing, submission internally. |
 | Proving | On-device (local) | Proves the local prover works on real hardware. No server dependency. |
 | Network | PREPROD only | Real blockchain, test tokens. Same contract works on mainnet later. |
