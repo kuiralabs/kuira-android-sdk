@@ -73,8 +73,12 @@ class DustRepository @Inject constructor(
         /** Events per chunk for streaming sync. Balances memory vs checkpoint overhead. */
         private const val CHUNK_SIZE = 500
 
-        /** Timeout waiting for the first event in a delta sync (500ms). */
-        private const val DELTA_FIRST_EVENT_TIMEOUT_MS = 500L
+        /**
+         * Timeout waiting for the first event in a delta sync.
+         * Must be long enough for slow remote indexers (PREPROD) to start streaming.
+         * If no event arrives within this window, we conclude "truly caught up."
+         */
+        private const val DELTA_FIRST_EVENT_TIMEOUT_MS = 30_000L
 
         // Key format: "dust_state_{address}"
         private fun dustStateKey(address: String) = stringPreferencesKey("dust_state_$address")

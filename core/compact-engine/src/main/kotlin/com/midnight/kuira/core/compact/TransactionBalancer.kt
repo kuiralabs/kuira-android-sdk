@@ -27,4 +27,18 @@ interface TransactionBalancer {
      * @param balancedTxHex Hex-encoded balanced transaction
      */
     suspend fun submitTransaction(balancedTxHex: String)
+
+    /**
+     * Balance and submit a proven transaction in one operation.
+     *
+     * Implementations can override this to add retry logic for recoverable
+     * errors (e.g., error 170 InvalidDustSpendProof due to stale Merkle root).
+     * The default implementation simply calls [balanceTransaction] then [submitTransaction].
+     *
+     * @param provenTxHex Hex-encoded proven (but unsealed) transaction
+     */
+    suspend fun balanceAndSubmit(provenTxHex: String) {
+        val balanced = balanceTransaction(provenTxHex)
+        submitTransaction(balanced)
+    }
 }

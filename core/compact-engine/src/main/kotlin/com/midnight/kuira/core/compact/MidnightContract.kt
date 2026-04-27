@@ -47,27 +47,26 @@ class MidnightContract private constructor(
 
         onProgress?.invoke(ContractCallStage.Balancing)
         val balancer = config.getBalancer()
-        val balanceStart = System.currentTimeMillis()
-        val balancedTxHex = try {
-            balancer.balanceTransaction(prepared.provenTxHex)
-        } catch (e: Exception) {
-            throw ContractCallException.BalancingFailed("Balance failed: ${e.message}", e)
-        }
-        val balanceMs = System.currentTimeMillis() - balanceStart
-
-        onProgress?.invoke(ContractCallStage.Submitting)
-        val submitStart = System.currentTimeMillis()
+        val balanceAndSubmitStart = System.currentTimeMillis()
         try {
-            balancer.submitTransaction(balancedTxHex)
+            balancer.balanceAndSubmit(prepared.provenTxHex)
         } catch (e: Exception) {
-            throw ContractCallException.SubmissionFailed("Submit failed: ${e.message}", e)
+            // Classify the error based on the stage it occurred in
+            val message = e.message ?: ""
+            if (message.contains("Balance failed") || message.contains("balance")) {
+                throw ContractCallException.BalancingFailed("Balance failed: $message", e)
+            }
+            throw ContractCallException.SubmissionFailed("Submit failed: $message", e)
         }
-        val submitMs = System.currentTimeMillis() - submitStart
+        val balanceAndSubmitMs = System.currentTimeMillis() - balanceAndSubmitStart
 
         return TransactionReceipt(
             txHash = null,
             status = TransactionStatus.SUBMITTED,
-            timings = prepared.timings.copy(balanceMs = balanceMs, submitMs = submitMs),
+            timings = prepared.timings.copy(
+                balanceMs = balanceAndSubmitMs,
+                submitMs = 0, // Included in balanceMs (combined operation)
+            ),
             provenTxHex = prepared.provenTxHex,
         )
     }
