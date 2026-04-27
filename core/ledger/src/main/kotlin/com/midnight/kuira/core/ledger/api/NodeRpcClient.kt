@@ -90,6 +90,22 @@ interface NodeRpcClient {
     ): TransactionFinalizationResult
 
     /**
+     * Get the hash of the latest finalized block.
+     *
+     * Standard Substrate RPC: `chain_getFinalizedHead`.
+     * Returns a 32-byte block hash as 64-char hex (without 0x prefix).
+     *
+     * Used as a tip fingerprint for cache validity: if the finalized head
+     * hasn't changed since last sync, dust state is guaranteed current.
+     *
+     * @return Block hash (64 hex chars)
+     * @throws NodeNetworkException if network connectivity fails
+     * @throws NodeTimeoutException if request times out
+     * @throws NodeRpcError if node returns JSON-RPC error
+     */
+    suspend fun getFinalizedHead(): String
+
+    /**
      * Check if node is healthy and reachable.
      *
      * Performs a lightweight RPC call to verify connectivity.

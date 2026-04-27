@@ -64,6 +64,7 @@ class NodeRpcClientImpl(
 
     companion object {
         private const val TAG = "NodeRpcClient"
+        private const val TIP_FETCH_TIMEOUT_MS = 3_000L
 
         private fun createDefaultHttpClient() = HttpClient(OkHttp) {
             install(ContentNegotiation) {
@@ -552,6 +553,51 @@ class NodeRpcClientImpl(
             }
 
             else -> TransactionFinalizationResult.Invalid(txHash, "Cannot parse status: $status")
+        }
+    }
+
+    override suspend fun getFinalizedHead(): String {
+        val requestId = requestIdCounter.incrementAndGet()
+        val request = JsonRpcRequest(
+            id = requestId,
+            method = "chain_getFinalizedHead",
+            params = emptyList(),
+        )
+
+        // Convert ws(s):// to http(s):// for the HTTP POST RPC call
+        val httpUrl = nodeUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://")
+
+        try {
+            val response = httpClient.post(httpUrl) {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout {
+                    requestTimeoutMillis = TIP_FETCH_TIMEOUT_MS
+                }
+            }
+
+            val jsonResponse = json.decodeFromString<JsonRpcResponse>(response.bodyAsText())
+
+            if (jsonResponse.error != null) {
+                throw NodeRpcError(
+                    code = jsonResponse.error.code,
+                    message = jsonResponse.error.message,
+                    data = jsonResponse.error.data,
+                )
+            }
+
+            val result = jsonResponse.result
+                ?: throw NodeInvalidResponseException("Missing 'result' in chain_getFinalizedHead response")
+
+            return result.jsonPrimitive.content.removePrefix("0x")
+        } catch (e: NodeRpcException) {
+            throw e
+        } catch (e: HttpRequestTimeoutException) {
+            throw NodeTimeoutException("Timeout fetching finalized head", e)
+        } catch (e: Exception) {
+            throw NodeNetworkException("Failed to fetch finalized head: ${e.message}", e)
         }
     }
 

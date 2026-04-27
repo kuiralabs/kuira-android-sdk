@@ -32,55 +32,45 @@ class MidnightWalletTest {
     // ── submitTransaction delegates to NodeRpcClient ──
 
     @Test
-    fun `submitTransaction calls submitAndWaitForFinalization then deletes dust cache`() = runTest {
+    fun `submitTransaction calls submitAndWaitForFinalization then invalidates dust memo`() = runTest {
         val nodeRpc = mock<NodeRpcClient> {
             onBlocking { submitAndWaitForFinalization(any(), any()) } doReturn
                 TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
         }
-        val dustRepo = mock<DustRepository> {
-            onBlocking { deleteState(any()) } doReturn Unit
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { invalidateMemo() } doReturn Unit
         }
 
-        val wallet = createWallet(nodeRpcClient = nodeRpc, dustRepository = dustRepo)
+        val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = syncManager)
         wallet.submitTransaction("balanced_hex")
 
         verify(nodeRpc).submitAndWaitForFinalization(eq("balanced_hex"), any())
-        verify(dustRepo).deleteState("test_address")
+        verify(syncManager).invalidateMemo()
     }
 
     // ── syncDust delegates to DustRepository ──
 
     @Test
-    fun `syncDust calls dustRepository syncFromBlockchain`() = runTest {
-        val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
+    fun `syncDust delegates to DustSyncManager ensureSynced`() = runTest {
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced() } doReturn mock()
         }
 
-        val wallet = createWallet(dustRepository = dustRepo)
+        val wallet = createWallet(dustSyncManager = syncManager)
         wallet.syncDust()
 
-        verify(dustRepo).syncFromBlockchain(eq("test_address"), any(), any())
+        verify(syncManager).ensureSynced()
     }
 
     // ── balanceTransaction error cases ──
-
-    @Test(expected = IllegalStateException::class)
-    fun `balanceTransaction throws if no dust state found`() = runTest {
-        val dustRepo = mock<DustRepository> {
-            onBlocking { loadState(any()) } doReturn null
-        }
-
-        val wallet = createWallet(dustRepository = dustRepo)
-        wallet.balanceTransaction("proven_hex")
-    }
 
     @Test(expected = IllegalStateException::class)
     fun `balanceTransaction throws if indexer returns no ledger params`() = runTest {
         val dustState = mock<DustLocalState> {
             on { getStatePointer() } doReturn 12345L
         }
-        val dustRepo = mock<DustRepository> {
-            onBlocking { loadState(any()) } doReturn dustState
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced() } doReturn dustState
         }
         val indexer = mock<IndexerClient> {
             onBlocking { getCurrentBlockWithParams() } doReturn BlockInfo(
@@ -91,23 +81,26 @@ class MidnightWalletTest {
             )
         }
 
-        val wallet = createWallet(dustRepository = dustRepo, indexerClient = indexer)
+        val wallet = createWallet(dustSyncManager = syncManager, indexerClient = indexer)
         wallet.balanceTransaction("proven_hex")
     }
 
     // ── close ──
 
     @Test
-    fun `close delegates to NodeRpcClient`() {
+    fun `close delegates to NodeRpcClient and DustSyncManager`() {
         val nodeRpc = mock<NodeRpcClient>()
-        val wallet = createWallet(nodeRpcClient = nodeRpc)
+        val syncManager = mock<DustSyncManager>()
+        val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = syncManager)
         wallet.close()
         verify(nodeRpc).close()
+        verify(syncManager).close()
     }
 
     // ── Helpers ──
 
     private fun createWallet(
+        dustSyncManager: DustSyncManager = mock(),
         dustRepository: DustRepository = mock(),
         indexerClient: IndexerClient = mock(),
         nodeRpcClient: NodeRpcClient = mock(),
@@ -116,6 +109,7 @@ class MidnightWalletTest {
         provingKeysDir: String = "/tmp/keys",
         networkId: String = "undeployed",
     ) = MidnightWallet(
+        dustSyncManager = dustSyncManager,
         dustRepository = dustRepository,
         indexerClient = indexerClient,
         nodeRpcClient = nodeRpcClient,

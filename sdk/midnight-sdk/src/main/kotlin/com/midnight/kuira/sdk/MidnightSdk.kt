@@ -142,9 +142,17 @@ class MidnightSdk private constructor(
 
             val provingKeyManager = ProvingKeyManager(appContext)
 
-            // ── Create wallet ──
+            // ── Create wallet with tip-aware dust sync ──
+
+            val dustSyncManager = DustSyncManager(
+                dustRepository = dustRepository,
+                nodeRpcClient = nodeRpcClient,
+                walletAddress = keys.address,
+                dustSeed = keys.dustSeed,
+            )
 
             val wallet = MidnightWallet(
+                dustSyncManager = dustSyncManager,
                 dustRepository = dustRepository,
                 indexerClient = indexerClient,
                 nodeRpcClient = nodeRpcClient,

@@ -3,12 +3,14 @@ package com.midnight.kuira.core.indexer.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.database.DustDao
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.di.DustStateDataStore
 import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -70,6 +72,9 @@ class DustRepository @Inject constructor(
 
         // Key format: "dust_state_{address}"
         private fun dustStateKey(address: String) = stringPreferencesKey("dust_state_$address")
+
+        // Key format: "dust_last_event_{address}" (for delta sync resume)
+        private fun lastEventIdKey(address: String) = longPreferencesKey("dust_last_event_$address")
 
         // Time for balance calculations
         private fun currentTimeMillis(): Long = System.currentTimeMillis()
@@ -335,61 +340,88 @@ class DustRepository @Inject constructor(
         android.util.Log.d(TAG, "Syncing dust from blockchain for $address")
 
         try {
-            // Step 1: Query dust events from indexer
-            android.util.Log.d(TAG, "Querying dust events (scanning last $maxBlocks blocks)...")
-            val eventsHex = indexerClient.queryDustEvents(maxBlocks)
+            // Try delta sync first: load existing state + last event ID
+            val existingState = loadState(address)
+            val lastEventId = getLastAppliedEventId(address)
 
-            if (eventsHex.isEmpty()) {
-                android.util.Log.d(TAG, "No dust events found - dust not registered yet")
+            if (existingState != null && lastEventId != null) {
+                // Delta sync: replay only new events from checkpoint
+                android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
+                val result = indexerClient.queryDustEventsDelta(fromId = lastEventId + 1)
+
+                if (result.eventCount == 0) {
+                    android.util.Log.d(TAG, "Delta sync: no new events, state is current")
+                    existingState.close()
+                    return true
+                }
+
+                android.util.Log.d(TAG, "Delta sync: ${result.eventCount} new events (${lastEventId + 1}..${result.lastEventId})")
+
+                val updatedState = existingState.replayEvents(dustSeed, result.eventsHex)
+                existingState.close()
+
+                if (updatedState != null) {
+                    try {
+                        val utxoCount = updatedState.getUtxoCount()
+                        syncTokensFromState(address, updatedState)
+                        saveState(address, updatedState)
+                        saveLastAppliedEventId(address, result.lastEventId)
+                        android.util.Log.d(TAG, "Delta sync complete: $utxoCount UTXOs (+${result.eventCount} events)")
+                        return utxoCount > 0
+                    } finally {
+                        updatedState.close()
+                    }
+                }
+
+                // Delta replay failed (Merkle mismatch / chain reset). Fall through to full sync.
+                android.util.Log.w(TAG, "Delta replay failed, falling back to full sync")
+                deleteState(address)
+            } else {
+                existingState?.close()
+            }
+
+            // Full sync from genesis with a generous timeout for PREPROD (250k+ events)
+            android.util.Log.d(TAG, "Full sync from genesis")
+            val result = indexerClient.queryDustEventsDelta(
+                fromId = 0,
+                timeoutMs = com.midnight.kuira.core.indexer.api.IndexerClient.FULL_SYNC_TIMEOUT_MS,
+            )
+
+            if (result.eventCount == 0) {
+                android.util.Log.d(TAG, "No dust events found, dust not registered yet")
                 return false
             }
 
-            android.util.Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes of dust events")
-
-            // Step 2: Create fresh DustLocalState
-            // Always start fresh because queryDustEvents() returns ALL events from genesis.
-            // The Merkle tree requires sequential insertion — replaying from 0 into a state
-            // that already has events causes NonLinearInsertion errors.
-            // Incremental sync (reusing saved state) is planned for Phase 2.
-            android.util.Log.d(TAG, "Creating fresh dust state for full replay")
             val initialState = DustLocalState.create()
-
-            if (initialState == null) {
-                android.util.Log.e(TAG, "Failed to create/load DustLocalState")
-                return false
-            }
-
-            try {
-                // Step 3: Replay events into state
-                android.util.Log.d(TAG, "Replaying dust events into state...")
-                val restoredState = initialState.replayEvents(dustSeed, eventsHex)
-
-                if (restoredState == null) {
-                    android.util.Log.e(TAG, "Failed to replay dust events")
+                ?: run {
+                    android.util.Log.e(TAG, "Failed to create DustLocalState")
                     return false
                 }
 
+            try {
+                val restoredState = initialState.replayEvents(dustSeed, result.eventsHex)
+                    ?: run {
+                        android.util.Log.e(TAG, "Failed to replay dust events")
+                        return false
+                    }
+
                 try {
                     val utxoCount = restoredState.getUtxoCount()
-                    android.util.Log.d(TAG, "Replay complete: $utxoCount UTXOs in state")
-
-                    // Step 4: Sync tokens from state to database
                     syncTokensFromState(address, restoredState)
-
-                    // Step 5: Save updated state
                     saveState(address, restoredState)
+                    saveLastAppliedEventId(address, result.lastEventId)
 
-                    android.util.Log.d(TAG, "✅ Dust sync complete for $address ($utxoCount UTXOs)")
+                    android.util.Log.d(TAG, "Full sync complete: $utxoCount UTXOs, ${result.eventCount} events, last ID=${result.lastEventId}")
                     return utxoCount > 0
-
                 } finally {
                     restoredState.close()
                 }
-
             } finally {
                 initialState.close()
             }
 
+        } catch (e: CancellationException) {
+            throw e // Never swallow cancellation in suspend functions
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Failed to sync dust from blockchain", e)
             return false
@@ -527,7 +559,8 @@ class DustRepository @Inject constructor(
      * @param state DustLocalState instance
      */
     suspend fun saveState(address: String, state: DustLocalState) {
-        val serialized = state.serialize() ?: return
+        val serialized = state.serialize()
+            ?: throw IllegalStateException("Failed to serialize dust state for $address")
         saveSerializedState(address, serialized)
     }
 
@@ -585,12 +618,28 @@ class DustRepository @Inject constructor(
      * @param address Wallet address
      */
     suspend fun deleteState(address: String) {
-        val key = dustStateKey(address)
+        val stateKey = dustStateKey(address)
+        val eventKey = lastEventIdKey(address)
         dustStateDataStore.edit { prefs ->
-            prefs.remove(key)
+            prefs.remove(stateKey)
+            prefs.remove(eventKey)
         }
         dustDao.deleteTokensForAddress(address)
-        android.util.Log.d(TAG, "Deleted dust state for $address")
+        android.util.Log.d(TAG, "Deleted dust state + event ID for $address")
+    }
+
+    /** Get last applied dust event ID for delta sync resume. Null if never synced. */
+    suspend fun getLastAppliedEventId(address: String): Long? {
+        val key = lastEventIdKey(address)
+        return dustStateDataStore.data.first()[key]
+    }
+
+    /** Save last applied dust event ID (for delta sync resume). */
+    suspend fun saveLastAppliedEventId(address: String, eventId: Long) {
+        val key = lastEventIdKey(address)
+        dustStateDataStore.edit { prefs ->
+            prefs[key] = eventId
+        }
     }
 
     // ========== Utility Functions ==========

@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.indexer.api
 
 import com.midnight.kuira.core.indexer.model.BlockInfo
+import com.midnight.kuira.core.indexer.model.DustSyncResult
 import com.midnight.kuira.core.indexer.model.NetworkState
 import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
@@ -187,6 +188,25 @@ interface IndexerClient {
      * @return Combined SCALE hex string of all dust events, sorted by ID
      */
     suspend fun queryDustEvents(maxBlocks: Int = 100): String
+
+    /**
+     * Query dust events starting from a specific event ID (delta sync).
+     *
+     * Like [queryDustEvents] but subscribes from [fromId] instead of the beginning.
+     * Returns structured result with the combined hex, last event ID, and count.
+     * If no new events exist (already caught up), returns immediately with empty hex.
+     *
+     * @param fromId First event ID to include (inclusive)
+     * @return Delta sync result with events hex, last applied ID, and event count
+     */
+    suspend fun queryDustEventsDelta(fromId: Long, timeoutMs: Long = DELTA_TIMEOUT_MS): DustSyncResult
+
+    companion object {
+        /** Default timeout for delta sync (500ms, sufficient for local + remote delta). */
+        const val DELTA_TIMEOUT_MS = 500L
+        /** Timeout for full sync from genesis (120s, PREPROD has 250k+ events). */
+        const val FULL_SYNC_TIMEOUT_MS = 120_000L
+    }
 
     /**
      * Query all zswap (shielded) events from the blockchain via subscription.

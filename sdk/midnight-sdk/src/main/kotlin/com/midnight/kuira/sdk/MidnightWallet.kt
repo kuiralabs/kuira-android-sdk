@@ -14,13 +14,11 @@ import kotlinx.coroutines.sync.withLock
  * [com.midnight.kuira.core.compact.MidnightConfig] as a drop-in replacement
  * for the remote DAppConnectorClient.
  *
- * Lifecycle:
- * 1. [syncDust] must be called at least once before balancing (SDK builder handles this).
- * 2. Each [balanceTransaction] call: loads dust state → FFI balance+prove+seal → saves state.
- * 3. Each [submitTransaction] call: submits to the blockchain node and waits for finalization.
- * 4. [close] releases resources.
+ * Uses [DustSyncManager] for tip-aware caching: same-block transactions are
+ * instant, cross-block transactions delta-sync only new events (~200ms).
  */
 class MidnightWallet internal constructor(
+    private val dustSyncManager: DustSyncManager,
     private val dustRepository: DustRepository,
     private val indexerClient: IndexerClient,
     private val nodeRpcClient: NodeRpcClient,
@@ -35,80 +33,64 @@ class MidnightWallet internal constructor(
     /**
      * Sync dust state from the blockchain.
      *
-     * Must be called before the first [balanceTransaction] call.
-     * Subsequent calls are incremental (only fetch new events).
+     * On first call: full sync from genesis.
+     * On subsequent calls: tip-aware delta sync (instant if tip unchanged).
      */
     suspend fun syncDust() {
-        dustRepository.syncFromBlockchain(walletAddress, dustSeed)
+        dustSyncManager.ensureSynced()
     }
 
     /**
      * Balance a proven transaction by adding dust fee payment locally.
      *
-     * Steps:
-     * 1. Load dust state from persistent storage
-     * 2. Fetch ledger parameters from the indexer (for fee calculation)
-     * 3. Call Rust FFI: create dust spends → prove → merge → seal
-     * 4. Save updated dust state (marks coins as spent)
-     * 5. Return the balanced+sealed transaction hex
+     * Dust state is obtained via [DustSyncManager.ensureSynced] which handles
+     * tip-aware caching and delta sync automatically.
      *
      * Thread-safe: only one balance operation at a time (prevents double-spend).
      */
     override suspend fun balanceTransaction(provenTxHex: String): String = balanceMutex.withLock {
-        // Re-sync dust state if cache was cleared (e.g. after a successful submit).
-        // TODO: study optimal sync strategy for remote networks (PREPROD/PREVIEW).
-        // The Kuira wallet force-syncs before every tx to prevent error 170 loops,
-        // but that adds seconds on remote indexers. For now, sync only when needed.
-        var dustState = dustRepository.loadState(walletAddress)
-        if (dustState == null) {
-            syncDust()
-            dustState = dustRepository.loadState(walletAddress)
-                ?: throw IllegalStateException("No dust state after sync. Is dust registered?")
-        }
+        val dustState = dustSyncManager.ensureSynced()
 
-        try {
-            val blockInfo = indexerClient.getCurrentBlockWithParams()
-            val ledgerParamsHex = blockInfo.ledgerParameters
-                ?: throw IllegalStateException("Indexer returned no ledger parameters")
+        val blockInfo = indexerClient.getCurrentBlockWithParams()
+        val ledgerParamsHex = blockInfo.ledgerParameters
+            ?: throw IllegalStateException("Indexer returned no ledger parameters")
 
-            val currentTimeMs = System.currentTimeMillis()
+        val currentTimeMs = System.currentTimeMillis()
 
-            val balancedHex = TransactionBalancerNative.nativeBalanceProvenTransaction(
-                provenTxHex = provenTxHex,
-                dustStatePtr = dustState.getStatePointer(),
-                seed = dustSeed,
-                ledgerParamsHex = ledgerParamsHex,
-                currentTimeMs = currentTimeMs,
-                keysDir = provingKeysDir,
-                networkId = networkId,
-            ) ?: throw IllegalStateException(
-                "Native balance_proven_transaction returned null — check logcat for details"
-            )
+        val balancedHex = TransactionBalancerNative.nativeBalanceProvenTransaction(
+            provenTxHex = provenTxHex,
+            dustStatePtr = dustState.getStatePointer(),
+            seed = dustSeed,
+            ledgerParamsHex = ledgerParamsHex,
+            currentTimeMs = currentTimeMs,
+            keysDir = provingKeysDir,
+            networkId = networkId,
+        ) ?: throw IllegalStateException(
+            "Native balance_proven_transaction returned null, check logcat for details"
+        )
 
-            // Save updated dust state (FFI mutated the native pointer — spends recorded)
-            dustRepository.saveState(walletAddress, dustState)
+        // Save updated dust state (FFI mutated the native pointer, spends recorded)
+        dustRepository.saveState(walletAddress, dustState)
 
-            balancedHex
-        } finally {
-            dustState.close()
-        }
+        balancedHex
     }
 
     /**
      * Submit a balanced transaction to the blockchain node.
      *
      * Uses WebSocket to wait for finalization (not fire-and-forget).
-     * Deletes dust cache after success to force re-sync before next tx.
+     * Invalidates the dust memo so the next balance call delta-syncs
+     * from the disk checkpoint (no destructive delete).
      */
     override suspend fun submitTransaction(balancedTxHex: String) {
         nodeRpcClient.submitAndWaitForFinalization(balancedTxHex)
 
-        // Delete dust cache after successful submission — forces re-sync before next tx.
-        // Matches the existing Kuira wallet pattern (prevents stale UTXO errors).
-        dustRepository.deleteState(walletAddress)
+        // Invalidate memo, keep disk checkpoint for delta resume.
+        dustSyncManager.invalidateMemo()
     }
 
     fun close() {
+        dustSyncManager.close()
         nodeRpcClient.close()
     }
 }

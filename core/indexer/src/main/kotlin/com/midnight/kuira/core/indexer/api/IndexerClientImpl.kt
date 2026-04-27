@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.indexer.api
 
 import com.midnight.kuira.core.indexer.model.BlockInfo
+import com.midnight.kuira.core.indexer.model.DustSyncResult
 import com.midnight.kuira.core.indexer.model.NetworkState
 import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -72,6 +74,8 @@ class IndexerClientImpl(
     )
 
     companion object {
+        /** Timeout for delta dust sync. Events arrive within ~50ms local, ~200ms remote. */
+        private const val DELTA_SYNC_TIMEOUT_MS = 500L
         private fun createDefaultHttpClient() = HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(Json {
@@ -535,6 +539,34 @@ class IndexerClientImpl(
         }
     } catch (e: Exception) {
         throw InvalidResponseException("Failed to query dust events: ${e.message}", e)
+    }
+
+    override suspend fun queryDustEventsDelta(fromId: Long, timeoutMs: Long): DustSyncResult = try {
+        val events = withTimeoutOrNull(timeoutMs) {
+            subscribeToDustEvents(fromId = fromId)
+                .transformWhile { event ->
+                    emit(event)
+                    event.id < event.maxId
+                }
+                .toList()
+        }
+
+        if (events.isNullOrEmpty()) {
+            DustSyncResult(
+                eventsHex = "",
+                lastEventId = fromId - 1,
+                eventCount = 0,
+            )
+        } else {
+            val sorted = events.sortedBy { it.id }
+            DustSyncResult(
+                eventsHex = sorted.joinToString("") { it.rawHex },
+                lastEventId = sorted.last().id,
+                eventCount = sorted.size,
+            )
+        }
+    } catch (e: Exception) {
+        throw InvalidResponseException("Failed to query dust events delta from $fromId: ${e.message}", e)
     }
 
     override suspend fun queryZswapEvents(): String = try {
