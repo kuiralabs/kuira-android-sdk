@@ -67,8 +67,10 @@ class MidnightWallet internal constructor(
             } catch (e: NodeRpcError) {
                 if (isDustSpendProofError(e) && attempt < MAX_DUST_RETRIES) {
                     android.util.Log.w(TAG,
-                        "Error 170 (stale Merkle root), forcing fresh sync (attempt $attempt/$MAX_DUST_RETRIES)")
-                    forceFullSync()
+                        "Error 170 (stale Merkle root), delta re-sync and retry (attempt $attempt/$MAX_DUST_RETRIES)")
+                    // Delta re-sync, NOT full re-sync. Only a few new events
+                    // have landed since our last sync. Much faster than genesis replay.
+                    dustSyncManager.invalidateMemo()
                     continue
                 }
                 throw e
@@ -134,6 +136,7 @@ class MidnightWallet internal constructor(
 
     companion object {
         private const val TAG = "MidnightWallet"
-        private const val MAX_DUST_RETRIES = 2
+        /** Max balance+submit attempts on error 170. Delta re-sync per retry is cheap. */
+        private const val MAX_DUST_RETRIES = 3
     }
 }
