@@ -57,25 +57,31 @@ class MidnightWallet internal constructor(
      * root), forces a fresh dust sync and retries balance + submit once.
      * The circuit proof (provenTxHex) is still valid; only dust needs refreshing.
      */
-    override suspend fun balanceAndSubmit(provenTxHex: String) = balanceMutex.withLock {
-        for (attempt in 1..MAX_DUST_RETRIES) {
-            android.util.Log.d(TAG, "balanceAndSubmit attempt $attempt/$MAX_DUST_RETRIES")
+    override suspend fun balanceAndSubmit(provenTxHex: String): Unit = balanceMutex.withLock {
+        val deadline = System.currentTimeMillis() + DUST_RETRY_DEADLINE_MS
+        var attempt = 0
+        while (System.currentTimeMillis() < deadline) {
+            attempt++
+            android.util.Log.d(TAG, "balanceAndSubmit attempt $attempt")
             val balanced = doBalance(provenTxHex)
             try {
                 nodeRpcClient.submitAndWaitForFinalization(balanced)
                 dustSyncManager.invalidateMemo()
                 return
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "Submit failed (${e.javaClass.simpleName}): ${e.message}")
-                if (e is NodeRpcError && isDustSpendProofError(e) && attempt < MAX_DUST_RETRIES) {
+                if (e is NodeRpcError && isDustSpendProofError(e) && System.currentTimeMillis() < deadline) {
                     android.util.Log.w(TAG,
-                        "Error 170 detected, delta re-sync and retry (attempt $attempt/$MAX_DUST_RETRIES)")
+                        "Error 170 (stale Merkle root), delta re-sync and retry (attempt $attempt)")
+                    // Invalidate memo so next doBalance does a fresh delta sync
                     dustSyncManager.invalidateMemo()
+                    // Brief pause to let the chain settle before retrying
+                    kotlinx.coroutines.delay(DUST_RETRY_DELAY_MS)
                     continue
                 }
                 throw e
             }
         }
+        throw IllegalStateException("Dust retry deadline exceeded after $attempt attempts")
     }
 
     /**
@@ -136,7 +142,9 @@ class MidnightWallet internal constructor(
 
     companion object {
         private const val TAG = "MidnightWallet"
-        /** Max balance+submit attempts on error 170. Delta re-sync per retry is cheap. */
-        private const val MAX_DUST_RETRIES = 3
+        /** Total time budget for error 170 retries (matches wallet-cli's 2 min deadline). */
+        private const val DUST_RETRY_DEADLINE_MS = 120_000L
+        /** Pause between retries to let the chain settle briefly. */
+        private const val DUST_RETRY_DELAY_MS = 2_000L
     }
 }
