@@ -70,6 +70,12 @@ class DustRepository @Inject constructor(
     companion object {
         private const val TAG = "DustRepository"
 
+        /** Events per chunk for streaming sync. Balances memory vs checkpoint overhead. */
+        private const val CHUNK_SIZE = 500
+
+        /** Timeout waiting for the first event in a delta sync (500ms). */
+        private const val DELTA_FIRST_EVENT_TIMEOUT_MS = 500L
+
         // Key format: "dust_state_{address}"
         private fun dustStateKey(address: String) = stringPreferencesKey("dust_state_$address")
 
@@ -345,80 +351,30 @@ class DustRepository @Inject constructor(
             val lastEventId = getLastAppliedEventId(address)
 
             if (existingState != null && lastEventId != null) {
-                // Delta sync: replay only new events from checkpoint
-                android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                val result = indexerClient.queryDustEventsDelta(fromId = lastEventId + 1)
-
-                if (result.eventCount == 0) {
-                    android.util.Log.d(TAG, "Delta sync: no new events, state is current")
-                    existingState.close()
-                    return true
-                }
-
-                android.util.Log.d(TAG, "Delta sync: ${result.eventCount} new events (${lastEventId + 1}..${result.lastEventId})")
-
-                val updatedState = existingState.replayEvents(dustSeed, result.eventsHex)
                 existingState.close()
+                // Delta sync: stream only new events from checkpoint
+                android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
+                val result = streamDustEvents(address, dustSeed, fromId = lastEventId + 1)
+                if (result) return true
 
-                if (updatedState != null) {
-                    try {
-                        val utxoCount = updatedState.getUtxoCount()
-                        syncTokensFromState(address, updatedState)
-                        saveState(address, updatedState)
-                        saveLastAppliedEventId(address, result.lastEventId)
-                        android.util.Log.d(TAG, "Delta sync complete: $utxoCount UTXOs (+${result.eventCount} events)")
-                        return utxoCount > 0
-                    } finally {
-                        updatedState.close()
-                    }
-                }
-
-                // Delta replay failed (Merkle mismatch / chain reset). Fall through to full sync.
-                android.util.Log.w(TAG, "Delta replay failed, falling back to full sync")
+                // Streaming returned false (no events or replay failed). Fall through to full sync.
+                android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
                 deleteState(address)
             } else {
                 existingState?.close()
             }
 
-            // Full sync from genesis with a generous timeout for PREPROD (250k+ events)
-            android.util.Log.d(TAG, "Full sync from genesis")
-            val result = indexerClient.queryDustEventsDelta(
-                fromId = 0,
-                timeoutMs = com.midnight.kuira.core.indexer.api.IndexerClient.FULL_SYNC_TIMEOUT_MS,
-            )
+            // Streaming sync: process events in chunks to keep memory flat.
+            // PREPROD has 250k+ global dust events. Collecting into a List OOMs.
+            // Instead: subscribe, buffer chunks of 500, replay into Rust state,
+            // checkpoint to disk, discard hex. Matches wallet-cli pattern.
+            android.util.Log.d(TAG, "Streaming sync from genesis")
 
-            if (result.eventCount == 0) {
+            val result = streamDustEvents(address, dustSeed, fromId = null)
+            if (!result) {
                 android.util.Log.d(TAG, "No dust events found, dust not registered yet")
-                return false
             }
-
-            val initialState = DustLocalState.create()
-                ?: run {
-                    android.util.Log.e(TAG, "Failed to create DustLocalState")
-                    return false
-                }
-
-            try {
-                val restoredState = initialState.replayEvents(dustSeed, result.eventsHex)
-                    ?: run {
-                        android.util.Log.e(TAG, "Failed to replay dust events")
-                        return false
-                    }
-
-                try {
-                    val utxoCount = restoredState.getUtxoCount()
-                    syncTokensFromState(address, restoredState)
-                    saveState(address, restoredState)
-                    saveLastAppliedEventId(address, result.lastEventId)
-
-                    android.util.Log.d(TAG, "Full sync complete: $utxoCount UTXOs, ${result.eventCount} events, last ID=${result.lastEventId}")
-                    return utxoCount > 0
-                } finally {
-                    restoredState.close()
-                }
-            } finally {
-                initialState.close()
-            }
+            return result
 
         } catch (e: CancellationException) {
             throw e // Never swallow cancellation in suspend functions
@@ -427,6 +383,118 @@ class DustRepository @Inject constructor(
             return false
         }
     }
+
+    /**
+     * Stream dust events from the indexer in chunks, replaying each chunk into
+     * the Rust DustLocalState immediately. Keeps memory flat regardless of event count.
+     *
+     * @param address Wallet address (for checkpoint persistence)
+     * @param dustSeed 32-byte dust seed
+     * @param fromId Start event ID (null = from genesis, non-null = delta)
+     * @return true if at least one UTXO exists after sync
+     */
+    private suspend fun streamDustEvents(
+        address: String,
+        dustSeed: ByteArray,
+        fromId: Long?,
+    ): Boolean {
+        var state = if (fromId != null) loadState(address) else null
+        if (state == null) {
+            state = DustLocalState.create()
+                ?: run {
+                    android.util.Log.e(TAG, "Failed to create DustLocalState")
+                    return false
+                }
+        }
+
+        val chunk = mutableListOf<String>()
+        var totalEvents = 0
+        var latestEventId = getLastAppliedEventId(address) ?: -1L
+        var firstEventReceived = false
+
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(
+                if (fromId != null) DELTA_FIRST_EVENT_TIMEOUT_MS else Long.MAX_VALUE
+            ) {
+                indexerClient.subscribeToDustEvents(fromId = fromId)
+                    .collect { event ->
+                        // Once first event arrives, remove the timeout constraint
+                        // by letting the flow run until caught up.
+                        if (!firstEventReceived) {
+                            firstEventReceived = true
+                        }
+
+                        chunk.add(event.rawHex)
+                        latestEventId = event.id
+                        totalEvents++
+
+                        if (chunk.size >= CHUNK_SIZE) {
+                            state = flushChunk(state!!, dustSeed, chunk, address, latestEventId)
+                            if (totalEvents % 5000 == 0) {
+                                android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                            }
+                        }
+
+                        if (event.id >= event.maxId) {
+                            // Caught up to chain tip. Throw to break out of collect.
+                            throw StreamingCompleteSignal()
+                        }
+                    }
+            }
+        } catch (_: StreamingCompleteSignal) {
+            // Normal completion
+        }
+
+        // Flush remaining partial chunk
+        if (chunk.isNotEmpty()) {
+            state = flushChunk(state!!, dustSeed, chunk, address, latestEventId)
+        }
+
+        if (totalEvents == 0) {
+            state!!.close()
+            return false
+        }
+
+        // Final save + sync to database
+        try {
+            val utxoCount = state!!.getUtxoCount()
+            syncTokensFromState(address, state!!)
+            saveState(address, state!!)
+            saveLastAppliedEventId(address, latestEventId)
+            android.util.Log.d(TAG, "Streaming sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
+            return utxoCount > 0
+        } finally {
+            state!!.close()
+        }
+    }
+
+    /** Replay a chunk of events into the state, clear the chunk buffer, checkpoint. */
+    private suspend fun flushChunk(
+        currentState: DustLocalState,
+        dustSeed: ByteArray,
+        chunk: MutableList<String>,
+        address: String,
+        latestEventId: Long,
+    ): DustLocalState {
+        val chunkHex = chunk.joinToString("")
+        val newState = currentState.replayEvents(dustSeed, chunkHex)
+            ?: throw IllegalStateException("Dust replay failed at event $latestEventId")
+        currentState.close()
+        chunk.clear()
+
+        // Checkpoint to disk so a crash doesn't lose progress
+        try {
+            saveState(address, newState)
+            saveLastAppliedEventId(address, latestEventId)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Checkpoint save failed (best-effort): ${e.message}")
+        }
+
+        return newState
+    }
+
+    /** Signal to break out of Flow.collect when caught up to chain tip. */
+    private class StreamingCompleteSignal : Exception()
 
     /**
      * Sync dust tokens from DustLocalState to database cache.
