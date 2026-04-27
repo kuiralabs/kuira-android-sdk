@@ -51,37 +51,27 @@ class MidnightWallet internal constructor(
     }
 
     /**
-     * Balance and submit with error 170 retry.
+     * Balance and submit with a single retry on error 170.
      *
-     * If the node rejects with error 170 (InvalidDustSpendProof, stale Merkle
-     * root), forces a fresh dust sync and retries balance + submit once.
-     * The circuit proof (provenTxHex) is still valid; only dust needs refreshing.
+     * Error 170 (InvalidDustSpendProof) should be rare now that we seal
+     * before merge (matching the facade's order). One retry with a fresh
+     * delta sync handles the edge case where the Merkle tree advanced
+     * between balance and submission.
      */
     override suspend fun balanceAndSubmit(provenTxHex: String): Unit = balanceMutex.withLock {
-        val deadline = System.currentTimeMillis() + DUST_RETRY_DEADLINE_MS
-        var attempt = 0
-        while (System.currentTimeMillis() < deadline) {
-            attempt++
-            android.util.Log.d(TAG, "balanceAndSubmit attempt $attempt")
-            val balanced = doBalance(provenTxHex)
-            try {
-                nodeRpcClient.submitAndWaitForFinalization(balanced)
-                dustSyncManager.invalidateMemo()
-                return
-            } catch (e: Exception) {
-                if (e is NodeRpcError && isDustSpendProofError(e) && System.currentTimeMillis() < deadline) {
-                    android.util.Log.w(TAG,
-                        "Error 170 (stale Merkle root), delta re-sync and retry (attempt $attempt)")
-                    // Invalidate memo so next doBalance does a fresh delta sync
-                    dustSyncManager.invalidateMemo()
-                    // Brief pause to let the chain settle before retrying
-                    kotlinx.coroutines.delay(DUST_RETRY_DELAY_MS)
-                    continue
-                }
-                throw e
-            }
+        val balanced = doBalance(provenTxHex)
+        try {
+            nodeRpcClient.submitAndWaitForFinalization(balanced)
+            dustSyncManager.invalidateMemo()
+        } catch (e: NodeRpcError) {
+            if (!isDustSpendProofError(e)) throw e
+
+            android.util.Log.w(TAG, "Error 170, delta re-sync and retry once")
+            dustSyncManager.invalidateMemo()
+            val retryBalanced = doBalance(provenTxHex)
+            nodeRpcClient.submitAndWaitForFinalization(retryBalanced)
+            dustSyncManager.invalidateMemo()
         }
-        throw IllegalStateException("Dust retry deadline exceeded after $attempt attempts")
     }
 
     /**
@@ -142,9 +132,5 @@ class MidnightWallet internal constructor(
 
     companion object {
         private const val TAG = "MidnightWallet"
-        /** Total time budget for error 170 retries (matches wallet-cli's 2 min deadline). */
-        private const val DUST_RETRY_DEADLINE_MS = 120_000L
-        /** Pause between retries to let the chain settle briefly. */
-        private const val DUST_RETRY_DELAY_MS = 2_000L
     }
 }
