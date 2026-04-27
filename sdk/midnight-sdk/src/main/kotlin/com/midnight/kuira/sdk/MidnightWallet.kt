@@ -59,17 +59,17 @@ class MidnightWallet internal constructor(
      */
     override suspend fun balanceAndSubmit(provenTxHex: String) = balanceMutex.withLock {
         for (attempt in 1..MAX_DUST_RETRIES) {
+            android.util.Log.d(TAG, "balanceAndSubmit attempt $attempt/$MAX_DUST_RETRIES")
             val balanced = doBalance(provenTxHex)
             try {
                 nodeRpcClient.submitAndWaitForFinalization(balanced)
                 dustSyncManager.invalidateMemo()
                 return
-            } catch (e: NodeRpcError) {
-                if (isDustSpendProofError(e) && attempt < MAX_DUST_RETRIES) {
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Submit failed (${e.javaClass.simpleName}): ${e.message}")
+                if (e is NodeRpcError && isDustSpendProofError(e) && attempt < MAX_DUST_RETRIES) {
                     android.util.Log.w(TAG,
-                        "Error 170 (stale Merkle root), delta re-sync and retry (attempt $attempt/$MAX_DUST_RETRIES)")
-                    // Delta re-sync, NOT full re-sync. Only a few new events
-                    // have landed since our last sync. Much faster than genesis replay.
+                        "Error 170 detected, delta re-sync and retry (attempt $attempt/$MAX_DUST_RETRIES)")
                     dustSyncManager.invalidateMemo()
                     continue
                 }
