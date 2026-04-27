@@ -452,7 +452,9 @@ class DustRepository @Inject constructor(
 
         if (totalEvents == 0) {
             state!!.close()
-            return false
+            // Delta with 0 new events = already caught up (success).
+            // Full sync with 0 events = dust not registered (failure).
+            return fromId != null
         }
 
         // Final save + sync to database
