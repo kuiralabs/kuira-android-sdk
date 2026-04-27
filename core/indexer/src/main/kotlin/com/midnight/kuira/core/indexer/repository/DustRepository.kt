@@ -410,36 +410,80 @@ class DustRepository @Inject constructor(
         val chunk = mutableListOf<String>()
         var totalEvents = 0
         var latestEventId = getLastAppliedEventId(address) ?: -1L
-        var firstEventReceived = false
 
         try {
-            kotlinx.coroutines.withTimeoutOrNull(
-                if (fromId != null) DELTA_FIRST_EVENT_TIMEOUT_MS else Long.MAX_VALUE
-            ) {
-                indexerClient.subscribeToDustEvents(fromId = fromId)
-                    .collect { event ->
-                        // Once first event arrives, remove the timeout constraint
-                        // by letting the flow run until caught up.
-                        if (!firstEventReceived) {
-                            firstEventReceived = true
-                        }
+            // For delta (fromId != null): wait up to DELTA_FIRST_EVENT_TIMEOUT_MS
+            // for the first event. If nothing arrives, we're truly caught up.
+            // Once the first event arrives, stream with no timeout until caught up.
+            // For full sync (fromId == null): no initial timeout, stream everything.
+            val flow = indexerClient.subscribeToDustEvents(fromId = fromId)
+            val isDelta = fromId != null
 
-                        chunk.add(event.rawHex)
-                        latestEventId = event.id
+            if (isDelta) {
+                // Wait for first event with timeout
+                var firstEvent: com.midnight.kuira.core.indexer.model.RawLedgerEvent? = null
+                kotlinx.coroutines.withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
+                    flow.collect { event ->
+                        firstEvent = event
+                        throw StreamingCompleteSignal() // Got first event, break out
+                    }
+                }
+
+                if (firstEvent == null) {
+                    // No events in timeout window: truly caught up
+                    state!!.close()
+                    return fromId != null
+                }
+
+                // Process first event
+                val event = firstEvent!!
+                chunk.add(event.rawHex)
+                latestEventId = event.id
+                totalEvents++
+
+                if (event.id >= event.maxId) {
+                    // First event was also the last
+                    state = flushChunk(state!!, dustSeed, chunk, address, latestEventId)
+                    chunk.clear()
+                } else {
+                    // More events to come. Stream the rest with no timeout.
+                    // Need a new subscription since we broke out of the first one.
+                    val resumeFlow = indexerClient.subscribeToDustEvents(fromId = event.id + 1)
+                    resumeFlow.collect { nextEvent ->
+                        chunk.add(nextEvent.rawHex)
+                        latestEventId = nextEvent.id
                         totalEvents++
 
                         if (chunk.size >= CHUNK_SIZE) {
                             state = flushChunk(state!!, dustSeed, chunk, address, latestEventId)
                             if (totalEvents % 5000 == 0) {
-                                android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                                android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
                             }
                         }
 
-                        if (event.id >= event.maxId) {
-                            // Caught up to chain tip. Throw to break out of collect.
+                        if (nextEvent.id >= nextEvent.maxId) {
                             throw StreamingCompleteSignal()
                         }
                     }
+                }
+            } else {
+                // Full sync: no timeout, stream everything
+                flow.collect { event ->
+                    chunk.add(event.rawHex)
+                    latestEventId = event.id
+                    totalEvents++
+
+                    if (chunk.size >= CHUNK_SIZE) {
+                        state = flushChunk(state!!, dustSeed, chunk, address, latestEventId)
+                        if (totalEvents % 5000 == 0) {
+                            android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                        }
+                    }
+
+                    if (event.id >= event.maxId) {
+                        throw StreamingCompleteSignal()
+                    }
+                }
             }
         } catch (_: StreamingCompleteSignal) {
             // Normal completion
