@@ -49,6 +49,22 @@ class MidnightWallet internal constructor(
      * Thread-safe: only one balance operation at a time (prevents double-spend).
      */
     override suspend fun balanceTransaction(provenTxHex: String): String = balanceMutex.withLock {
+        // Try balance with current dust state. If it fails (stale checkpoint with
+        // insufficient balance), wipe and full re-sync, then retry once.
+        tryBalance(provenTxHex)
+            ?: run {
+                android.util.Log.w(TAG, "Balance failed, forcing full dust re-sync and retrying")
+                dustRepository.deleteState(walletAddress)
+                dustSyncManager.invalidateMemo()
+                dustSyncManager.ensureSynced()
+                tryBalance(provenTxHex)
+                    ?: throw IllegalStateException(
+                        "Balance failed after full re-sync, check logcat for details"
+                    )
+            }
+    }
+
+    private suspend fun tryBalance(provenTxHex: String): String? {
         val dustState = dustSyncManager.ensureSynced()
 
         val blockInfo = indexerClient.getCurrentBlockWithParams()
@@ -65,14 +81,17 @@ class MidnightWallet internal constructor(
             currentTimeMs = currentTimeMs,
             keysDir = provingKeysDir,
             networkId = networkId,
-        ) ?: throw IllegalStateException(
-            "Native balance_proven_transaction returned null, check logcat for details"
         )
 
-        // Save updated dust state (FFI mutated the native pointer, spends recorded)
-        dustRepository.saveState(walletAddress, dustState)
+        if (balancedHex != null) {
+            dustRepository.saveState(walletAddress, dustState)
+        }
 
-        balancedHex
+        return balancedHex
+    }
+
+    companion object {
+        private const val TAG = "MidnightWallet"
     }
 
     /**
