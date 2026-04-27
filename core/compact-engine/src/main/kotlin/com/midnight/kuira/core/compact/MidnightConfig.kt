@@ -14,12 +14,24 @@ import java.net.URL
  * Configuration for Midnight contract operations.
  *
  * Created once per app, shared across all [MidnightContract] instances.
- * Manages indexer connectivity, DApp Connector connection, and proving.
+ * Manages indexer connectivity, transaction balancing, and proving.
+ *
+ * Two modes:
+ * - **Remote wallet:** provide `walletUrl` to delegate balancing to `mn serve` via WebSocket
+ * - **Embedded wallet:** provide a [TransactionBalancer] directly (e.g., `MidnightWallet`)
  *
  * ```kotlin
+ * // Remote wallet (existing pattern)
  * val config = MidnightConfig.Builder(context)
  *     .indexerUrl("https://indexer.preview.midnight.network/api/v3")
  *     .walletUrl("ws://10.0.2.2:9932")
+ *     .networkId("preview")
+ *     .build()
+ *
+ * // Embedded wallet (new pattern)
+ * val config = MidnightConfig.Builder(context)
+ *     .indexerUrl("https://indexer.preview.midnight.network/api/v3")
+ *     .transactionBalancer(myWallet)
  *     .networkId("preview")
  *     .build()
  * ```
@@ -27,23 +39,32 @@ import java.net.URL
 class MidnightConfig private constructor(
     val context: Context,
     val indexerUrl: String,
-    val walletUrl: String,
+    private val walletUrl: String?,
     val networkId: String,
     val provingKeyManager: ProvingKeyManager,
+    private val externalBalancer: TransactionBalancer?,
 ) {
     internal val executor = CircuitExecutor(context)
     internal val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
 
-    private var connector: DAppConnectorClient? = null
-    private val connectorMutex = Mutex()
+    private var connectorClient: DAppConnectorClient? = null
+    private val balancerMutex = Mutex()
 
-    /** Get or create a DApp Connector connection (reused across calls). */
-    internal suspend fun getConnector(): DAppConnectorClient = connectorMutex.withLock {
-        connector?.let { return@withLock it }
+    /**
+     * Get the [TransactionBalancer] for this config.
+     *
+     * If an external balancer was provided via [Builder.transactionBalancer], returns it directly.
+     * Otherwise creates/reuses a [DAppConnectorClient] connected to [walletUrl].
+     */
+    internal suspend fun getBalancer(): TransactionBalancer = balancerMutex.withLock {
+        externalBalancer?.let { return@withLock it }
 
-        val client = DAppConnectorClient(walletUrl)
+        connectorClient?.let { return@withLock it }
+
+        val url = requireNotNull(walletUrl) { "No TransactionBalancer or walletUrl configured" }
+        val client = DAppConnectorClient(url)
         client.connect()
-        connector = client
+        connectorClient = client
         client
     }
 
@@ -89,14 +110,14 @@ class MidnightConfig private constructor(
 
     /** Submit a previously prepared transaction. */
     suspend fun submit(prepared: PreparedTransaction): TransactionReceipt {
-        val connector = getConnector()
+        val balancer = getBalancer()
         val start = System.currentTimeMillis()
 
-        val balancedTxHex = connector.balanceTransaction(prepared.provenTxHex)
+        val balancedTxHex = balancer.balanceTransaction(prepared.provenTxHex)
         val balanceMs = System.currentTimeMillis() - start
 
         val submitStart = System.currentTimeMillis()
-        connector.submitTransaction(balancedTxHex)
+        balancer.submitTransaction(balancedTxHex)
         val submitMs = System.currentTimeMillis() - submitStart
 
         return TransactionReceipt(
@@ -112,8 +133,8 @@ class MidnightConfig private constructor(
 
     /** Close connections and release resources. */
     fun close() {
-        connector?.disconnect()
-        connector = null
+        connectorClient?.disconnect()
+        connectorClient = null
     }
 
     private suspend fun graphqlQuery(query: String): JSONObject = withContext(Dispatchers.IO) {
@@ -158,21 +179,32 @@ class MidnightConfig private constructor(
         private var indexerUrl: String? = null
         private var walletUrl: String? = null
         private var networkId: String? = null
+        private var balancer: TransactionBalancer? = null
 
         fun indexerUrl(url: String) = apply { this.indexerUrl = url }
         fun walletUrl(url: String) = apply { this.walletUrl = url }
         fun networkId(id: String) = apply { this.networkId = id }
 
+        /** Provide an embedded [TransactionBalancer] instead of a remote wallet URL. */
+        fun transactionBalancer(balancer: TransactionBalancer) = apply { this.balancer = balancer }
+
         fun build(): MidnightConfig {
             val indexer = requireNotNull(indexerUrl) { "indexerUrl is required" }
-            val wallet = requireNotNull(walletUrl) { "walletUrl is required" }
             val network = requireNotNull(networkId) { "networkId is required" }
 
             require(indexer.startsWith("http://") || indexer.startsWith("https://")) {
                 "indexerUrl must start with http:// or https://"
             }
-            require(wallet.startsWith("ws://") || wallet.startsWith("wss://")) {
-                "walletUrl must start with ws:// or wss://"
+
+            // Must have either a TransactionBalancer or a walletUrl
+            val wallet = walletUrl
+            if (balancer == null) {
+                requireNotNull(wallet) {
+                    "Either transactionBalancer() or walletUrl() is required"
+                }
+                require(wallet.startsWith("ws://") || wallet.startsWith("wss://")) {
+                    "walletUrl must start with ws:// or wss://"
+                }
             }
 
             return MidnightConfig(
@@ -181,6 +213,7 @@ class MidnightConfig private constructor(
                 walletUrl = wallet,
                 networkId = network,
                 provingKeyManager = ProvingKeyManager(context.applicationContext),
+                externalBalancer = balancer,
             )
         }
     }

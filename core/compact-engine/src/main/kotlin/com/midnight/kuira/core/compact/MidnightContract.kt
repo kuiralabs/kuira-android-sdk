@@ -46,10 +46,10 @@ class MidnightContract private constructor(
         val prepared = prepare(circuitName, *args, onProgress = onProgress)
 
         onProgress?.invoke(ContractCallStage.Balancing)
-        val connector = config.getConnector()
+        val balancer = config.getBalancer()
         val balanceStart = System.currentTimeMillis()
         val balancedTxHex = try {
-            connector.balanceTransaction(prepared.provenTxHex)
+            balancer.balanceTransaction(prepared.provenTxHex)
         } catch (e: Exception) {
             throw ContractCallException.BalancingFailed("Balance failed: ${e.message}", e)
         }
@@ -58,7 +58,7 @@ class MidnightContract private constructor(
         onProgress?.invoke(ContractCallStage.Submitting)
         val submitStart = System.currentTimeMillis()
         try {
-            connector.submitTransaction(balancedTxHex)
+            balancer.submitTransaction(balancedTxHex)
         } catch (e: Exception) {
             throw ContractCallException.SubmissionFailed("Submit failed: ${e.message}", e)
         }

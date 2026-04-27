@@ -10,6 +10,8 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.sdk.MidnightSdk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,6 +24,10 @@ import kotlinx.coroutines.launch
  * 2. Create a contract handle with witnesses
  * 3. Call circuits with one line: `contract.call("post", message)`
  * 4. Observe progress stages for UI feedback
+ *
+ * Two connection modes:
+ * - **Remote wallet:** delegates balancing to `mn serve` via WebSocket (existing)
+ * - **Standalone SDK:** embedded wallet, no external process needed (new)
  */
 class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -29,19 +35,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<BBoardState> = _state
 
     private var config: MidnightConfig? = null
+    private var sdk: MidnightSdk? = null
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
     private var currentAddress: String? = null
 
-    /** Connect to a deployed bboard contract. */
+    /** Connect using a remote wallet (mn serve). */
     fun connect(contractAddress: String, network: NetworkChoice) {
         viewModelScope.launch {
-            _state.value = BBoardState.Connecting("Initializing...")
+            _state.value = BBoardState.Connecting("Initializing (remote wallet)...")
             try {
-                // 0. Install proving keys if available from adb push
                 installProvingKeys()
 
-                // 1. Create SDK config
                 val cfg = MidnightConfig.Builder(getApplication())
                     .indexerUrl(network.indexerUrl)
                     .walletUrl(network.walletUrl)
@@ -49,49 +54,110 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     .build()
                 config = cfg
 
-                // 2. Create contract handle
-                _state.value = BBoardState.Connecting("Loading contract...")
-                val bboard = MidnightContract.create(cfg) {
-                    contractJs = getApplication<Application>().assets
-                        .open("runtime/bboard-contract-iife.js")
-                    address = contractAddress
-                    witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
-                    initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
-                    coinPublicKey = ByteArray(32)
-                }
-                contract = bboard
-                currentAddress = contractAddress
-
-                // 3. Create repository for reading state
-                val repo = BBoardRepository(cfg)
-                repository = repo
-
-                // 4. Fetch current board state
-                _state.value = BBoardState.Connecting("Fetching board state...")
-                val boardContent = repo.fetchBoardState(contractAddress)
-                val boardState = when (boardContent) {
-                    is BoardContent.Vacant -> BoardState.Vacant
-                    is BoardContent.Occupied -> BoardState.Occupied(boardContent.message)
-                    is BoardContent.NotDeployed -> {
-                        _state.value = BBoardState.Error("Contract not deployed at $contractAddress")
-                        return@launch
-                    }
-                    is BoardContent.Error -> {
-                        _state.value = BBoardState.Error(boardContent.reason)
-                        return@launch
-                    }
-                }
-
-                _state.value = BBoardState.Connected(
-                    networkId = network.networkId,
-                    contractAddress = contractAddress,
-                    boardState = boardState,
-                )
+                setupContract(cfg, contractAddress, network.networkId)
             } catch (e: Exception) {
                 Log.e(TAG, "Connect failed", e)
                 _state.value = BBoardState.Error(e.message ?: "Connection failed")
             }
         }
+    }
+
+    /**
+     * Connect using the standalone SDK (no mn serve needed).
+     *
+     * @param contractAddress Deployed contract address (64 hex chars)
+     * @param network Midnight network to use
+     * @param seed BIP-39 mnemonic seed (64 bytes)
+     */
+    fun connectWithSdk(
+        contractAddress: String,
+        network: MidnightNetwork,
+        seed: ByteArray,
+    ) {
+        viewModelScope.launch {
+            _state.value = BBoardState.Connecting("Initializing SDK...")
+            try {
+                installProvingKeys()
+
+                _state.value = BBoardState.Connecting("Building SDK (deriving keys)...")
+                val midnightSdk = MidnightSdk.Builder(getApplication())
+                    .network(network)
+                    .seed(seed)
+                    .build()
+                sdk = midnightSdk
+
+                // Download proving keys if needed
+                if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
+                    _state.value = BBoardState.Connecting("Downloading proving keys...")
+                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                        _state.value = BBoardState.Connecting(
+                            "Downloading keys: ${(progress * 100).toInt()}%"
+                        )
+                    }
+                }
+
+                // Sync dust state
+                _state.value = BBoardState.Connecting("Syncing dust state...")
+                midnightSdk.wallet.syncDust()
+
+                setupContract(
+                    cfg = midnightSdk.config,
+                    contractAddress = contractAddress,
+                    networkId = network.rustNetworkId,
+                    coinPublicKey = midnightSdk.coinPublicKey,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "SDK connect failed", e)
+                _state.value = BBoardState.Error(e.message ?: "SDK connection failed")
+            }
+        }
+    }
+
+    /** Shared setup: create contract handle, fetch state, transition to Connected. */
+    private suspend fun setupContract(
+        cfg: MidnightConfig,
+        contractAddress: String,
+        networkId: String,
+        coinPublicKey: ByteArray = ByteArray(32), // Default for remote wallet mode
+    ) {
+        config = cfg
+
+        _state.value = BBoardState.Connecting("Loading contract...")
+        val bboard = MidnightContract.create(cfg) {
+            contractJs = getApplication<Application>().assets
+                .open("runtime/bboard-contract-iife.js")
+            address = contractAddress
+            witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
+            initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
+            this.coinPublicKey = coinPublicKey
+        }
+        contract = bboard
+        currentAddress = contractAddress
+
+        val repo = BBoardRepository(cfg)
+        repository = repo
+
+        _state.value = BBoardState.Connecting("Fetching board state...")
+        val boardContent = repo.fetchBoardState(contractAddress)
+        val boardState = when (boardContent) {
+            is BoardContent.Vacant -> BoardState.Vacant
+            is BoardContent.Occupied -> BoardState.Occupied(boardContent.message)
+            is BoardContent.NotDeployed -> {
+                _state.value = BBoardState.Error("Contract not deployed at $contractAddress")
+                return
+            }
+            is BoardContent.Error -> {
+                _state.value = BBoardState.Error(boardContent.reason)
+                return
+            }
+        }
+
+        _state.value = BBoardState.Connected(
+            networkId = networkId,
+            contractAddress = contractAddress,
+            boardState = boardState,
+            standalone = sdk != null,
+        )
     }
 
     /** Post a message to the board. */
@@ -169,6 +235,8 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Disconnect and return to setup. */
     fun disconnect() {
+        sdk?.close()
+        sdk = null
         config?.close()
         config = null
         contract = null
@@ -177,6 +245,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        sdk?.close()
         config?.close()
         super.onCleared()
     }
@@ -235,6 +304,7 @@ sealed class BBoardState {
         val contractAddress: String,
         val boardState: BoardState,
         val lastTimingMs: Long? = null,
+        val standalone: Boolean = false,
     ) : BBoardState()
     data class Error(val message: String) : BBoardState()
 }
@@ -246,7 +316,7 @@ sealed class BoardState {
     data class CallError(val message: String) : BoardState()
 }
 
-/** Network configuration presets. */
+/** Network configuration presets (for remote wallet mode). */
 enum class NetworkChoice(
     val label: String,
     val networkId: String,

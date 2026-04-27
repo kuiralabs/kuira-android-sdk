@@ -28,7 +28,7 @@ import kotlin.coroutines.resumeWithException
  * client.disconnect()
  * ```
  */
-class DAppConnectorClient(private val wsUrl: String) {
+class DAppConnectorClient(private val wsUrl: String) : TransactionBalancer {
 
     private var ws: WebSocketClient? = null
     private val nextId = AtomicInteger(1)
@@ -67,14 +67,17 @@ class DAppConnectorClient(private val wsUrl: String) {
     /** Get wallet configuration (network, endpoints). */
     suspend fun getConfiguration(): JSONObject = call("getConfiguration")
 
+    override suspend fun balanceTransaction(provenTxHex: String): String =
+        balanceTransaction(provenTxHex, payFees = true)
+
     /**
      * Balance a proven transaction (adds dust fees).
      *
      * @param provenTxHex Hex-encoded proven transaction
-     * @param payFees Whether to pay fees (default: true)
+     * @param payFees Whether to pay fees
      * @return Hex-encoded balanced transaction ready for submission
      */
-    suspend fun balanceTransaction(provenTxHex: String, payFees: Boolean = true): String {
+    suspend fun balanceTransaction(provenTxHex: String, payFees: Boolean): String {
         val params = JSONObject().put("tx", provenTxHex).put("payFees", payFees)
         val result = call("balanceUnsealedTransaction", params)
         // Response: {"jsonrpc":"2.0","id":N,"result":{"tx":"...hex..."}}
@@ -86,12 +89,7 @@ class DAppConnectorClient(private val wsUrl: String) {
         }
     }
 
-    /**
-     * Submit a balanced transaction to the blockchain.
-     *
-     * @param balancedTxHex Hex-encoded balanced transaction
-     */
-    suspend fun submitTransaction(balancedTxHex: String) {
+    override suspend fun submitTransaction(balancedTxHex: String) {
         val params = JSONObject().put("tx", balancedTxHex)
         call("submitTransaction", params)
     }

@@ -32,6 +32,10 @@ android {
 dependencies {
     // Midnight Contract SDK — execute circuits, prove, and submit from Android
     implementation(project(":core:compact-engine"))
+    // Midnight SDK — fully standalone (no mn serve needed)
+    implementation(project(":sdk:midnight-sdk"))
+    // Network config (MidnightNetwork enum)
+    implementation(project(":core:network"))
     // Native FFI library (provides libkuira_crypto_ffi.so via CMake)
     runtimeOnly(project(":core:crypto"))
 

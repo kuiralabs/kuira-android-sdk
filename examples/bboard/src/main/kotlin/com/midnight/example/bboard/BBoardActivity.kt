@@ -39,16 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midnight.kuira.core.network.MidnightNetwork
 
-/**
- * BBoard — Midnight Bulletin Board example for Android.
- *
- * Demonstrates how to build a dApp using the Midnight Contract SDK.
- * No browser, no WebView — pure native Android executing ZK circuits
- * and submitting transactions to the Midnight blockchain.
- *
- * This is the Android equivalent of example-bboard (React).
- */
 class BBoardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,7 +59,10 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(32.dp))
 
             when (val s = state) {
-                is BBoardState.Setup -> SetupScreen(onConnect = viewModel::connect)
+                is BBoardState.Setup -> SetupScreen(
+                    onConnectRemote = viewModel::connect,
+                    onConnectSdk = viewModel::connectWithSdk,
+                )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
                 is BBoardState.Connected -> ConnectedScreen(
@@ -84,13 +79,55 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 
 // ── Setup Screen ──
 
+private enum class ConnectionMode(val label: String) {
+    REMOTE("Remote Wallet"),
+    STANDALONE("Standalone SDK"),
+}
+
 @Composable
-private fun SetupScreen(onConnect: (String, NetworkChoice) -> Unit) {
+private fun SetupScreen(
+    onConnectRemote: (String, NetworkChoice) -> Unit,
+    onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
+) {
     var address by remember { mutableStateOf("") }
     var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
+    var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
 
     DarkCard {
         Text("connect to contract", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Connection mode toggle
+        Text("mode", color = Dim, fontSize = 12.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConnectionMode.entries.forEach { m ->
+                val selected = m == mode
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (selected) {
+                                if (m == ConnectionMode.STANDALONE) Accent else Color.White
+                            } else {
+                                Color.White.copy(alpha = 0.06f)
+                            }
+                        )
+                        .clickable { mode = m },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        m.label,
+                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.5f),
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Network picker
@@ -129,17 +166,54 @@ private fun SetupScreen(onConnect: (String, NetworkChoice) -> Unit) {
             colors = textFieldColors(),
             singleLine = true,
         )
-        Text(
-            "Deploy with: mn contract deploy --network ${network.networkId}",
-            color = Color.White.copy(alpha = 0.2f),
-            fontSize = 10.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+
+        if (mode == ConnectionMode.STANDALONE) {
+            Text(
+                "Uses embedded wallet (no mn serve needed). Test seed.",
+                color = Accent.copy(alpha = 0.5f),
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else {
+            Text(
+                "Requires mn serve --approve-all running on host",
+                color = Color.White.copy(alpha = 0.2f),
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
-        ActionButton("connect", enabled = address.length == 64) { onConnect(address, network) }
+
+        val buttonLabel = if (mode == ConnectionMode.STANDALONE) "connect (standalone)" else "connect"
+        ActionButton(buttonLabel, enabled = address.length == 64) {
+            when (mode) {
+                ConnectionMode.REMOTE -> onConnectRemote(address, network)
+                ConnectionMode.STANDALONE -> {
+                    val midnightNetwork = when (network) {
+                        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
+                        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
+                        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
+                    }
+                    onConnectSdk(address, midnightNetwork, TEST_SEED)
+                }
+            }
+        }
     }
 }
+
+/**
+ * Test seed for standalone SDK mode.
+ * In a real dApp this would come from the identity module (passkeys).
+ * This is the alice wallet's 64-byte PBKDF2 seed (from `mn wallet seed`).
+ */
+private val TEST_SEED = hexToBytes(
+    "7dc468f62278cd0c14b6674f31531a90b64599d657d3c7ab2adb63395d647f7a" +
+    "505de6428fcf8b0d208873f4d5e2a1340c14688067477542f53c48dfea817da4"
+)
+
+private fun hexToBytes(hex: String): ByteArray =
+    ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 
 // ── Connected Screen ──
 
@@ -154,7 +228,8 @@ private fun ConnectedScreen(
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(state.networkId, color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
-            Text("\u2022 connected", color = Green, fontSize = 11.sp)
+            val modeLabel = if (state.standalone) "standalone" else "remote"
+            Text("\u2022 $modeLabel", color = if (state.standalone) Accent else Green, fontSize = 11.sp)
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -290,3 +365,4 @@ private fun textFieldColors() = OutlinedTextFieldDefaults.colors(
 
 private val Dim = Color.White.copy(alpha = 0.4f)
 private val Green = Color(0xFF4CAF8B)
+private val Accent = Color(0xFF64B5F6)
