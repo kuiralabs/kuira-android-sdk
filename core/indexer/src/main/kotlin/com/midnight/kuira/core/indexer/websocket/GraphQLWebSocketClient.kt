@@ -50,6 +50,14 @@ class GraphQLWebSocketClient(
     private val connected = AtomicBoolean(false)
     private val operationIdCounter = AtomicInteger(0)
     private val activeSubscriptions = mutableMapOf<String, Channel<JsonElement>>()
+
+    companion object {
+        /**
+         * Max subscription events buffered before backpressure suspends the producer.
+         * Prevents OOM on high-volume subscriptions (PREPROD has 247k+ dust events).
+         */
+        private const val SUBSCRIPTION_CHANNEL_CAPACITY = 64
+    }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
@@ -146,7 +154,7 @@ class GraphQLWebSocketClient(
         }
 
         val operationId = generateOperationId()
-        val channel = Channel<JsonElement>(Channel.UNLIMITED)
+        val channel = Channel<JsonElement>(SUBSCRIPTION_CHANNEL_CAPACITY)
         activeSubscriptions[operationId] = channel
         android.util.Log.d("GraphQLWebSocket", "Starting subscription $operationId, active subs: ${activeSubscriptions.keys}")
 
