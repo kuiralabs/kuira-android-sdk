@@ -42,8 +42,20 @@ class DustSyncManager(
             onProgress = onSyncProgress,
         )
 
-        val freshState = dustRepository.getLastSyncedState()
-            ?: throw IllegalStateException("No dust state after sync. Is dust registered?")
+        var freshState = dustRepository.getLastSyncedState()
+
+        if (freshState == null) {
+            // Delta sync found no new events — lastSyncedState wasn't set.
+            // Force a full sync from genesis to get an in-memory state.
+            dustRepository.deleteState(walletAddress)
+            dustRepository.syncFromBlockchain(
+                address = walletAddress,
+                dustSeed = dustSeed,
+                onProgress = onSyncProgress,
+            )
+            freshState = dustRepository.getLastSyncedState()
+                ?: throw IllegalStateException("No dust state after full sync. Is dust registered?")
+        }
 
         state = freshState
         freshState
