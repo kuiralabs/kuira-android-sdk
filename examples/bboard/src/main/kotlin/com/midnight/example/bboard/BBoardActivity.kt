@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -225,6 +226,9 @@ private fun ConnectedScreen(
     onRefresh: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
+    val isSyncing = state.dustSyncStatus is DustSyncStatus.Syncing
+    val isReady = state.dustSyncStatus is DustSyncStatus.Ready
+
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(state.networkId, color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
@@ -240,9 +244,28 @@ private fun ConnectedScreen(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        state.lastTimingMs?.let {
+
+        // Dust sync progress bar — inline, non-blocking
+        if (isSyncing) {
+            val sync = state.dustSyncStatus as DustSyncStatus.Syncing
+            Spacer(modifier = Modifier.height(8.dp))
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { sync.percent / 100f },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = Accent,
+                trackColor = Color.White.copy(alpha = 0.1f),
+            )
             Spacer(modifier = Modifier.height(4.dp))
-            Text("last tx: ${it}ms", color = Green.copy(alpha = 0.6f), fontSize = 10.sp)
+            Text(
+                "syncing dust wallet: ${sync.percent}%",
+                color = Accent.copy(alpha = 0.7f),
+                fontSize = 10.sp,
+            )
+        } else {
+            state.lastTimingMs?.let {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("last tx: ${it}ms", color = Green.copy(alpha = 0.6f), fontSize = 10.sp)
+            }
         }
     }
 
@@ -250,9 +273,9 @@ private fun ConnectedScreen(
 
     DarkCard {
         when (val board = state.boardState) {
-            is BoardState.Vacant -> VacantBoard(onPost)
+            is BoardState.Vacant -> VacantBoard(onPost = onPost, isEnabled = isReady)
             is BoardState.Working -> WorkingBoard(board.stage)
-            is BoardState.Occupied -> OccupiedBoard(board.message, onTakeDown, onRefresh)
+            is BoardState.Occupied -> OccupiedBoard(board.message, onTakeDown, onRefresh, isEnabled = isReady)
             is BoardState.CallError -> CallErrorView(board.message, onRefresh)
         }
     }
@@ -268,7 +291,7 @@ private fun ConnectedScreen(
 }
 
 @Composable
-private fun VacantBoard(onPost: (String) -> Unit) {
+private fun VacantBoard(onPost: (String) -> Unit, isEnabled: Boolean = true) {
     var message by remember { mutableStateOf("") }
     Text("board is vacant", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
     Spacer(modifier = Modifier.height(16.dp))
@@ -281,7 +304,11 @@ private fun VacantBoard(onPost: (String) -> Unit) {
         singleLine = true,
     )
     Spacer(modifier = Modifier.height(16.dp))
-    ActionButton("post", enabled = message.isNotBlank()) { onPost(message) }
+    ActionButton("post", enabled = message.isNotBlank() && isEnabled) { onPost(message) }
+    if (!isEnabled) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("waiting for dust sync...", color = Dim, fontSize = 10.sp)
+    }
 }
 
 @Composable
@@ -297,14 +324,18 @@ private fun WorkingBoard(stage: String) {
 }
 
 @Composable
-private fun OccupiedBoard(message: String, onTakeDown: () -> Unit, onRefresh: () -> Unit) {
+private fun OccupiedBoard(message: String, onTakeDown: () -> Unit, onRefresh: () -> Unit, isEnabled: Boolean = true) {
     Text("board is occupied", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
     Spacer(modifier = Modifier.height(16.dp))
     Text(message, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.W300)
     Spacer(modifier = Modifier.height(16.dp))
-    ActionButton("take down", enabled = true, dimmed = true, onClick = onTakeDown)
+    ActionButton("take down", enabled = isEnabled, dimmed = true, onClick = onTakeDown)
     Spacer(modifier = Modifier.height(8.dp))
     ActionButton("refresh", enabled = true, dimmed = true, onClick = onRefresh)
+    if (!isEnabled) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("waiting for dust sync...", color = Dim, fontSize = 10.sp)
+    }
 }
 
 @Composable

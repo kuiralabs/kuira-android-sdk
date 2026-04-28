@@ -97,23 +97,45 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                // Sync dust state (shows streaming progress)
-                _state.value = BBoardState.Connecting("Syncing dust wallet...")
-                midnightSdk.wallet.syncDust { processed, total ->
-                    val pct = if (total > 0) (processed * 100 / total) else 0
-                    _state.value = BBoardState.Connecting("Syncing dust: $pct% ($processed/$total)")
-                }
-
+                // Connect to contract immediately — show state to user fast
                 setupContract(
                     cfg = midnightSdk.config,
                     contractAddress = contractAddress,
                     networkId = network.rustNetworkId,
                     coinPublicKey = midnightSdk.coinPublicKey,
                 )
+
+                // Sync dust in background — UI shows progress bar, actions enabled when done
+                syncDustInBackground(midnightSdk)
             } catch (e: Exception) {
                 Log.e(TAG, "SDK connect failed", e)
                 _state.value = BBoardState.Error(e.message ?: "SDK connection failed")
             }
+        }
+    }
+
+    private fun syncDustInBackground(midnightSdk: MidnightSdk) {
+        viewModelScope.launch {
+            try {
+                updateDustSyncStatus(DustSyncStatus.Syncing(0, "Starting..."))
+                midnightSdk.wallet.syncDust { processed, total ->
+                    val pct = if (total > 0) (processed * 100 / total) else 0
+                    updateDustSyncStatus(DustSyncStatus.Syncing(pct, "$processed/$total events"))
+                }
+                updateDustSyncStatus(DustSyncStatus.Ready)
+                Log.d(TAG, "Background dust sync complete")
+            } catch (e: Exception) {
+                Log.w(TAG, "Background dust sync failed: ${e.message}")
+                // Non-fatal — sync will happen on first tx attempt
+                updateDustSyncStatus(DustSyncStatus.Ready)
+            }
+        }
+    }
+
+    private fun updateDustSyncStatus(status: DustSyncStatus) {
+        val current = _state.value
+        if (current is BBoardState.Connected) {
+            _state.value = current.copy(dustSyncStatus = status)
         }
     }
 
@@ -320,8 +342,15 @@ sealed class BBoardState {
         val boardState: BoardState,
         val lastTimingMs: Long? = null,
         val standalone: Boolean = false,
+        val dustSyncStatus: DustSyncStatus = DustSyncStatus.Ready,
     ) : BBoardState()
     data class Error(val message: String) : BBoardState()
+}
+
+/** Background dust sync status — shown as a subtle bar in the connected screen. */
+sealed class DustSyncStatus {
+    data object Ready : DustSyncStatus()
+    data class Syncing(val percent: Int, val detail: String) : DustSyncStatus()
 }
 
 sealed class BoardState {
