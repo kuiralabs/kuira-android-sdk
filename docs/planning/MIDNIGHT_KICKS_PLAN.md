@@ -1,7 +1,7 @@
 # Midnight Kicks — Penalty Shootout on Midnight
 
-**Status:** Planning
-**Last updated:** 2026-04-25
+**Status:** Phase 2 validated, Phase 1 next
+**Last updated:** 2026-04-28
 **Target:** FIFA World Cup 2026 (June 11 - July 19)
 
 ---
@@ -468,19 +468,32 @@ results → draw → sudden death → resolve → timeout forfeit.
 
 ### Phase 2: Midnight Android SDK (parallel with Phase 1)
 
+**Status: VALIDATED (2026-04-28)** — BBoard works standalone on PREPROD.
+
 **Deliverable:** Single AAR that a standalone app imports with one
 Gradle line. No external wallet process needed.
 
-**Concepts:** Thin facade over existing 5 core modules. Embedded
-wallet (key gen, UTXO tracking, tx balancing, signing, submission)
-replaces the external wallet dependency. Auto-download proving keys
-on first launch. Native .so bundled in AAR. Passkey identity
-(CredentialManager), `did:key` derivation, self-verifiable
-keyAuthorization, PRF-encrypted cloud backup for recovery. Contract
-deployment API (new — BBoard only reads existing contracts).
+**What shipped:**
+- `MidnightSdk.Builder` facade — one builder, three lines of code
+- `MidnightWallet` embedded balancer — on-device dust sync, proving, submission
+- `TransactionBalancerNative` FFI — Rust `balance_ffi.rs` with local ZK proving
+- `DustSyncManager` — session-scoped in-memory state (SDK-001 workaround)
+- `ProvingKeyManager` — auto-download from S3 (dust + zswap + BLS params)
+- `BalanceProgress` callbacks — granular UX stages for dApp developers
+- File-based event streaming — 500-event chunked replay matching WASM pattern
+- Zero-fee detection — skips dust balancing on testnets
 
-**Validated by:** migrate BBoard to use the new SDK without
-`mn serve` running. If BBoard works standalone, the SDK is ready.
+**Known issues (tracked in docs/tickets.md):**
+- SDK-001: DustLocalState serialize/deserialize corrupts Merkle roots (workaround: in-memory only)
+- SDK-003: Full dust sync takes 60s on PREPROD (acceptable for now, optimizable later)
+- SDK-005: WebSocket "No active subscription" log spam (cosmetic)
+
+**Not yet implemented (needed for Kicks):**
+- Contract deployment API (BBoard only reads existing contracts)
+- Passkey identity (CredentialManager + `did:key` derivation)
+- PRF-encrypted cloud backup for recovery
+
+**Validated by:** BBoard post + takeDown on PREPROD without `mn serve`.
 
 ### Phase 3: Unity game
 
@@ -527,7 +540,16 @@ entry becomes a Kuira SDK improvement task.
 
 | # | Friction | Severity | SDK fix |
 |---|---------|----------|---------|
-| | (populate during implementation) | | |
+| 1 | Error 170 on PREPROD — INITIAL_PARAMETERS fallback calculated 66 trillion specks fee, creating imbalanced tx the node rejected | **Critical** | Zero-fee detection in balance_ffi. When `feesWithMargin` returns 0, skip dust entirely. Need convergence loop for mainnet. |
+| 2 | DustLocalState serialize/deserialize corrupts Merkle tree roots | **High** | Workaround: keep state in-memory only, never load from disk. Needs proper fix in SCALE codec for arena-based trees. |
+| 3 | Full dust sync takes 60s (253k events) on first connect | **Medium** | Acceptable for beta. Optimize with binary event format or incremental checkpoints later. Background sync with progress bar masks the wait. |
+| 4 | `fromId: null` vs `fromId: 0` in dustLedgerEvents subscription — null skipped early events | **Critical** | Always pass `id: 0` explicitly. Indexer treats null differently from 0. |
+| 5 | Hex-concatenation + tag-prefix splitting corrupts events at scale — SCALE binary can contain the tag prefix bytes | **Critical** | Switched to file-based line-per-event format. Rust reads lines, not tag splits. |
+| 6 | No progress feedback during balance+submit pipeline — user sees "Balancing..." for 60+ seconds | **High** | `BalanceProgress` sealed class with 6 stages. `TransactionBalancer.balanceAndSubmit(onProgress)`. Background dust sync on connect. |
+| 7 | `balanceAndSubmit` modifying cached state via FFI pointer — consecutive tx fail | **High** | Don't write post-spend state back to pointer. Each tx uses the original synced state. |
+| 8 | WebSocket bounded channel (64) causes backpressure on 250k+ events | **Medium** | Streaming to temp file, Rust reads in native memory. JVM heap stays flat. |
+| 9 | No contract deployment API — BBoard connects to existing contracts only | **Medium** | Needed for Kicks (each match = new contract instance). Not built yet. |
+| 10 | App content draws behind system status bar | **Low** | Added `WindowInsets.statusBars` padding. |
 
 This log is the primary deliverable for the Kuira SDK team. If
 building Kicks is hard, building any Midnight dApp is hard.
