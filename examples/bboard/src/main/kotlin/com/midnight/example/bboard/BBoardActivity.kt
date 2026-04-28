@@ -240,6 +240,7 @@ private fun ConnectedScreen(
     onDisconnect: () -> Unit,
 ) {
     val isSyncing = state.dustSyncStatus is DustSyncStatus.Syncing
+    val isProcessing = state.dustSyncStatus is DustSyncStatus.Processing
     val isReady = state.dustSyncStatus is DustSyncStatus.Ready
 
     DarkCard {
@@ -258,26 +259,44 @@ private fun ConnectedScreen(
             overflow = TextOverflow.Ellipsis,
         )
 
-        // Dust sync progress bar — inline, non-blocking
-        if (isSyncing) {
-            val sync = state.dustSyncStatus as DustSyncStatus.Syncing
-            Spacer(modifier = Modifier.height(8.dp))
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { sync.percent / 100f },
-                modifier = Modifier.fillMaxWidth().height(3.dp),
-                color = Accent,
-                trackColor = Color.White.copy(alpha = 0.1f),
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "syncing dust wallet: ${sync.percent}%",
-                color = Accent.copy(alpha = 0.7f),
-                fontSize = 10.sp,
-            )
-        } else {
-            state.lastTimingMs?.let {
+        // Dust sync progress — inline, non-blocking
+        when {
+            isSyncing -> {
+                val sync = state.dustSyncStatus as DustSyncStatus.Syncing
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { sync.percent / 100f },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = Accent,
+                    trackColor = Color.White.copy(alpha = 0.1f),
+                )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("last tx: ${it}ms", color = Green.copy(alpha = 0.6f), fontSize = 10.sp)
+                Text(
+                    "syncing dust: ${sync.percent}% — ${sync.detail}",
+                    color = Accent.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                )
+            }
+            isProcessing -> {
+                val proc = state.dustSyncStatus as DustSyncStatus.Processing
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = Accent,
+                    trackColor = Color.White.copy(alpha = 0.1f),
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    proc.detail,
+                    color = Accent.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                )
+            }
+            else -> {
+                state.lastTimingMs?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("last tx: ${it}ms", color = Green.copy(alpha = 0.6f), fontSize = 10.sp)
+                }
             }
         }
     }

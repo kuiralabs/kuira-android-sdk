@@ -117,10 +117,15 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private fun syncDustInBackground(midnightSdk: MidnightSdk) {
         viewModelScope.launch {
             try {
-                updateDustSyncStatus(DustSyncStatus.Syncing(0, "Starting..."))
+                updateDustSyncStatus(DustSyncStatus.Syncing(0, "Connecting to indexer..."))
                 midnightSdk.wallet.syncDust { processed, total ->
-                    val pct = if (total > 0) (processed * 100 / total) else 0
-                    updateDustSyncStatus(DustSyncStatus.Syncing(pct, "$processed/$total events"))
+                    if (processed < 0) {
+                        // Sentinel: streaming done, now replaying in Rust
+                        updateDustSyncStatus(DustSyncStatus.Processing("Replaying $total events..."))
+                    } else {
+                        val pct = if (total > 0) (processed * 100 / total) else 0
+                        updateDustSyncStatus(DustSyncStatus.Syncing(pct, "$processed / $total events"))
+                    }
                 }
                 updateDustSyncStatus(DustSyncStatus.Ready)
                 Log.d(TAG, "Background dust sync complete")
@@ -351,6 +356,7 @@ sealed class BBoardState {
 sealed class DustSyncStatus {
     data object Ready : DustSyncStatus()
     data class Syncing(val percent: Int, val detail: String) : DustSyncStatus()
+    data class Processing(val detail: String) : DustSyncStatus()
 }
 
 sealed class BoardState {

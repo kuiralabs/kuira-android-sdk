@@ -501,8 +501,11 @@ class DustRepository @Inject constructor(
             return fromId != null
         }
 
-        // Replay from file: Rust reads the file, deserializes each line,
-        // replays in 500-event chunks (matching WASM). State stays in native memory.
+        // Signal: streaming done, now replaying (this is the long part)
+        onProgress?.invoke(totalEvents, totalEvents) // 100% streaming
+        // Use negative totalEvents as sentinel for "replaying" phase
+        onProgress?.invoke(-1, totalEvents)
+
         val state = DustLocalState.create()
             ?: run {
                 tempFile.delete()
@@ -510,21 +513,12 @@ class DustRepository @Inject constructor(
                 return false
             }
 
-        // TEMPORARY: Use WASM events file for comparison test
-        val wasmFile = java.io.File("/data/local/tmp/wasm_events.txt")
-        val replayFile = if (wasmFile.exists()) {
-            android.util.Log.w(TAG, "⚠️ USING WASM EVENTS FILE FOR TESTING")
-            wasmFile
-        } else {
-            tempFile
-        }
-
-        android.util.Log.d(TAG, "Replaying from ${replayFile.absolutePath} (${replayFile.length() / 1024}KB)")
+        android.util.Log.d(TAG, "Replaying $totalEvents events (${tempFile.length() / 1024}KB file)")
         val newState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            state.replayEventsFromFile(dustSeed, replayFile.absolutePath)
+            state.replayEventsFromFile(dustSeed, tempFile.absolutePath)
         }
         state.close()
-        if (replayFile == tempFile) tempFile.delete()
+        tempFile.delete()
 
         if (newState == null) {
             android.util.Log.e(TAG, "Dust replay failed after $totalEvents events")
