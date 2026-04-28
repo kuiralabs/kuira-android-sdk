@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk
 
+import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -15,7 +16,7 @@ import kotlinx.coroutines.sync.withLock
  * [com.midnight.kuira.core.compact.MidnightConfig] as a drop-in replacement
  * for the remote DAppConnectorClient.
  *
- * Uses [DustSyncManager] for tip-aware caching. Handles error 170
+ * Uses [DustSyncManager] for session-scoped caching. Handles error 170
  * (InvalidDustSpendProof) by auto-retrying with a fresh dust sync.
  */
 class MidnightWallet internal constructor(
@@ -31,12 +32,6 @@ class MidnightWallet internal constructor(
 
     private val balanceMutex = Mutex()
 
-    /**
-     * Sync dust state from the blockchain.
-     *
-     * On first call: full sync from genesis.
-     * On subsequent calls: tip-aware delta sync (instant if tip unchanged).
-     */
     suspend fun syncDust() {
         dustSyncManager.ensureSynced()
     }
@@ -50,16 +45,14 @@ class MidnightWallet internal constructor(
         dustSyncManager.invalidateMemo()
     }
 
-    /**
-     * Balance and submit with a single retry on error 170.
-     *
-     * Error 170 (InvalidDustSpendProof) should be rare now that we seal
-     * before merge (matching the facade's order). One retry with a fresh
-     * delta sync handles the edge case where the Merkle tree advanced
-     * between balance and submission.
-     */
-    override suspend fun balanceAndSubmit(provenTxHex: String): Unit = balanceMutex.withLock {
-        val balanced = doBalance(provenTxHex)
+    override suspend fun balanceAndSubmit(
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)?,
+    ): Unit = balanceMutex.withLock {
+        onProgress?.invoke(BalanceProgress.SyncingDust)
+        val balanced = doBalance(provenTxHex, onProgress)
+
+        onProgress?.invoke(BalanceProgress.Submitting)
         try {
             nodeRpcClient.submitAndWaitForFinalization(balanced)
             dustSyncManager.invalidateMemo()
@@ -67,37 +60,42 @@ class MidnightWallet internal constructor(
             if (!isDustSpendProofError(e)) throw e
 
             android.util.Log.w(TAG, "Error 170, full re-sync and retry once")
+            onProgress?.invoke(BalanceProgress.RetryingDustSync)
             forceFullSync()
-            val retryBalanced = doBalance(provenTxHex)
+            val retryBalanced = doBalance(provenTxHex, onProgress)
+            onProgress?.invoke(BalanceProgress.Submitting)
             nodeRpcClient.submitAndWaitForFinalization(retryBalanced)
             dustSyncManager.invalidateMemo()
         }
     }
 
-    /**
-     * Balance with stale-checkpoint recovery.
-     *
-     * If the FFI returns null (e.g., insufficient dust from a partial checkpoint),
-     * forces a full re-sync and retries once.
-     */
-    private suspend fun doBalance(provenTxHex: String): String {
-        return tryBalance(provenTxHex)
+    private suspend fun doBalance(
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)? = null,
+    ): String {
+        return tryBalance(provenTxHex, onProgress)
             ?: run {
                 android.util.Log.w(TAG, "Balance failed, forcing full dust re-sync")
+                onProgress?.invoke(BalanceProgress.RetryingDustSync)
                 forceFullSync()
-                tryBalance(provenTxHex)
+                tryBalance(provenTxHex, onProgress)
                     ?: throw IllegalStateException("Balance failed after full re-sync, check logcat")
             }
     }
 
-    private suspend fun tryBalance(provenTxHex: String): String? {
+    private suspend fun tryBalance(
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)? = null,
+    ): String? {
         val dustState = dustSyncManager.ensureSynced()
 
         val blockInfo = indexerClient.getCurrentBlockWithParams()
         val ledgerParamsHex = blockInfo.ledgerParameters
             ?: throw IllegalStateException("Indexer returned no ledger parameters")
 
-        val balancedHex = TransactionBalancerNative.nativeBalanceProvenTransaction(
+        onProgress?.invoke(BalanceProgress.ProvingDust)
+
+        return TransactionBalancerNative.nativeBalanceProvenTransaction(
             provenTxHex = provenTxHex,
             dustStatePtr = dustState.getStatePointer(),
             seed = dustSeed,
@@ -106,19 +104,6 @@ class MidnightWallet internal constructor(
             keysDir = provingKeysDir,
             networkId = networkId,
         )
-
-        // Dump full hex for diagnostic — logcat truncates
-        if (balancedHex != null) {
-            // Split into 4000-char chunks for logcat
-            balancedHex.chunked(4000).forEachIndexed { i, chunk ->
-                android.util.Log.i(TAG, "BALANCED[$i]: $chunk")
-            }
-            provenTxHex.chunked(4000).forEachIndexed { i, chunk ->
-                android.util.Log.i(TAG, "PROVEN[$i]: $chunk")
-            }
-        }
-
-        return balancedHex
     }
 
     private suspend fun forceFullSync() {

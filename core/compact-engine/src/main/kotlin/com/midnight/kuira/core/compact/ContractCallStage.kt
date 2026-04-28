@@ -6,5 +6,9 @@ sealed class ContractCallStage {
     data object Executing : ContractCallStage()
     data object Proving : ContractCallStage()
     data object Balancing : ContractCallStage()
+
+    /** Granular balance+submit progress. Emitted AFTER [Balancing] for detailed UX. */
+    data class BalancingDetail(val progress: BalanceProgress) : ContractCallStage()
+
     data object Submitting : ContractCallStage()
 }

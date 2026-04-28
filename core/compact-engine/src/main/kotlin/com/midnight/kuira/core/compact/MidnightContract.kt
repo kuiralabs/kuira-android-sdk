@@ -49,7 +49,9 @@ class MidnightContract private constructor(
         val balancer = config.getBalancer()
         val balanceAndSubmitStart = System.currentTimeMillis()
         try {
-            balancer.balanceAndSubmit(prepared.provenTxHex)
+            balancer.balanceAndSubmit(prepared.provenTxHex) { balanceProgress ->
+                onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
+            }
         } catch (e: Exception) {
             // Classify the error based on the stage it occurred in
             val message = e.message ?: ""

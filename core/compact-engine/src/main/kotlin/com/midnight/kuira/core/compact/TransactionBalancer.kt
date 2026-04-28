@@ -36,9 +36,16 @@ interface TransactionBalancer {
      * The default implementation simply calls [balanceTransaction] then [submitTransaction].
      *
      * @param provenTxHex Hex-encoded proven (but unsealed) transaction
+     * @param onProgress Optional callback for granular progress updates.
+     *   DApp developers use this to show users what's happening during the
+     *   long balance+submit pipeline. See [BalanceProgress] for available stages.
      */
-    suspend fun balanceAndSubmit(provenTxHex: String) {
+    suspend fun balanceAndSubmit(
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)? = null,
+    ) {
         val balanced = balanceTransaction(provenTxHex)
+        onProgress?.invoke(BalanceProgress.Submitting)
         submitTransaction(balanced)
     }
 }

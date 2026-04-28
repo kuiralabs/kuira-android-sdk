@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.ContractCallException
 import com.midnight.kuira.core.compact.ContractCallStage
 import com.midnight.kuira.core.compact.MidnightConfig
@@ -255,7 +256,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         is ContractCallStage.Executing -> "Executing circuit..."
         is ContractCallStage.Proving -> "Generating ZK proof..."
         is ContractCallStage.Balancing -> "Balancing transaction..."
+        is ContractCallStage.BalancingDetail -> balanceLabel(stage.progress)
         is ContractCallStage.Submitting -> "Submitting to chain..."
+    }
+
+    private fun balanceLabel(progress: BalanceProgress): String = when (progress) {
+        is BalanceProgress.SyncingDust -> "Syncing dust wallet..."
+        is BalanceProgress.SyncingDustProgress ->
+            "Syncing dust: ${progress.eventsProcessed}/${progress.totalEvents}"
+        is BalanceProgress.ProvingDust -> "Proving dust payment..."
+        is BalanceProgress.Submitting -> "Submitting to blockchain..."
+        is BalanceProgress.WaitingFinalization -> "Waiting for finalization..."
+        is BalanceProgress.RetryingDustSync -> "Retrying dust sync..."
     }
 
     /**
