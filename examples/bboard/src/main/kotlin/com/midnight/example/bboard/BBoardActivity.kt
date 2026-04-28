@@ -13,11 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +45,52 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midnight.kuira.core.network.MidnightNetwork
 
+// ── Design Tokens ──
+
+private object Colors {
+    val Background = Color(0xFF0A0A0A)
+    val Surface = Color(0xFF111111)
+    val ErrorSurface = Color(0xFF1A0A0A)
+    val Accent = Color(0xFF64B5F6)
+    val Success = Color(0xFF4CAF8B)
+    val Error = Color(0xFFFF6666)
+    val OnSurface = Color.White
+    val OnSurfaceDim = Color.White.copy(alpha = 0.45f)
+    val OnSurfaceSubtle = Color.White.copy(alpha = 0.25f)
+    val Disabled = Color.White.copy(alpha = 0.08f)
+}
+
+private object Type {
+    val Title = 24.sp
+    val Subtitle = 14.sp
+    val Body = 14.sp
+    val Label = 13.sp
+    val Caption = 12.sp
+    val Mono = 11.sp // monospace addresses — smallest allowed
+}
+
+private object Spacing {
+    val ScreenPadding = 24.dp
+    val CardPadding = 20.dp
+    val SectionGap = 20.dp
+    val ItemGap = 12.dp
+    val SmallGap = 8.dp
+    val TinyGap = 4.dp
+}
+
+private object Shapes {
+    val Card = RoundedCornerShape(16.dp)
+    val Button = RoundedCornerShape(12.dp)
+    val Chip = RoundedCornerShape(10.dp)
+}
+
+private const val BUTTON_HEIGHT_DP = 48
+private const val CHIP_HEIGHT_DP = 40
+private const val PROGRESS_BAR_HEIGHT_DP = 3
+private const val SPINNER_SIZE_DP = 24
+
+// ── Activity ──
+
 class BBoardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,21 +102,20 @@ class BBoardActivity : ComponentActivity() {
 fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
 
-    Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A0A0A)) {
+    Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    top = androidx.compose.foundation.layout.WindowInsets.statusBars
-                        .asPaddingValues().calculateTopPadding() + 16.dp,
-                    start = 24.dp,
-                    end = 24.dp,
-                    bottom = 24.dp,
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                    start = Spacing.ScreenPadding,
+                    end = Spacing.ScreenPadding,
+                    bottom = Spacing.ScreenPadding,
                 )
         ) {
-            Text("bboard", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.W300, letterSpacing = 4.sp)
-            Text("midnight bulletin board", color = Dim, fontSize = 12.sp, letterSpacing = 2.sp)
-            Spacer(modifier = Modifier.height(32.dp))
+            Text("bboard", color = Colors.OnSurface, fontSize = Type.Title, fontWeight = FontWeight.W300, letterSpacing = 4.sp)
+            Text("midnight bulletin board", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+            Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
             when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
@@ -108,96 +153,52 @@ private fun SetupScreen(
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
 
     DarkCard {
-        Text("connect to contract", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text("connect to contract", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-        // Connection mode toggle
-        Text("mode", color = Dim, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ConnectionMode.entries.forEach { m ->
-                val selected = m == mode
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (selected) {
-                                if (m == ConnectionMode.STANDALONE) Accent else Color.White
-                            } else {
-                                Color.White.copy(alpha = 0.06f)
-                            }
-                        )
-                        .clickable { mode = m },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        m.label,
-                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.5f),
-                        fontSize = 13.sp,
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                    )
-                }
-            }
-        }
+        Text("mode", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        ChipRow(
+            options = ConnectionMode.entries.map { it.label },
+            selectedIndex = mode.ordinal,
+            accentSelected = mode == ConnectionMode.STANDALONE,
+            onSelect = { mode = ConnectionMode.entries[it] },
+        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-        // Network picker
-        Text("network", color = Dim, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NetworkChoice.entries.forEach { choice ->
-                val selected = choice == network
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) Color.White else Color.White.copy(alpha = 0.06f))
-                        .clickable { network = choice },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        choice.label,
-                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.5f),
-                        fontSize = 13.sp,
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                    )
-                }
-            }
-        }
+        Text("network", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        ChipRow(
+            options = NetworkChoice.entries.map { it.label },
+            selectedIndex = network.ordinal,
+            onSelect = { network = NetworkChoice.entries[it] },
+        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
         OutlinedTextField(
             value = address,
             onValueChange = { address = it.trim() },
-            label = { Text("contract address", color = Dim) },
-            placeholder = { Text("64 hex chars", color = Color.White.copy(alpha = 0.15f)) },
+            label = { Text("contract address", color = Colors.OnSurfaceDim) },
+            placeholder = { Text("64 hex chars", color = Colors.OnSurfaceSubtle) },
             modifier = Modifier.fillMaxWidth(),
             colors = textFieldColors(),
             singleLine = true,
         )
 
-        if (mode == ConnectionMode.STANDALONE) {
-            Text(
-                "Uses embedded wallet (no mn serve needed). Test seed.",
-                color = Accent.copy(alpha = 0.5f),
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        } else {
-            Text(
-                "Requires mn serve --approve-all running on host",
-                color = Color.White.copy(alpha = 0.2f),
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
+        val hint = if (mode == ConnectionMode.STANDALONE)
+            "Uses embedded wallet (no mn serve needed). Test seed."
+        else
+            "Requires mn serve --approve-all running on host"
+        Text(
+            hint,
+            color = if (mode == ConnectionMode.STANDALONE) Colors.Accent.copy(alpha = 0.6f) else Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
+            modifier = Modifier.padding(top = Spacing.TinyGap),
+        )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
         val buttonLabel = if (mode == ConnectionMode.STANDALONE) "connect (standalone)" else "connect"
         ActionButton(buttonLabel, enabled = address.length == 64) {
@@ -245,15 +246,19 @@ private fun ConnectedScreen(
 
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(state.networkId, color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
+            Text(state.networkId, color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
             val modeLabel = if (state.standalone) "standalone" else "remote"
-            Text("\u2022 $modeLabel", color = if (state.standalone) Accent else Green, fontSize = 11.sp)
+            Text(
+                "\u2022 $modeLabel",
+                color = if (state.standalone) Colors.Accent else Colors.Success,
+                fontSize = Type.Caption,
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
         Text(
             state.contractAddress,
-            color = Color.White.copy(alpha = 0.4f),
-            fontSize = 10.sp,
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Mono,
             fontFamily = FontFamily.Monospace,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -261,47 +266,26 @@ private fun ConnectedScreen(
 
         // Dust sync progress — inline, non-blocking
         when {
-            isSyncing -> {
-                val sync = state.dustSyncStatus as DustSyncStatus.Syncing
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { sync.percent / 100f },
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = Accent,
-                    trackColor = Color.White.copy(alpha = 0.1f),
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "syncing dust: ${sync.percent}% — ${sync.detail}",
-                    color = Accent.copy(alpha = 0.7f),
-                    fontSize = 10.sp,
-                )
+            isSyncing && state.dustSyncStatus is DustSyncStatus.Syncing -> {
+                val sync = state.dustSyncStatus
+                Spacer(modifier = Modifier.height(Spacing.ItemGap))
+                SyncProgressBar(progress = sync.percent / 100f, label = "syncing dust: ${sync.percent}% — ${sync.detail}")
             }
-            isProcessing -> {
-                val proc = state.dustSyncStatus as DustSyncStatus.Processing
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = Accent,
-                    trackColor = Color.White.copy(alpha = 0.1f),
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    proc.detail,
-                    color = Accent.copy(alpha = 0.7f),
-                    fontSize = 10.sp,
-                )
+            isProcessing && state.dustSyncStatus is DustSyncStatus.Processing -> {
+                val proc = state.dustSyncStatus
+                Spacer(modifier = Modifier.height(Spacing.ItemGap))
+                SyncProgressBar(progress = null, label = proc.detail)
             }
             else -> {
                 state.lastTimingMs?.let {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("last tx: ${it}ms", color = Green.copy(alpha = 0.6f), fontSize = 10.sp)
+                    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+                    Text("last tx: ${it}ms", color = Colors.Success.copy(alpha = 0.7f), fontSize = Type.Caption)
                 }
             }
         }
     }
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
     DarkCard {
         when (val board = state.boardState) {
@@ -312,68 +296,66 @@ private fun ConnectedScreen(
         }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(Spacing.SectionGap * 2))
 
     Box(
-        modifier = Modifier.fillMaxWidth().height(40.dp).clickable(onClick = onDisconnect),
+        modifier = Modifier.fillMaxWidth().height(CHIP_HEIGHT_DP.dp).clickable(onClick = onDisconnect),
         contentAlignment = Alignment.Center,
     ) {
-        Text("disconnect", color = Color.White.copy(alpha = 0.3f), fontSize = 12.sp)
+        Text("disconnect", color = Colors.OnSurfaceSubtle, fontSize = Type.Caption)
     }
 }
 
 @Composable
 private fun VacantBoard(onPost: (String) -> Unit, isEnabled: Boolean = true) {
     var message by remember { mutableStateOf("") }
-    Text("board is vacant", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
-    Spacer(modifier = Modifier.height(16.dp))
+    Text("board is vacant", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
     OutlinedTextField(
         value = message,
         onValueChange = { message = it },
         modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("your message", color = Color.White.copy(alpha = 0.2f)) },
+        placeholder = { Text("your message", color = Colors.OnSurfaceSubtle) },
         colors = textFieldColors(),
         singleLine = true,
     )
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
     ActionButton("post", enabled = message.isNotBlank() && isEnabled) { onPost(message) }
     if (!isEnabled) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Text("waiting for dust sync...", color = Dim, fontSize = 10.sp)
+        SyncWaitingHint()
     }
 }
 
 @Composable
 private fun WorkingBoard(stage: String) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.ScreenPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(stage, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+        CircularProgressIndicator(color = Colors.OnSurface, strokeWidth = 2.dp, modifier = Modifier.size(SPINNER_SIZE_DP.dp))
+        Spacer(modifier = Modifier.height(Spacing.ItemGap))
+        Text(stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
     }
 }
 
 @Composable
 private fun OccupiedBoard(message: String, onTakeDown: () -> Unit, onRefresh: () -> Unit, isEnabled: Boolean = true) {
-    Text("board is occupied", color = Dim, fontSize = 11.sp, letterSpacing = 2.sp)
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(message, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.W300)
-    Spacer(modifier = Modifier.height(16.dp))
+    Text("board is occupied", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    Text(message, color = Colors.OnSurface, fontSize = 18.sp, fontWeight = FontWeight.W300)
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
     ActionButton("take down", enabled = isEnabled, dimmed = true, onClick = onTakeDown)
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(Spacing.SmallGap))
     ActionButton("refresh", enabled = true, dimmed = true, onClick = onRefresh)
     if (!isEnabled) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Text("waiting for dust sync...", color = Dim, fontSize = 10.sp)
+        SyncWaitingHint()
     }
 }
 
 @Composable
 private fun CallErrorView(message: String, onRetry: () -> Unit) {
-    Text(message, color = Color(0xFFFF6666), fontSize = 13.sp)
-    Spacer(modifier = Modifier.height(16.dp))
+    Text(message, color = Colors.Error, fontSize = Type.Label)
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
     ActionButton("retry", enabled = true, dimmed = true, onClick = onRetry)
 }
 
@@ -382,50 +364,125 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
 @Composable
 private fun ConnectingView(stage: String) {
     DarkCard {
-        Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(stage, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+        Column(Modifier.fillMaxWidth().padding(vertical = Spacing.ScreenPadding), horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Colors.OnSurface, strokeWidth = 2.dp, modifier = Modifier.size(SPINNER_SIZE_DP.dp))
+            Spacer(modifier = Modifier.height(Spacing.ItemGap))
+            Text(stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
         }
     }
 }
 
 @Composable
 private fun ErrorView(message: String, onBack: () -> Unit) {
-    DarkCard(color = Color(0xFF1A0A0A)) {
-        Text(message, color = Color(0xFFFF6666), fontSize = 13.sp)
-        Spacer(modifier = Modifier.height(16.dp))
+    DarkCard(color = Colors.ErrorSurface) {
+        Text(message, color = Colors.Error, fontSize = Type.Label)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
         ActionButton("back", enabled = true, dimmed = true, onClick = onBack)
     }
 }
 
+/** Inline progress bar with label — used for dust sync. */
 @Composable
-private fun DarkCard(color: Color = Color(0xFF111111), content: @Composable () -> Unit) {
+private fun SyncProgressBar(progress: Float?, label: String) {
+    if (progress != null) {
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().height(PROGRESS_BAR_HEIGHT_DP.dp),
+            color = Colors.Accent,
+            trackColor = Colors.Disabled,
+        )
+    } else {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().height(PROGRESS_BAR_HEIGHT_DP.dp),
+            color = Colors.Accent,
+            trackColor = Colors.Disabled,
+        )
+    }
+    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+    Text(label, color = Colors.Accent.copy(alpha = 0.8f), fontSize = Type.Caption)
+}
+
+/** "waiting for dust sync..." hint shown below disabled buttons. */
+@Composable
+private fun SyncWaitingHint() {
+    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+    Text("waiting for dust sync...", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
+}
+
+/** Horizontal chip row for selection (mode, network). */
+@Composable
+private fun ChipRow(
+    options: List<String>,
+    selectedIndex: Int,
+    accentSelected: Boolean = false,
+    onSelect: (Int) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.SmallGap)) {
+        options.forEachIndexed { index, label ->
+            val isSelected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(CHIP_HEIGHT_DP.dp)
+                    .clip(Shapes.Chip)
+                    .background(
+                        when {
+                            isSelected && accentSelected -> Colors.Accent
+                            isSelected -> Colors.OnSurface
+                            else -> Colors.Disabled
+                        }
+                    )
+                    .clickable { onSelect(index) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    color = if (isSelected) Color.Black else Colors.OnSurfaceDim,
+                    fontSize = Type.Label,
+                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DarkCard(color: Color = Colors.Surface, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = color),
-        shape = RoundedCornerShape(16.dp),
-    ) { Column(Modifier.padding(24.dp)) { content() } }
+        shape = Shapes.Card,
+    ) { Column(Modifier.padding(Spacing.CardPadding)) { content() } }
 }
 
 @Composable
 private fun ActionButton(text: String, enabled: Boolean, dimmed: Boolean = false, onClick: () -> Unit) {
-    val bg = when { !enabled -> Color.White.copy(alpha = 0.05f); dimmed -> Color.White.copy(alpha = 0.1f); else -> Color.White }
-    val fg = when { !enabled -> Color.White.copy(alpha = 0.2f); dimmed -> Color.White.copy(alpha = 0.6f); else -> Color.Black }
+    val bg = when {
+        !enabled -> Colors.Disabled
+        dimmed -> Color.White.copy(alpha = 0.12f)
+        else -> Colors.OnSurface
+    }
+    val fg = when {
+        !enabled -> Colors.OnSurfaceSubtle
+        dimmed -> Colors.OnSurfaceDim
+        else -> Color.Black
+    }
     Box(
-        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp)).background(bg)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(BUTTON_HEIGHT_DP.dp)
+            .clip(Shapes.Button)
+            .background(bg)
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
-    ) { Text(text, color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+    ) { Text(text, color = fg, fontSize = Type.Body, fontWeight = FontWeight.Medium) }
 }
 
 @Composable
 private fun textFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-    focusedBorderColor = Color.White.copy(alpha = 0.3f), unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-    cursorColor = Color.White,
+    focusedTextColor = Colors.OnSurface,
+    unfocusedTextColor = Colors.OnSurface,
+    focusedBorderColor = Colors.OnSurfaceDim,
+    unfocusedBorderColor = Colors.Disabled,
+    cursorColor = Colors.OnSurface,
 )
-
-private val Dim = Color.White.copy(alpha = 0.4f)
-private val Green = Color(0xFF4CAF8B)
-private val Accent = Color(0xFF64B5F6)
