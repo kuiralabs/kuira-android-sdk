@@ -406,6 +406,37 @@ class DustLocalState private constructor(
     }
 
     /**
+     * Replays events from a file in a single pass.
+     *
+     * The file contains concatenated tagged-SCALE hex events (same format
+     * as [replayEvents] hex parameter). Rust reads the file in native memory,
+     * avoiding JVM heap pressure for large event sets (PREPROD: 250k+ events).
+     *
+     * Single-pass replay ensures generation collapses and Merkle tree rehash
+     * happen exactly once, producing roots that match the node's root history.
+     *
+     * @param seed 32-byte dust seed
+     * @param filePath Absolute path to the hex events file
+     * @return New DustLocalState, or null on error
+     */
+    fun replayEventsFromFile(seed: ByteArray, filePath: String): DustLocalState? {
+        checkNotClosed()
+
+        if (seed.size != 32) {
+            logError("Seed must be 32 bytes, got ${seed.size}")
+            return null
+        }
+
+        val newPtr = nativeDustReplayEventsFromFile(nativePtr, seed, filePath)
+        if (newPtr == 0L) {
+            logError("Event replay from file failed")
+            return null
+        }
+
+        return DustLocalState(newPtr)
+    }
+
+    /**
      * Gets the number of dust UTXOs in this wallet state.
      *
      * **What are UTXOs?**
@@ -620,5 +651,11 @@ class DustLocalState private constructor(
         statePtr: Long,
         seed: ByteArray,
         eventsHex: String
+    ): Long
+
+    private external fun nativeDustReplayEventsFromFile(
+        statePtr: Long,
+        seed: ByteArray,
+        filePath: String
     ): Long
 }

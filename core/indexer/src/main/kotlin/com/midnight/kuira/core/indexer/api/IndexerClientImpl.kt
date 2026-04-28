@@ -218,11 +218,10 @@ class IndexerClientImpl(
     // ==================== DUST EVENTS (Subscription) ====================
 
     override fun subscribeToDustEvents(fromId: Long?): Flow<RawLedgerEvent> {
-        val variables = buildMap<String, Any> {
-            if (fromId != null) {
-                put("id", fromId)
-            }
-        }
+        // Always pass id explicitly. The indexer's dustLedgerEvents subscription
+        // treats null/missing id differently from id=0: null may start from the
+        // latest event, while 0 starts from genesis. Use 0 for full sync.
+        val variables = mapOf("id" to (fromId ?: 0L))
 
         return flow {
             val client = getOrCreateWsClient()

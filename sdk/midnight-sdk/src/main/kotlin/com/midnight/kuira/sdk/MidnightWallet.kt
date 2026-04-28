@@ -66,8 +66,8 @@ class MidnightWallet internal constructor(
         } catch (e: NodeRpcError) {
             if (!isDustSpendProofError(e)) throw e
 
-            android.util.Log.w(TAG, "Error 170, delta re-sync and retry once")
-            dustSyncManager.invalidateMemo()
+            android.util.Log.w(TAG, "Error 170, full re-sync and retry once")
+            forceFullSync()
             val retryBalanced = doBalance(provenTxHex)
             nodeRpcClient.submitAndWaitForFinalization(retryBalanced)
             dustSyncManager.invalidateMemo()
@@ -107,16 +107,22 @@ class MidnightWallet internal constructor(
             networkId = networkId,
         )
 
+        // Dump full hex for diagnostic — logcat truncates
         if (balancedHex != null) {
-            dustRepository.saveState(walletAddress, dustState)
+            // Split into 4000-char chunks for logcat
+            balancedHex.chunked(4000).forEachIndexed { i, chunk ->
+                android.util.Log.i(TAG, "BALANCED[$i]: $chunk")
+            }
+            provenTxHex.chunked(4000).forEachIndexed { i, chunk ->
+                android.util.Log.i(TAG, "PROVEN[$i]: $chunk")
+            }
         }
 
         return balancedHex
     }
 
     private suspend fun forceFullSync() {
-        dustRepository.deleteState(walletAddress)
-        dustSyncManager.invalidateMemo()
+        dustSyncManager.forceResync()
         dustSyncManager.ensureSynced()
     }
 
