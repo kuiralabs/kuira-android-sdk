@@ -8,7 +8,7 @@ Tracked issues for the Midnight SDK. Move to GitHub Issues when the repo goes pu
 
 **Priority:** High  
 **Component:** `kuira-crypto-ffi/src/dust_ffi.rs`, `DustRepository`  
-**Status:** Workaround in place (forceFullSync on error 170 retry)
+**Status:** Workaround in place (in-memory only state, never deserialize)
 
 After a successful dust spend, the modified `DustLocalState` is serialized to disk. On the next transaction, deserializing this state produces different Merkle tree roots than the original in-memory state. The node rejects the dust spend proof (error 170).
 
@@ -62,11 +62,11 @@ Single-pass replay of 250k events takes ~53s on device. The file-based approach 
 
 **Priority:** Medium  
 **Component:** `kuira-crypto-ffi/src/balance_ffi.rs`  
-**Status:** Works but overpays
+**Status:** FIXED (2026-04-27) — zero-fee path bypasses dust entirely
 
-`fees_with_margin` returns 0 for `ProofMarker` transactions. We fall back to `INITIAL_PARAMETERS` which calculates ~66 trillion specks. The facade uses a convergence loop with erased-proof merges to get the real fee (~1000 specks).
+PREPROD has zero fees (`feesWithMargin` returns 0). The old code fell back to `INITIAL_PARAMETERS` (66 trillion specks), creating an imbalanced tx that the node rejected. Now `balance_ffi` checks real ledger params first — if fee=0, seals the proven tx without dust.
 
-**Fix:** Port the facade's fee convergence loop: erase proofs on the merged tx, calculate fee, select coins, dry-run, repeat until converged. This would reduce dust consumption by ~6 orders of magnitude per transaction.
+**Remaining work:** When fees are non-zero (mainnet), we need the facade's convergence loop for correct fee calculation. The `INITIAL_PARAMETERS` fallback is still wrong for production.
 
 ---
 
