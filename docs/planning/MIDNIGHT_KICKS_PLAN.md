@@ -411,13 +411,14 @@ or automatic proving key installation.
   - [x] 27 tests (16 functional + 11 security exploit reproductions)
   - [x] Security registry: 4 vulns documented, VULN-002 + VULN-003 fixed
   - [x] CLI feedback: 5 friction points documented for mn maintainer
-- [ ] **Phase 2 — Midnight Android SDK**
-  - [ ] MidnightSdk facade + MidnightWallet (embedded tx pipeline)
+- [x] **Phase 2 — Midnight Android SDK**
+  - [x] MidnightSdk facade + MidnightWallet (embedded tx pipeline)
+  - [x] Proving key auto-download
+  - [x] Validate: BBoard works without mn serve on PREPROD
+  - [x] Balance progress callbacks for dApp UX
   - [ ] Contract deployment API
-  - [ ] Proving key auto-download
   - [ ] Passkey identity (CredentialManager + did:key + keyAuthorization)
   - [ ] PRF-encrypted cloud backup
-  - [ ] Validate: BBoard works without mn serve
 - [ ] **Phase 3 — Unity game**
   - [ ] Buy + strip penalty template
   - [ ] Batch choice UI (pick 5 directions)
@@ -473,27 +474,12 @@ results → draw → sudden death → resolve → timeout forfeit.
 **Deliverable:** Single AAR that a standalone app imports with one
 Gradle line. No external wallet process needed.
 
-**What shipped:**
-- `MidnightSdk.Builder` facade — one builder, three lines of code
-- `MidnightWallet` embedded balancer — on-device dust sync, proving, submission
-- `TransactionBalancerNative` FFI — Rust `balance_ffi.rs` with local ZK proving
-- `DustSyncManager` — session-scoped in-memory state (SDK-001 workaround)
-- `ProvingKeyManager` — auto-download from S3 (dust + zswap + BLS params)
-- `BalanceProgress` callbacks — granular UX stages for dApp developers
-- File-based event streaming — 500-event chunked replay matching WASM pattern
-- Zero-fee detection — skips dust balancing on testnets
-
-**Known issues (tracked in docs/tickets.md):**
-- SDK-001: DustLocalState serialize/deserialize corrupts Merkle roots (workaround: in-memory only)
-- SDK-003: Full dust sync takes 60s on PREPROD (acceptable for now, optimizable later)
-- SDK-005: WebSocket "No active subscription" log spam (cosmetic)
-
-**Not yet implemented (needed for Kicks):**
-- Contract deployment API (BBoard only reads existing contracts)
-- Passkey identity (CredentialManager + `did:key` derivation)
-- PRF-encrypted cloud backup for recovery
-
 **Validated by:** BBoard post + takeDown on PREPROD without `mn serve`.
+See `docs/tickets.md` for known issues. See friction log below for
+everything discovered during integration.
+
+**Still needed for Kicks:** contract deployment API, passkey identity,
+PRF-encrypted cloud backup.
 
 ### Phase 3: Unity game
 
