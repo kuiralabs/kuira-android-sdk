@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -54,7 +57,17 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A0A0A)) {
-        Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = androidx.compose.foundation.layout.WindowInsets.statusBars
+                        .asPaddingValues().calculateTopPadding() + 16.dp,
+                    start = 24.dp,
+                    end = 24.dp,
+                    bottom = 24.dp,
+                )
+        ) {
             Text("bboard", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.W300, letterSpacing = 4.sp)
             Text("midnight bulletin board", color = Dim, fontSize = 12.sp, letterSpacing = 2.sp)
             Spacer(modifier = Modifier.height(32.dp))
