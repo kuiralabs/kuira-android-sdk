@@ -21,18 +21,53 @@ Sudden death: batches of 5, circuit stops at decisive round. Unrevealed rounds s
 
 **Anti-cheat:** commit-reveal. Hash of 5 choices + nonces stored as private state. ZK circuit proves revealed choices match commitments. Cannot change choices after commit.
 
+## Stakes & gas
+
+- PREPROD NIGHT stakes (configurable per match, default 1 NIGHT). Winner takes pot, draw = refund.
+- DUST for gas via PREPROD faucet. Provider-pay model on mainnet (developer subsidizes gas).
+
+## Timeout & disconnect
+
+- Commitment timeout (5 min) — if opponent doesn't commit, committed player claims pot (forfeit).
+- Replay is client-side (Unity) — disconnect mid-replay doesn't affect on-chain result.
+- Match cancellation if opponent never joins (reclaim stake after timeout).
+
+## Matchmaking
+
+- **QR (in-person):** Create Match → show QR → opponent scans → joined.
+- **Deep link (remote):** Create Match → share `midnight://kicks?match=<contract_address>` → opponent opens.
+- Match ID = deployed contract address. No central server.
+
+## Leaderboard
+
+On-chain, indexer-queryable. Wins/losses/draws/streaks per player address. Verifiable — no fake leaderboards.
+
 ## Architecture
 
-- **Unity (UaaL)** — 3D stadium, ball physics, choice UI, cinematic replay. Knows nothing about blockchain.
-- **Kotlin (native)** — SDK for contract interaction, pairing (QR + deep links), UaaL bridge (JSON messages).
+- **Unity (UaaL)** — 3D stadium, ball physics, choice UI, cinematic replay. JSON bridge to Kotlin. Knows nothing about blockchain.
+- **Kotlin (native)** — SDK for contract interaction, pairing (QR + deep links), UaaL bridge, state polling for opponent commits.
 - **Compact contract** — match lifecycle, commit-reveal, scoring, stake escrow, payouts. Each match = new contract instance.
+  - Private state: 5 choices + nonces per player
+  - Public ledger: participants, scores, results, winner, stakes, phase
+  - Circuits: create, join, commit batch, resolve regulation, resolve sudden death, claim payout
 
-## Identity (two-tier)
+## Repo & relationship to Kuira
+
+Separate repo: `midnight-kicks/` (app/ + unity/ + contract/). Consumes Kuira SDK as pre-built AAR. Proves the SDK works standalone — if Kicks can't build without the full Kuira repo, the SDK isn't self-contained. Connector SDK open-sourced separately.
+
+## Identity (two-tier) — INVESTIGATED, DECIDED
 
 - **Tier 1 (standalone):** SDK generates keys (Android Keystore), manages UTXOs, signs/submits. No external wallet.
 - **Tier 2 (Kuira enhanced):** SDK detects Kuira → delegates to TEE-backed sigil. Automatic upgrade, no code change.
 
-Passkey (P-256) → `did:key` → secp256k1 access key → self-verifiable keyAuthorization. PRF-encrypted cloud backup (zero words). Full details in `docs/planning/IDENTITY_INVESTIGATION.md`.
+| Primitive | Decision | Tier 1 (SDK) | Tier 2 (Kuira) |
+|-----------|----------|-------------|----------------|
+| Passkey (P-256) | CredentialManager (API 28+) | Google Password Manager | TEE/StrongBox + biometric |
+| DID | `did:key` from root passkey | One per user (not per-dApp) | Sigil dashboard |
+| Access key | secp256k1 (advocate P-256 to Midnight) | Self-verifiable keyAuthorization | Delegation policies |
+| Recovery | PRF-encrypted cloud backup | Zero words, passkey syncs | TEE-hardened key material |
+
+**Our edge over rvcas:** self-verifiable keyAuthorization (TEE signs directly, no server trust). Full investigation in `docs/planning/IDENTITY_INVESTIGATION.md`.
 
 ---
 
@@ -46,8 +81,9 @@ Passkey (P-256) → `did:key` → secp256k1 access key → self-verifiable keyAu
   - [x] Proving key auto-download
   - [x] BBoard standalone on PREPROD (no mn serve)
   - [x] Balance progress callbacks
-  - [ ] Contract deployment API (needed for Kicks — each match = new contract)
-  - [ ] Passkey identity
+  - [x] Identity investigation + decisions (see IDENTITY_INVESTIGATION.md)
+  - [ ] Contract deployment API (each match = new contract)
+  - [ ] Passkey identity implementation (CredentialManager + did:key)
   - [ ] PRF-encrypted cloud backup
 - [ ] **Phase 3 — Unity game**
   - [ ] Asset Store template → strip AI → batch choice UI
