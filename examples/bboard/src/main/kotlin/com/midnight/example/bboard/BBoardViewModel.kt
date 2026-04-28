@@ -97,9 +97,12 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                // Sync dust state
-                _state.value = BBoardState.Connecting("Syncing dust state...")
-                midnightSdk.wallet.syncDust()
+                // Sync dust state (shows streaming progress)
+                _state.value = BBoardState.Connecting("Syncing dust wallet...")
+                midnightSdk.wallet.syncDust { processed, total ->
+                    val pct = if (total > 0) (processed * 100 / total) else 0
+                    _state.value = BBoardState.Connecting("Syncing dust: $pct% ($processed/$total)")
+                }
 
                 setupContract(
                     cfg = midnightSdk.config,

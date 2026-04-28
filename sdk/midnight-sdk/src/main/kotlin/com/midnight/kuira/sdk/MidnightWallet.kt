@@ -33,8 +33,15 @@ class MidnightWallet internal constructor(
 
     private val balanceMutex = Mutex()
 
-    suspend fun syncDust() {
-        dustSyncManager.ensureSynced()
+    /**
+     * Sync dust state from the blockchain.
+     *
+     * @param onProgress Optional callback with (eventsProcessed, totalEvents) for progress UX.
+     */
+    suspend fun syncDust(
+        onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
+    ) {
+        dustSyncManager.ensureSynced(onSyncProgress = onProgress)
     }
 
     override suspend fun balanceTransaction(provenTxHex: String): String = balanceMutex.withLock {
