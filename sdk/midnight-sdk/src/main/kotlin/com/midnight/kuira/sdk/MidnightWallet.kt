@@ -5,6 +5,7 @@ import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
+import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,7 +55,13 @@ class MidnightWallet internal constructor(
 
         onProgress?.invoke(BalanceProgress.Submitting)
         try {
-            nodeRpcClient.submitAndWaitForFinalization(balanced)
+            nodeRpcClient.submitAndWaitForFinalization(balanced) { stage ->
+                when (stage) {
+                    SubmissionStage.IN_BLOCK ->
+                        onProgress?.invoke(BalanceProgress.WaitingFinalization)
+                    else -> { /* SUBMITTED, BROADCAST — stay on Submitting */ }
+                }
+            }
             dustSyncManager.invalidateMemo()
         } catch (e: NodeRpcError) {
             if (!isDustSpendProofError(e)) throw e
@@ -64,7 +71,13 @@ class MidnightWallet internal constructor(
             forceFullSync()
             val retryBalanced = doBalance(provenTxHex, onProgress)
             onProgress?.invoke(BalanceProgress.Submitting)
-            nodeRpcClient.submitAndWaitForFinalization(retryBalanced)
+            nodeRpcClient.submitAndWaitForFinalization(retryBalanced) { stage ->
+                when (stage) {
+                    SubmissionStage.IN_BLOCK ->
+                        onProgress?.invoke(BalanceProgress.WaitingFinalization)
+                    else -> {}
+                }
+            }
             dustSyncManager.invalidateMemo()
         }
     }
@@ -87,7 +100,9 @@ class MidnightWallet internal constructor(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
     ): String? {
-        val dustState = dustSyncManager.ensureSynced()
+        val dustState = dustSyncManager.ensureSynced { processed, total ->
+            onProgress?.invoke(BalanceProgress.SyncingDustProgress(processed, total))
+        }
 
         val blockInfo = indexerClient.getCurrentBlockWithParams()
         val ledgerParamsHex = blockInfo.ledgerParameters

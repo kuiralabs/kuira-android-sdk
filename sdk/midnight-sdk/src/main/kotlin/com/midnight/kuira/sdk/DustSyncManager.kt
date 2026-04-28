@@ -28,12 +28,19 @@ class DustSyncManager(
     /**
      * Get a synced DustLocalState. First call does full sync (~60s on PREPROD).
      * All subsequent calls return the same in-memory state instantly.
+     *
+     * @param onSyncProgress Optional callback for streaming progress during full sync.
      */
-    suspend fun ensureSynced(): DustLocalState = mutex.withLock {
+    suspend fun ensureSynced(
+        onSyncProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
+    ): DustLocalState = mutex.withLock {
         state?.let { return@withLock it }
 
-        // Cold start: full sync from genesis
-        dustRepository.syncFromBlockchain(walletAddress, dustSeed)
+        dustRepository.syncFromBlockchain(
+            address = walletAddress,
+            dustSeed = dustSeed,
+            onProgress = onSyncProgress,
+        )
 
         val freshState = dustRepository.getLastSyncedState()
             ?: throw IllegalStateException("No dust state after sync. Is dust registered?")
@@ -45,7 +52,6 @@ class DustSyncManager(
     /** After submit: no-op. State stays in memory. */
     suspend fun invalidateMemo() {
         // Intentionally empty. The in-memory state is reused across transactions.
-        // The node's historic root set keeps our roots valid for 1+ hours.
     }
 
     /** Force a completely fresh sync. Clears everything. For error 170 recovery. */

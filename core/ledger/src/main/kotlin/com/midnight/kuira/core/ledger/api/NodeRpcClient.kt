@@ -86,8 +86,19 @@ interface NodeRpcClient {
      */
     suspend fun submitAndWaitForFinalization(
         serializedTxHex: String,
-        timeoutMs: Long = 60_000L
+        timeoutMs: Long = 60_000L,
+        onStage: (suspend (SubmissionStage) -> Unit)? = null,
     ): TransactionFinalizationResult
+
+    /** Stages during transaction submission, for progress UX. */
+    enum class SubmissionStage {
+        /** Transaction sent to node, waiting for broadcast. */
+        SUBMITTED,
+        /** Node has broadcast the transaction to peers. */
+        BROADCAST,
+        /** Transaction included in a block, waiting for finalization. */
+        IN_BLOCK,
+    }
 
     /**
      * Get the hash of the latest finalized block.

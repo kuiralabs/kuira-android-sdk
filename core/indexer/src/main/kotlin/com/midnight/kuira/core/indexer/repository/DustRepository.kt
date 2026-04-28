@@ -361,7 +361,8 @@ class DustRepository @Inject constructor(
     suspend fun syncFromBlockchain(
         address: String,
         dustSeed: ByteArray,
-        maxBlocks: Int = 100
+        maxBlocks: Int = 100,
+        onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): Boolean {
         android.util.Log.d(TAG, "Syncing dust from blockchain for $address")
 
@@ -374,7 +375,7 @@ class DustRepository @Inject constructor(
                 existingState.close()
                 // Delta sync: stream only new events from checkpoint
                 android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                val result = streamDustEvents(address, dustSeed, fromId = lastEventId + 1)
+                val result = streamDustEvents(address, dustSeed, fromId = lastEventId + 1, onProgress = onProgress)
                 if (result) return true
 
                 // Streaming returned false (no events or replay failed). Fall through to full sync.
@@ -389,7 +390,7 @@ class DustRepository @Inject constructor(
             // exactly once, producing roots that match the node's root history.
             android.util.Log.d(TAG, "Full sync from genesis")
 
-            val result = streamDustEvents(address, dustSeed, fromId = null)
+            val result = streamDustEvents(address, dustSeed, fromId = null, onProgress = onProgress)
             if (!result) {
                 android.util.Log.d(TAG, "No dust events found, dust not registered yet")
             }
@@ -418,6 +419,7 @@ class DustRepository @Inject constructor(
         address: String,
         dustSeed: ByteArray,
         fromId: Long?,
+        onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): Boolean {
         // Write events to a temp file (one hex per line). Rust reads the file
         // in native memory and replays in 500-event chunks — proven identical
@@ -464,6 +466,7 @@ class DustRepository @Inject constructor(
 
                             if (totalEvents % 5000 == 0) {
                                 android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
+                                onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
                             }
 
                             if (nextEvent.id >= nextEvent.maxId) {
@@ -480,6 +483,7 @@ class DustRepository @Inject constructor(
 
                         if (totalEvents % 5000 == 0) {
                             android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                            onProgress?.invoke(totalEvents, event.maxId.toInt())
                         }
 
                         if (event.id >= event.maxId) {

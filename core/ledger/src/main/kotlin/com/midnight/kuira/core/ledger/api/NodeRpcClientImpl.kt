@@ -315,7 +315,8 @@ class NodeRpcClientImpl(
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override suspend fun submitAndWaitForFinalization(
         serializedTxHex: String,
-        timeoutMs: Long
+        timeoutMs: Long,
+        onStage: (suspend (NodeRpcClient.SubmissionStage) -> Unit)?,
     ): TransactionFinalizationResult {
         // Validate input
         val cleanHex = serializedTxHex.removePrefix("0x").lowercase()
@@ -350,6 +351,7 @@ class NodeRpcClientImpl(
 
                     Log.d(TAG, "Sending author_submitAndWatchExtrinsic request...")
                     send(Frame.Text(subscribeRequest))
+                    onStage?.invoke(NodeRpcClient.SubmissionStage.SUBMITTED)
 
                     // Step 2: Process responses
                     for (frame in incoming) {
@@ -424,9 +426,9 @@ class NodeRpcClientImpl(
                                                 return@webSocket
                                             }
                                             is TransactionFinalizationResult.InBlock -> {
-                                                // Still waiting for finalization
                                                 txHash = finalizationResult.txHash
                                                 Log.d(TAG, "Transaction in block, waiting for finalization...")
+                                                onStage?.invoke(NodeRpcClient.SubmissionStage.IN_BLOCK)
                                             }
                                             is TransactionFinalizationResult.Dropped,
                                             is TransactionFinalizationResult.Invalid,
@@ -438,6 +440,7 @@ class NodeRpcClientImpl(
                                             else -> {
                                                 // Continue waiting (ready, broadcast, etc.)
                                                 Log.d(TAG, "Intermediate status, continuing...")
+                                                onStage?.invoke(NodeRpcClient.SubmissionStage.BROADCAST)
                                             }
                                         }
                                     }
