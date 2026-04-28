@@ -21,6 +21,8 @@ Sudden death: batches of 5, circuit stops at decisive round. Unrevealed rounds s
 
 **Anti-cheat:** commit-reveal. Hash of 5 choices + nonces stored as private state. ZK circuit proves revealed choices match commitments. Cannot change choices after commit.
 
+Detailed game logic, state machine, circuit specs, UI flows, and Unity bridge spec in [`KICKS_GAME_DESIGN.md`](KICKS_GAME_DESIGN.md).
+
 ## Stakes & gas
 
 - PREPROD NIGHT stakes (configurable per match, default 1 NIGHT). Winner takes pot, draw = refund.
