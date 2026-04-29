@@ -100,6 +100,18 @@ object ContractRuntime {
         return nativeAssembleContractCallTx(paramsJson)
     }
 
+    /**
+     * Assemble a contract DEPLOY transaction from constructor output.
+     *
+     * Takes JSON: `{"network_id":"preprod","state_handle":42}`
+     * Returns JSON: `{"tx_hex":"...","contract_address":"..."}`
+     * or `{"error":"..."}` on failure.
+     */
+    fun assembleDeployTx(paramsJson: String): String? {
+        ensureLoaded()
+        return nativeAssembleDeployTx(paramsJson)
+    }
+
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
@@ -112,4 +124,5 @@ object ContractRuntime {
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
     @JvmStatic private external fun nativeStateReadFields(handle: Long): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
+    @JvmStatic private external fun nativeAssembleDeployTx(paramsJson: String): String?
 }
