@@ -237,12 +237,14 @@ class MidnightContract private constructor(
 
         internal fun build(config: MidnightConfig): MidnightContract {
             val jsStream = requireNotNull(contractJs) { "contractJs is required" }
-            val addr = requireNotNull(address) { "address is required" }
             val cpk = requireNotNull(coinPublicKey) { "coinPublicKey is required" }
 
-            require(addr.length == CONTRACT_ADDRESS_HEX_LENGTH &&
-                addr.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
-                "address must be $CONTRACT_ADDRESS_HEX_LENGTH hex characters"
+            val addr = address
+            if (addr != null) {
+                require(addr.length == CONTRACT_ADDRESS_HEX_LENGTH &&
+                    addr.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    "address must be $CONTRACT_ADDRESS_HEX_LENGTH hex characters"
+                }
             }
 
             val jsContent = jsStream.use { it.bufferedReader().readText() }
@@ -250,7 +252,7 @@ class MidnightContract private constructor(
             return MidnightContract(
                 config = config,
                 contractJsContent = jsContent,
-                contractAddress = addr,
+                contractAddress = addr ?: "", // Empty for deploy — set after deploy returns
                 witnesses = witnesses.toMap(),
                 initialPrivateStateMap = initialPrivateState,
                 coinPublicKey = cpk,
