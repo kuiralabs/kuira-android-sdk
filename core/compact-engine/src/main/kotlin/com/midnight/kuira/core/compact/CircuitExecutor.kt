@@ -108,12 +108,18 @@ class CircuitExecutor(private val context: Context) {
      * @return Deploy transaction hex + contract address
      * @throws CircuitExecutionException if constructor execution or assembly fails
      */
+    /**
+     * @param verifierKeys Map of circuit name → hex-encoded verifier key bytes.
+     *   These are registered in the contract state during deploy so circuits
+     *   are immediately callable (no separate maintenance tx needed).
+     */
     suspend fun executeConstructor(
         contractJs: String,
         witnesses: Map<String, WitnessProvider>,
         initialPrivateState: String,
         coinPublicKey: ByteArray,
         networkId: String = "undeployed",
+        verifierKeys: Map<String, String> = emptyMap(),
     ): DeployExecutionResult {
         validateIdentifier(networkId, "networkId")
 
@@ -170,11 +176,19 @@ class CircuitExecutor(private val context: Context) {
         val handle = stateHandle?.toLongOrNull()
             ?: throw CircuitExecutionException("Constructor produced no state handle")
 
-        return assembleDeployTransaction(handle, networkId)
+        return assembleDeployTransaction(handle, networkId, verifierKeys)
     }
 
-    private fun assembleDeployTransaction(stateHandle: Long, networkId: String): DeployExecutionResult {
-        val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle}"""
+    private fun assembleDeployTransaction(
+        stateHandle: Long,
+        networkId: String,
+        verifierKeys: Map<String, String>,
+    ): DeployExecutionResult {
+        val vkJson = if (verifierKeys.isNotEmpty()) {
+            val entries = verifierKeys.entries.joinToString(",") { (k, v) -> "\"$k\":\"$v\"" }
+            ",\"verifier_keys\":{$entries}"
+        } else ""
+        val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle$vkJson}"""
         val resultJson = ContractRuntime.assembleDeployTx(paramsJson)
             ?: throw CircuitExecutionException("Deploy assembly returned null")
 

@@ -28,6 +28,7 @@ class MidnightContract private constructor(
     private val witnesses: Map<String, WitnessProvider>,
     private val initialPrivateStateMap: Map<String, Any?>,
     private val coinPublicKey: ByteArray,
+    private val circuitVerifierKeys: Map<String, ByteArray> = emptyMap(),
 ) {
     /**
      * Call a circuit and submit the transaction to the blockchain.
@@ -170,6 +171,9 @@ class MidnightContract private constructor(
                 initialPrivateState = privateStateJs,
                 coinPublicKey = coinPublicKey,
                 networkId = config.networkId,
+                verifierKeys = circuitVerifierKeys.mapValues { (_, bytes) ->
+                    bytes.joinToString("") { "%02x".format(it) }
+                },
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
@@ -228,6 +232,13 @@ class MidnightContract private constructor(
         /** Coin public key (32 bytes). Required. */
         var coinPublicKey: ByteArray? = null
 
+        /**
+         * Circuit verifier keys for deploy — map of circuit name to raw verifier key bytes.
+         * Load from the compiled contract's `keys/{circuit}.verifier` files.
+         * Required for [deploy], not needed for [call].
+         */
+        var circuitVerifierKeys: Map<String, ByteArray> = emptyMap()
+
         private val witnesses = mutableMapOf<String, WitnessProvider>()
 
         /** Register a witness provider for a named witness. */
@@ -252,10 +263,11 @@ class MidnightContract private constructor(
             return MidnightContract(
                 config = config,
                 contractJsContent = jsContent,
-                contractAddress = addr ?: "", // Empty for deploy — set after deploy returns
+                contractAddress = addr ?: "",
                 witnesses = witnesses.toMap(),
                 initialPrivateStateMap = initialPrivateState,
                 coinPublicKey = cpk,
+                circuitVerifierKeys = circuitVerifierKeys,
             )
         }
     }

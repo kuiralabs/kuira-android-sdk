@@ -141,6 +141,14 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 _state.value = BBoardState.Connecting("Deploying BBoard contract...")
+
+                // Load verifier keys for each circuit from the proving keys directory
+                val keysDir = midnightSdk.provingKeyManager.keysDir
+                val verifierKeys = mapOf(
+                    "post" to java.io.File(keysDir, "post.verifier").readBytes(),
+                    "takeDown" to java.io.File(keysDir, "takeDown.verifier").readBytes(),
+                )
+
                 val bboard = MidnightContract.create(midnightSdk.config) {
                     name = "bboard"
                     contractJs = getApplication<Application>().assets
@@ -148,6 +156,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
                     initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
                     coinPublicKey = midnightSdk.coinPublicKey
+                    circuitVerifierKeys = verifierKeys
                 }
 
                 val deployResult = bboard.deploy { stage ->
