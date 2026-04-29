@@ -84,7 +84,7 @@ Separate repo: `midnight-kicks/` (app/ + unity/ + contract/). Consumes Kuira SDK
   - [x] BBoard standalone on PREPROD (no mn serve)
   - [x] Balance progress callbacks
   - [x] Identity investigation + decisions (see IDENTITY_INVESTIGATION.md)
-  - [ ] Contract deployment API (each match = new contract)
+  - [x] Contract deployment API (each match = new contract)
   - [ ] Passkey identity implementation (CredentialManager + did:key)
   - [ ] PRF-encrypted cloud backup
 - [ ] **Phase 3 — Unity game**
