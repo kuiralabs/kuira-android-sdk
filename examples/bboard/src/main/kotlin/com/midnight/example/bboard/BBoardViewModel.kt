@@ -158,7 +158,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
                 val addr = deployResult.contractAddress
                 Log.i(TAG, "Deployed at: $addr (${deployResult.timings})")
-                _state.value = BBoardState.Connecting("Deployed! Connecting to $addr...")
+
+                // Wait for indexer to catch up with the newly deployed contract
+                _state.value = BBoardState.Connecting("Deployed at ${addr.take(8)}... Waiting for indexer...")
+                val tempRepo = BBoardRepository(midnightSdk.config)
+                var retries = 0
+                while (retries < 10) {
+                    kotlinx.coroutines.delay(2000)
+                    val content = tempRepo.fetchBoardState(addr)
+                    if (content !is BoardContent.NotDeployed && content !is BoardContent.Error) break
+                    retries++
+                    _state.value = BBoardState.Connecting("Waiting for indexer... (${retries * 2}s)")
+                }
 
                 setupContract(
                     cfg = midnightSdk.config,
