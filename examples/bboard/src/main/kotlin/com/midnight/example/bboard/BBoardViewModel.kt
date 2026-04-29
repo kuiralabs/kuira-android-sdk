@@ -114,6 +114,67 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Deploy a fresh BBoard contract, then connect to it.
+     * Tests the full deploy pipeline: constructor → prove → balance → submit.
+     */
+    fun deployAndConnect(network: MidnightNetwork, seed: ByteArray) {
+        viewModelScope.launch {
+            _state.value = BBoardState.Connecting("Initializing SDK...")
+            try {
+                installProvingKeys()
+
+                _state.value = BBoardState.Connecting("Building SDK...")
+                val midnightSdk = MidnightSdk.Builder(getApplication())
+                    .network(network)
+                    .seed(seed)
+                    .build()
+                sdk = midnightSdk
+
+                if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
+                    _state.value = BBoardState.Connecting("Downloading proving keys...")
+                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                        _state.value = BBoardState.Connecting(
+                            "Downloading keys: ${(progress * 100).toInt()}%"
+                        )
+                    }
+                }
+
+                _state.value = BBoardState.Connecting("Deploying BBoard contract...")
+                val bboard = MidnightContract.create(midnightSdk.config) {
+                    name = "bboard"
+                    contractJs = getApplication<Application>().assets
+                        .open("runtime/bboard-contract-iife.js")
+                    witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
+                    initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
+                    coinPublicKey = midnightSdk.coinPublicKey
+                }
+
+                val deployResult = bboard.deploy { stage ->
+                    val label = stageLabel(stage)
+                    Log.i(TAG, "Deploy stage: $label")
+                    _state.value = BBoardState.Connecting(label)
+                }
+
+                val addr = deployResult.contractAddress
+                Log.i(TAG, "Deployed at: $addr (${deployResult.timings})")
+                _state.value = BBoardState.Connecting("Deployed! Connecting to $addr...")
+
+                setupContract(
+                    cfg = midnightSdk.config,
+                    contractAddress = addr,
+                    networkId = network.rustNetworkId,
+                    coinPublicKey = midnightSdk.coinPublicKey,
+                )
+
+                syncDustInBackground(midnightSdk)
+            } catch (e: Exception) {
+                Log.e(TAG, "Deploy failed", e)
+                _state.value = BBoardState.Error(e.message ?: "Deploy failed")
+            }
+        }
+    }
+
     private fun syncDustInBackground(midnightSdk: MidnightSdk) {
         viewModelScope.launch {
             try {

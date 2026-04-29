@@ -121,6 +121,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 is BBoardState.Setup -> SetupScreen(
                     onConnectRemote = viewModel::connect,
                     onConnectSdk = viewModel::connectWithSdk,
+                    onDeploySdk = viewModel::deployAndConnect,
                 )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
@@ -147,6 +148,7 @@ private enum class ConnectionMode(val label: String) {
 private fun SetupScreen(
     onConnectRemote: (String, NetworkChoice) -> Unit,
     onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
+    onDeploySdk: (MidnightNetwork, ByteArray) -> Unit,
 ) {
     var address by remember { mutableStateOf("") }
     var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
@@ -212,6 +214,18 @@ private fun SetupScreen(
                     }
                     onConnectSdk(address, midnightNetwork, TEST_SEED)
                 }
+            }
+        }
+
+        if (mode == ConnectionMode.STANDALONE) {
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            ActionButton("deploy new contract", enabled = true, dimmed = true) {
+                val midnightNetwork = when (network) {
+                    NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
+                    NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
+                    NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
+                }
+                onDeploySdk(midnightNetwork, TEST_SEED)
             }
         }
     }
