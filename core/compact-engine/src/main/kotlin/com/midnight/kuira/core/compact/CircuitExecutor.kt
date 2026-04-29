@@ -93,6 +93,102 @@ class CircuitExecutor(private val context: Context) {
         return assembleTransaction(params)
     }
 
+    /**
+     * Execute a contract constructor and assemble a deploy transaction.
+     *
+     * Runs `contract.initialState()` in QuickJS (same runtime as circuit execution)
+     * and captures the resulting state handle. Then calls [ContractRuntime.assembleDeployTx]
+     * to build the deploy transaction with the initial state + derived contract address.
+     *
+     * @param contractJs Compiled contract JavaScript (IIFE format)
+     * @param witnesses Witness callbacks (e.g., localSecretKey for key generation)
+     * @param initialPrivateState JS expression for the initial private state
+     * @param coinPublicKey The coin public key bytes (32 bytes)
+     * @param networkId Network ID for the transaction
+     * @return Deploy transaction hex + contract address
+     * @throws CircuitExecutionException if constructor execution or assembly fails
+     */
+    suspend fun executeConstructor(
+        contractJs: String,
+        witnesses: Map<String, WitnessProvider>,
+        initialPrivateState: String,
+        coinPublicKey: ByteArray,
+        networkId: String = "undeployed",
+    ): DeployExecutionResult {
+        validateIdentifier(networkId, "networkId")
+
+        var stateHandle: String? = null
+        var jsError: String? = null
+
+        quickJs {
+            function("__capture") { args: Array<Any?> -> stateHandle = args[0] as? String }
+            function("__captureError") { args: Array<Any?> -> jsError = args[0] as? String }
+
+            registerWitnesses(this, witnesses)
+            registerNativeFfi(this)
+            loadRuntime(this, contractJs)
+
+            val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
+            val witnessEntries = witnesses.keys.joinToString(",\n") { name ->
+                """
+                $name: function(witnessContext) {
+                    const resultStr = __witness_$name(
+                        JSON.stringify(witnessContext.privateState)
+                    );
+                    const parts = resultStr.split('|');
+                    const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
+                    const keyBytes = new Uint8Array(parts[1].split(',').map(Number));
+                    return [privateState, keyBytes];
+                }
+                """.trimIndent()
+            }
+
+            val constructorJs = """
+                try {
+                    const witnesses = { $witnessEntries };
+                    const contract = new Contract(witnesses);
+
+                    const initResult = contract.initialState({
+                        initialPrivateState: $initialPrivateState,
+                        initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
+                    });
+
+                    // Capture the state handle for the deploy transaction assembler
+                    __capture(initResult.currentContractState._rustHandle.toString());
+                } catch (e) {
+                    __captureError(e.toString());
+                }
+            """.trimIndent()
+
+            evaluate<Any?>(constructorJs)
+        }
+
+        if (jsError != null) {
+            throw CircuitExecutionException("Constructor execution failed: $jsError")
+        }
+
+        val handle = stateHandle?.toLongOrNull()
+            ?: throw CircuitExecutionException("Constructor produced no state handle")
+
+        return assembleDeployTransaction(handle, networkId)
+    }
+
+    private fun assembleDeployTransaction(stateHandle: Long, networkId: String): DeployExecutionResult {
+        val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle}"""
+        val resultJson = ContractRuntime.assembleDeployTx(paramsJson)
+            ?: throw CircuitExecutionException("Deploy assembly returned null")
+
+        if (resultJson.contains("\"error\"")) {
+            throw CircuitExecutionException("Deploy assembly failed: $resultJson")
+        }
+
+        val result = JSONObject(resultJson)
+        return DeployExecutionResult(
+            unprovenTxHex = result.getString("tx_hex"),
+            contractAddress = result.getString("contract_address"),
+        )
+    }
+
     private suspend fun executeInQuickJs(
         contractJs: String,
         contractAddress: String,
@@ -427,6 +523,12 @@ data class WitnessResult(
 data class ExecutionResult(
     val unprovenTxHex: String,
     val txParamsJson: String,
+)
+
+/** Result of contract deployment assembly. */
+data class DeployExecutionResult(
+    val unprovenTxHex: String,
+    val contractAddress: String,
 )
 
 /** Thrown when circuit execution or transaction assembly fails. */

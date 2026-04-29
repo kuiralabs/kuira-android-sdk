@@ -146,6 +146,71 @@ class MidnightContract private constructor(
         )
     }
 
+    /**
+     * Deploy a new contract instance to the blockchain.
+     *
+     * Runs the constructor in QuickJS, proves the deploy tx, balances, and submits.
+     * Returns the contract address — use it to create a [MidnightContract] for calls.
+     *
+     * @param onProgress Optional callback for UI progress updates
+     * @return [DeployResult] with the contract address and timings
+     */
+    suspend fun deploy(
+        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
+    ): DeployResult {
+        val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
+
+        // Step 1: Execute constructor
+        onProgress?.invoke(ContractCallStage.Executing)
+        val executeStart = System.currentTimeMillis()
+        val deployExec = try {
+            config.executor.executeConstructor(
+                contractJs = contractJsContent,
+                witnesses = witnesses,
+                initialPrivateState = privateStateJs,
+                coinPublicKey = coinPublicKey,
+                networkId = config.networkId,
+            )
+        } catch (e: Exception) {
+            throw ContractCallException.CircuitExecutionFailed(
+                "Constructor failed: ${e.message}", e,
+            )
+        }
+        val executeMs = System.currentTimeMillis() - executeStart
+
+        // Step 2: Prove deploy tx
+        onProgress?.invoke(ContractCallStage.Proving)
+        val proveStart = System.currentTimeMillis()
+        val provenTxHex = try {
+            config.proofProvider.prove(deployExec.unprovenTxHex).trim()
+        } catch (e: Exception) {
+            throw ContractCallException.ProvingFailed("Deploy proving failed: ${e.message}", e)
+        }
+        val proveMs = System.currentTimeMillis() - proveStart
+
+        // Step 3: Balance + submit
+        onProgress?.invoke(ContractCallStage.Balancing)
+        val balanceStart = System.currentTimeMillis()
+        val balancer = config.getBalancer()
+        try {
+            balancer.balanceAndSubmit(provenTxHex) { balanceProgress ->
+                onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
+            }
+        } catch (e: Exception) {
+            throw ContractCallException.SubmissionFailed("Deploy submit failed: ${e.message}", e)
+        }
+        val balanceMs = System.currentTimeMillis() - balanceStart
+
+        return DeployResult(
+            contractAddress = deployExec.contractAddress,
+            timings = DeployTimings(
+                executeMs = executeMs,
+                proveMs = proveMs,
+                balanceMs = balanceMs,
+            ),
+        )
+    }
+
     /** DSL builder for creating a [MidnightContract]. */
     class ContractBuilder internal constructor() {
         /** Contract name (used for proving key management). */
