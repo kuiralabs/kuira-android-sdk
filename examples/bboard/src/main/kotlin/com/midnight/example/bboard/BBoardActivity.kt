@@ -219,7 +219,10 @@ private fun SetupScreen(
 
         if (mode == ConnectionMode.STANDALONE) {
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
-            ActionButton("deploy new contract", enabled = true, dimmed = true) {
+            Text("— or deploy a fresh instance —", color = Colors.OnSurfaceSubtle, fontSize = Type.Caption,
+                modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            ActionButton("deploy new contract", enabled = true) {
                 val midnightNetwork = when (network) {
                     NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
                     NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
