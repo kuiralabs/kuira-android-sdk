@@ -272,14 +272,31 @@ private fun ConnectedScreen(
             )
         }
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        Text(
-            state.contractAddress,
-            color = Colors.OnSurfaceSubtle,
-            fontSize = Type.Mono,
-            fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+        var copied by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable {
+                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(state.contractAddress))
+                copied = true
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                state.contractAddress,
+                color = Colors.OnSurfaceSubtle,
+                fontSize = Type.Mono,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (copied) "copied" else "tap to copy",
+                color = if (copied) Colors.Success else Colors.OnSurfaceSubtle,
+                fontSize = Type.Caption,
+                modifier = Modifier.padding(start = Spacing.SmallGap),
+            )
+        }
 
         // Dust sync progress — inline, non-blocking
         when {

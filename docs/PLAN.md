@@ -28,6 +28,7 @@
 14. ⏭️ **Phase 7**: Agent Runtime (est ~80–120h) — full five-pillar runtime (Agent Mode background service, Policy Engine, x402 Handler, MCP Bridge, Agent Registration). Ships as Kuira v1.1 alongside **CipherDefense** companion game as the canonical live demo of "first agent-native wallet on Midnight".
 15. 🔬 **Phase 9**: Privacy-Preserving Spendability Indexer (research + prototype, est — scoped after discovery spike) — eliminate the ~90s cold-sync wait by building a PIR-based (or PIR-adjacent) privacy-preserving indexer for Midnight. **Ecosystem-level initiative, not Kuira-only** — benefits every Midnight wallet and any dApp needing fast spendability signals (especially agents doing x402 payments). Inspired by `valargroup/spendability-pir` (Zcash prototype) + `zodl-ios` PR #32. Open-source outcome targeted: `midnight-spendability-indexer`. Queued post-v1.1.
 16. 🔬 **Phase 10**: MPC-Based Custody & Coordination (future research, est — scoped at activation) — introduce Multi-Party Computation primitives to Kuira as the Midnight ecosystem's MPC/DRek/TEE infrastructure matures. Covers threshold Schnorr shared wallets (M-of-N family/corporate per Charles's AMA), DRek social recovery, private multi-agent coordination for the Agent Store, and threshold-split agent custody. **Architectural rule baked in:** use a generic MPC VM toolchain (MP-SPDZ family) — never roll custom MPC. Activates when Midnight Labs ships DRek reference infra or an Agent Store vertical requires it.
+17. 🔬 **Phase 11**: Nightstream Android SDK + MOS Capability Demonstrator (research + new SDK module, est — scoped after Stage 1) — second SDK alongside `core:compact-engine`, dedicated to running **WASM Components** (`wasm32-wasip2`) on Android via wasmtime/WAMR with WASI host surface, sandboxed graphics/audio/filesystem, and trace capture for Nightstream's stream-based folding-proof system. Validates Charles's MOS vision on mobile and proves Kuira can host arbitrary untrusted dApp components, not just Compact circuits. **Distinct from `core:compact-engine`** — different runtime, different proof system, different trust model, optional dependency. Reference litmus: `SebastienGllmt/foldiboy` (ZK-proven Game Boy). Stage 4 (proving) gated on Midnight Labs wiring up Nightstream upstream.
 
 ---
 
@@ -51,6 +52,7 @@
 | **Phase 7: Agent Runtime (v1.1)** | Full 5-pillar runtime (Agent Mode, Policy Engine, x402, MCP Bridge, Agent Registration) + CipherDefense co-launch | est ~80-120h | ⏸️ Planned |
 | **Phase 9: Spendability Indexer (research)** | Privacy-preserving indexer for Midnight (PIR or equivalent) → instant spend UX, ecosystem-level infra | est — research first | 🔬 Queued post-v1.1 |
 | **Phase 10: MPC Custody & Coordination (research)** | Threshold Schnorr shared wallets, DRek social recovery, private multi-agent coordination — always via an MPC VM (MP-SPDZ family), never custom | est — scoped at activation | 🔬 Queued, triggered by Midnight/ecosystem readiness |
+| **Phase 11: Nightstream SDK + MOS Demonstrator** | Second SDK module — WASM Component host on Android (wasmtime/WAMR + WASI + sandboxed gfx/audio) + capability demonstrator. Proves Kuira can host arbitrary MOS dApps, not just Compact. | est — scoped after Stage 1 | 🔬 Queued; Stage 4 gated on Nightstream upstream |
 
 **Invested:** ~365h | **Remaining to v1.0 (8B only):** ~188-242h | **Remaining to v1.1 (+ 8C + Phase 7):** ~328-442h | **Phases 9 + 10:** scoped after entry conditions met
 
@@ -1279,6 +1281,63 @@ Before Phase 10 work begins, all three should hold:
 - `AGENT_STORE_VISION.md` — Section 10, "MPC for Multi-Agent Coordination" research item
 - `KUIRA_VISION_V1.md` — Charles's AMA on DRek, keychain isolation, account abstraction
 - Memory: `feedback_mpc_vm_principle.md` — the hard rule this phase operationalizes
+
+---
+
+## Phase 11: Nightstream Android SDK + MOS Capability Demonstrator (Research + New SDK)
+
+**Goal:** Build a **second SDK module** alongside `core:compact-engine`, dedicated to running **WASM Components** (`wasm32-wasip2`) on Android with full WASI host surface, sandboxed graphics / audio / filesystem, and trace capture suitable for Nightstream's stream-based folding-proof system. Validates Charles's MOS vision on mobile and proves Kuira can host arbitrary untrusted dApp components — not just Compact circuits.
+
+**Status:** 🔬 Queued. Stages 1–3 are independent of Midnight Labs and can ship at our own pace. Stage 4 (proof emission to a real Nightstream prover) is gated on Midnight upstream wiring Nightstream into the chain.
+
+### Why a separate SDK
+
+`core:compact-engine` and a Nightstream host share almost nothing in common: different runtime (QuickJS vs wasmtime/WAMR), different code format (JS IIFE vs WASM Components), different binding surface, different I/O surface, different proof system (Plonk + Halo 2 vs lattice-based folding), different trust model (trusted contract vs untrusted guest), different binary footprint. Forcing them into one module would bloat the everyday wallet AAR and tangle two proof systems. Nightstream gets its own optional AAR; wallet users never pay the size cost unless they install a MOS-host build.
+
+### Stages (concept-level, no implementation prescribed)
+
+**Stage 1 — Investigation (research deliverable).** Survey runtimes (wasmtime vs WAMR vs Wasmer), pick one based on Android-ARM64 fit, binary size, JIT-vs-AOT under W^X, Component Model maturity. Decide WASI surface scope (which interfaces in, which deliberately out). Decide what to do about `wasi-gfx` — adopt as-is, ship a Skia/Compose-backed shim, or defer graphics entirely. Output: an architectural decision record that unlocks Stage 2.
+
+**Stage 2 — Runtime skeleton.** Embed the chosen runtime, load and execute a hello-world WASM Component on Android. No graphics, no audio, no proving. Just proves the embed works on real devices, with reasonable startup time and memory ceiling. Sets up the module structure for Stages 3–4.
+
+**Stage 3 — Capability demonstrator.** End-to-end run of a foldiboy-class WASM Component on a phone — display, audio, input, filesystem — with the user able to interact. **No proving yet.** This is the visual proof point: Kuira can host MOS-style dApps. This is also our litmus test for the design choices in Stage 1.
+
+**Stage 4 — Proving integration.** When Midnight Labs wires Nightstream into the chain, plug the trace-capture path into Nightstream's prover via FFI. Out of our control on timing — could be months or quarters after Stage 3. Until then, Stage 3 stands on its own as a capability demonstration.
+
+### Architectural principles
+
+- **Same delegation rule as everywhere else:** never roll our own folding-proof prover; consume upstream Nightstream Rust libraries via FFI when they exist. Same pattern we follow for Compact, Schnorr signing, MPC.
+- **Sandboxing is non-negotiable.** Memory limits, fuel metering, capability-scoped WASI imports. Untrusted guest code cannot read the wallet seed, cannot make arbitrary network calls, cannot escape the host.
+- **Optional dependency.** Phase 11 SDK ships as a separate AAR — the wallet binary stays small for normal users. Only MOS-host builds and capability demonstrators pull it in.
+
+### Entry conditions for Stage 1
+
+- Phase 7 (Agent Runtime) shipped, so the wallet has a coherent dApp-host story.
+- Concrete external pressure — either a partner asking for MOS-host capability, Midnight Labs publishing MOS specs, or a strategic moment requiring the demonstrator (conference, launch, ecosystem event).
+
+### Entry condition for Stage 4
+
+- Nightstream is integrated upstream into Midnight (per Charles's roadmap, "future update" — no committed date).
+
+### Litmus tests beyond foldiboy
+
+- Compact-compiled WASM dApp components from a future Phase 6 successor — proves coexistence with the existing engine.
+- Simple MOS counter / state component — proves the basic Component Model wiring works.
+- Third-party Component Model examples published by the Bytecode Alliance — proves we're spec-compliant, not just "works for our toy."
+
+### Outcomes
+
+- Architectural decision record (Stage 1).
+- New SDK module: `core:nightstream-runtime` and a public wrapper alongside `sdk/midnight-sdk` (naming TBD at Stage 2).
+- Capability demonstrator video / event-ready demo (Stage 3).
+- Upstream contributions where we discover gaps in mobile-Component-Model tooling.
+
+### References
+
+- `SebastienGllmt/foldiboy` — reference component for the demonstrator
+- `LFDT-Nightstream` — the proving target
+- `KUIRA_VISION_V1.md` Phase 9 (MOS / WASM dApp Host) — original Charles-vision framing
+- `AGENT_STORE_VISION.md` — Section 4 ("Agent Runtime Environment") aligns with this SDK as the on-device execution surface
 
 ---
 
