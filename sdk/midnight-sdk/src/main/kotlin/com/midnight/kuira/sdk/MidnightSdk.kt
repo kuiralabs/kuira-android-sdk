@@ -9,6 +9,7 @@ import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
+import com.midnight.kuira.core.identity.accesskey.AccessKeyManager
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
 import com.midnight.kuira.core.indexer.database.UtxoDatabase
 import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
@@ -58,6 +59,15 @@ class MidnightSdk private constructor(
 
     /** Proving key manager (for checking/downloading keys). */
     val provingKeyManager: ProvingKeyManager,
+
+    /**
+     * Access key for sigil identity — 33-byte compressed secp256k1 public key.
+     * Use this with [KeyAuthorization] to build delegation payloads.
+     */
+    val accessKeyPublicKey: ByteArray,
+
+    /** HD derivation path of the access key (e.g., "m/44'/2400'/0'/5/0"). */
+    val accessKeyPath: String,
 
     // Resources to close
     private val database: UtxoDatabase,
@@ -176,6 +186,8 @@ class MidnightSdk private constructor(
                 coinPublicKey = keys.coinPublicKey,
                 walletAddress = keys.address,
                 provingKeyManager = provingKeyManager,
+                accessKeyPublicKey = keys.accessKeyPublicKey,
+                accessKeyPath = keys.accessKeyPath,
                 database = database,
                 indexerClient = indexerClient,
             )
@@ -196,6 +208,8 @@ internal data class DerivedKeys(
     val address: String,
     val dustSeed: ByteArray,
     val coinPublicKey: ByteArray,
+    val accessKeyPublicKey: ByteArray,
+    val accessKeyPath: String,
 )
 
 /**
@@ -231,11 +245,19 @@ internal fun deriveKeys(
         ?: throw IllegalStateException("ShieldedKeyDeriver.deriveKeys failed — is native library loaded?")
     val coinPublicKey = hexToBytes(shieldedKeys.coinPublicKey)
 
+    // Access key for sigil identity: m/44'/2400'/account'/5/0
+    val accessKeyManager = AccessKeyManager(hdWallet, accountIndex)
+    val accessKey = accessKeyManager.deriveDefaultAccessKey()
+    val accessKeyPublicKey = accessKey.publicKeyBytes.copyOf()
+    val accessKeyPath = accessKey.path
+
     // Individual key.clear() is internal — hdWallet.clear() handles hierarchical cleanup
 
     return DerivedKeys(
         address = address,
         dustSeed = dustSeed,
         coinPublicKey = coinPublicKey,
+        accessKeyPublicKey = accessKeyPublicKey,
+        accessKeyPath = accessKeyPath,
     )
 }
