@@ -34,7 +34,7 @@ class MidnightWalletTest {
     @Test
     fun `submitTransaction calls submitAndWaitForFinalization then invalidates dust memo`() = runTest {
         val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { submitAndWaitForFinalization(any(), any()) } doReturn
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doReturn
                 TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
         }
         val syncManager = mock<DustSyncManager> {
@@ -44,7 +44,7 @@ class MidnightWalletTest {
         val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = syncManager)
         wallet.submitTransaction("balanced_hex")
 
-        verify(nodeRpc).submitAndWaitForFinalization(eq("balanced_hex"), any())
+        verify(nodeRpc).submitAndWaitForFinalization(eq("balanced_hex"), any(), anyOrNull())
         verify(syncManager).invalidateMemo()
     }
 

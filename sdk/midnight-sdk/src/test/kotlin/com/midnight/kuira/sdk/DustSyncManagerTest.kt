@@ -2,7 +2,6 @@ package com.midnight.kuira.sdk
 
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.repository.DustRepository
-import com.midnight.kuira.core.ledger.api.NodeNetworkException
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -18,153 +17,118 @@ class DustSyncManagerTest {
     // ── Cold start ──
 
     @Test
-    fun `cold start calls syncFromBlockchain and returns state`() = runTest {
+    fun `cold start syncs from blockchain and returns state`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doReturn "aabb" + "cc".repeat(30)
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
         }
 
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc)
+        val manager = createManager(dustRepo = dustRepo)
         val result = manager.ensureSynced()
 
         assertEquals(dustState, result)
-        verify(dustRepo).syncFromBlockchain(eq("test_addr"), any(), any())
+        verify(dustRepo).syncFromBlockchain(eq("test_addr"), any(), any(), anyOrNull())
     }
 
-    // ── Warm hit (same tip, within TTL) ──
+    // ── Cached after first sync ──
 
     @Test
-    fun `same tip within TTL returns cached state without network calls`() = runTest {
-        var now = 1000L
+    fun `second call returns cached state without re-syncing`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doReturn "tip_hash_1".padEnd(64, '0')
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
         }
 
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc, clock = { now })
+        val manager = createManager(dustRepo = dustRepo)
 
         // First call: syncs
         manager.ensureSynced()
-        verify(nodeRpc, times(1)).getFinalizedHead()
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any())
+        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any(), anyOrNull())
 
-        // Second call within TTL: no network
-        now += 2000 // 2s later, within 5s TTL
+        // Second call: returns cached, no re-sync
         val result = manager.ensureSynced()
         assertEquals(dustState, result)
-        verify(nodeRpc, times(1)).getFinalizedHead() // still only 1 call
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any()) // still only 1 sync
+        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any(), anyOrNull())
     }
 
-    // ── TTL expired but same tip ──
+    // ── invalidateMemo is no-op ──
 
     @Test
-    fun `TTL expired but same tip re-fetches tip and serves cache`() = runTest {
-        var now = 1000L
+    fun `invalidateMemo is no-op — state stays cached`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doReturn "stable_tip".padEnd(64, '0')
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
         }
 
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc, clock = { now })
-
+        val manager = createManager(dustRepo = dustRepo)
         manager.ensureSynced()
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any())
 
-        // 6s later: TTL expired, but tip unchanged
-        now += 6000
-        manager.ensureSynced()
-        verify(nodeRpc, times(2)).getFinalizedHead() // re-fetched tip
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any()) // no re-sync
-    }
-
-    // ── Tip changed ──
-
-    @Test
-    fun `tip changed triggers delta sync`() = runTest {
-        var now = 1000L
-        var tipCounter = 0
-        val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doAnswer {
-                "tip_${tipCounter++}".padEnd(64, '0')
-            }
-        }
-
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc, clock = { now })
-
-        manager.ensureSynced()
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any())
-
-        // Expire TTL so tip is re-fetched (and gets a new value)
-        now += 6000
-        manager.ensureSynced()
-        verify(dustRepo, times(2)).syncFromBlockchain(any(), any(), any())
-    }
-
-    // ── Post-submit invalidation ──
-
-    @Test
-    fun `invalidateMemo causes next ensureSynced to re-check tip`() = runTest {
-        val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doReturn "same_tip".padEnd(64, '0')
-        }
-
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc)
-
-        manager.ensureSynced()
-        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any())
-
-        // Invalidate memo
         manager.invalidateMemo()
 
-        // Next call must re-check tip and re-sync (even though tip is same)
-        manager.ensureSynced()
-        verify(dustRepo, times(2)).syncFromBlockchain(any(), any(), any())
-    }
-
-    // ── Network error serves stale ──
-
-    @Test
-    fun `network error on tip check serves stale cache`() = runTest {
-        var callCount = 0
-        val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doAnswer {
-                callCount++
-                if (callCount == 1) "good_tip".padEnd(64, '0')
-                else throw NodeNetworkException("Network down")
-            }
-        }
-
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc)
-
-        // First call: succeeds
-        manager.ensureSynced()
-
-        // Second call: network error, but stale tip is available
-        // Should return cached state without throwing
+        // After invalidate, state is still cached
         val result = manager.ensureSynced()
         assertEquals(dustState, result)
+        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any(), anyOrNull())
+    }
+
+    // ── forceResync clears and re-syncs ──
+
+    @Test
+    fun `forceResync clears state and requires fresh sync`() = runTest {
+        val freshState = mock<DustLocalState> {
+            on { getStatePointer() } doReturn 99999L
+        }
+
+        var syncCount = 0
+        val dustRepo = mock<DustRepository> {
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doAnswer {
+                if (syncCount == 0) { syncCount++; dustState }
+                else freshState
+            }
+            onBlocking { deleteState(any()) } doAnswer {}
+        }
+
+        val manager = createManager(dustRepo = dustRepo)
+
+        // First sync
+        val first = manager.ensureSynced()
+        assertEquals(dustState, first)
+
+        // Force resync clears everything
+        manager.forceResync()
+        verify(dustState).close()
+        verify(dustRepo).clearLastSyncedState()
+        verify(dustRepo).deleteState("test_addr")
+
+        // Next call must sync again
+        val second = manager.ensureSynced()
+        assertEquals(freshState, second)
+        verify(dustRepo, times(2)).syncFromBlockchain(any(), any(), any(), anyOrNull())
+    }
+
+    // ── Fallback full sync when getLastSyncedState returns null ──
+
+    @Test
+    fun `falls back to full sync when delta returns no state`() = runTest {
+        var callCount = 0
+        val dustRepo = mock<DustRepository> {
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doAnswer {
+                callCount++
+                if (callCount == 1) null // delta sync produced no state
+                else dustState // full sync produced state
+            }
+            onBlocking { deleteState(any()) } doAnswer {}
+        }
+
+        val manager = createManager(dustRepo = dustRepo)
+        val result = manager.ensureSynced()
+
+        assertEquals(dustState, result)
+        // Called twice: first delta attempt, then full sync fallback
+        verify(dustRepo, times(2)).syncFromBlockchain(any(), any(), any(), anyOrNull())
+        verify(dustRepo).deleteState("test_addr")
     }
 
     // ── Close releases memory ──
@@ -172,18 +136,44 @@ class DustSyncManagerTest {
     @Test
     fun `close calls close on cached DustLocalState`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { syncFromBlockchain(any(), any(), any()) } doReturn true
-            onBlocking { loadState(any()) } doReturn dustState
-        }
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { getFinalizedHead() } doReturn "tip".padEnd(64, '0')
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
         }
 
-        val manager = createManager(dustRepo = dustRepo, nodeRpc = nodeRpc)
+        val manager = createManager(dustRepo = dustRepo)
         manager.ensureSynced()
 
         manager.close()
         verify(dustState).close()
+    }
+
+    @Test
+    fun `close is safe when no state exists`() {
+        val manager = createManager()
+        // Should not throw
+        manager.close()
+    }
+
+    // ── Progress callback ──
+
+    @Test
+    fun `ensureSynced passes progress callback to repository`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
+        }
+
+        val manager = createManager(dustRepo = dustRepo)
+        val progress = mock<suspend (Int, Int) -> Unit>()
+
+        manager.ensureSynced(onSyncProgress = progress)
+
+        verify(dustRepo).syncFromBlockchain(
+            eq("test_addr"),
+            any(),
+            any(),
+            eq(progress),
+        )
     }
 
     // ── Helpers ──
@@ -191,12 +181,10 @@ class DustSyncManagerTest {
     private fun createManager(
         dustRepo: DustRepository = mock(),
         nodeRpc: NodeRpcClient = mock(),
-        clock: () -> Long = System::currentTimeMillis,
     ) = DustSyncManager(
         dustRepository = dustRepo,
         nodeRpcClient = nodeRpc,
         walletAddress = "test_addr",
         dustSeed = ByteArray(32),
-        clock = clock,
     )
 }

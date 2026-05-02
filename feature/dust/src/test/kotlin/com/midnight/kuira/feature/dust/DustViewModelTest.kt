@@ -136,7 +136,7 @@ class DustViewModelTest {
 
     @Test
     fun `checkDustStatus when no dust returns NoDust state`() = runTest {
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(false)
+        whenever(dustRepository.syncFromBlockchain(any(), any(), any(), anyOrNull())).thenReturn(false)
 
         viewModel.checkDustStatus(activity, TEST_ADDRESS)
 
@@ -162,7 +162,7 @@ class DustViewModelTest {
         )
 
         val nightBalance = BigInteger.valueOf(5_000_000)
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
+        whenever(dustRepository.syncFromBlockchain(any(), any(), any(), anyOrNull())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(balance)
         whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(
             mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
@@ -181,7 +181,7 @@ class DustViewModelTest {
     fun `checkDustStatus shows nightBalance from utxoManager`() = runTest {
         val nightBalance = BigInteger.valueOf(10_000_000)
 
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
+        whenever(dustRepository.syncFromBlockchain(any(), any(), any(), anyOrNull())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.valueOf(1_000_000))
         whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(
             mapOf(UtxoSpend.NATIVE_TOKEN_TYPE to nightBalance)
@@ -197,7 +197,7 @@ class DustViewModelTest {
 
     @Test
     fun `checkDustStatus with no NIGHT UTXOs shows zero nightBalance`() = runTest {
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any())).thenReturn(true)
+        whenever(dustRepository.syncFromBlockchain(any(), any(), any(), anyOrNull())).thenReturn(true)
         whenever(dustRepository.getCurrentBalance(TEST_ADDRESS)).thenReturn(BigInteger.ZERO)
         whenever(utxoManager.calculateBalance(TEST_ADDRESS)).thenReturn(emptyMap())
 
@@ -215,7 +215,7 @@ class DustViewModelTest {
 
     @Test
     fun `checkDustStatus sync exception shows error with original message`() = runTest {
-        whenever(dustRepository.syncFromBlockchain(any(), any(), any()))
+        whenever(dustRepository.syncFromBlockchain(any(), any(), any(), anyOrNull()))
             .thenThrow(RuntimeException("Network error"))
 
         viewModel.checkDustStatus(activity, TEST_ADDRESS)
