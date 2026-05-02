@@ -34,6 +34,8 @@ dependencies {
     implementation(project(":core:compact-engine"))
     // Midnight SDK — fully standalone (no mn serve needed)
     implementation(project(":sdk:midnight-sdk"))
+    // Identity — passkey, DID, keyAuthorization
+    implementation(project(":core:identity"))
     // Network config (MidnightNetwork enum)
     implementation(project(":core:network"))
     // Native FFI library (provides libkuira_crypto_ffi.so via CMake)

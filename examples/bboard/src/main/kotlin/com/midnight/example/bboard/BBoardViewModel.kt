@@ -1,5 +1,6 @@
 package com.midnight.example.bboard
 
+import android.app.Activity
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -11,6 +12,11 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
+import com.midnight.kuira.core.identity.auth.AuthorizationScope
+import com.midnight.kuira.core.identity.auth.KeyAuthorization
+import com.midnight.kuira.core.identity.did.DidKeyGenerator
+import com.midnight.kuira.core.identity.passkey.PasskeyConfig
+import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,11 +41,107 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
 
+    private val _sigilState = MutableStateFlow<SigilState>(SigilState.None)
+    val sigilState: StateFlow<SigilState> = _sigilState
+
     private var config: MidnightConfig? = null
     private var sdk: MidnightSdk? = null
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
     private var currentAddress: String? = null
+
+    private val passkeyManager = PasskeyManager(
+        config = PasskeyConfig(rpId = "kuira.midnight.network"),
+    )
+
+    /**
+     * Create a passkey and derive the user's DID.
+     * This is "Forge your Sigil" — the root of the identity stack.
+     */
+    fun forgeSigil(activity: Activity) {
+        viewModelScope.launch {
+            _sigilState.value = SigilState.Creating("Creating passkey...")
+            try {
+                // Generate a random user ID (in production this comes from the app's user system)
+                val userId = java.security.SecureRandom().let { rng ->
+                    ByteArray(16).also { rng.nextBytes(it) }
+                }
+
+                val result = passkeyManager.createPasskey(
+                    activity = activity,
+                    userId = userId,
+                    userName = "BBoard Test User",
+                )
+
+                val did = DidKeyGenerator.fromCompressedP256(result.publicKey.compressed)
+
+                Log.i(TAG, "Sigil forged — DID: $did")
+                Log.i(TAG, "  Credential ID: ${result.credentialId}")
+                Log.i(TAG, "  P-256 pubkey: ${result.publicKey.compressedHex()}")
+
+                _sigilState.value = SigilState.Forged(
+                    did = did,
+                    credentialId = result.credentialId,
+                    publicKeyHex = result.publicKey.compressedHex(),
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Forge sigil failed", e)
+                _sigilState.value = SigilState.Error(e.message ?: "Passkey creation failed")
+            }
+        }
+    }
+
+    /**
+     * Build a keyAuthorization payload and sign it with the passkey.
+     * This authorizes the SDK's access key to sign Midnight transactions.
+     */
+    fun authorizeAccessKey(activity: Activity) {
+        val sigil = _sigilState.value as? SigilState.Forged ?: return
+        val midnightSdk = sdk ?: return
+
+        viewModelScope.launch {
+            _sigilState.value = SigilState.Authorizing(sigil, "Building authorization...")
+            try {
+                // Build the payload: root P-256 key authorizes SDK's secp256k1 access key
+                val rootPublicKey = sigil.publicKeyHex.hexToBytes()
+                val accessPublicKey = midnightSdk.accessKeyPublicKey
+
+                val payload = KeyAuthorization.buildPayload(
+                    rootPublicKey = rootPublicKey,
+                    accessPublicKey = accessPublicKey,
+                    scope = AuthorizationScope.FULL_ACCESS,
+                    timestampMs = System.currentTimeMillis(),
+                )
+
+                // Hash the payload — this becomes the WebAuthn challenge
+                val challengeHash = KeyAuthorization.hashPayload(payload)
+
+                _sigilState.value = SigilState.Authorizing(sigil, "Sign with passkey...")
+
+                // Passkey signs the challenge (user sees biometric prompt)
+                val assertion = passkeyManager.authenticate(
+                    activity = activity,
+                    challenge = challengeHash,
+                )
+
+                Log.i(TAG, "Access key authorized!")
+                Log.i(TAG, "  Access key: ${midnightSdk.accessKeyPublicKey.toHex()}")
+                Log.i(TAG, "  Path: ${midnightSdk.accessKeyPath}")
+                Log.i(TAG, "  Signature: ${assertion.signature.size} bytes")
+
+                _sigilState.value = SigilState.Authorized(
+                    did = sigil.did,
+                    credentialId = sigil.credentialId,
+                    publicKeyHex = sigil.publicKeyHex,
+                    accessKeyHex = midnightSdk.accessKeyPublicKey.toHex(),
+                    accessKeyPath = midnightSdk.accessKeyPath,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Authorization failed", e)
+                _sigilState.value = SigilState.Error(e.message ?: "Authorization failed")
+            }
+        }
+    }
 
     /** Connect using a remote wallet (mn serve). */
     fun connect(contractAddress: String, network: NetworkChoice) {
@@ -446,6 +548,32 @@ sealed class BoardState {
     data class Occupied(val message: String) : BoardState()
     data class CallError(val message: String) : BoardState()
 }
+
+/** Sigil identity state — tracks passkey creation and access key authorization. */
+sealed class SigilState {
+    data object None : SigilState()
+    data class Creating(val stage: String) : SigilState()
+    data class Forged(
+        val did: String,
+        val credentialId: String,
+        val publicKeyHex: String,
+    ) : SigilState()
+    data class Authorizing(val sigil: Forged, val stage: String) : SigilState()
+    data class Authorized(
+        val did: String,
+        val credentialId: String,
+        val publicKeyHex: String,
+        val accessKeyHex: String,
+        val accessKeyPath: String,
+    ) : SigilState()
+    data class Error(val message: String) : SigilState()
+}
+
+private fun String.hexToBytes(): ByteArray =
+    ByteArray(length / 2) { substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+
+private fun ByteArray.toHex(): String =
+    joinToString("") { "%02x".format(it) }
 
 /** Network configuration presets (for remote wallet mode). */
 enum class NetworkChoice(

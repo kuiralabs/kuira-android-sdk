@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midnight.kuira.core.network.MidnightNetwork
 
@@ -101,6 +102,8 @@ class BBoardActivity : ComponentActivity() {
 @Composable
 fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+    val sigilState by viewModel.sigilState.collectAsState()
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Column(
@@ -119,6 +122,8 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 
             when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
+                    sigilState = sigilState,
+                    onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                     onConnectRemote = viewModel::connect,
                     onConnectSdk = viewModel::connectWithSdk,
                     onDeploySdk = viewModel::deployAndConnect,
@@ -127,6 +132,8 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
                 is BBoardState.Connected -> ConnectedScreen(
                     state = s,
+                    sigilState = sigilState,
+                    onAuthorize = { activity?.let { viewModel.authorizeAccessKey(it) } },
                     onPost = viewModel::post,
                     onTakeDown = viewModel::takeDown,
                     onRefresh = viewModel::refresh,
@@ -146,6 +153,8 @@ private enum class ConnectionMode(val label: String) {
 
 @Composable
 private fun SetupScreen(
+    sigilState: SigilState,
+    onForgeSigil: () -> Unit,
     onConnectRemote: (String, NetworkChoice) -> Unit,
     onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
     onDeploySdk: (MidnightNetwork, ByteArray) -> Unit,
@@ -154,6 +163,11 @@ private fun SetupScreen(
     var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
 
+    // ── Sigil Identity Card ──
+    SigilCard(sigilState = sigilState, onForgeSigil = onForgeSigil)
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
+
+    // ── Contract Connection Card ──
     DarkCard {
         Text("connect to contract", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
@@ -220,7 +234,7 @@ private fun SetupScreen(
         if (mode == ConnectionMode.STANDALONE) {
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
             Text("— or deploy a fresh instance —", color = Colors.OnSurfaceSubtle, fontSize = Type.Caption,
-                modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
             ActionButton("deploy new contract", enabled = true) {
                 val midnightNetwork = when (network) {
@@ -252,6 +266,8 @@ private fun hexToBytes(hex: String): ByteArray =
 @Composable
 private fun ConnectedScreen(
     state: BBoardState.Connected,
+    sigilState: SigilState,
+    onAuthorize: () -> Unit,
     onPost: (String) -> Unit,
     onTakeDown: () -> Unit,
     onRefresh: () -> Unit,
@@ -260,6 +276,15 @@ private fun ConnectedScreen(
     val isSyncing = state.dustSyncStatus is DustSyncStatus.Syncing
     val isProcessing = state.dustSyncStatus is DustSyncStatus.Processing
     val isReady = state.dustSyncStatus is DustSyncStatus.Ready
+
+    // Show sigil authorization card if sigil is forged but not yet authorized
+    if (sigilState is SigilState.Forged || sigilState is SigilState.Authorizing) {
+        SigilAuthCard(sigilState = sigilState, onAuthorize = onAuthorize)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    } else if (sigilState is SigilState.Authorized) {
+        SigilAuthorizedCard(sigilState)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    }
 
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -391,6 +416,111 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
     Text(message, color = Colors.Error, fontSize = Type.Label)
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
     ActionButton("retry", enabled = true, dimmed = true, onClick = onRetry)
+}
+
+// ── Sigil Identity Components ──
+
+@Composable
+private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit) {
+    DarkCard {
+        Text("sigil identity", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.ItemGap))
+
+        when (sigilState) {
+            is SigilState.None -> {
+                Text(
+                    "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
+                    color = Colors.OnSurfaceSubtle,
+                    fontSize = Type.Caption,
+                )
+                Spacer(modifier = Modifier.height(Spacing.ItemGap))
+                ActionButton("forge sigil", enabled = true, onClick = onForgeSigil)
+            }
+            is SigilState.Creating -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(color = Colors.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.size(Spacing.SmallGap))
+                    Text(sigilState.stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
+                }
+            }
+            is SigilState.Forged -> SigilInfo(did = sigilState.did, publicKeyHex = sigilState.publicKeyHex)
+            is SigilState.Authorizing -> SigilInfo(did = sigilState.sigil.did, publicKeyHex = sigilState.sigil.publicKeyHex)
+            is SigilState.Authorized -> SigilInfo(
+                did = sigilState.did,
+                publicKeyHex = sigilState.publicKeyHex,
+                accessKeyHex = sigilState.accessKeyHex,
+            )
+            is SigilState.Error -> {
+                Text(sigilState.message, color = Colors.Error, fontSize = Type.Label)
+                Spacer(modifier = Modifier.height(Spacing.SmallGap))
+                ActionButton("retry", enabled = true, dimmed = true, onClick = onForgeSigil)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SigilInfo(did: String, publicKeyHex: String, accessKeyHex: String? = null) {
+    MonoField(label = "did", value = did)
+    Spacer(modifier = Modifier.height(Spacing.SmallGap))
+    MonoField(label = "root key (P-256)", value = publicKeyHex)
+    if (accessKeyHex != null) {
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        MonoField(label = "access key (secp256k1)", value = accessKeyHex)
+    }
+}
+
+@Composable
+private fun SigilAuthCard(sigilState: SigilState, onAuthorize: () -> Unit) {
+    DarkCard {
+        Text("authorize access key", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.ItemGap))
+        Text(
+            "Sign with your passkey to authorize the SDK's secp256k1 key for Midnight transactions.",
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
+        )
+        Spacer(modifier = Modifier.height(Spacing.ItemGap))
+
+        if (sigilState is SigilState.Authorizing) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = Colors.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.size(Spacing.SmallGap))
+                Text(sigilState.stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
+            }
+        } else {
+            ActionButton("authorize", enabled = true, onClick = onAuthorize)
+        }
+    }
+}
+
+@Composable
+private fun SigilAuthorizedCard(state: SigilState.Authorized) {
+    DarkCard {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("sigil", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+            Text("authorized", color = Colors.Success, fontSize = Type.Caption)
+        }
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        MonoField(label = "did", value = state.did)
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        MonoField(label = "access key", value = state.accessKeyHex)
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        Text("path: ${state.accessKeyPath}", color = Colors.OnSurfaceSubtle, fontSize = Type.Mono, fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Composable
+private fun MonoField(label: String, value: String) {
+    Text(label, color = Colors.OnSurfaceDim, fontSize = Type.Caption)
+    Text(
+        value,
+        color = Colors.Accent,
+        fontSize = Type.Mono,
+        fontFamily = FontFamily.Monospace,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 // ── Shared Components ──
