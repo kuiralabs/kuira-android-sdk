@@ -77,7 +77,18 @@ enum class MidnightKeyRole(val index: Int) {
      *
      * Path: `m/44'/2400'/account'/4/index`
      */
-    METADATA(4);
+    METADATA(4),
+
+    /**
+     * **Identity** - Used for sigil access keys (Kuira-specific).
+     *
+     * secp256k1 access keys that are authorized by the P-256 root passkey
+     * via keyAuthorization. These keys sign Midnight transactions on behalf
+     * of the sigil identity.
+     *
+     * Path: `m/44'/2400'/account'/5/index`
+     */
+    IDENTITY(5);
 
     companion object {
         /**

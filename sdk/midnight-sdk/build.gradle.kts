@@ -31,6 +31,7 @@ dependencies {
     // Core modules
     implementation(project(":core:compact-engine"))
     implementation(project(":core:crypto"))
+    implementation(project(":core:identity"))
     implementation(project(":core:ledger"))
     implementation(project(":core:indexer"))
     implementation(project(":core:network"))

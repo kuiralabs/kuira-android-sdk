@@ -22,6 +22,7 @@ quickjsKt = "1.0.3"
 room = "2.8.4"
 ksp = "2.3.6"
 biometric = "1.1.0"
+credentials = "1.5.0"
 lottieCompose = "6.6.6"
 
 [libraries]
@@ -67,6 +68,9 @@ quickjs-kt = { group = "io.github.dokar3", name = "quickjs-kt", version.ref = "q
 # Biometric + Fragment (Phase 8A — Auth & Onboarding)
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version = "1.8.8" }
+# CredentialManager — Passkey creation/auth (Identity)
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 # Room Database (Phase 4B)
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
