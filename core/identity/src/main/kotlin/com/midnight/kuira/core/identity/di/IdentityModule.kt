@@ -51,8 +51,9 @@ object IdentityModule {
 
     /**
      * Default RP ID — must match Digital Asset Links configuration.
-     * TODO: Replace with actual domain when deploying to production.
+     * Production: kuira.midnight.network (once DAL is configured there)
+     * Development: nel349.github.io (DAL hosted on GitHub Pages)
      */
-    private const val DEFAULT_RP_ID = "kuira.midnight.network"
+    private const val DEFAULT_RP_ID = "nel349.github.io"
     private const val DEFAULT_RP_NAME = "Kuira"
 }

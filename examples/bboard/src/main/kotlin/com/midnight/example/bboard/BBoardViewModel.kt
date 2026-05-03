@@ -51,7 +51,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private var currentAddress: String? = null
 
     private val passkeyManager = PasskeyManager(
-        config = PasskeyConfig(rpId = "kuira.midnight.network"),
+        config = PasskeyConfig(rpId = "nel349.github.io"),
     )
 
     /**
