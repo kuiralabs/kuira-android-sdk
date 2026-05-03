@@ -85,8 +85,8 @@ Separate repo: `midnight-kicks/` (app/ + unity/ + contract/). Consumes Kuira SDK
   - [x] Balance progress callbacks
   - [x] Identity investigation + decisions (see IDENTITY_INVESTIGATION.md)
   - [x] Contract deployment API (each match = new contract)
-  - [ ] Passkey identity implementation (CredentialManager + did:key)
-  - [ ] PRF-encrypted cloud backup
+  - [x] Passkey identity (CredentialManager + did:key + keyAuthorization) — verified on emulator
+  - [ ] PRF-encrypted cloud backup (Phase 8C — zero-words recovery)
 - [ ] **Phase 3 — Unity game**
   - [ ] Asset Store template → strip AI → batch choice UI
   - [ ] Replay system (5 rounds from JSON) + stadium intro cinematic
@@ -118,7 +118,7 @@ Every friction point building BBoard standalone → becomes SDK improvement.
 | 6 | No progress during balance+submit (60s opaque) | High | BalanceProgress callbacks (6 stages). |
 | 7 | FFI pointer write-back corrupts cached state | High | Don't write back post-spend state. |
 | 8 | WebSocket backpressure OOM on 250k events | Medium | File streaming, Rust native memory. |
-| 9 | No contract deployment API | Medium | Needed for Kicks. Not built yet. |
+| 9 | No contract deployment API | Medium | ✅ FIXED. `MidnightContract.deploy()` + FFI. |
 | 10 | Content behind system status bar | Low | WindowInsets padding. |
 
 ---

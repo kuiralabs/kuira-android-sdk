@@ -2,9 +2,9 @@
 
 **Project:** Midnight Wallet for Android — Agent-Native, Privacy-First
 **Total Invested:** ~330h across completed phases
-**Status:** Phases 1–6 ✅ | Phase 8A (Auth & Onboarding) ✅ | **Phase 8B (Productization) 🔧 Active**
+**Status:** Phases 1–6 ✅ | Phase 8A ✅ | **SDK Phase (Identity + Kicks prereqs) 🔧 Active** | Phase 8B (Productization) ⏸️
 
-**Last Updated:** 2026-04-20
+**Last Updated:** 2026-05-03
 
 ## Implementation Strategy
 
@@ -22,8 +22,17 @@
 10. ✅ **Phase 6**: Android DApp SDK (~50h) — QuickJS + Rust FFI for contract execution, self-contained SDK module
 11. ✅ **Phase 8A**: Wallet Auth & Onboarding (~35h) — hardware-backed biometric, encrypted SeedVault, StrongBox/TEE, `WalletGate`, onboarding + restore, all 4 feature modules wired to SeedVault. 8A.9 E2E verification deferred to 8B (view-recovery-phrase feature was missing and is now scoped in 8B as T1-2)
 
+12. 🔧 **SDK Phase**: Midnight Android SDK hardening + Sigil Identity — standalone embedded wallet, contract deployment, progress callbacks, passkey identity (CredentialManager + did:key + keyAuthorization), BBoard reference app. Validates SDK before Kicks consumes it. See `docs/planning/MIDNIGHT_KICKS_PLAN.md` Phase 2.
+    - ✅ Embedded wallet (MidnightSdk + MidnightWallet, no mn serve)
+    - ✅ Error 170 fix (zero-fee detection, skip dust on PREPROD)
+    - ✅ Dust sync progress callbacks (BalanceProgress, 6 stages)
+    - ✅ Contract deployment API (MidnightContract.deploy + FFI)
+    - ✅ Sigil identity — core/identity module (passkey, DID, keyAuthorization, 43 tests)
+    - ✅ BBoard reference — forge sigil + authorize access key, verified on emulator
+    - ⬜ PRF-encrypted cloud backup (zero-words recovery — Phase 8C)
+
 **Next:**
-12. 🔧 **Phase 8B**: Wallet Productization (est ~180–230h) — **see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`** for the full feature matrix and decisions log. Scope: Settings + View recovery phrase + Tx history + Receive QR + `midnight:` URI scheme + Send confirmation screen + Dusk L3 redesign everywhere + App icon + Firebase (Remote Config + Crashlytics) + R8 enablement + Play Store listing + closed-beta testing gate + MCP Bridge seed (minimal Agent Runtime). Ships v1.0 as "first Midnight wallet on Android, MCP-compatible" targeting Preprod testnet.
+13. 🔧 **Phase 8B**: Wallet Productization (est ~180–230h) — **see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`** for the full feature matrix and decisions log. Scope: Settings + View recovery phrase + Tx history + Receive QR + `midnight:` URI scheme + Send confirmation screen + Dusk L3 redesign everywhere + App icon + Firebase (Remote Config + Crashlytics) + R8 enablement + Play Store listing + closed-beta testing gate + MCP Bridge seed (minimal Agent Runtime). Ships v1.0 as "first Midnight wallet on Android, MCP-compatible" targeting Preprod testnet.
 13. ⏭️ **Phase 8C**: SDK GA release (est ~60–80h) — `com.midnight.kuira:compact-engine` public API audit, KDoc, semver, Maven Central GA. Alpha (`0.x.0-alphaN`) ships parallel to 8B per Q4 hybrid decision.
 14. ⏭️ **Phase 7**: Agent Runtime (est ~80–120h) — full five-pillar runtime (Agent Mode background service, Policy Engine, x402 Handler, MCP Bridge, Agent Registration). Ships as Kuira v1.1 alongside **CipherDefense** companion game as the canonical live demo of "first agent-native wallet on Midnight".
 15. 🔬 **Phase 9**: Privacy-Preserving Spendability Indexer (research + prototype, est — scoped after discovery spike) — eliminate the ~90s cold-sync wait by building a PIR-based (or PIR-adjacent) privacy-preserving indexer for Midnight. **Ecosystem-level initiative, not Kuira-only** — benefits every Midnight wallet and any dApp needing fast spendability signals (especially agents doing x402 payments). Inspired by `valargroup/spendability-pir` (Zcash prototype) + `zodl-ios` PR #32. Open-source outcome targeted: `midnight-spendability-indexer`. Queued post-v1.1.
@@ -47,6 +56,7 @@
 | **Phase 5: DApp Connector** | ConnectedAPI + transports + approval UI | ~30h | ✅ Complete |
 | **Phase 6: Android DApp SDK** | Contract execution on mobile (QuickJS + Rust) | ~50h | ✅ Complete |
 | **Phase 8A: Auth & Onboarding** | Hardware biometric auth, encrypted seed, wallet creation | ~35h | ✅ Complete |
+| **SDK Phase: Identity + Kicks prereqs** | Embedded wallet, contract deploy, progress callbacks, passkey identity (core/identity), BBoard reference | ~40h | 🔧 Active |
 | **Phase 8B: Productization (v1.0 ship)** | Settings + tx history + receive QR + URI scheme + L3 Dusk redesign + Firebase + R8 + MCP seed + incremental UTXO sync + Play Store submission. See [`WALLET_PRODUCTIZATION_PLAN.md`](planning/WALLET_PRODUCTIZATION_PLAN.md) | est ~188-242h | 🔧 Active |
 | **Phase 8C: SDK GA** | `core:compact-engine` Maven Central release, public API audit, semver | est ~60-80h | ⏸️ Planned (alpha ships parallel to 8B) |
 | **Phase 7: Agent Runtime (v1.1)** | Full 5-pillar runtime (Agent Mode, Policy Engine, x402, MCP Bridge, Agent Registration) + CipherDefense co-launch | est ~80-120h | ⏸️ Planned |

@@ -24,22 +24,9 @@ After a successful dust spend, the modified `DustLocalState` is serialized to di
 
 **Priority:** Medium  
 **Component:** `sdk/midnight-sdk`, `core/compact-engine`  
-**Status:** Not started
+**Status:** FIXED (2026-04-28)
 
-The balance+submit pipeline has multiple long phases (dust sync 5-60s, ZK proving 1-2s, submission, finalization 10-30s) but the client receives zero progress updates. On PREPROD with a force-resync, "Balancing transaction" can take 60+ seconds with no feedback.
-
-**Proposal:** Add a `Flow<BalanceStage>` or callback to `TransactionBalancer`:
-```kotlin
-enum class BalanceStage {
-    SyncingDust,
-    ResyncingDust,  // after error 170 retry
-    ProvingDust,
-    Submitting,
-    WaitingFinalization,
-}
-```
-
-The BBoard example should display these stages in the UI.
+Implemented `BalanceProgress` sealed class with 6 stages: SyncingDust, SyncingDustProgress, ProvingDust, Submitting, WaitingFinalization, RetryingDustSync. Piped through `TransactionBalancer.balanceAndSubmit()` via optional callback. BBoard shows inline progress bar during dust sync and stage labels during balance+submit.
 
 ---
 

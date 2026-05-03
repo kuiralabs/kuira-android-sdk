@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.midnight.example.bboard",
+    "sha256_cert_fingerprints": ["80:C5:BF:12:38:4A:4A:EC:87:B3:E9:31:F1:A9:5A:B2:CE:81:26:61:B4:37:DD:F2:68:06:4E:1F:B1:76:06:D3"]
+  }
+}]
