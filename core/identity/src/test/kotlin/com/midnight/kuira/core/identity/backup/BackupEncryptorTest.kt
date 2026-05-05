@@ -112,19 +112,76 @@ class BackupEncryptorTest {
         BackupEncryptor.encrypt(testEntropy, testSeed, ByteArray(16))
     }
 
+    // ── Metadata tests ──
+
     @Test
-    fun `full pipeline - PRF derive then encrypt-decrypt`() {
-        // Simulates the real flow: PRF output → HKDF → AES key → encrypt → decrypt
+    fun `encrypt with metadata produces same blob size`() {
+        val metadata = "game state: round=3, score=5-2".toByteArray()
+        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, testKey, metadata = metadata)
+        assertEquals(BackupEncryptor.BLOB_SIZE, blob.size)
+    }
+
+    @Test
+    fun `encrypt-decrypt roundtrip with metadata`() {
+        val metadata = """{"choices":[1,3,2,4,1],"nonces":["abc","def"]}""".toByteArray()
+        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, testKey, metadata = metadata)
+        val decrypted = BackupEncryptor.decrypt(blob, testKey)
+
+        try {
+            assertArrayEquals(testEntropy, decrypted.entropy)
+            assertArrayEquals(testSeed, decrypted.bip39Seed)
+            assertArrayEquals(metadata, decrypted.metadata)
+        } finally {
+            decrypted.wipe()
+        }
+    }
+
+    @Test
+    fun `encrypt-decrypt without metadata returns null metadata`() {
+        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, testKey)
+        val decrypted = BackupEncryptor.decrypt(blob, testKey)
+
+        try {
+            assertArrayEquals(testEntropy, decrypted.entropy)
+            assertEquals(null, decrypted.metadata)
+        } finally {
+            decrypted.wipe()
+        }
+    }
+
+    @Test
+    fun `max metadata size fits`() {
+        val maxMeta = ByteArray(BackupEncryptor.MAX_METADATA_SIZE) { (it % 256).toByte() }
+        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, testKey, metadata = maxMeta)
+        val decrypted = BackupEncryptor.decrypt(blob, testKey)
+
+        try {
+            assertArrayEquals(maxMeta, decrypted.metadata)
+        } finally {
+            decrypted.wipe()
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `metadata exceeding max size rejected`() {
+        val tooLarge = ByteArray(BackupEncryptor.MAX_METADATA_SIZE + 1)
+        BackupEncryptor.encrypt(testEntropy, testSeed, testKey, metadata = tooLarge)
+    }
+
+    @Test
+    fun `full pipeline - PRF derive then encrypt-decrypt with metadata`() {
         val fakePrfOutput = ByteArray(32) { (it * 3 + 7).toByte() }
         val aesKey = PrfKeyDeriver.deriveKey(fakePrfOutput)
+        val metadata = """{"match":"penalty","round":3}""".toByteArray()
 
-        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, aesKey)
+        val blob = BackupEncryptor.encrypt(testEntropy, testSeed, aesKey, metadata = metadata)
         assertEquals(BackupEncryptor.BLOB_SIZE, blob.size)
 
         val decrypted = BackupEncryptor.decrypt(blob, aesKey)
         try {
             assertArrayEquals(testEntropy, decrypted.entropy)
             assertArrayEquals(testSeed, decrypted.bip39Seed)
+            assertArrayEquals(metadata, decrypted.metadata)
         } finally {
             decrypted.wipe()
             aesKey.fill(0)

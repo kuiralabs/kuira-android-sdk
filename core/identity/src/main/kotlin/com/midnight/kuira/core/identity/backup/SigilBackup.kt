@@ -31,11 +31,14 @@ class SigilBackup(
     private val storage: BackupStorage,
 ) {
     /**
-     * Encrypts the seed with PRF-derived key and stores it.
+     * Encrypts the seed (and optional metadata) with PRF-derived key and stores it.
      *
      * @param activity Activity for the passkey biometric prompt
      * @param entropy 32-byte BIP-39 mnemonic entropy
      * @param bip39Seed 64-byte BIP-39 seed
+     * @param metadata Optional app state to include (max 397 bytes). Game state,
+     *                 contract private data, session info — anything expensive to
+     *                 store on-chain but needed across devices.
      * @throws PasskeyException if passkey auth fails
      * @throws BackupException if PRF is not available or storage fails
      */
@@ -43,6 +46,7 @@ class SigilBackup(
         activity: Activity,
         entropy: ByteArray,
         bip39Seed: ByteArray,
+        metadata: ByteArray? = null,
     ) {
         val challenge = generateChallenge()
 
@@ -62,6 +66,7 @@ class SigilBackup(
                 entropy = entropy,
                 bip39Seed = bip39Seed,
                 aesKey = aesKey,
+                metadata = metadata,
             )
             storage.store(blob)
         } finally {

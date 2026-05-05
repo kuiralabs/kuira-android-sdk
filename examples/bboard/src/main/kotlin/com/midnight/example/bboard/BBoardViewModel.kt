@@ -53,6 +53,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private var repository: BBoardRepository? = null
     private var currentAddress: String? = null
 
+    /** Simulated app metadata — generated after posting, backed up with the seed. */
+    private var appMetadata: ByteArray? = null
+
     private val passkeyManager = PasskeyManager(
         config = PasskeyConfig(rpId = "nel349.github.io"),
     )
@@ -164,13 +167,16 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 val entropy = ByteArray(32) { 0x11 }
                 val bip39Seed = TEST_SEED.copyOf()
 
+                val meta = appMetadata
                 sigilBackup.backup(
                     activity = activity,
                     entropy = entropy,
                     bip39Seed = bip39Seed,
+                    metadata = meta,
                 )
 
-                Log.i(TAG, "Backup SUCCESS — seed encrypted and stored in Block Store")
+                val metaInfo = if (meta != null) " + ${meta.size} bytes metadata" else ""
+                Log.i(TAG, "Backup SUCCESS — seed$metaInfo encrypted and stored in Block Store")
                 _sigilState.value = when (val current = _sigilState.value) {
                     is SigilState.Forged -> SigilState.Forged(
                         did = current.did,
@@ -202,6 +208,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     Log.i(TAG, "  Entropy: ${decrypted.entropy.toHex()}")
                     Log.i(TAG, "  Seed (first 16 bytes): ${decrypted.bip39Seed.copyOfRange(0, 16).toHex()}...")
                     Log.i(TAG, "  Seed matches test seed: ${decrypted.bip39Seed.contentEquals(TEST_SEED)}")
+                    val restoredMeta = decrypted.metadata
+                    if (restoredMeta != null) {
+                        Log.i(TAG, "  Metadata restored: ${restoredMeta.size} bytes")
+                        Log.i(TAG, "  Metadata: ${String(restoredMeta, Charsets.UTF_8)}")
+                    } else {
+                        Log.i(TAG, "  No metadata in backup")
+                    }
                 } finally {
                     decrypted.wipe()
                 }
@@ -513,6 +526,12 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
                 if (receipt.status == TransactionStatus.SUBMITTED) {
                     Log.i(TAG, "Post submitted! total=${receipt.timings.totalMs}ms")
+
+                    // Generate metadata — simulates game state computed after a tx
+                    val meta = buildAppMetadata(message, receipt.timings.totalMs)
+                    appMetadata = meta
+                    Log.i(TAG, "Generated ${meta.size} bytes of app metadata")
+
                     _state.value = current.copy(
                         boardState = BoardState.Occupied(message = message),
                         lastTimingMs = receipt.timings.totalMs,
@@ -638,6 +657,24 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         private const val TAG = "BBoard"
         // Fixed test key — in a real dApp, derive from wallet or secure storage
         private val SECRET_KEY = ByteArray(32) { (it + 1).toByte() }
+
+        /**
+         * Generates simulated app metadata after a successful post.
+         * In a real game (Kicks), this would be: committed choices, nonces,
+         * match state, player stats — data that's computed locally and
+         * expensive to store on-chain.
+         */
+        private fun buildAppMetadata(message: String, timingMs: Long): ByteArray {
+            val json = org.json.JSONObject().apply {
+                put("type", "bboard_post")
+                put("message_hash", java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(message.toByteArray()).joinToString("") { "%02x".format(it) })
+                put("timing_ms", timingMs)
+                put("timestamp", System.currentTimeMillis())
+                put("session_id", java.util.UUID.randomUUID().toString())
+            }
+            return json.toString().toByteArray(Charsets.UTF_8)
+        }
     }
 }
 
