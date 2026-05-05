@@ -125,6 +125,8 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                     sigilState = sigilState,
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                     onTestPrf = { activity?.let { viewModel.testPrf(it) } },
+                    onBackup = { activity?.let { viewModel.backupSeed(it) } },
+                    onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                     onConnectRemote = viewModel::connect,
                     onConnectSdk = viewModel::connectWithSdk,
                     onDeploySdk = viewModel::deployAndConnect,
@@ -157,6 +159,8 @@ private fun SetupScreen(
     sigilState: SigilState,
     onForgeSigil: () -> Unit,
     onTestPrf: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
     onConnectRemote: (String, NetworkChoice) -> Unit,
     onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
     onDeploySdk: (MidnightNetwork, ByteArray) -> Unit,
@@ -166,7 +170,13 @@ private fun SetupScreen(
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
 
     // ── Sigil Identity Card ──
-    SigilCard(sigilState = sigilState, onForgeSigil = onForgeSigil, onTestPrf = onTestPrf)
+    SigilCard(
+        sigilState = sigilState,
+        onForgeSigil = onForgeSigil,
+        onTestPrf = onTestPrf,
+        onBackup = onBackup,
+        onRestore = onRestore,
+    )
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
     // ── Contract Connection Card ──
@@ -255,7 +265,7 @@ private fun SetupScreen(
  * In a real dApp this would come from the identity module (passkeys).
  * This is the alice wallet's 64-byte PBKDF2 seed (from `mn wallet seed`).
  */
-private val TEST_SEED = hexToBytes(
+internal val TEST_SEED = hexToBytes(
     "7dc468f62278cd0c14b6674f31531a90b64599d657d3c7ab2adb63395d647f7a" +
     "505de6428fcf8b0d208873f4d5e2a1340c14688067477542f53c48dfea817da4"
 )
@@ -423,7 +433,13 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
 // ── Sigil Identity Components ──
 
 @Composable
-private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit, onTestPrf: () -> Unit) {
+private fun SigilCard(
+    sigilState: SigilState,
+    onForgeSigil: () -> Unit,
+    onTestPrf: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+) {
     DarkCard {
         Text("sigil identity", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
         Spacer(modifier = Modifier.height(Spacing.ItemGap))
@@ -437,6 +453,8 @@ private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit, onTestPr
                 )
                 Spacer(modifier = Modifier.height(Spacing.ItemGap))
                 ActionButton("forge sigil", enabled = true, onClick = onForgeSigil)
+                Spacer(modifier = Modifier.height(Spacing.SmallGap))
+                ActionButton("restore from cloud", enabled = true, dimmed = true, onClick = onRestore)
             }
             is SigilState.Creating -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -448,6 +466,8 @@ private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit, onTestPr
             is SigilState.Forged -> {
                 SigilInfo(did = sigilState.did, publicKeyHex = sigilState.publicKeyHex)
                 Spacer(modifier = Modifier.height(Spacing.SmallGap))
+                ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
+                Spacer(modifier = Modifier.height(Spacing.TinyGap))
                 ActionButton("test prf", enabled = true, dimmed = true, onClick = onTestPrf)
             }
             is SigilState.Authorizing -> SigilInfo(did = sigilState.sigil.did, publicKeyHex = sigilState.sigil.publicKeyHex)

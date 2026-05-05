@@ -14,6 +14,9 @@ import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
 import com.midnight.kuira.core.identity.auth.AuthorizationScope
 import com.midnight.kuira.core.identity.auth.KeyAuthorization
+import com.midnight.kuira.core.identity.backup.BackupException
+import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
+import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
@@ -53,6 +56,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private val passkeyManager = PasskeyManager(
         config = PasskeyConfig(rpId = "nel349.github.io"),
     )
+
+    private val sigilBackup by lazy {
+        SigilBackup(
+            passkeyManager = passkeyManager,
+            storage = BlockStoreBackupStorage(getApplication()),
+        )
+    }
 
     /**
      * Create a passkey and derive the user's DID.
@@ -137,6 +147,68 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "PRF test failed", e)
+            }
+        }
+    }
+
+    /**
+     * Backup the test seed to Google Block Store via PRF-encrypted blob.
+     * Tests the full backup pipeline: PRF → HKDF → AES-GCM → Block Store.
+     */
+    fun backupSeed(activity: Activity) {
+        viewModelScope.launch {
+            try {
+                Log.i(TAG, "Starting PRF backup...")
+
+                // Use the test seed's entropy and BIP-39 seed
+                val entropy = ByteArray(32) { 0x11 }
+                val bip39Seed = TEST_SEED.copyOf()
+
+                sigilBackup.backup(
+                    activity = activity,
+                    entropy = entropy,
+                    bip39Seed = bip39Seed,
+                )
+
+                Log.i(TAG, "Backup SUCCESS — seed encrypted and stored in Block Store")
+                _sigilState.value = when (val current = _sigilState.value) {
+                    is SigilState.Forged -> SigilState.Forged(
+                        did = current.did,
+                        credentialId = current.credentialId,
+                        publicKeyHex = current.publicKeyHex,
+                    )
+                    else -> current
+                }
+            } catch (e: BackupException) {
+                Log.e(TAG, "Backup failed: ${e.message}", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Backup failed", e)
+            }
+        }
+    }
+
+    /**
+     * Restore the seed from Google Block Store via PRF decryption.
+     * Tests the full restore pipeline: Block Store → PRF → HKDF → AES-GCM → seed.
+     */
+    fun restoreSeed(activity: Activity) {
+        viewModelScope.launch {
+            try {
+                Log.i(TAG, "Starting PRF restore...")
+
+                val decrypted = sigilBackup.restore(activity)
+                try {
+                    Log.i(TAG, "Restore SUCCESS!")
+                    Log.i(TAG, "  Entropy: ${decrypted.entropy.toHex()}")
+                    Log.i(TAG, "  Seed (first 16 bytes): ${decrypted.bip39Seed.copyOfRange(0, 16).toHex()}...")
+                    Log.i(TAG, "  Seed matches test seed: ${decrypted.bip39Seed.contentEquals(TEST_SEED)}")
+                } finally {
+                    decrypted.wipe()
+                }
+            } catch (e: BackupException) {
+                Log.e(TAG, "Restore failed: ${e.message}", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Restore failed", e)
             }
         }
     }
