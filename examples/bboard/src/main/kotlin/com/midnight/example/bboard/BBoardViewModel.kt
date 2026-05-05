@@ -92,6 +92,56 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Test PRF extension — verify the emulator returns a 32-byte PRF output.
+     * Quick spike before building the full backup stack.
+     */
+    fun testPrf(activity: Activity) {
+        viewModelScope.launch {
+            try {
+                val challenge = java.security.SecureRandom().let { rng ->
+                    ByteArray(32).also { rng.nextBytes(it) }
+                }
+                // Purpose-bound salt: SHA-256("kuira:backup:v1")
+                val salt = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest("kuira:backup:v1".toByteArray(Charsets.UTF_8))
+
+                Log.i(TAG, "Testing PRF with salt: ${salt.toHex()}")
+
+                val result = passkeyManager.authenticateWithPrf(
+                    activity = activity,
+                    challenge = challenge,
+                    prfSalt = salt,
+                )
+
+                val prfBytes = result.prfOutput
+                if (prfBytes != null && prfBytes.size == 32) {
+                    Log.i(TAG, "PRF SUCCESS! Output (${prfBytes.size} bytes): ${prfBytes.toHex()}")
+
+                    // Test determinism — authenticate again with same salt
+                    Log.i(TAG, "Testing PRF determinism (same salt, second auth)...")
+                    val result2 = passkeyManager.authenticateWithPrf(
+                        activity = activity,
+                        challenge = challenge,
+                        prfSalt = salt,
+                    )
+                    val prfBytes2 = result2.prfOutput
+                    if (prfBytes2 != null && prfBytes2.size == 32) {
+                        val match = prfBytes.contentEquals(prfBytes2)
+                        Log.i(TAG, "PRF determinism: ${if (match) "PASS (same output)" else "FAIL (different output)"}")
+                        Log.i(TAG, "  First:  ${prfBytes.toHex()}")
+                        Log.i(TAG, "  Second: ${prfBytes2.toHex()}")
+                    }
+                } else {
+                    Log.w(TAG, "PRF returned null — extension not supported on this authenticator")
+                    Log.i(TAG, "Full response: ${result.assertionResponseJson}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "PRF test failed", e)
+            }
+        }
+    }
+
+    /**
      * Build a keyAuthorization payload and sign it with the passkey.
      * This authorizes the SDK's access key to sign Midnight transactions.
      */

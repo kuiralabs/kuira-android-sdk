@@ -124,6 +124,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilState = sigilState,
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
+                    onTestPrf = { activity?.let { viewModel.testPrf(it) } },
                     onConnectRemote = viewModel::connect,
                     onConnectSdk = viewModel::connectWithSdk,
                     onDeploySdk = viewModel::deployAndConnect,
@@ -155,6 +156,7 @@ private enum class ConnectionMode(val label: String) {
 private fun SetupScreen(
     sigilState: SigilState,
     onForgeSigil: () -> Unit,
+    onTestPrf: () -> Unit,
     onConnectRemote: (String, NetworkChoice) -> Unit,
     onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
     onDeploySdk: (MidnightNetwork, ByteArray) -> Unit,
@@ -164,7 +166,7 @@ private fun SetupScreen(
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
 
     // ── Sigil Identity Card ──
-    SigilCard(sigilState = sigilState, onForgeSigil = onForgeSigil)
+    SigilCard(sigilState = sigilState, onForgeSigil = onForgeSigil, onTestPrf = onTestPrf)
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
     // ── Contract Connection Card ──
@@ -421,7 +423,7 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
 // ── Sigil Identity Components ──
 
 @Composable
-private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit) {
+private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit, onTestPrf: () -> Unit) {
     DarkCard {
         Text("sigil identity", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
         Spacer(modifier = Modifier.height(Spacing.ItemGap))
@@ -443,7 +445,11 @@ private fun SigilCard(sigilState: SigilState, onForgeSigil: () -> Unit) {
                     Text(sigilState.stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
                 }
             }
-            is SigilState.Forged -> SigilInfo(did = sigilState.did, publicKeyHex = sigilState.publicKeyHex)
+            is SigilState.Forged -> {
+                SigilInfo(did = sigilState.did, publicKeyHex = sigilState.publicKeyHex)
+                Spacer(modifier = Modifier.height(Spacing.SmallGap))
+                ActionButton("test prf", enabled = true, dimmed = true, onClick = onTestPrf)
+            }
             is SigilState.Authorizing -> SigilInfo(did = sigilState.sigil.did, publicKeyHex = sigilState.sigil.publicKeyHex)
             is SigilState.Authorized -> SigilInfo(
                 did = sigilState.did,

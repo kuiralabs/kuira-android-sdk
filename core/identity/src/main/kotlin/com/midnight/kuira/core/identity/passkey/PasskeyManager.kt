@@ -194,13 +194,92 @@ class PasskeyManager(
         }.toString()
     }
 
-    private fun buildAuthenticationRequestJson(challengeB64: String): String {
+    /**
+     * Authenticates with PRF extension — produces a deterministic secret from the passkey.
+     *
+     * Same passkey + same salt = same 32-byte secret on any device.
+     * Used for deriving encryption keys for cloud backup (zero-words recovery).
+     *
+     * @param activity Activity context for the CredentialManager system UI
+     * @param challenge Challenge bytes for the assertion
+     * @param prfSalt Salt for the PRF evaluation (purpose-bound, e.g. SHA-256("kuira:backup:v1"))
+     * @return [PrfAssertionResult] with the assertion data AND the 32-byte PRF output
+     * @throws PasskeyException if PRF is not supported or authentication fails
+     */
+    suspend fun authenticateWithPrf(
+        activity: Activity,
+        challenge: ByteArray,
+        prfSalt: ByteArray,
+    ): PrfAssertionResult {
+        val challengeB64 = encodeBase64Url(challenge)
+        val saltB64 = encodeBase64Url(prfSalt)
+
+        val credentialManager = CredentialManager.create(activity)
+        val requestJson = buildAuthenticationRequestJson(challengeB64, prfSaltB64 = saltB64)
+        val option = GetPublicKeyCredentialOption(requestJson)
+        val request = GetCredentialRequest(listOf(option))
+
+        val response = try {
+            credentialManager.getCredential(activity, request)
+        } catch (e: Exception) {
+            throw PasskeyException("PRF authentication failed: ${e.message}", e)
+        }
+
+        val credential = response.credential
+        if (credential !is PublicKeyCredential) {
+            throw PasskeyException(
+                "Unexpected credential type: ${credential::class.simpleName}"
+            )
+        }
+
+        val assertionResponseJson = credential.authenticationResponseJson
+        val json = JSONObject(assertionResponseJson)
+        val responseObj = json.getJSONObject("response")
+
+        // Extract PRF output from clientExtensionResults
+        val prfOutput = try {
+            val extensionResults = json.optJSONObject("clientExtensionResults")
+            val prf = extensionResults?.optJSONObject("prf")
+            val results = prf?.optJSONObject("results")
+            val firstB64 = results?.optString("first", "")
+            if (firstB64.isNullOrEmpty()) null else decodeBase64Url(firstB64)
+        } catch (e: Exception) {
+            null
+        }
+
+        return PrfAssertionResult(
+            credentialId = json.getString("id"),
+            authenticatorData = decodeBase64Url(responseObj.getString("authenticatorData")),
+            clientDataJson = decodeBase64Url(responseObj.getString("clientDataJSON")),
+            signature = decodeBase64Url(responseObj.getString("signature")),
+            assertionResponseJson = assertionResponseJson,
+            prfOutput = prfOutput,
+        )
+    }
+
+    private fun buildAuthenticationRequestJson(
+        challengeB64: String,
+        prfSaltB64: String? = null,
+    ): String {
         return JSONObject().apply {
             put("challenge", challengeB64)
             put("rpId", config.rpId)
             put("timeout", config.timeoutMs)
             put("userVerification", "required")
+            if (prfSaltB64 != null) {
+                put("extensions", JSONObject().apply {
+                    put("prf", JSONObject().apply {
+                        put("eval", JSONObject().apply {
+                            put("first", prfSaltB64)
+                        })
+                    })
+                })
+            }
         }.toString()
+    }
+
+    private fun encodeBase64Url(data: ByteArray): String {
+        return Base64.encodeToString(data, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
     private fun decodeBase64Url(input: String): ByteArray {
@@ -253,6 +332,31 @@ class PasskeyAssertionResult(
     /** Full assertion response JSON (for audit/debugging). */
     val assertionResponseJson: String,
 )
+
+/**
+ * Result of a passkey authentication with PRF extension.
+ * Extends the standard assertion with the 32-byte PRF output.
+ */
+class PrfAssertionResult(
+    /** Credential ID used for this assertion. */
+    val credentialId: String,
+    /** Raw authenticator data bytes. */
+    val authenticatorData: ByteArray,
+    /** Raw client data JSON bytes. */
+    val clientDataJson: ByteArray,
+    /** ECDSA P-256 signature. */
+    val signature: ByteArray,
+    /** Full assertion response JSON. */
+    val assertionResponseJson: String,
+    /**
+     * 32-byte PRF output — deterministic for the same passkey + salt.
+     * Null if the authenticator doesn't support PRF or the extension wasn't evaluated.
+     */
+    val prfOutput: ByteArray?,
+) {
+    /** Whether PRF produced a result. */
+    val hasPrf: Boolean get() = prfOutput != null && prfOutput.size == 32
+}
 
 class PasskeyException(
     message: String,
