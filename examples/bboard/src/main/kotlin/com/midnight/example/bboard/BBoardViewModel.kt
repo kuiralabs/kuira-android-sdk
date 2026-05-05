@@ -696,6 +696,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 Log.d(TAG, "Installed key: $name")
             }
         }
+
+        // Write version.txt so hasWalletKeys() recognizes the installed keys
+        val versionFile = java.io.File(keysDir, "version.txt")
+        if (!versionFile.exists()) {
+            versionFile.writeText("9") // Must match ProvingKeyManager.CURRENT_VERSION
+            Log.d(TAG, "Wrote version.txt")
+        }
     }
 
     companion object {
