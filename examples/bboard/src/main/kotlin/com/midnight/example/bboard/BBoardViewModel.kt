@@ -92,69 +92,10 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val sigilBackup by lazy {
-        // Stores to BOTH Block Store (cloud sync) and local file (emulator fallback).
-        // On restore: tries Block Store first, falls back to local file.
         SigilBackup(
             passkeyManager = passkeyManager,
-            storage = DualBackupStorage(
-                primary = BlockStoreBackupStorage(getApplication()),
-                fallback = FileBackupStorage(),
-            ),
+            storage = BlockStoreBackupStorage(getApplication()),
         )
-    }
-
-    /**
-     * Stores to both backends, retrieves from whichever has data.
-     * Block Store syncs across devices (production). File storage survives
-     * app data clears on the same emulator (testing).
-     */
-    private class DualBackupStorage(
-        private val primary: com.midnight.kuira.core.identity.backup.BackupStorage,
-        private val fallback: com.midnight.kuira.core.identity.backup.BackupStorage,
-    ) : com.midnight.kuira.core.identity.backup.BackupStorage {
-        override suspend fun store(encryptedBlob: ByteArray) {
-            primary.store(encryptedBlob)
-            fallback.store(encryptedBlob)
-            Log.d("BBoard", "Backup stored to both Block Store and local file")
-        }
-
-        override suspend fun retrieve(): ByteArray? {
-            val fromPrimary = primary.retrieve()
-            if (fromPrimary != null) {
-                Log.d("BBoard", "Backup retrieved from Block Store (${fromPrimary.size} bytes)")
-                return fromPrimary
-            }
-            val fromFallback = fallback.retrieve()
-            if (fromFallback != null) {
-                Log.d("BBoard", "Backup retrieved from local file fallback (${fromFallback.size} bytes)")
-            }
-            return fromFallback
-        }
-
-        override suspend fun delete() {
-            primary.delete()
-            fallback.delete()
-        }
-
-        override suspend fun isAvailable(): Boolean = true
-    }
-
-    /** File-based backup for emulator testing — survives app data clears. */
-    private class FileBackupStorage : com.midnight.kuira.core.identity.backup.BackupStorage {
-        private val file = java.io.File("/data/local/tmp/kuira_backup.bin")
-
-        override suspend fun store(encryptedBlob: ByteArray) {
-            file.writeBytes(encryptedBlob)
-        }
-
-        override suspend fun retrieve(): ByteArray? {
-            if (!file.exists()) return null
-            val bytes = file.readBytes()
-            return if (bytes.isNotEmpty()) bytes else null
-        }
-
-        override suspend fun delete() { file.delete() }
-        override suspend fun isAvailable(): Boolean = true
     }
 
     /**

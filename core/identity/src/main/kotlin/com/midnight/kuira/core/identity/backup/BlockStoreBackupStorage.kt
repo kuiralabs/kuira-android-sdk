@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.identity.backup
 
 import android.content.Context
+import android.util.Log
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.StoreBytesData
 import kotlinx.coroutines.tasks.await
@@ -28,24 +29,35 @@ class BlockStoreBackupStorage(
 
         val isE2ee = try {
             client.isEndToEndEncryptionAvailable.await()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "E2E encryption check failed: ${e.message}")
             false
         }
+
+        Log.i(TAG, "Storing ${encryptedBlob.size} bytes, E2E available: $isE2ee, cloud backup: $isE2ee")
 
         val storeRequest = StoreBytesData.Builder()
             .setBytes(encryptedBlob)
             .setShouldBackupToCloud(isE2ee)
             .build()
 
-        client.storeBytes(storeRequest).await()
+        try {
+            val result = client.storeBytes(storeRequest).await()
+            Log.i(TAG, "Block Store storeBytes returned: $result")
+        } catch (e: Exception) {
+            Log.e(TAG, "Block Store storeBytes FAILED: ${e.message}", e)
+            throw e
+        }
     }
 
     override suspend fun retrieve(): ByteArray? {
         val client = Blockstore.getClient(context)
         return try {
             val result = client.retrieveBytes().await()
+            Log.i(TAG, "Block Store retrieveBytes returned ${result.size} bytes")
             if (result.isNotEmpty()) result else null
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Block Store retrieveBytes failed: ${e.message}")
             null
         }
     }
@@ -69,5 +81,9 @@ class BlockStoreBackupStorage(
         } catch (_: Exception) {
             false
         }
+    }
+
+    companion object {
+        private const val TAG = "BlockStore"
     }
 }
