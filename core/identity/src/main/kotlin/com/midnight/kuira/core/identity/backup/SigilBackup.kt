@@ -3,6 +3,7 @@ package com.midnight.kuira.core.identity.backup
 import android.app.Activity
 import com.midnight.kuira.core.identity.passkey.PasskeyException
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -31,14 +32,21 @@ class SigilBackup(
     private val storage: BackupStorage,
 ) {
     /**
-     * Encrypts the seed (and optional metadata) with PRF-derived key and stores it.
+     * Encrypts the seed, sigil identity, and optional app metadata, then stores it.
+     *
+     * The sigil identity (DID, credential ID, public key) is stored inside the
+     * encrypted blob so it can be recovered on a new device. The `get` ceremony
+     * (authenticate) doesn't return the public key — only `create` does — so
+     * the DID must be persisted in the backup.
      *
      * @param activity Activity for the passkey biometric prompt
      * @param entropy 32-byte BIP-39 mnemonic entropy
      * @param bip39Seed 64-byte BIP-39 seed
-     * @param metadata Optional app state to include (max 397 bytes). Game state,
-     *                 contract private data, session info — anything expensive to
-     *                 store on-chain but needed across devices.
+     * @param did The user's DID (did:key:z...)
+     * @param credentialId Credential ID from passkey registration
+     * @param publicKeyHex Compressed P-256 public key hex
+     * @param appMetadata Optional app state (game data, contract state). Included in the
+     *                    backup alongside the sigil identity.
      * @throws PasskeyException if passkey auth fails
      * @throws BackupException if PRF is not available or storage fails
      */
@@ -46,7 +54,10 @@ class SigilBackup(
         activity: Activity,
         entropy: ByteArray,
         bip39Seed: ByteArray,
-        metadata: ByteArray? = null,
+        did: String,
+        credentialId: String,
+        publicKeyHex: String,
+        appMetadata: ByteArray? = null,
     ) {
         val challenge = generateChallenge()
 
@@ -58,6 +69,9 @@ class SigilBackup(
 
         val prfOutput = prfResult.prfOutput
             ?: throw BackupException("PRF not available — authenticator does not support PRF extension")
+
+        // Build metadata: sigil identity + optional app state
+        val metadata = buildBackupMetadata(did, credentialId, publicKeyHex, appMetadata)
 
         var aesKey: ByteArray? = null
         try {
@@ -76,14 +90,18 @@ class SigilBackup(
     }
 
     /**
-     * Retrieves and decrypts the seed from cloud backup.
+     * Retrieves and decrypts the backup from cloud storage.
+     *
+     * Returns the seed, sigil identity (DID, credential ID, public key),
+     * and any app metadata. This is everything needed to fully restore
+     * the sigil on a new device.
      *
      * @param activity Activity for the passkey biometric prompt
-     * @return [DecryptedBackup] with entropy and BIP-39 seed. Caller MUST call [DecryptedBackup.wipe].
+     * @return [RestoredSigil] with seed, identity, and app metadata
      * @throws PasskeyException if passkey auth fails
      * @throws BackupException if no backup exists, PRF unavailable, or decryption fails
      */
-    suspend fun restore(activity: Activity): DecryptedBackup {
+    suspend fun restore(activity: Activity): RestoredSigil {
         val blob = storage.retrieve()
             ?: throw BackupException("No backup found in storage")
 
@@ -101,7 +119,8 @@ class SigilBackup(
         var aesKey: ByteArray? = null
         try {
             aesKey = PrfKeyDeriver.deriveKey(prfOutput)
-            return BackupEncryptor.decrypt(blob = blob, aesKey = aesKey)
+            val decrypted = BackupEncryptor.decrypt(blob = blob, aesKey = aesKey)
+            return parseRestoredSigil(decrypted)
         } catch (e: BackupDecryptionException) {
             throw BackupException("Restore failed: ${e.message}", e)
         } finally {
@@ -125,12 +144,99 @@ class SigilBackup(
         return challenge
     }
 
+    // ── Metadata serialization ──
+
+    private fun buildBackupMetadata(
+        did: String,
+        credentialId: String,
+        publicKeyHex: String,
+        appMetadata: ByteArray?,
+    ): ByteArray {
+        val json = JSONObject().apply {
+            put("did", did)
+            put("credentialId", credentialId)
+            put("publicKeyHex", publicKeyHex)
+            if (appMetadata != null) {
+                put("appState", android.util.Base64.encodeToString(
+                    appMetadata,
+                    android.util.Base64.NO_WRAP,
+                ))
+            }
+        }
+        return json.toString().toByteArray(Charsets.UTF_8)
+    }
+
+    private fun parseRestoredSigil(decrypted: DecryptedBackup): RestoredSigil {
+        val metaBytes = decrypted.metadata
+        if (metaBytes == null) {
+            return RestoredSigil(
+                entropy = decrypted.entropy,
+                bip39Seed = decrypted.bip39Seed,
+                did = null,
+                credentialId = null,
+                publicKeyHex = null,
+                appMetadata = null,
+            )
+        }
+
+        return try {
+            val json = JSONObject(String(metaBytes, Charsets.UTF_8))
+            val appStateB64 = json.optString("appState", "")
+            val appMetadata = if (appStateB64.isNotEmpty()) {
+                android.util.Base64.decode(appStateB64, android.util.Base64.NO_WRAP)
+            } else null
+
+            RestoredSigil(
+                entropy = decrypted.entropy,
+                bip39Seed = decrypted.bip39Seed,
+                did = json.optString("did", null),
+                credentialId = json.optString("credentialId", null),
+                publicKeyHex = json.optString("publicKeyHex", null),
+                appMetadata = appMetadata,
+            )
+        } catch (e: Exception) {
+            // Metadata is unparseable — return seed without identity
+            RestoredSigil(
+                entropy = decrypted.entropy,
+                bip39Seed = decrypted.bip39Seed,
+                did = null,
+                credentialId = null,
+                publicKeyHex = null,
+                appMetadata = null,
+            )
+        }
+    }
+
     companion object {
         private const val CHALLENGE_SIZE = 32
 
         /** Purpose-bound salt: SHA-256("kuira:backup:v1"). Deterministic, public. */
         val BACKUP_SALT: ByteArray = MessageDigest.getInstance("SHA-256")
             .digest("kuira:backup:v1".toByteArray(Charsets.UTF_8))
+    }
+}
+
+/**
+ * Full restored sigil — seed + identity + app state.
+ * Everything needed to fully reconstruct the sigil on a new device.
+ * Caller MUST call [wipe] after use.
+ */
+class RestoredSigil(
+    val entropy: ByteArray,
+    val bip39Seed: ByteArray,
+    /** User's DID (did:key:z...). Null if backup predates identity storage. */
+    val did: String?,
+    /** Passkey credential ID. Null if backup predates identity storage. */
+    val credentialId: String?,
+    /** Compressed P-256 public key hex. Null if backup predates identity storage. */
+    val publicKeyHex: String?,
+    /** App-specific state (game data, etc.). Null if none was backed up. */
+    val appMetadata: ByteArray?,
+) {
+    fun wipe() {
+        entropy.fill(0)
+        bip39Seed.fill(0)
+        appMetadata?.fill(0)
     }
 }
 

@@ -200,6 +200,23 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 val entropy = ByteArray(32) { 0x11 }
                 val bip39Seed = TEST_SEED.copyOf()
 
+                val sigil = _sigilState.value
+                val did = when (sigil) {
+                    is SigilState.Forged -> sigil.did
+                    is SigilState.Authorized -> sigil.did
+                    else -> "unknown"
+                }
+                val credId = when (sigil) {
+                    is SigilState.Forged -> sigil.credentialId
+                    is SigilState.Authorized -> sigil.credentialId
+                    else -> ""
+                }
+                val pubKeyHex = when (sigil) {
+                    is SigilState.Forged -> sigil.publicKeyHex
+                    is SigilState.Authorized -> sigil.publicKeyHex
+                    else -> ""
+                }
+
                 val meta = appMetadata
                 if (meta != null) {
                     Log.i(TAG, "Backing up metadata (${meta.size} bytes): ${String(meta, Charsets.UTF_8)}")
@@ -209,11 +226,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     activity = activity,
                     entropy = entropy,
                     bip39Seed = bip39Seed,
-                    metadata = meta,
+                    did = did,
+                    credentialId = credId,
+                    publicKeyHex = pubKeyHex,
+                    appMetadata = meta,
                 )
 
-                val metaInfo = if (meta != null) " + ${meta.size} bytes metadata" else ""
-                Log.i(TAG, "Backup SUCCESS — seed$metaInfo encrypted and stored in Block Store")
+                Log.i(TAG, "Backup SUCCESS — seed + sigil identity + ${meta?.size ?: 0} bytes app metadata")
                 _sigilState.value = when (val current = _sigilState.value) {
                     is SigilState.Forged -> SigilState.Forged(
                         did = current.did,
@@ -239,21 +258,36 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 Log.i(TAG, "Starting PRF restore...")
 
-                val decrypted = sigilBackup.restore(activity)
+                val restored = sigilBackup.restore(activity)
                 try {
                     Log.i(TAG, "Restore SUCCESS!")
-                    Log.i(TAG, "  Entropy: ${decrypted.entropy.toHex()}")
-                    Log.i(TAG, "  Seed (first 16 bytes): ${decrypted.bip39Seed.copyOfRange(0, 16).toHex()}...")
-                    Log.i(TAG, "  Seed matches test seed: ${decrypted.bip39Seed.contentEquals(TEST_SEED)}")
-                    val restoredMeta = decrypted.metadata
+                    Log.i(TAG, "  Seed matches test seed: ${restored.bip39Seed.contentEquals(TEST_SEED)}")
+
+                    val restoredDid = restored.did
+                    val restoredCredId = restored.credentialId
+                    val restoredPubKey = restored.publicKeyHex
+                    if (restoredDid != null) {
+                        Log.i(TAG, "  DID: $restoredDid")
+                        Log.i(TAG, "  Credential ID: $restoredCredId")
+                        Log.i(TAG, "  Public key: $restoredPubKey")
+
+                        // Restore the sigil state
+                        _sigilState.value = SigilState.Forged(
+                            did = restoredDid,
+                            credentialId = restoredCredId ?: "",
+                            publicKeyHex = restoredPubKey ?: "",
+                        )
+                        persistSigil(restoredDid, restoredCredId ?: "", restoredPubKey ?: "")
+                        Log.i(TAG, "  Sigil identity restored!")
+                    }
+
+                    val restoredMeta = restored.appMetadata
                     if (restoredMeta != null) {
-                        Log.i(TAG, "  Metadata restored: ${restoredMeta.size} bytes")
-                        Log.i(TAG, "  Metadata: ${String(restoredMeta, Charsets.UTF_8)}")
-                    } else {
-                        Log.i(TAG, "  No metadata in backup")
+                        Log.i(TAG, "  App metadata: ${restoredMeta.size} bytes")
+                        Log.i(TAG, "  App metadata: ${String(restoredMeta, Charsets.UTF_8)}")
                     }
                 } finally {
-                    decrypted.wipe()
+                    restored.wipe()
                 }
             } catch (e: BackupException) {
                 Log.e(TAG, "Restore failed: ${e.message}", e)
