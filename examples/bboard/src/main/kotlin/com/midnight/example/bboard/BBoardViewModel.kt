@@ -201,6 +201,10 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 val bip39Seed = TEST_SEED.copyOf()
 
                 val meta = appMetadata
+                if (meta != null) {
+                    Log.i(TAG, "Backing up metadata (${meta.size} bytes): ${String(meta, Charsets.UTF_8)}")
+                }
+
                 sigilBackup.backup(
                     activity = activity,
                     entropy = entropy,
