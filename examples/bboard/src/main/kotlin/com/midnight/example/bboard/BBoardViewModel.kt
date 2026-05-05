@@ -369,13 +369,17 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     .build()
                 sdk = midnightSdk
 
-                // Download proving keys if needed
+                // Download wallet proving keys if needed (skip on zero-fee networks)
                 if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
-                    _state.value = BBoardState.Connecting("Downloading proving keys...")
-                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                        _state.value = BBoardState.Connecting(
-                            "Downloading keys: ${(progress * 100).toInt()}%"
-                        )
+                    if (network == MidnightNetwork.UNDEPLOYED) {
+                        Log.i(TAG, "Skipping wallet key download — zero-fee network")
+                    } else {
+                        _state.value = BBoardState.Connecting("Downloading proving keys...")
+                        midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                            _state.value = BBoardState.Connecting(
+                                "Downloading keys: ${(progress * 100).toInt()}%"
+                            )
+                        }
                     }
                 }
 
@@ -414,11 +418,15 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 sdk = midnightSdk
 
                 if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
-                    _state.value = BBoardState.Connecting("Downloading proving keys...")
-                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                        _state.value = BBoardState.Connecting(
-                            "Downloading keys: ${(progress * 100).toInt()}%"
-                        )
+                    if (network == MidnightNetwork.UNDEPLOYED) {
+                        Log.i(TAG, "Skipping wallet key download — zero-fee network")
+                    } else {
+                        _state.value = BBoardState.Connecting("Downloading proving keys...")
+                        midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                            _state.value = BBoardState.Connecting(
+                                "Downloading keys: ${(progress * 100).toInt()}%"
+                            )
+                        }
                     }
                 }
 
