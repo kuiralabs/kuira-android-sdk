@@ -291,26 +291,19 @@ private fun ConnectedScreen(
     val isProcessing = state.dustSyncStatus is DustSyncStatus.Processing
     val isReady = state.dustSyncStatus is DustSyncStatus.Ready
 
-    // Show sigil authorization card if sigil is forged but not yet authorized
-    if (sigilState is SigilState.Forged || sigilState is SigilState.Authorizing) {
-        SigilAuthCard(sigilState = sigilState, onAuthorize = onAuthorize)
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-    } else if (sigilState is SigilState.Authorized) {
-        SigilAuthorizedCard(sigilState, onBackup = onBackup)
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-    } else if (sigilState is SigilState.Forged) {
-        // Sigil forged but not authorized — still show backup option
-        DarkCard {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("sigil", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-                Text("forged", color = Colors.Accent, fontSize = Type.Caption)
-            }
-            Spacer(modifier = Modifier.height(Spacing.SmallGap))
-            MonoField(label = "did", value = sigilState.did)
+    // Show sigil card based on identity state
+    when (sigilState) {
+        is SigilState.Forged, is SigilState.Authorizing -> {
+            SigilAuthCard(sigilState = sigilState, onAuthorize = onAuthorize)
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
             ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
+            Spacer(modifier = Modifier.height(Spacing.SectionGap))
         }
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+        is SigilState.Authorized -> {
+            SigilAuthorizedCard(sigilState, onBackup = onBackup)
+            Spacer(modifier = Modifier.height(Spacing.SectionGap))
+        }
+        else -> {}
     }
 
     DarkCard {

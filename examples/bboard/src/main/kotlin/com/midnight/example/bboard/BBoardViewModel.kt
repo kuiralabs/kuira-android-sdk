@@ -268,8 +268,16 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * This authorizes the SDK's access key to sign Midnight transactions.
      */
     fun authorizeAccessKey(activity: Activity) {
-        val sigil = _sigilState.value as? SigilState.Forged ?: return
-        val midnightSdk = sdk ?: return
+        val sigil = _sigilState.value as? SigilState.Forged
+        if (sigil == null) {
+            Log.w(TAG, "Authorize skipped — sigil state is ${_sigilState.value::class.simpleName}, not Forged")
+            return
+        }
+        val midnightSdk = sdk
+        if (midnightSdk == null) {
+            Log.w(TAG, "Authorize skipped — SDK not initialized (connect with standalone SDK first)")
+            return
+        }
 
         viewModelScope.launch {
             _sigilState.value = SigilState.Authorizing(sigil, "Building authorization...")
