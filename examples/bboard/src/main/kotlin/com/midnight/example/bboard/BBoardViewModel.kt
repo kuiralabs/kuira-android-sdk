@@ -60,6 +60,37 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         config = PasskeyConfig(rpId = "nel349.github.io"),
     )
 
+    // Persist sigil identity across app restarts
+    private val sigilPrefs by lazy {
+        getApplication<Application>().getSharedPreferences("sigil_identity", android.content.Context.MODE_PRIVATE)
+    }
+
+    init {
+        // Load persisted sigil on startup
+        loadPersistedSigil()
+    }
+
+    private fun loadPersistedSigil() {
+        val did = sigilPrefs.getString("did", null) ?: return
+        val credentialId = sigilPrefs.getString("credentialId", null) ?: return
+        val publicKeyHex = sigilPrefs.getString("publicKeyHex", null) ?: return
+
+        _sigilState.value = SigilState.Forged(
+            did = did,
+            credentialId = credentialId,
+            publicKeyHex = publicKeyHex,
+        )
+        Log.i(TAG, "Loaded persisted sigil: ${did.take(30)}...")
+    }
+
+    private fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
+        sigilPrefs.edit()
+            .putString("did", did)
+            .putString("credentialId", credentialId)
+            .putString("publicKeyHex", publicKeyHex)
+            .apply()
+    }
+
     private val sigilBackup by lazy {
         SigilBackup(
             passkeyManager = passkeyManager,
@@ -92,11 +123,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 Log.i(TAG, "  Credential ID: ${result.credentialId}")
                 Log.i(TAG, "  P-256 pubkey: ${result.publicKey.compressedHex()}")
 
-                _sigilState.value = SigilState.Forged(
+                val forged = SigilState.Forged(
                     did = did,
                     credentialId = result.credentialId,
                     publicKeyHex = result.publicKey.compressedHex(),
                 )
+                _sigilState.value = forged
+                persistSigil(did, result.credentialId, result.publicKey.compressedHex())
             } catch (e: Exception) {
                 Log.e(TAG, "Forge sigil failed", e)
                 _sigilState.value = SigilState.Error(e.message ?: "Passkey creation failed")
