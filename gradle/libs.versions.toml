@@ -23,6 +23,7 @@ room = "2.8.4"
 ksp = "2.3.6"
 biometric = "1.1.0"
 credentials = "1.5.0"
+playServicesBlockstore = "16.4.0"
 lottieCompose = "6.6.6"
 
 [libraries]
@@ -75,6 +76,10 @@ androidx-credentials-play-services = { group = "androidx.credentials", name = "c
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+# Google Block Store — encrypted cloud backup for sigil recovery (Identity)
+play-services-blockstore = { group = "com.google.android.gms", name = "play-services-auth-blockstore", version.ref = "playServicesBlockstore" }
+# Coroutine adapters for Play Services Task API
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 # Lottie for animated progress indicators (8B.1 design sprint)
 lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottieCompose" }
 
