@@ -92,10 +92,39 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val sigilBackup by lazy {
+        // Use file-based storage on emulator (survives app data clears).
+        // Production uses BlockStoreBackupStorage (cloud-synced).
         SigilBackup(
             passkeyManager = passkeyManager,
-            storage = BlockStoreBackupStorage(getApplication()),
+            storage = EmulatorBackupStorage(),
         )
+    }
+
+    /**
+     * File-based backup storage for emulator testing.
+     * Writes to /data/local/tmp/ which survives app data clears.
+     * NOT for production — use BlockStoreBackupStorage instead.
+     */
+    private class EmulatorBackupStorage : com.midnight.kuira.core.identity.backup.BackupStorage {
+        private val file = java.io.File("/data/local/tmp/kuira_backup.bin")
+
+        override suspend fun store(encryptedBlob: ByteArray) {
+            file.writeBytes(encryptedBlob)
+            Log.d("BBoard", "Backup stored to ${file.absolutePath} (${encryptedBlob.size} bytes)")
+        }
+
+        override suspend fun retrieve(): ByteArray? {
+            if (!file.exists()) return null
+            val bytes = file.readBytes()
+            Log.d("BBoard", "Backup retrieved from ${file.absolutePath} (${bytes.size} bytes)")
+            return if (bytes.isNotEmpty()) bytes else null
+        }
+
+        override suspend fun delete() {
+            file.delete()
+        }
+
+        override suspend fun isAvailable(): Boolean = true
     }
 
     /**
