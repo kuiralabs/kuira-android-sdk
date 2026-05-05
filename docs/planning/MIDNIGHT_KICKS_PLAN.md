@@ -86,7 +86,7 @@ Separate repo: `midnight-kicks/` (app/ + unity/ + contract/). Consumes Kuira SDK
   - [x] Identity investigation + decisions (see IDENTITY_INVESTIGATION.md)
   - [x] Contract deployment API (each match = new contract)
   - [x] Passkey identity (CredentialManager + did:key + keyAuthorization) — verified on emulator
-  - [ ] PRF-encrypted cloud backup (Phase 8C — zero-words recovery)
+  - [x] PRF-encrypted cloud backup — verified on emulator (same-session round-trip, cross-device needs physical device)
 - [ ] **Phase 3 — Unity game**
   - [ ] Asset Store template → strip AI → batch choice UI
   - [ ] Replay system (5 rounds from JSON) + stadium intro cinematic

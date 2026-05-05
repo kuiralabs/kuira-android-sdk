@@ -234,6 +234,87 @@ dApp calls contract.call("post", "Hello!")
     Transaction finalized!
 ```
 
+### Step 5: PRF-Encrypted Cloud Backup (zero-words recovery)
+
+```
+User taps "Backup to Cloud"
+         │
+         ▼
+PasskeyManager.authenticateWithPrf()
+         │
+         │ extensions: {"prf": {"eval": {"first": "<salt>"}}}
+         │ salt = SHA-256("kuira:backup:v1")
+         ▼
+┌─────────────────────┐
+│ Google Password      │     ┌──────────────────┐
+│ Manager              │────▶│ Biometric prompt  │
+│                      │     └──────────────────┘
+│ PRF computed inside  │
+│ authenticator HW     │
+│ (never leaves device)│
+└──────────┬──────────┘
+           │
+           │ 32-byte PRF output (deterministic)
+           ▼
+┌─────────────────────┐
+│ PrfKeyDeriver        │
+│                      │
+│ HKDF-SHA256:         │
+│ IKM = PRF output     │
+│ info = "kuira-       │
+│   backup-encryption  │
+│   -v1"               │
+│ → 32-byte AES key    │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ BackupEncryptor      │
+│                      │
+│ Plaintext (496 bytes │
+│ fixed, padded):      │
+│ - seed entropy (32B) │
+│ - BIP-39 seed (64B)  │
+│ - metadata (≤397B)   │
+│ - zero padding       │
+│                      │
+│ AES-256-GCM encrypt  │
+│ → 525-byte blob      │
+│ (always same size)   │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ Google Block Store   │
+│                      │
+│ E2E encrypted on top │
+│ Syncs to Google cloud│
+│ Available on any     │
+│ device with same     │
+│ Google account       │
+└─────────────────────┘
+```
+
+**Restore on new device:**
+```
+Passkey syncs via Google Password Manager (automatic)
+         │
+         ▼
+Same passkey + same salt → same PRF output → same AES key
+         │
+         ▼
+Block Store → retrieve blob → decrypt → seed + metadata restored
+         │
+         ▼
+Zero words. Zero passwords. Just biometric.
+```
+
+**Privacy guarantee:**
+- Google sees: one 525-byte opaque blob (always same size, no size oracle)
+- Google does NOT see: contents (double encrypted: our AES-GCM + Block Store E2E)
+- PRF output: never leaves authenticator hardware
+- Metadata: arbitrary app state (game choices, session data) encrypted alongside seed
+
 ## Why This Matters
 
 ### vs. rvcas (midnightOS Passkeys)
@@ -286,6 +367,12 @@ core/identity/
 │   ├── KeyAuthorization.kt    ─── Authorization payload builder
 │   ├── AuthorizationRecord.kt ─── Persistent record
 │   └── AuthorizationStore.kt  ─── AES-256-GCM encrypted storage
+├── backup/
+│   ├── PrfKeyDeriver.kt      ─── HKDF-SHA256 from PRF output
+│   ├── BackupEncryptor.kt    ─── Fixed-size AES-256-GCM blob + metadata
+│   ├── BackupStorage.kt      ─── Storage-agnostic interface
+│   ├── BlockStoreBackupStorage.kt ─── Google Block Store implementation
+│   └── SigilBackup.kt        ─── Backup/restore orchestrator
 ├── util/
 │   └── ByteArrayUtil.kt      ─── Shared BigInteger conversion
 └── di/
@@ -304,3 +391,7 @@ examples/bboard/
 - Google Password Manager as credential provider
 - DAL hosted at nel349.github.io
 - Full flow: forge → connect → authorize → post/takeDown
+- PRF: deterministic output verified (same passkey + salt = same 32 bytes)
+- Backup/restore: same-session round-trip with 196 bytes metadata (seed + JSON)
+- 68 unit tests across identity + backup modules
+- Cross-device restore: needs physical device (emulator Block Store is local-only)

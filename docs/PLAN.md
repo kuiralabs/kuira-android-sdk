@@ -29,7 +29,9 @@
     - ✅ Contract deployment API (MidnightContract.deploy + FFI)
     - ✅ Sigil identity — core/identity module (passkey, DID, keyAuthorization, 43 tests)
     - ✅ BBoard reference — forge sigil + authorize access key, verified on emulator
-    - ⬜ PRF-encrypted cloud backup (zero-words recovery — Phase 8C)
+    - ✅ PRF-encrypted cloud backup — PrfKeyDeriver (HKDF), BackupEncryptor (fixed-size AES-GCM),
+      Block Store storage, metadata support (up to 397 bytes app state), 68 tests.
+      Round-trip verified on emulator. Cross-device restore needs physical device test.
 
 **Next:**
 13. 🔧 **Phase 8B**: Wallet Productization (est ~180–230h) — **see `docs/planning/WALLET_PRODUCTIZATION_PLAN.md`** for the full feature matrix and decisions log. Scope: Settings + View recovery phrase + Tx history + Receive QR + `midnight:` URI scheme + Send confirmation screen + Dusk L3 redesign everywhere + App icon + Firebase (Remote Config + Crashlytics) + R8 enablement + Play Store listing + closed-beta testing gate + MCP Bridge seed (minimal Agent Runtime). Ships v1.0 as "first Midnight wallet on Android, MCP-compatible" targeting Preprod testnet.
