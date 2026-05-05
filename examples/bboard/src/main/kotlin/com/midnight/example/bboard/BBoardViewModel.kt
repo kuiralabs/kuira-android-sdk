@@ -614,6 +614,11 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     _state.value = current.copy(boardState = BoardState.Working(label))
                 }
                 Log.i(TAG, "TakeDown submitted!")
+
+                val meta = buildAppMetadata("takeDown", 0)
+                appMetadata = meta
+                Log.i(TAG, "Generated ${meta.size} bytes of app metadata (takeDown)")
+
                 _state.value = current.copy(boardState = BoardState.Vacant, lastTimingMs = null)
             } catch (e: ContractCallException) {
                 Log.e(TAG, "TakeDown failed", e)

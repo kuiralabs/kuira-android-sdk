@@ -138,6 +138,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                     sigilState = sigilState,
                     onAuthorize = { activity?.let { viewModel.authorizeAccessKey(it) } },
                     onBackup = { activity?.let { viewModel.backupSeed(it) } },
+                    onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                     onPost = viewModel::post,
                     onTakeDown = viewModel::takeDown,
                     onRefresh = viewModel::refresh,
@@ -282,6 +283,7 @@ private fun ConnectedScreen(
     sigilState: SigilState,
     onAuthorize: () -> Unit,
     onBackup: () -> Unit,
+    onRestore: () -> Unit,
     onPost: (String) -> Unit,
     onTakeDown: () -> Unit,
     onRefresh: () -> Unit,
@@ -297,10 +299,12 @@ private fun ConnectedScreen(
             SigilAuthCard(sigilState = sigilState, onAuthorize = onAuthorize)
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
             ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
+            Spacer(modifier = Modifier.height(Spacing.TinyGap))
+            ActionButton("restore from cloud", enabled = true, dimmed = true, onClick = onRestore)
             Spacer(modifier = Modifier.height(Spacing.SectionGap))
         }
         is SigilState.Authorized -> {
-            SigilAuthorizedCard(sigilState, onBackup = onBackup)
+            SigilAuthorizedCard(sigilState, onBackup = onBackup, onRestore = onRestore)
             Spacer(modifier = Modifier.height(Spacing.SectionGap))
         }
         else -> {}
@@ -529,7 +533,7 @@ private fun SigilAuthCard(sigilState: SigilState, onAuthorize: () -> Unit) {
 }
 
 @Composable
-private fun SigilAuthorizedCard(state: SigilState.Authorized, onBackup: () -> Unit) {
+private fun SigilAuthorizedCard(state: SigilState.Authorized, onBackup: () -> Unit, onRestore: () -> Unit) {
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("sigil", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
@@ -543,6 +547,8 @@ private fun SigilAuthorizedCard(state: SigilState.Authorized, onBackup: () -> Un
         Text("path: ${state.accessKeyPath}", color = Colors.OnSurfaceSubtle, fontSize = Type.Mono, fontFamily = FontFamily.Monospace)
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
         ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
+        ActionButton("restore from cloud", enabled = true, dimmed = true, onClick = onRestore)
     }
 }
 
