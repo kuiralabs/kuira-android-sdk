@@ -87,20 +87,28 @@ Separate repo: `midnight-kicks/` (app/ + unity/ + contract/). Consumes Kuira SDK
   - [x] Contract deployment API (each match = new contract)
   - [x] Passkey identity (CredentialManager + did:key + keyAuthorization) — verified on emulator
   - [x] PRF-encrypted cloud backup — verified on emulator (same-session round-trip, cross-device needs physical device)
-- [ ] **Phase 3 — Unity game**
-  - [ ] Asset Store template → strip AI → batch choice UI
+- [ ] **Phase 3 — Unity + Kotlin integration**
+  - [x] kick-prototype with ball physics + 3 directions (URP, IL2CPP, arm64)
+  - [x] UaaL export script (ExportAndroidLibrary.cs, batch mode CLI)
+  - [x] Separate Gradle project (AGP 9.0.0, independent from Kuira build)
+  - [x] GameController.cs — JSON bridge, 5-round choice UI, replay stub
+  - [x] UnityBridge.kt — Kotlin↔Unity JSON messaging
+  - [x] KicksActivity — main menu + deep link handler
+  - [ ] GameController receiving choicePhase + sending choicesLocked (end-to-end)
   - [ ] Replay system (5 rounds from JSON) + stadium intro cinematic
-  - [ ] Export as UaaL module
-- [ ] **Phase 4 — Android app**
+  - [ ] MatchManager — deploy/join/commit/reveal/claim circuit calls
+  - [ ] StatePoller — watch opponent actions via indexer
+- [ ] **Phase 4 — Full two-player game**
   - [ ] Onboarding (passkey → biometric → play)
-  - [ ] Matchmaking (QR + deep link)
-  - [ ] SDK wiring + UaaL bridge + state polling
-  - [ ] Results + leaderboard
-- [ ] **Phase 5 — Integration + polish**
-  - [ ] E2E on two devices, proof latency tuning, error handling
-  - [ ] APK size audit (< 100MB), Play Store listing
-- [ ] **Phase 6 — Release**
-  - [ ] Closed beta → open beta → announce (World Cup timing)
+  - [ ] Matchmaking (QR code + deep link)
+  - [ ] Two-emulator E2E on localnet
+  - [ ] Results screen + leaderboard query
+- [ ] **Phase 5 — Polish + release**
+  - [ ] APK size audit (< 100MB), proof latency tuning
+  - [ ] Error handling, timeout UX, disconnect recovery
+  - [ ] Play Store listing, closed beta
+- [ ] **Phase 6 — Launch**
+  - [ ] Open beta → announce (World Cup timing, June 11)
 
 ---
 
