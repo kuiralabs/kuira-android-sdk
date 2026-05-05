@@ -137,6 +137,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                     state = s,
                     sigilState = sigilState,
                     onAuthorize = { activity?.let { viewModel.authorizeAccessKey(it) } },
+                    onBackup = { activity?.let { viewModel.backupSeed(it) } },
                     onPost = viewModel::post,
                     onTakeDown = viewModel::takeDown,
                     onRefresh = viewModel::refresh,
@@ -280,6 +281,7 @@ private fun ConnectedScreen(
     state: BBoardState.Connected,
     sigilState: SigilState,
     onAuthorize: () -> Unit,
+    onBackup: () -> Unit,
     onPost: (String) -> Unit,
     onTakeDown: () -> Unit,
     onRefresh: () -> Unit,
@@ -294,7 +296,20 @@ private fun ConnectedScreen(
         SigilAuthCard(sigilState = sigilState, onAuthorize = onAuthorize)
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
     } else if (sigilState is SigilState.Authorized) {
-        SigilAuthorizedCard(sigilState)
+        SigilAuthorizedCard(sigilState, onBackup = onBackup)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    } else if (sigilState is SigilState.Forged) {
+        // Sigil forged but not authorized — still show backup option
+        DarkCard {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("sigil", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+                Text("forged", color = Colors.Accent, fontSize = Type.Caption)
+            }
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            MonoField(label = "did", value = sigilState.did)
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
+        }
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
     }
 
@@ -521,7 +536,7 @@ private fun SigilAuthCard(sigilState: SigilState, onAuthorize: () -> Unit) {
 }
 
 @Composable
-private fun SigilAuthorizedCard(state: SigilState.Authorized) {
+private fun SigilAuthorizedCard(state: SigilState.Authorized, onBackup: () -> Unit) {
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("sigil", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
@@ -533,6 +548,8 @@ private fun SigilAuthorizedCard(state: SigilState.Authorized) {
         MonoField(label = "access key", value = state.accessKeyHex)
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
         Text("path: ${state.accessKeyPath}", color = Colors.OnSurfaceSubtle, fontSize = Type.Mono, fontFamily = FontFamily.Monospace)
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
     }
 }
 
