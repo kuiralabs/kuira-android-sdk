@@ -242,11 +242,13 @@ var __compactRuntime = (() => {
     _ensureRustHandle() {
       if (this._rustHandle) return this._rustHandle;
       if (typeof globalThis.__native_stateCreateWithNulls !== "function") return 0;
-      let numSlots = 0;
-      if (this._data && this._data._state && this._data._state._data && this._data._state._data.type === "array") {
-        numSlots = this._data._state._data.items.length;
+      // Serialize the JS state structure to JSON so Rust can build the correct
+      // nested array/null layout (penalty contract has Array([Array([Null x N]), ...]))
+      var structureJson = "0"; // fallback: 0 slots
+      if (this._data && this._data._state && this._data._state._data) {
+        structureJson = JSON.stringify(this._stateToStructure(this._data._state._data));
       }
-      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
+      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(structureJson));
       for (const name of Object.keys(this._operations)) {
         if (typeof globalThis.__native_stateSetOperation === "function") {
           globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
@@ -256,6 +258,20 @@ var __compactRuntime = (() => {
         this._data._rustHandle = this._rustHandle;
       }
       return this._rustHandle;
+    }
+    // Convert JS StateValue to a structure descriptor for Rust
+    _stateToStructure(data) {
+      if (!data) return null;
+      if (typeof data === 'object' && data.type === "null") return null;
+      if (typeof data === 'object' && data.type === "array" && Array.isArray(data.items)) {
+        return { array: data.items.map(function(item) {
+          if (item && typeof item === 'object' && item._data) return this._stateToStructure(item._data);
+          if (item && typeof item === 'object' && item.type) return this._stateToStructure(item);
+          return null;
+        }.bind(this)) };
+      }
+      // Cell, map, bmt — treat as null placeholder
+      return null;
     }
   };
   var ContractOperation = class {

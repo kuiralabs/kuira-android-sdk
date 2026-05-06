@@ -426,8 +426,8 @@ class CircuitExecutor(private val context: Context) {
                 ContractRuntime.valueToBigInt(args[0] as String) ?: ""
             }
             js.function("__nativeStateCreateWithNulls") { args: Array<Any?> ->
-                val n = (args[0] as String).toInt()
-                ContractRuntime.stateCreateWithNulls(n).toString()
+                val structureJson = args[0] as String
+                ContractRuntime.stateCreateWithNulls(structureJson).toString()
             }
             js.function("__nativeStateSetOperation") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()

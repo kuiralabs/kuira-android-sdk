@@ -67,10 +67,10 @@ object ContractRuntime {
         return nativeContractQuery(handle, opcodesJson)
     }
 
-    /** Create state with N null slots. */
-    fun stateCreateWithNulls(numSlots: Int): Long {
+    /** Create state from a JSON structure descriptor (nested arrays of nulls). */
+    fun stateCreateWithNulls(structureJson: String): Long {
         ensureLoaded()
-        return nativeStateCreateWithNulls(numSlots)
+        return nativeStateCreateWithNulls(structureJson)
     }
 
     /** Clone a state handle (saves initial state before circuit queries). */
@@ -117,7 +117,7 @@ object ContractRuntime {
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
     @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
     @JvmStatic private external fun nativeStateCreate(stateHex: String): Long
-    @JvmStatic private external fun nativeStateCreateWithNulls(numSlots: Int): Long
+    @JvmStatic private external fun nativeStateCreateWithNulls(structureJson: String): Long
     @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
     @JvmStatic private external fun nativeStateFree(handle: Long)
     @JvmStatic private external fun nativeStateClone(handle: Long): Long
