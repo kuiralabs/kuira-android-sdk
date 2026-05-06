@@ -133,6 +133,11 @@ class MidnightWallet internal constructor(
         dustSyncManager.ensureSynced()
     }
 
+    /** Force a fresh dust sync. Call between sequential transactions to avoid stale UTXO state. */
+    suspend fun forceResyncDust() {
+        forceFullSync()
+    }
+
     private fun isDustSpendProofError(e: NodeRpcError): Boolean {
         val data = e.data ?: return false
         return data.contains("Custom error: 170")
