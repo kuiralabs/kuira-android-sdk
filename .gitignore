@@ -27,5 +27,13 @@ release.keystore
 *.keystore
 
 # Separate repos with own git tracking
-examples/midnight-kicks/
 docs/security/
+
+# Kicks — generated artifacts (not source)
+examples/midnight-kicks/unityLibrary/
+examples/midnight-kicks/libs/
+examples/midnight-kicks/shared/
+examples/midnight-kicks/contract/node_modules/
+examples/midnight-kicks/contract/dist/
+examples/midnight-kicks/contract/midnight-level-db/
+examples/midnight-kicks/local.properties
