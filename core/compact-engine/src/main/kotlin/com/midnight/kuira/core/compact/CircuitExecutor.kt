@@ -143,8 +143,11 @@ class CircuitExecutor(private val context: Context) {
                     );
                     const parts = resultStr.split('|');
                     const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
-                    const keyBytes = new Uint8Array(parts[1].split(',').map(Number));
-                    return [privateState, keyBytes];
+                    const values = parts[1].split(',').map(Number);
+                    // Single byte → return as BigInt (for Uint<8> witnesses)
+                    // Multi byte → return as Uint8Array (for Bytes<N> witnesses)
+                    const result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
+                    return [privateState, result];
                 }
                 """.trimIndent()
             }
@@ -315,8 +318,9 @@ class CircuitExecutor(private val context: Context) {
                 );
                 const parts = resultStr.split('|');
                 const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
-                const keyBytes = new Uint8Array(parts[1].split(',').map(Number));
-                return [privateState, keyBytes];
+                const values = parts[1].split(',').map(Number);
+                const result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
+                return [privateState, result];
             }
             """.trimIndent()
         }
@@ -419,6 +423,9 @@ class CircuitExecutor(private val context: Context) {
             js.function("__nativePersistentHashAligned") { args: Array<Any?> ->
                 ContractRuntime.persistentHashAligned(args[0] as String) ?: ""
             }
+            js.function("__nativePersistentCommitAligned") { args: Array<Any?> ->
+                ContractRuntime.persistentCommitAligned(args[0] as String) ?: ""
+            }
             js.function("__nativeBigIntToValue") { args: Array<Any?> ->
                 ContractRuntime.bigIntToValue(args[0] as String) ?: ""
             }
@@ -455,6 +462,40 @@ class CircuitExecutor(private val context: Context) {
             }
             js.evaluate<Any?>("""
                 globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
+                globalThis.__native_persistentCommit = function() {
+                    try {
+                        // Called as persistentCommit(alignment, value, [opening])
+                        // from persistentCommit2(rtType, value, opening):
+                        //   persistentCommit(rtType.alignment(), rtType.toValue(value), [opening])
+                        // persistent_commit = SHA-256(opening || binary_repr(aligned_value))
+                        var alignment = arguments[0];
+                        var value = arguments[1];
+                        var openings = arguments[2]; // array of Uint8Array, typically [nonce_32bytes]
+
+                        // Build the opening bytes (prepended to hash)
+                        var openingBytes = [];
+                        if (openings && openings.length > 0) {
+                            var o = openings[0];
+                            openingBytes = o instanceof Uint8Array ? Array.from(o) : o;
+                        }
+
+                        // Build aligned value (same format as persistentHash)
+                        var aligned = {
+                            value: value.map(function(v) { return v instanceof Uint8Array ? Array.from(v) : v; }),
+                            alignment: alignment
+                        };
+
+                        // Call Rust: persistent_commit(aligned_value, opening)
+                        var input = JSON.stringify({ value: aligned, opening: openingBytes });
+                        var resultStr = __nativePersistentCommitAligned(input);
+                        if (!resultStr) throw new Error('native returned null');
+                        var parsed = JSON.parse(resultStr);
+                        if (parsed && parsed.error) throw new Error('Rust: ' + parsed.error);
+                        return parsed.map(function(arr) { return new Uint8Array(arr); });
+                    } catch(e) {
+                        throw new Error('persistentCommit failed: ' + e.toString());
+                    }
+                };
                 globalThis.__native_bigIntToValue = __nativeBigIntToValue;
                 globalThis.__native_valueToBigInt = __nativeValueToBigInt;
                 globalThis.__native_stateCreateWithNulls = __nativeStateCreateWithNulls;

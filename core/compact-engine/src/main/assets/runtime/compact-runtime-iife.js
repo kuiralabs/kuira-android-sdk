@@ -531,9 +531,9 @@ var __compactRuntime = (() => {
     }
     throw new Error("persistentHash: native FFI not available");
   }
-  function persistentCommit(value, opening) {
+  function persistentCommit(alignment, value, openings) {
     if (typeof globalThis.__native_persistentCommit === "function") {
-      return globalThis.__native_persistentCommit(value, opening);
+      return globalThis.__native_persistentCommit(alignment, value, openings);
     }
     throw new Error("persistentCommit: native function not bound");
   }

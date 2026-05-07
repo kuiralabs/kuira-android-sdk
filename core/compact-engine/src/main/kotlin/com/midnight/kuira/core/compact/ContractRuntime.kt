@@ -25,6 +25,12 @@ object ContractRuntime {
         return nativePersistentHashAligned(alignedValueJson)
     }
 
+    /** Compute persistent commit: SHA-256(opening || binary_repr(value)). */
+    fun persistentCommitAligned(inputJson: String): String? {
+        ensureLoaded()
+        return nativePersistentCommitAligned(inputJson)
+    }
+
     /** Convert BigInt (hex string) to Value (JSON). */
     fun bigIntToValue(bigintStr: String): String? {
         ensureLoaded()
@@ -113,6 +119,7 @@ object ContractRuntime {
     }
 
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
+    @JvmStatic private external fun nativePersistentCommitAligned(inputJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
     @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
