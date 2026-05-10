@@ -365,6 +365,11 @@ var __compactRuntime = (() => {
   function transformAlignedValuePadded(av) {
     if (!av) return { value: [[]], alignment: [{ tag: "atom", value: { tag: "field" } }] };
     const alignment = av.alignment || [{ tag: "atom", value: { tag: "field" } }];
+    // CRITICAL: Do NOT pad empty value slots with zeros.
+    // On-chain state stores values in normalized form (trailing zeros stripped
+    // via ValueAtom.normalize()). The on-chain verifier compares popeq results
+    // using byte-exact PartialEq. Padding empty slots (e.g. ValueAtom([]) →
+    // ValueAtom([0,0,...,0])) causes ReadMismatch → Error 104 (Transcript).
     let value = (av.value || [[]]).map((v) => {
       if (v instanceof Uint8Array) return Array.from(v);
       if (Array.isArray(v)) return v;
@@ -375,34 +380,10 @@ var __compactRuntime = (() => {
       }
       return [];
     });
-    if (alignment.length > 0 && value.length > 0) {
-      value = value.map((slot, i) => {
-        if (slot.length > 0) return slot;
-        const align = alignment[i];
-        if (!align) return slot;
-        if (align.tag === "atom" && align.value) {
-          if (align.value.tag === "field" || align.value.tag === "compress") {
-            return new Array(32).fill(0);
-          }
-          if (align.value.tag === "bytes" && align.value.length) {
-            return new Array(align.value.length).fill(0);
-          }
-        }
-        return slot;
-      });
-    }
+    // If value array is empty but alignment has segments, create matching
+    // empty slots (one per alignment segment) — but do NOT fill with zeros.
     if (value.length === 0 && alignment.length > 0) {
-      value = alignment.map((align) => {
-        if (align.tag === "atom" && align.value) {
-          if (align.value.tag === "field" || align.value.tag === "compress") {
-            return new Array(32).fill(0);
-          }
-          if (align.value.tag === "bytes" && align.value.length) {
-            return new Array(align.value.length).fill(0);
-          }
-        }
-        return [];
-      });
+      value = alignment.map(() => []);
     }
     return { value, alignment };
   }
