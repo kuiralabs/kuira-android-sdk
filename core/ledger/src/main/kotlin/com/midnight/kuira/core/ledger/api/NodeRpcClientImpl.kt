@@ -350,11 +350,6 @@ class NodeRpcClientImpl(
                     )
 
                     Log.d(TAG, "Sending author_submitAndWatchExtrinsic request...")
-                    Log.d(TAG, "TX_HEX_DUMP_BEGIN tx_len=${cleanHex.length / 2}")
-                    cleanHex.chunked(3000).forEachIndexed { i, chunk ->
-                        Log.d(TAG, "TX_HEX_DUMP_PART $i $chunk")
-                    }
-                    Log.d(TAG, "TX_HEX_DUMP_END")
                     send(Frame.Text(subscribeRequest))
                     onStage?.invoke(NodeRpcClient.SubmissionStage.SUBMITTED)
 
