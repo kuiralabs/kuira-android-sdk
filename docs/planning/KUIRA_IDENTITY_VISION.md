@@ -323,7 +323,7 @@ hold ("browser," "app," "tweet"):
 - Agent Store Vision: `docs/planning/AGENT_STORE_VISION.md`
 - Kuira Vision v1: `docs/planning/KUIRA_VISION_V1.md`
 - Identity investigation: `docs/planning/IDENTITY_INVESTIGATION.md`
-- Midnight Kicks plan: `docs/planning/MIDNIGHT_KICKS_PLAN.md`
+- Midnight Kicks plan: `examples/midnight-kicks/docs/PLAN.md`
 
 ---
 

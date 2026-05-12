@@ -22,7 +22,7 @@
 10. ✅ **Phase 6**: Android DApp SDK (~50h) — QuickJS + Rust FFI for contract execution, self-contained SDK module
 11. ✅ **Phase 8A**: Wallet Auth & Onboarding (~35h) — hardware-backed biometric, encrypted SeedVault, StrongBox/TEE, `WalletGate`, onboarding + restore, all 4 feature modules wired to SeedVault. 8A.9 E2E verification deferred to 8B (view-recovery-phrase feature was missing and is now scoped in 8B as T1-2)
 
-12. 🔧 **SDK Phase**: Midnight Android SDK hardening + Sigil Identity — standalone embedded wallet, contract deployment, progress callbacks, passkey identity (CredentialManager + did:key + keyAuthorization), BBoard reference app. Validates SDK before Kicks consumes it. See `docs/planning/MIDNIGHT_KICKS_PLAN.md` Phase 2.
+12. 🔧 **SDK Phase**: Midnight Android SDK hardening + Sigil Identity — standalone embedded wallet, contract deployment, progress callbacks, passkey identity (CredentialManager + did:key + keyAuthorization), BBoard reference app. Validates SDK before Kicks consumes it. See `examples/midnight-kicks/docs/PLAN.md` Phase 2.
     - ✅ Embedded wallet (MidnightSdk + MidnightWallet, no mn serve)
     - ✅ Error 170 fix (zero-fee detection, skip dust on PREPROD)
     - ✅ Dust sync progress callbacks (BalanceProgress, 6 stages)

@@ -255,7 +255,7 @@ Kuira has a solid foundation with ~185.5 hours invested:
 **What's remaining:**
 - Agent Runtime (Phase 7) — on-chain agent authorization via Compact contracts
 - Production Polish (Phase 8) — settings ✅ shipped, remaining 8B.3 screens in progress
-- Midnight Android SDK — single AAR, embedded wallet, passkey identity (see `MIDNIGHT_KICKS_PLAN.md`)
+- Midnight Android SDK — single AAR, embedded wallet, passkey identity (see `../../examples/midnight-kicks/docs/PLAN.md`)
 - Passkey + DID implementation — CredentialManager integration, `did:key` derivation
 - PRF-based recovery — encrypted cloud backup, zero-seed onboarding
 - Midnight Kicks — first SDK consumer, World Cup 2026 target
@@ -284,7 +284,7 @@ Kuira has a solid foundation with ~185.5 hours invested:
 | **Account Abstraction** | **Passkey + PRF architecture designed.** Root passkey (P-256, TEE) authorizes secp256k1 access keys via self-verifiable keyAuthorization. Recovery via PRF-encrypted cloud backup. No seed phrase in default flow. | Keys in TEE, never user-accessible, social recovery | **Path clear** — see `IDENTITY_INVESTIGATION.md` |
 | **DID / Identity** | **`did:key` from root passkey decided.** One DID per user (sigil identity). Interop with rvcas midnightOS Passkeys investigated. | Selective disclosure, universal DID, ZK compliance | **Path clear** — implementation needed |
 | **Sigil (product framing)** | **"Kuira is a Sigil" — documented.** Three facets: Identity, Authority, State. 4-tab bottom nav shipped (My Sigil / Assets / Activity / Settings). Vocabulary, SDK naming, connector protocol designed. | "You shouldn't need a wallet" (CTO) | **Shipped** (docs + nav) — see `KUIRA_IDENTITY_VISION.md` |
-| **Midnight Android SDK** | **Architecture designed.** Single AAR packaging all 5 core modules. Embedded wallet (no external process). Two-tier identity (standalone → Kuira-enhanced). Midnight Kicks is first consumer. | Developer-friendly mobile SDK | **Path clear** — see `MIDNIGHT_KICKS_PLAN.md` |
+| **Midnight Android SDK** | **Architecture designed.** Single AAR packaging all 5 core modules. Embedded wallet (no external process). Two-tier identity (standalone → Kuira-enhanced). Midnight Kicks is first consumer. | Developer-friendly mobile SDK | **Path clear** — see `../../examples/midnight-kicks/docs/PLAN.md` |
 | **Intent System** | Direct transaction building | CAKE/APSS framework, solvers handle execution | **Waiting** — needs Midnight protocol specs |
 | **Capacity Exchange** | DUST-only fee payment | Pay in anything (stablecoins, BTC, credit card) | **Waiting** — needs Midnight protocol support |
 | **MOS / dApp Layer** | No dApp hosting | WASM dApps, one-click install, keychain isolation | **Waiting** — needs MOS spec availability |
@@ -306,7 +306,7 @@ Kuira is the upgrade — TEE-hardened keys, biometric gates, cross-app
 sigil management. Midnight Kicks (World Cup 2026) is the first SDK
 consumer, validating the developer experience before Kuira ships.
 
-See: `KUIRA_IDENTITY_VISION.md`, `MIDNIGHT_KICKS_PLAN.md`,
+See: `KUIRA_IDENTITY_VISION.md`, `../../examples/midnight-kicks/docs/PLAN.md`,
 `IDENTITY_INVESTIGATION.md`.
 
 ### Mainnet Launch Changes the Timeline
