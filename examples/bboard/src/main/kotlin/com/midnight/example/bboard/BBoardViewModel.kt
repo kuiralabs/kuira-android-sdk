@@ -3,8 +3,13 @@ package com.midnight.example.bboard
 import android.app.Activity
 import android.app.Application
 import android.util.Log
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.auth.BiometricGate
+import com.midnight.kuira.core.auth.PlaintextSeed
+import com.midnight.kuira.core.auth.SeedVault
+import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.ContractCallException
 import com.midnight.kuira.core.compact.ContractCallStage
@@ -12,6 +17,7 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
+import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.identity.auth.AuthorizationScope
 import com.midnight.kuira.core.identity.auth.KeyAuthorization
 import com.midnight.kuira.core.identity.backup.BackupException
@@ -20,11 +26,15 @@ import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
+import com.midnight.kuira.sdk.WalletBalance
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.math.BigInteger
+import java.security.SecureRandom
 
 /**
  * BBoard ViewModel — demonstrates using the Midnight Contract SDK.
@@ -49,6 +59,8 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
     private var config: MidnightConfig? = null
     private var sdk: MidnightSdk? = null
+    /** Network the current [sdk] was built against — used to detect changes in [buildOrReuseSdk]. */
+    private var sdkNetwork: MidnightNetwork? = null
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
     private var currentAddress: String? = null
@@ -96,6 +108,221 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
             passkeyManager = passkeyManager,
             storage = BlockStoreBackupStorage(getApplication()),
         )
+    }
+
+    // ── Seed storage (canary for the "dApp creates its own wallet" flow) ──
+    //
+    // BBoard's prior life used a hardcoded TEST_SEED (alice). The canary
+    // replaces that with a freshly generated seed persisted via SeedVault,
+    // biometric-gated on every read. Same primitives Kicks will use for its
+    // onboarding flow next.
+    private val walletKeyManager by lazy { WalletKeyManager() }
+    private val biometricGate by lazy { BiometricGate(walletKeyManager) }
+    private val seedVault by lazy { SeedVault(getApplication(), biometricGate) }
+
+    private val _walletStatus = MutableStateFlow<WalletStatusState>(WalletStatusState.None)
+    val walletStatus: StateFlow<WalletStatusState> = _walletStatus
+
+    /**
+     * Bootstraps the wallet seed:
+     *  - If [SeedVault] already has a seed: biometric-prompt and decrypt → return bip39Seed.
+     *  - Otherwise: generate a fresh BIP-39 entropy → mnemonic → bip39Seed,
+     *    persist via [SeedVault.storeSeed] (biometric-prompts to encrypt),
+     *    and return a copy of the seed for immediate SDK use.
+     *
+     * Returns a 64-byte BIP-39 seed (the form [MidnightSdk.Builder.seed] expects).
+     * Caller is responsible for wiping the returned array once the SDK has copied
+     * it internally.
+     */
+    private suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
+        if (seedVault.hasSeed()) {
+            Log.i(TAG, "Loading existing seed from SeedVault (biometric prompt)...")
+            val plaintext = seedVault.loadSeed(activity)
+            return try {
+                plaintext.bip39Seed.copyOf()
+            } finally {
+                plaintext.wipe()
+            }
+        }
+
+        Log.i(TAG, "No seed in SeedVault — generating a fresh wallet (biometric prompt)...")
+        // SeedVault.storeSeed needs a Keystore master key to encrypt against. The
+        // master key is created on-demand here (StrongBox if available, TEE fallback).
+        // Idempotent: skip if already present from a prior install/run. The
+        // `Master key not found. Create a wallet first.` ISE comes from skipping this
+        // step — WalletKeyManager doesn't auto-create.
+        if (!walletKeyManager.hasKey()) {
+            val strongBox = walletKeyManager.generateKey()
+            Log.i(TAG, "Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"})")
+        }
+        // Defer the seed material's existence until after biometric auth succeeds —
+        // SeedVault invokes [seedProducer] only after the prompt is approved,
+        // matching the existing storeSeed safety model.
+        var capturedSeed: ByteArray? = null
+        seedVault.storeSeed(activity) {
+            val entropy = ByteArray(PlaintextSeed.ENTROPY_SIZE).also { SecureRandom().nextBytes(it) }
+            val mnemonic = BIP39.entropyToMnemonic(entropy)
+            val bip39Seed = BIP39.mnemonicToSeed(mnemonic)
+            // Save a copy here, before SeedVault.storeSeed wipes the PlaintextSeed
+            // it receives. We need the seed to hand to MidnightSdk.Builder.
+            capturedSeed = bip39Seed.copyOf()
+            PlaintextSeed(entropy, bip39Seed)
+        }
+        return requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
+    }
+
+    // ── Canary wallet actions (exercise the new SDK APIs end-to-end) ──
+    //
+    // Each method below ensures the SDK is built for the given network (loading
+    // the seed via biometric prompt the first time per session), then calls one
+    // of the new MidnightSdk / MidnightWallet methods we just shipped:
+    //   - refreshBalance  → wallet.balance()
+    //   - waitForFunding  → wallet.waitForFunding(...)
+    //   - registerDust    → sdk.registerForDustGeneration()
+    //
+    // Used by the Wallet Status card in the setup screen.
+
+    /**
+     * Build (or reuse) the SDK and read the current NIGHT/dust balance from chain.
+     * Emits [WalletStatusState.Ready] with the snapshot on success.
+     */
+    fun refreshBalance(network: MidnightNetwork, activity: FragmentActivity) {
+        viewModelScope.launch {
+            _walletStatus.value = WalletStatusState.Loading("Reading balance...")
+            try {
+                val builtSdk = buildOrReuseSdk(network, activity)
+                // Best-effort dust resync. NIGHT balance is subscription-driven
+                // and live without this; dust state is local-replay-driven and
+                // can be stale until we pull fresh events. If the indexer
+                // WebSocket isn't ready yet (race on first launch, or a
+                // transient disconnect), DO NOT let that kill the balance read
+                // — we'd rather show slightly-stale dust than fail the whole
+                // refresh. Subsequent taps usually succeed.
+                try {
+                    builtSdk.wallet.forceResyncDust()
+                } catch (e: Exception) {
+                    Log.w(TAG, "forceResyncDust failed (showing cached): ${e.message}")
+                }
+                val balance = builtSdk.wallet.balance()
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = balance,
+                )
+                Log.i(TAG, "balance: night=${balance.night} dust=${balance.dust} registered=${balance.dustRegistered}")
+            } catch (e: Exception) {
+                Log.e(TAG, "refreshBalance failed", e)
+                _walletStatus.value = WalletStatusState.Error(e.message ?: "Balance read failed")
+            }
+        }
+    }
+
+    /**
+     * Suspend until the wallet's NIGHT balance reaches [MIN_FUNDING_NIGHT]
+     * (default 1 NIGHT base unit), or timeout. While waiting, the UI shows
+     * the wallet address so the user can run `mn transfer <addr> 100` from a
+     * host terminal.
+     */
+    fun waitForFunding(network: MidnightNetwork, activity: FragmentActivity) {
+        viewModelScope.launch {
+            try {
+                val builtSdk = buildOrReuseSdk(network, activity)
+                val current = builtSdk.wallet.balance()
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = current,
+                    busy = "Waiting for funds…",
+                )
+                Log.i(TAG, "waitForFunding: night=${current.night}, waiting up to 5min")
+                val funded = builtSdk.wallet.waitForFunding(MIN_FUNDING_NIGHT)
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = funded,
+                    message = "Funded — NIGHT=${funded.night}",
+                )
+                Log.i(TAG, "waitForFunding: funded (night=${funded.night})")
+            } catch (e: Exception) {
+                Log.e(TAG, "waitForFunding failed", e)
+                _walletStatus.value = WalletStatusState.Error(e.message ?: "Wait for funding failed")
+            }
+        }
+    }
+
+    /**
+     * Register this wallet's NIGHT key for dust generation. Must be called
+     * once after the wallet first holds NIGHT — until then the chain won't
+     * release spendable dust, and contract calls (which pay fees in dust)
+     * fail.
+     */
+    fun registerDust(network: MidnightNetwork, activity: FragmentActivity) {
+        viewModelScope.launch {
+            try {
+                val builtSdk = buildOrReuseSdk(network, activity)
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = builtSdk.wallet.balance(),
+                    busy = "Registering for dust generation…",
+                )
+                val result = builtSdk.registerForDustGeneration()
+                Log.i(TAG, "registerDust result: $result")
+
+                val ok = result is TransactionSubmitter.SubmissionResult.Success ||
+                    result is TransactionSubmitter.SubmissionResult.Pending
+                if (!ok) {
+                    val reason = when (result) {
+                        is TransactionSubmitter.SubmissionResult.Failed -> result.reason
+                        is TransactionSubmitter.SubmissionResult.StaleUtxo -> "stale UTXO"
+                        else -> "unknown"
+                    }
+                    _walletStatus.value = WalletStatusState.Ready(
+                        address = builtSdk.walletAddress,
+                        balance = builtSdk.wallet.balance(),
+                        message = "Registration failed: $reason",
+                    )
+                    return@launch
+                }
+
+                // Registration accepted — dust generates from the NEXT block and
+                // surfaces in the local replay shortly after. Poll for ~20s with
+                // live status updates so the user sees dust climb instead of a
+                // stale "dust 0" reading.
+                Log.i(TAG, "registerDust: tx accepted, polling dust until visible")
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = builtSdk.wallet.balance(),
+                    busy = "Waiting for first dust generation…",
+                )
+                val deadline = System.currentTimeMillis() + DUST_VISIBLE_TIMEOUT_MS
+                var latest = builtSdk.wallet.balance()
+                while (latest.dust == BigInteger.ZERO && System.currentTimeMillis() < deadline) {
+                    kotlinx.coroutines.delay(DUST_POLL_INTERVAL_MS)
+                    // Force a fresh dust sync each tick — without this, balance()
+                    // reads the same stale cached state and would never see
+                    // freshly-generated dust until the next subscription tick.
+                    // Best-effort: a transient WS hiccup just means we wait
+                    // another tick and try again.
+                    try {
+                        builtSdk.wallet.forceResyncDust()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "forceResyncDust failed during poll: ${e.message}")
+                    }
+                    latest = builtSdk.wallet.balance()
+                    _walletStatus.value = WalletStatusState.Ready(
+                        address = builtSdk.walletAddress,
+                        balance = latest,
+                        busy = if (latest.dust == BigInteger.ZERO) "Waiting for first dust generation…" else null,
+                    )
+                }
+                Log.i(TAG, "registerDust: final balance night=${latest.night} dust=${latest.dust}")
+                _walletStatus.value = WalletStatusState.Ready(
+                    address = builtSdk.walletAddress,
+                    balance = latest,
+                    message = if (latest.dust > BigInteger.ZERO) "✓ Registered" else "Registered — dust still propagating, tap balance again in a moment.",
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "registerDust failed", e)
+                _walletStatus.value = WalletStatusState.Error(e.message ?: "Dust registration failed")
+            }
+        }
     }
 
     /**
@@ -191,14 +418,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * Backup the test seed to Google Block Store via PRF-encrypted blob.
      * Tests the full backup pipeline: PRF → HKDF → AES-GCM → Block Store.
      */
-    fun backupSeed(activity: Activity) {
+    fun backupSeed(activity: FragmentActivity) {
         viewModelScope.launch {
             try {
-                Log.i(TAG, "Starting PRF backup...")
+                Log.i(TAG, "Starting PRF backup of the SeedVault-stored seed...")
 
-                // Use the test seed's entropy and BIP-39 seed
-                val entropy = ByteArray(32) { 0x11 }
-                val bip39Seed = TEST_SEED.copyOf()
+                // Load the user's actual seed from SeedVault (biometric prompt).
+                // SigilBackup then re-encrypts (entropy, bip39Seed) under a
+                // PRF-derived AES key before pushing to Block Store.
+                val plaintext = seedVault.loadSeed(activity)
+                val entropy = plaintext.mnemonicEntropy.copyOf()
+                val bip39Seed = plaintext.bip39Seed.copyOf()
+                plaintext.wipe()
 
                 val sigil = _sigilState.value
                 val did = when (sigil) {
@@ -253,7 +484,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * Restore the seed from Google Block Store via PRF decryption.
      * Tests the full restore pipeline: Block Store → PRF → HKDF → AES-GCM → seed.
      */
-    fun restoreSeed(activity: Activity) {
+    fun restoreSeed(activity: FragmentActivity) {
         viewModelScope.launch {
             try {
                 Log.i(TAG, "Starting PRF restore...")
@@ -261,7 +492,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 val restored = sigilBackup.restore(activity)
                 try {
                     Log.i(TAG, "Restore SUCCESS!")
-                    Log.i(TAG, "  Seed matches test seed: ${restored.bip39Seed.contentEquals(TEST_SEED)}")
+                    Log.i(TAG, "  Restored seed size: ${restored.bip39Seed.size} bytes")
 
                     val restoredDid = restored.did
                     val restoredCredId = restored.credentialId
@@ -380,40 +611,64 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Lazily build (or rebuild) the SDK against [network]. Reuses the existing
+     * SDK if one is already built for the same network; otherwise closes it,
+     * loads the seed via [ensureSeedReady] (biometric prompt), and constructs a
+     * fresh one. All call sites that need a usable SDK go through this — keeps
+     * seed loading / network switching in one place.
+     */
+    private suspend fun buildOrReuseSdk(network: MidnightNetwork, activity: FragmentActivity): MidnightSdk {
+        sdk?.let { existing ->
+            if (sdkNetwork == network) return existing
+            // Network changed — tear down the old subscription/db before rebuilding.
+            existing.close()
+            sdk = null
+        }
+        installProvingKeys()
+        val seed = ensureSeedReady(activity)
+        return try {
+            val built = MidnightSdk.Builder(getApplication())
+                .network(network)
+                .seed(seed)
+                .build()
+            sdk = built
+            sdkNetwork = network
+            // Download wallet proving keys on non-zero-fee networks (same logic
+            // the old connect path used).
+            if (!built.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
+                built.provingKeyManager.downloadWalletKeys { /* progress ignored — caller decides UX */ }
+            }
+            built
+        } finally {
+            // The SDK builder copies the seed internally; wipe our local view.
+            seed.fill(0)
+        }
+    }
+
+    /**
      * Connect using the standalone SDK (no mn serve needed).
      *
      * @param contractAddress Deployed contract address (64 hex chars)
      * @param network Midnight network to use
-     * @param seed BIP-39 mnemonic seed (64 bytes)
+     * @param activity Hosts the biometric prompt for SeedVault.loadSeed/storeSeed.
      */
     fun connectWithSdk(
         contractAddress: String,
         network: MidnightNetwork,
-        seed: ByteArray,
+        activity: FragmentActivity,
     ) {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting("Initializing SDK...")
             try {
-                installProvingKeys()
-
                 _state.value = BBoardState.Connecting("Building SDK (deriving keys)...")
-                val midnightSdk = MidnightSdk.Builder(getApplication())
-                    .network(network)
-                    .seed(seed)
-                    .build()
-                sdk = midnightSdk
+                val midnightSdk = buildOrReuseSdk(network, activity)
 
-                // Download wallet proving keys if needed (skip on zero-fee networks)
-                if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
-                    if (network == MidnightNetwork.UNDEPLOYED) {
-                        Log.i(TAG, "Skipping wallet key download — zero-fee network")
-                    } else {
-                        _state.value = BBoardState.Connecting("Downloading proving keys...")
-                        midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                            _state.value = BBoardState.Connecting(
-                                "Downloading keys: ${(progress * 100).toInt()}%"
-                            )
-                        }
+                if (!midnightSdk.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
+                    _state.value = BBoardState.Connecting("Downloading proving keys...")
+                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                        _state.value = BBoardState.Connecting(
+                            "Downloading keys: ${(progress * 100).toInt()}%"
+                        )
                     }
                 }
 
@@ -438,29 +693,19 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * Deploy a fresh BBoard contract, then connect to it.
      * Tests the full deploy pipeline: constructor → prove → balance → submit.
      */
-    fun deployAndConnect(network: MidnightNetwork, seed: ByteArray) {
+    fun deployAndConnect(network: MidnightNetwork, activity: FragmentActivity) {
         viewModelScope.launch {
             _state.value = BBoardState.Connecting("Initializing SDK...")
             try {
-                installProvingKeys()
-
                 _state.value = BBoardState.Connecting("Building SDK...")
-                val midnightSdk = MidnightSdk.Builder(getApplication())
-                    .network(network)
-                    .seed(seed)
-                    .build()
-                sdk = midnightSdk
+                val midnightSdk = buildOrReuseSdk(network, activity)
 
-                if (!midnightSdk.provingKeyManager.hasWalletKeys()) {
-                    if (network == MidnightNetwork.UNDEPLOYED) {
-                        Log.i(TAG, "Skipping wallet key download — zero-fee network")
-                    } else {
-                        _state.value = BBoardState.Connecting("Downloading proving keys...")
-                        midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                            _state.value = BBoardState.Connecting(
-                                "Downloading keys: ${(progress * 100).toInt()}%"
-                            )
-                        }
+                if (!midnightSdk.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
+                    _state.value = BBoardState.Connecting("Downloading proving keys...")
+                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
+                        _state.value = BBoardState.Connecting(
+                            "Downloading keys: ${(progress * 100).toInt()}%"
+                        )
                     }
                 }
 
@@ -720,35 +965,28 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * Copy proving keys + BLS params from /data/local/tmp/bboard_keys/
      * (pushed via `./scripts/install-bboard-keys.sh`) to the app's proving_keys dir.
      */
+    /**
+     * Install proving keys from `/data/local/tmp/` (adb-pushed staging dir).
+     * Delegates to [com.midnight.kuira.core.compact.proving.ProvingKeyManager.installFromLocalTmp]
+     * — single source of truth for the dev/test install flow shared with the
+     * SDK e2e test and Kicks's match manager. Plus, BBoard's contract-side
+     * `post`/`takeDown` keys (which are dApp-specific, not on the SDK side).
+     */
     private fun installProvingKeys() {
-        val tempDir = java.io.File("/data/local/tmp/bboard_keys")
-        if (!tempDir.exists()) {
-            Log.w(TAG, "No proving keys at ${tempDir.path} — proving will fail")
-            return
+        val provingKeyManager = com.midnight.kuira.core.compact.proving.ProvingKeyManager(getApplication())
+        val ok = provingKeyManager.installFromLocalTmp()
+        if (!ok) {
+            Log.w(TAG, "installFromLocalTmp: hasWalletKeys() still false — adb-push keys to /data/local/tmp")
         }
-
-        val keysDir = java.io.File(getApplication<Application>().filesDir, "proving_keys")
-        keysDir.mkdirs()
-
-        val files = listOf(
-            "post.prover", "post.verifier", "post.bzkir",
-            "takeDown.prover", "takeDown.verifier", "takeDown.bzkir",
-            "bls_midnight_2p13", "bls_midnight_2p14", "bls_midnight_2p15",
-        )
-        for (name in files) {
-            val src = java.io.File(tempDir, name)
-            val dst = java.io.File(keysDir, name)
-            if (src.exists() && !dst.exists()) {
-                src.copyTo(dst)
-                Log.d(TAG, "Installed key: $name")
-            }
-        }
-
-        // Write version.txt so hasWalletKeys() recognizes the installed keys
-        val versionFile = java.io.File(keysDir, "version.txt")
-        if (!versionFile.exists()) {
-            versionFile.writeText("9") // Must match ProvingKeyManager.CURRENT_VERSION
-            Log.d(TAG, "Wrote version.txt")
+        // Contract-specific keys (post, takeDown) live in bboard_keys/ but aren't
+        // part of the wallet-key set; copy them flat into keysDir for the prover.
+        val bboardSrc = java.io.File("/data/local/tmp/bboard_keys")
+        if (bboardSrc.exists()) {
+            provingKeyManager.installCircuitKeysForProving(
+                circuitNames = listOf("post", "takeDown"),
+                keysSourceDir = bboardSrc,
+                zkirSourceDir = bboardSrc,
+            )
         }
     }
 
@@ -756,6 +994,18 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         private const val TAG = "BBoard"
         // Fixed test key — in a real dApp, derive from wallet or secure storage
         private val SECRET_KEY = ByteArray(32) { (it + 1).toByte() }
+
+        /**
+         * Minimum NIGHT (in u128 base units) to consider the wallet "funded enough
+         * to register for dust generation". The canary uses `mn transfer <addr> 100`
+         * which credits 100_000_000 base units (100 NIGHT), well above this floor.
+         */
+        private val MIN_FUNDING_NIGHT = BigInteger.ONE
+
+        /** How long [registerDust] keeps polling for dust to appear after a successful registration. */
+        private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L
+        /** How often the post-registration poll re-reads balance. */
+        private const val DUST_POLL_INTERVAL_MS = 2_000L
 
         /**
          * Generates simulated app metadata after a successful post.
@@ -798,6 +1048,40 @@ sealed class DustSyncStatus {
     data object Ready : DustSyncStatus()
     data class Syncing(val percent: Int, val detail: String) : DustSyncStatus()
     data class Processing(val detail: String) : DustSyncStatus()
+}
+
+/**
+ * Wallet bootstrap / funding / dust-registration status for the canary card.
+ *
+ * Tracks the "create wallet → fund → register dust" lifecycle that BBoard now
+ * exercises against the new SDK methods (`balance`, `waitForFunding`,
+ * `registerForDustGeneration`). Each variant maps 1:1 to UI text in the
+ * Wallet Status card on the setup screen.
+ */
+sealed class WalletStatusState {
+    /** No SDK built yet — bare app launch. */
+    data object None : WalletStatusState()
+
+    /** Building MidnightSdk and reading the first balance. */
+    data class Loading(val stage: String) : WalletStatusState()
+
+    /**
+     * SDK ready, current balance known.
+     *
+     * @property address Wallet's Bech32m address (display + paste into `mn transfer`).
+     * @property balance Latest [WalletBalance] snapshot from `sdk.wallet.balance()`.
+     * @property busy Set while a long-running action (waitForFunding / register) is in flight.
+     * @property message Optional one-line status — last action's result or an error.
+     */
+    data class Ready(
+        val address: String,
+        val balance: WalletBalance,
+        val busy: String? = null,
+        val message: String? = null,
+    ) : WalletStatusState()
+
+    /** SDK couldn't build or balance couldn't be read. */
+    data class Error(val message: String) : WalletStatusState()
 }
 
 sealed class BoardState {

@@ -1,10 +1,12 @@
 package com.midnight.example.bboard
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
 
 // ── Design Tokens ──
@@ -92,7 +95,7 @@ private const val SPINNER_SIZE_DP = 24
 
 // ── Activity ──
 
-class BBoardActivity : ComponentActivity() {
+class BBoardActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { BBoardApp() }
@@ -103,12 +106,17 @@ class BBoardActivity : ComponentActivity() {
 fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     val sigilState by viewModel.sigilState.collectAsState()
-    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val walletStatus by viewModel.walletStatus.collectAsState()
+    // FragmentActivity (which ComponentActivity extends) hosts SeedVault's
+    // biometric prompts. Same instance also satisfies Activity for the
+    // legacy sigil-side callbacks.
+    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())  // Scrollable — cards may overflow on smaller screens.
                 .padding(
                     top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                     start = Spacing.ScreenPadding,
@@ -123,13 +131,27 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
             when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilState = sigilState,
+                    walletStatus = walletStatus,
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                     onTestPrf = { activity?.let { viewModel.testPrf(it) } },
                     onBackup = { activity?.let { viewModel.backupSeed(it) } },
                     onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                     onConnectRemote = viewModel::connect,
-                    onConnectSdk = viewModel::connectWithSdk,
-                    onDeploySdk = viewModel::deployAndConnect,
+                    onConnectSdk = { addr, network ->
+                        activity?.let { viewModel.connectWithSdk(addr, network, it) }
+                    },
+                    onDeploySdk = { network ->
+                        activity?.let { viewModel.deployAndConnect(network, it) }
+                    },
+                    onRefreshBalance = { network ->
+                        activity?.let { viewModel.refreshBalance(network, it) }
+                    },
+                    onWaitForFunding = { network ->
+                        activity?.let { viewModel.waitForFunding(network, it) }
+                    },
+                    onRegisterDust = { network ->
+                        activity?.let { viewModel.registerDust(network, it) }
+                    },
                 )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
@@ -159,17 +181,26 @@ private enum class ConnectionMode(val label: String) {
 @Composable
 private fun SetupScreen(
     sigilState: SigilState,
+    walletStatus: WalletStatusState,
     onForgeSigil: () -> Unit,
     onTestPrf: () -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
     onConnectRemote: (String, NetworkChoice) -> Unit,
-    onConnectSdk: (String, MidnightNetwork, ByteArray) -> Unit,
-    onDeploySdk: (MidnightNetwork, ByteArray) -> Unit,
+    onConnectSdk: (String, MidnightNetwork) -> Unit,
+    onDeploySdk: (MidnightNetwork) -> Unit,
+    onRefreshBalance: (MidnightNetwork) -> Unit,
+    onWaitForFunding: (MidnightNetwork) -> Unit,
+    onRegisterDust: (MidnightNetwork) -> Unit,
 ) {
     var address by remember { mutableStateOf("") }
     var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
+    val midnightNetwork = when (network) {
+        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
+        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
+        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
+    }
 
     // ── Sigil Identity Card ──
     SigilCard(
@@ -178,6 +209,16 @@ private fun SetupScreen(
         onTestPrf = onTestPrf,
         onBackup = onBackup,
         onRestore = onRestore,
+    )
+    Spacer(modifier = Modifier.height(Spacing.SectionGap))
+
+    // ── Wallet Status Card (canary for the new SDK APIs) ──
+    WalletStatusCard(
+        status = walletStatus,
+        network = midnightNetwork,
+        onRefreshBalance = { onRefreshBalance(midnightNetwork) },
+        onWaitForFunding = { onWaitForFunding(midnightNetwork) },
+        onRegisterDust = { onRegisterDust(midnightNetwork) },
     )
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
@@ -234,14 +275,7 @@ private fun SetupScreen(
         ActionButton(buttonLabel, enabled = address.length == 64) {
             when (mode) {
                 ConnectionMode.REMOTE -> onConnectRemote(address, network)
-                ConnectionMode.STANDALONE -> {
-                    val midnightNetwork = when (network) {
-                        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
-                        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
-                        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
-                    }
-                    onConnectSdk(address, midnightNetwork, TEST_SEED)
-                }
+                ConnectionMode.STANDALONE -> onConnectSdk(address, midnightNetwork)
             }
         }
 
@@ -251,29 +285,137 @@ private fun SetupScreen(
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(Spacing.SmallGap))
             ActionButton("deploy new contract", enabled = true) {
-                val midnightNetwork = when (network) {
-                    NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
-                    NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
-                    NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
-                }
-                onDeploySdk(midnightNetwork, TEST_SEED)
+                onDeploySdk(midnightNetwork)
             }
         }
     }
 }
 
 /**
- * Test seed for standalone SDK mode.
- * In a real dApp this would come from the identity module (passkeys).
- * This is the alice wallet's 64-byte PBKDF2 seed (from `mn wallet seed`).
+ * Wallet bootstrap / funding / dust-registration card — the canary surface
+ * for the new SDK APIs (`balance`, `waitForFunding`, `registerForDustGeneration`).
+ *
+ * Three buttons:
+ *  - **read balance** — builds the SDK (biometric prompt the first time),
+ *    fetches `sdk.wallet.balance()`, displays NIGHT/dust.
+ *  - **wait for funding** — calls `sdk.wallet.waitForFunding(1 NIGHT)`. While
+ *    waiting, run `mn transfer <addr> 100` from a host terminal.
+ *  - **register dust** — calls `sdk.registerForDustGeneration()`. Required
+ *    once after funding before the wallet can pay fees on contract calls.
+ *
+ * Currently only meaningful on UNDEPLOYED (localnet); the buttons stay
+ * enabled on other networks but the funding flow assumes localnet for
+ * the canary path.
  */
-internal val TEST_SEED = hexToBytes(
-    "7dc468f62278cd0c14b6674f31531a90b64599d657d3c7ab2adb63395d647f7a" +
-    "505de6428fcf8b0d208873f4d5e2a1340c14688067477542f53c48dfea817da4"
-)
+@Composable
+private fun WalletStatusCard(
+    status: WalletStatusState,
+    network: MidnightNetwork,
+    onRefreshBalance: () -> Unit,
+    onWaitForFunding: () -> Unit,
+    onRegisterDust: () -> Unit,
+) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val balanceFormatter = remember { BalanceFormatter() }
+    DarkCard {
+        Text("wallet status", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-private fun hexToBytes(hex: String): ByteArray =
-    ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        when (status) {
+            is WalletStatusState.None -> {
+                Text(
+                    "Read balance to bootstrap the SDK. First press shows a biometric prompt to seal/load the wallet seed via SeedVault.",
+                    color = Colors.OnSurfaceSubtle,
+                    fontSize = Type.Caption,
+                )
+            }
+            is WalletStatusState.Loading -> {
+                Text(status.stage, color = Colors.OnSurfaceDim, fontSize = Type.Body)
+            }
+            is WalletStatusState.Ready -> {
+                // While waiting for funds: show ONLY the airdrop command (the
+                // address is inside it). Otherwise: show the address alone.
+                // Either way, the visible content is one tap-to-copy line —
+                // no duplicate address, no "tap to copy" labels.
+                val showFundCmd = status.busy != null
+                val displayText = if (showFundCmd) {
+                    // 10000 NIGHT — dust outpaces a slow tester (~1 block to spendable).
+                    "mn airdrop 10000 --wallet ${status.address}"
+                } else {
+                    status.address
+                }
+                Text(
+                    displayText,
+                    color = Colors.OnSurface,
+                    fontSize = Type.Caption,
+                    fontFamily = if (showFundCmd) FontFamily.Monospace else null,
+                    modifier = Modifier.clickable {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(displayText))
+                    },
+                )
+                Spacer(modifier = Modifier.height(Spacing.SmallGap))
+                Text(
+                    "${balanceFormatter.formatCompact(status.balance.night, "NIGHT")}" +
+                        " · ${balanceFormatter.formatCompact(status.balance.dust, "DUST")}" +
+                        if (status.balance.dustRegistered) " · ✓" else "",
+                    color = Colors.OnSurfaceDim,
+                    fontSize = Type.Caption,
+                )
+                if (status.busy != null) {
+                    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+                    Text(status.busy, color = Colors.Accent, fontSize = Type.Caption)
+                }
+                if (status.message != null) {
+                    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+                    Text(status.message, color = Colors.Accent.copy(alpha = 0.8f), fontSize = Type.Caption)
+                }
+            }
+            is WalletStatusState.Error -> {
+                Text("error: ${status.message}", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+
+        // Three actions in one row — labels intentionally short. The status
+        // text above this row tells the user what each one does in context
+        // (e.g. "Waiting for `mn transfer ... 100`..." appears while waiting).
+        val busy = status is WalletStatusState.Loading ||
+            (status is WalletStatusState.Ready && status.busy != null)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.SmallGap),
+        ) {
+            ActionButton(
+                text = "balance",
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+                onClick = onRefreshBalance,
+            )
+            ActionButton(
+                text = "fund",
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+                onClick = onWaitForFunding,
+            )
+            ActionButton(
+                text = "register",
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+                onClick = onRegisterDust,
+            )
+        }
+
+        if (network != MidnightNetwork.UNDEPLOYED) {
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            Text(
+                "canary is for localnet (UNDEPLOYED) — on ${network.name}, fund the address externally first.",
+                color = Colors.OnSurfaceSubtle,
+                fontSize = Type.Caption,
+            )
+        }
+    }
+}
 
 // ── Connected Screen ──
 
@@ -662,7 +804,13 @@ private fun DarkCard(color: Color = Colors.Surface, content: @Composable () -> U
 }
 
 @Composable
-private fun ActionButton(text: String, enabled: Boolean, dimmed: Boolean = false, onClick: () -> Unit) {
+private fun ActionButton(
+    text: String,
+    enabled: Boolean,
+    dimmed: Boolean = false,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit,
+) {
     val bg = when {
         !enabled -> Colors.Disabled
         dimmed -> Color.White.copy(alpha = 0.12f)
@@ -674,14 +822,23 @@ private fun ActionButton(text: String, enabled: Boolean, dimmed: Boolean = false
         else -> Color.Black
     }
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .height(BUTTON_HEIGHT_DP.dp)
             .clip(Shapes.Button)
             .background(bg)
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
-    ) { Text(text, color = fg, fontSize = Type.Body, fontWeight = FontWeight.Medium) }
+    ) {
+        Text(
+            text,
+            color = fg,
+            fontSize = Type.Body,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+    }
 }
 
 @Composable

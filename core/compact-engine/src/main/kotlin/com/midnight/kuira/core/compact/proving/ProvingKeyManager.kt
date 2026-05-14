@@ -309,6 +309,68 @@ class ProvingKeyManager(private val context: Context) {
         }
     }
 
+    /**
+     * Dev-only convenience: install proving keys from a local-tmp staging area
+     * pushed via `adb push` (the convention used by Kicks's build script, the
+     * SDK e2e test, and BBoard's canary). Looks at two well-known directories
+     * on the device:
+     *
+     *   - `<localTmp>/bboard_keys/` → BLS params (`bls_midnight_2p*`) + any
+     *     circuit-specific files the caller's app needs (post, takeDown, etc.
+     *     are picked up by [installCircuitKeysForProving] elsewhere).
+     *   - `<localTmp>/wallet_keys/` → flat `zswap/{spend,output,sign}` and
+     *     `dust/spend` (.prover, .verifier, .bzkir) — what [hasWalletKeys]
+     *     requires for [com.midnight.kuira.core.crypto.proving.ProvingMode.LOCAL].
+     *
+     * Idempotent (skips files that already exist in [keysDir]). Writes
+     * `version.txt` so [hasWalletKeys] recognises the install. Returns true
+     * iff [hasWalletKeys] is satisfied afterwards — the caller can use this
+     * to decide whether to fall back to [downloadWalletKeys].
+     *
+     * **NOT for production.** This expects files pre-staged on the device's
+     * `/data/local/tmp` (no permission for app processes to write there — only
+     * `adb push`). Production apps call [downloadWalletKeys] which fetches
+     * from S3.
+     *
+     * @return whether the keys directory now has a complete wallet key set.
+     */
+    fun installFromLocalTmp(localTmp: File = File("/data/local/tmp")): Boolean {
+        keysDir.mkdirs()
+        File(keysDir, "zswap").mkdirs()
+        File(keysDir, "dust").mkdirs()
+
+        // BLS params live under bboard_keys/ by convention.
+        val blsSrc = File(localTmp, "bboard_keys")
+        if (blsSrc.exists()) {
+            for (name in BLS_PARAM_FILES) {
+                val src = File(blsSrc, name)
+                val dst = File(keysDir, name)
+                if (src.exists() && !dst.exists()) src.copyTo(dst)
+            }
+        }
+
+        // zswap/* + dust/* under wallet_keys/.
+        val walletSrc = File(localTmp, "wallet_keys")
+        if (walletSrc.exists()) {
+            for (relative in WALLET_KEY_FILES) {
+                // Skip BLS — already handled above (they live in bboard_keys/).
+                if (relative.startsWith("bls_")) continue
+                val src = File(walletSrc, relative)
+                val dst = File(keysDir, relative)
+                if (src.exists() && !dst.exists()) {
+                    dst.parentFile?.mkdirs()
+                    src.copyTo(dst)
+                }
+            }
+        }
+
+        // hasWalletKeys() requires version.txt to assert the install is current.
+        val versionFile = File(keysDir, "version.txt")
+        if (!versionFile.exists()) versionFile.writeText(CURRENT_VERSION.toString())
+
+        return hasWalletKeys()
+    }
+
     companion object {
         private const val TAG = "ProvingKeyManager"
         private const val KEYS_DIR_NAME = "proving_keys"

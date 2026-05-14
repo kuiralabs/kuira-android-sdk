@@ -112,14 +112,14 @@ echo "  ✓ Test wallet address: $ADDR"
 # ─── Step 4: fund the wallet ───
 if [ "$AUTO_FUND" = "1" ]; then
     echo ""
-    echo "── Auto-funding: mn transfer $ADDR $FUND_AMOUNT ──"
-    mn transfer "$ADDR" "$FUND_AMOUNT" || {
-        echo "  mn transfer failed — test will time out on waitForFunding" >&2
+    echo "── Auto-funding: mn airdrop $FUND_AMOUNT --wallet $ADDR ──"
+    mn airdrop "$FUND_AMOUNT" --wallet "$ADDR" || {
+        echo "  mn airdrop failed — test will time out on waitForFunding" >&2
     }
 else
     echo ""
     echo "── AUTO_FUND=0; run this in another terminal: ──"
-    echo "    mn transfer $ADDR $FUND_AMOUNT"
+    echo "    mn airdrop $FUND_AMOUNT --wallet $ADDR"
 fi
 
 # ─── Step 5: wait for test result ───

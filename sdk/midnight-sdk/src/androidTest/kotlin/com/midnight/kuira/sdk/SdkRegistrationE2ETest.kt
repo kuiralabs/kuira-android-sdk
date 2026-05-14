@@ -61,47 +61,11 @@ class SdkRegistrationE2ETest {
 
     @Before
     fun installProvingKeysFromTempIfAvailable() {
-        // Same pattern as BboardEndToEndTest.installKeysFromTempIfAvailable:
-        // adb push wallet keys + BLS params into /data/local/tmp; @Before
-        // copies them into the SDK's keysDir. If the dir doesn't exist, the
-        // test will skip on its own via assumeTrue() in the test body.
-        val keysDir = provingKeyManager.keysDir
-        keysDir.mkdirs()
-        File(keysDir, "zswap").mkdirs()
-        File(keysDir, "dust").mkdirs()
-
-        val blsSrc = File("/data/local/tmp/bboard_keys")
-        if (blsSrc.exists()) {
-            for (k in listOf(13, 14, 15)) {
-                val name = "bls_midnight_2p$k"
-                val src = File(blsSrc, name)
-                val dst = File(keysDir, name)
-                if (src.exists() && !dst.exists()) src.copyTo(dst)
-            }
-        }
-
-        val walletSrc = File("/data/local/tmp/wallet_keys")
-        if (walletSrc.exists()) {
-            for (base in listOf("zswap/spend", "zswap/output", "zswap/sign", "dust/spend")) {
-                for (ext in listOf("prover", "verifier", "bzkir")) {
-                    val src = File(walletSrc, "$base.$ext")
-                    val dst = File(keysDir, "$base.$ext")
-                    if (src.exists() && !dst.exists()) {
-                        dst.parentFile?.mkdirs()
-                        src.copyTo(dst)
-                    }
-                }
-            }
-        }
-
-        // ProvingKeyManager.hasWalletKeys() requires this version stamp; without
-        // it the manager reports "keys missing" even when every individual file
-        // is in place — see ProvingKeyManager.kt:34-37. Same pattern as
-        // MatchManager.installProvingKeys in Kicks.
-        val versionFile = File(keysDir, "version.txt")
-        if (!versionFile.exists()) {
-            versionFile.writeText(ProvingKeyManager.CURRENT_VERSION.toString())
-        }
+        // Delegates to the canonical installer on ProvingKeyManager — same
+        // method BBoard's canary and Kicks's MatchManager call. The keys must
+        // have been adb-pushed to /data/local/tmp/{bboard,wallet}_keys/ first
+        // (typically via examples/midnight-kicks/build-kicks.sh).
+        provingKeyManager.installFromLocalTmp()
     }
 
     @Test

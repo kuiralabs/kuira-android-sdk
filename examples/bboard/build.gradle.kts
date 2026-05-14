@@ -36,10 +36,18 @@ dependencies {
     implementation(project(":sdk:midnight-sdk"))
     // Identity — passkey, DID, keyAuthorization
     implementation(project(":core:identity"))
+    // Auth — SeedVault, BiometricGate, WalletKeyManager (canary upgrade:
+    // BBoard now persists its own generated seed instead of using TEST_SEED).
+    implementation(project(":core:auth"))
     // Network config (MidnightNetwork enum)
     implementation(project(":core:network"))
-    // Native FFI library (provides libkuira_crypto_ffi.so via CMake)
-    runtimeOnly(project(":core:crypto"))
+    // Crypto — promoted from runtimeOnly to implementation so the canary can
+    // call BIP39.entropyToMnemonic / mnemonicToSeed for seed generation.
+    implementation(project(":core:crypto"))
+    // Ledger — exposes TransactionSubmitter.SubmissionResult (returned by
+    // MidnightSdk.registerForDustGeneration) and BalanceFormatter (token
+    // decimals are a ledger concept: 6 for NIGHT, 15 for DUST).
+    implementation(project(":core:ledger"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -47,6 +55,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // FragmentActivity — SeedVault.loadSeed / storeSeed host the biometric prompt
+    // on a FragmentActivity (BBoardActivity is already a ComponentActivity which
+    // extends FragmentActivity).
+    implementation(libs.androidx.fragment.ktx)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
