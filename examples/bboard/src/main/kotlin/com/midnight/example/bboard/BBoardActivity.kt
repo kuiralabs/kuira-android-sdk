@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midnight.example.common.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
 
@@ -113,6 +114,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -167,6 +169,21 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                     onDisconnect = viewModel::disconnect,
                 )
             }
+        }
+        // Reusable wallet panel anchored top-right. Self-contained: builds its own
+        // SDK from a SeedVault-backed seed on first tap, so it works alongside (not
+        // through) BBoard's existing connect/deploy flows during the canary period.
+        // UNDEPLOYED for the localnet canary; in production examples this would be
+        // hoisted to follow the host's network choice.
+        WalletStatusPanel(
+            network = MidnightNetwork.UNDEPLOYED,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
+                    end = 12.dp,
+                ),
+        )
         }
     }
 }

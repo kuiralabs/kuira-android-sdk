@@ -48,6 +48,8 @@ dependencies {
     // MidnightSdk.registerForDustGeneration) and BalanceFormatter (token
     // decimals are a ledger concept: 6 for NIGHT, 15 for DUST).
     implementation(project(":core:ledger"))
+    // Reusable wallet panel (pill + bottom sheet) — drop-in for examples.
+    implementation(project(":examples:common"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
