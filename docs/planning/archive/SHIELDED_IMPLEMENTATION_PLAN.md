@@ -531,7 +531,9 @@ Tests:
 
 ### Step 10: Integration Testing (3-4h)
 
-1. **Airdrop shielded NIGHT to Alice** via CLI: `mn wallet use genesis && mn transfer <alice-shielded-addr> 100 --shielded`
+1. **Airdrop shielded NIGHT to Alice** via CLI: `mn airdrop 100 --wallet <alice-shielded-addr> --shielded`
+   <!-- CORRECTION (2026-05-14): the prior example here was `mn wallet use genesis && mn transfer <addr> 100 --shielded`, which is wrong — `mn transfer` spends from the active wallet (it's a sender-pays-recipient transfer, not a faucet). Shielded funding uses the same `mn airdrop --wallet <addr>` form as unshielded, plus `--shielded`. See `memory/reference_mn_cli_forms.md` for the canonical forms. -->
+
 2. **View shielded balance in Kuira** — verify it shows 100 NIGHT shielded
 3. **Send shielded from Alice to Bob** via Kuira app
 4. **Verify** Bob's shielded balance via CLI

@@ -19,13 +19,18 @@ sealed class WalletStatus {
     /**
      * SDK ready, latest balance known.
      *
-     * @property address Bech32m wallet address — shown verbatim and copy-on-tap.
+     * @property address Unshielded Bech32m address — receives external NIGHT
+     *   transfers and is the address the SDK builds transactions against.
+     * @property shieldedAddress Shielded Bech32m address — destination for
+     *   private NIGHT transfers. Derived deterministically from the same seed
+     *   so it's stable for the wallet's lifetime.
      * @property balance Most recent snapshot from `sdk.wallet.balance()`.
      * @property busy Set while a long-running action (waitForFunding / register) is in flight; null when idle.
      * @property message One-line status from the last action (success or failure detail).
      */
     data class Ready(
         val address: String,
+        val shieldedAddress: String,
         val balance: WalletBalance,
         val busy: String? = null,
         val message: String? = null,

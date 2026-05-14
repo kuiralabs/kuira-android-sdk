@@ -35,8 +35,9 @@ import java.security.SecureRandom
  *  - the SDK is built lazily on first action, reused while [network] stays the
  *    same, rebuilt when it changes
  *
- * **Public surface:** [status] (observe), [refreshBalance] / [waitForFunding] /
- * [registerDust] (act). The sheet's three buttons map 1:1 to those actions.
+ * **Public surface:** [status] (observe), [refreshBalance] / [registerDust]
+ * (act). Funding doesn't need a panel-side handler — the Receive screen shows
+ * the airdrop command, the SDK's subscription picks up the credit on its own.
  *
  * **Not for production:** [installProvingKeys] reads from `/data/local/tmp/`,
  * which is the same adb-push convention the SDK e2e tests use. Production
@@ -58,61 +59,71 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
     private var sdkNetwork: MidnightNetwork? = null
 
     /**
-     * Read NIGHT/dust balance from chain. Triggers seed unlock (biometric) on
-     * first call per session, then reuses the SDK while [network] stays the same.
+     * Bootstrap (if needed) and refresh balances. Progressive: emits Ready as
+     * soon as the SDK is built so the user sees their addresses immediately,
+     * then re-emits Ready after the full resync lands so the values catch up.
+     *
+     * **Why two emissions:**
+     *  - Addresses are deterministic from the seed and available the moment
+     *    `MidnightSdk.Builder.build()` returns — no network round-trip needed.
+     *  - The shielded NIGHT resync replays every zswap event the wallet has
+     *    seen; on PREPROD/PREVIEW that's potentially thousands of events and
+     *    takes seconds. Forcing the user to stare at "Reading balance..." for
+     *    that whole window — when the addresses they need are already
+     *    derivable — is the bad UX `wallet-cli` already avoids by showing
+     *    unshielded first.
+     *
+     * The intermediate Ready carries a `busy = "Syncing balances…"` so the UI
+     * can show a subtle "values are catching up" indicator without blocking
+     * the rest of the screen.
+     *
+     * Triggers seed unlock (biometric) on first call per session; subsequent
+     * calls reuse the existing SDK as long as [network] doesn't change.
      */
     fun refreshBalance(network: MidnightNetwork, activity: FragmentActivity) {
         viewModelScope.launch {
-            _status.value = WalletStatus.Loading("Reading balance...")
+            // Don't overwrite the Ready state on a refresh — that would flash
+            // the sheet through Loading and lose the in-screen address. Only
+            // show Loading when we're truly bootstrapping from None / Error.
+            if (_status.value !is WalletStatus.Ready) {
+                _status.value = WalletStatus.Loading("Bootstrapping wallet…")
+            }
             try {
                 val built = buildOrReuseSdk(network, activity)
-                // Best-effort dust resync. NIGHT is subscription-driven and live
-                // without this; dust state is local-replay-driven and can be
-                // stale. A transient WS hiccup shouldn't fail the whole read.
+                // Phase 1 — addresses up immediately. balance() is a cheap
+                // read against already-populated state; whatever it returns
+                // (often zero on a fresh wallet, or stale on a long-idle
+                // wallet) is fine because we re-emit after refresh.
+                val initial = built.wallet.balance()
+                _status.value = WalletStatus.Ready(
+                    address = built.walletAddress,
+                    shieldedAddress = built.shieldedWalletAddress,
+                    balance = initial,
+                    busy = "Syncing balances…",
+                )
+                Log.i(TAG, "bootstrap: addresses ready (unshielded=${built.walletAddress.take(40)}…)")
+
+                // Phase 2 — full resync. On PREPROD this can take a few
+                // seconds (zswap replay); on localnet it's near-instant.
+                // Failures don't abort: the cached values from Phase 1 stay
+                // visible and the user can hit balance again to retry.
                 runCatching { built.wallet.refresh() }
                     .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
-                val balance = built.wallet.balance()
-                _status.value = WalletStatus.Ready(address = built.walletAddress, balance = balance)
+                val fresh = built.wallet.balance()
+                _status.value = WalletStatus.Ready(
+                    address = built.walletAddress,
+                    shieldedAddress = built.shieldedWalletAddress,
+                    balance = fresh,
+                )
                 Log.i(
                     TAG,
-                    "balance: unshieldedNight=${balance.unshieldedNight} " +
-                        "shieldedNight=${balance.shieldedNight} " +
-                        "dust=${balance.dust} registered=${balance.dustRegistered}",
+                    "balance: unshieldedNight=${fresh.unshieldedNight} " +
+                        "shieldedNight=${fresh.shieldedNight} " +
+                        "dust=${fresh.dust} registered=${fresh.dustRegistered}",
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Balance read failed")
-            }
-        }
-    }
-
-    /**
-     * Suspend until NIGHT >= [MIN_FUNDING_NIGHT]. While waiting the sheet shows
-     * the wallet address so the user can run `mn airdrop <amount> --wallet <addr>`
-     * from a host terminal.
-     */
-    fun waitForFunding(network: MidnightNetwork, activity: FragmentActivity) {
-        viewModelScope.launch {
-            try {
-                val built = buildOrReuseSdk(network, activity)
-                val current = built.wallet.balance()
-                _status.value = WalletStatus.Ready(
-                    address = built.walletAddress,
-                    balance = current,
-                    busy = "Waiting for funds…",
-                )
-                Log.i(TAG, "waitForFunding: unshieldedNight=${current.unshieldedNight}")
-                val funded = built.wallet.waitForFunding(MIN_FUNDING_NIGHT)
-                _status.value = WalletStatus.Ready(
-                    address = built.walletAddress,
-                    balance = funded,
-                    // External funding lands on the unshielded address, so the
-                    // funded edge is signaled by unshieldedNight crossing the threshold.
-                    message = "Funded — NIGHT=${funded.unshieldedNight}",
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "waitForFunding failed", e)
-                _status.value = WalletStatus.Error(e.message ?: "Wait for funding failed")
             }
         }
     }
@@ -129,6 +140,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 val built = buildOrReuseSdk(network, activity)
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
+                    shieldedAddress = built.shieldedWalletAddress,
                     balance = built.wallet.balance(),
                     busy = "Registering for dust generation…",
                 )
@@ -146,6 +158,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     _status.value = WalletStatus.Ready(
                         address = built.walletAddress,
+                        shieldedAddress = built.shieldedWalletAddress,
                         balance = built.wallet.balance(),
                         message = "Registration failed: $reason",
                     )
@@ -156,6 +169,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 // so the sheet shows dust climb instead of a stale "dust 0".
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
+                    shieldedAddress = built.shieldedWalletAddress,
                     balance = built.wallet.balance(),
                     busy = "Waiting for first dust generation…",
                 )
@@ -168,12 +182,14 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                     latest = built.wallet.balance()
                     _status.value = WalletStatus.Ready(
                         address = built.walletAddress,
+                        shieldedAddress = built.shieldedWalletAddress,
                         balance = latest,
                         busy = if (latest.dust == BigInteger.ZERO) "Waiting for first dust generation…" else null,
                     )
                 }
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
+                    shieldedAddress = built.shieldedWalletAddress,
                     balance = latest,
                     message = if (latest.dust > BigInteger.ZERO) "✓ Registered"
                     else "Registered — dust still propagating, tap balance again in a moment.",
@@ -262,13 +278,6 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private const val TAG = "WalletPanel"
-
-        /**
-         * Minimum NIGHT (u128 base units) before we consider the wallet "funded
-         * enough to register". One base unit is enough — the canary uses
-         * `mn airdrop 10000` which credits 10_000 * 10^6 = 10^10 base units.
-         */
-        private val MIN_FUNDING_NIGHT = BigInteger.ONE
 
         /** Upper bound on the post-registration dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L

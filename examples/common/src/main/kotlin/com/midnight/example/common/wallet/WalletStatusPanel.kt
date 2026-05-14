@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -23,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,6 +76,8 @@ private object PanelDimens {
     val SheetMessageGap = 6.dp         // Before status.message.
     val SheetBusyGap = 8.dp            // Before status.busy line.
     val SheetBottomGap = 8.dp
+    val BalanceRowGap = 4.dp           // Between rows in the 3-row balance breakdown.
+    val BalanceRowLabelWidth = 92.dp   // Aligns label column so values line up vertically.
 
     // Action buttons.
     val ButtonHeight = 48.dp
@@ -96,12 +97,15 @@ private object PanelType {
 }
 
 /**
- * Default amount baked into the airdrop command line shown in the sheet.
- * 10,000 NIGHT matches the wider repo's canary convention (see SDK e2e tests
- * and `WalletPanelViewModel`'s comment on `MIN_FUNDING_NIGHT`). Display-only —
- * the actual funding threshold is governed by [WalletPanelViewModel].
+ * Default amount baked into the `mn airdrop` command shown in the Receive
+ * screen on UNDEPLOYED. 10,000 NIGHT matches the wider repo's canary
+ * convention (see SDK e2e tests and `WalletPanelViewModel`'s comment on
+ * `MIN_FUNDING_NIGHT`). Display-only — the actual funding threshold is
+ * governed by [WalletPanelViewModel]. Internal so sibling files in the
+ * panel module (e.g. [WalletReceiveScreen]) can reference it without
+ * duplicating the magic number.
  */
-private const val DEFAULT_AIRDROP_AMOUNT = 10_000
+internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
 
 /**
  * Drop-in wallet panel for example apps.
@@ -146,6 +150,7 @@ fun WalletStatusPanel(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    var receiveOpen by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
@@ -163,6 +168,25 @@ fun WalletStatusPanel(
     // raw Activity doesn't — example apps that integrate this panel must use
     // a FragmentActivity-derived host (ComponentActivity counts).
     val activity = LocalContext.current as? FragmentActivity
+
+    // Auto-bootstrap on panel mount. The pill should start syncing the
+    // moment the host app surfaces it — the user shouldn't have to tap to
+    // see their wallet status. This intentionally triggers the biometric
+    // prompt on first launch (unlike the parent Kuira wallet, which defers
+    // it): the panel serves dApps where the user has already consented to
+    // wallet access by dropping the host into their device. See
+    // feedback_sdk_devx_principle for the wider rationale.
+    //
+    // Keyed on (activity, status) so the bootstrap fires once when the
+    // panel composes with an available activity, and won't loop if the
+    // first attempt failed (the resulting Error / Ready states both block
+    // re-entry; the user retries via the `balance` button).
+    LaunchedEffect(activity, status) {
+        if (status is WalletStatus.None && activity != null) {
+            viewModel.refreshBalance(network, activity)
+        }
+    }
+
     if (sheetOpen) {
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },
@@ -175,8 +199,18 @@ fun WalletStatusPanel(
                 formatter = formatter,
                 colors = colors,
                 onRefreshBalance = { activity?.let { viewModel.refreshBalance(network, it) } },
-                onWaitForFunding = { activity?.let { viewModel.waitForFunding(network, it) } },
                 onRegisterDust = { activity?.let { viewModel.registerDust(network, it) } },
+                onReceive = {
+                    // Dismiss the sheet first, then open the Receive screen on
+                    // the next frame so the sheet's exit animation isn't
+                    // competing with the screen's enter. Without the hide()
+                    // step the screen would render *under* the sheet scrim.
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        sheetOpen = false
+                        receiveOpen = true
+                    }
+                },
                 onClose = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -185,6 +219,21 @@ fun WalletStatusPanel(
                 },
             )
         }
+    }
+
+    // Receive screen — full-screen overlay rendered above the host content
+    // (and above the now-dismissed sheet). Only available when the wallet is
+    // Ready since we need addresses to display; in other states the sheet's
+    // "receive" button is disabled so this branch shouldn't fire.
+    val readyStatus = status as? WalletStatus.Ready
+    if (receiveOpen && readyStatus != null) {
+        WalletReceiveScreen(
+            unshieldedAddress = readyStatus.address,
+            shieldedAddress = readyStatus.shieldedAddress,
+            network = network,
+            colors = colors,
+            onBack = { receiveOpen = false },
+        )
     }
 }
 
@@ -246,9 +295,13 @@ private fun pillLabel(status: WalletStatus, formatter: BalanceFormatter): String
         // amounts grow; integer-only below 1K. Full precision is in the sheet.
         //
         // NIGHT aggregates shielded + unshielded — the pill is a "do I have
-        // enough to do something?" signal, not a portfolio view. The shielded
-        // breakdown lives in the sheet; the next iteration adds a shield
-        // badge here when status.balance.hasShielded.
+        // enough to do something?" signal, not a portfolio view. The shield
+        // glyph appears iff any portion is shielded, so non-shielded users
+        // never see the badge and the layout stays clean.
+        if (status.balance.hasShielded) {
+            append(SHIELD_GLYPH)
+            append(" ")
+        }
         append(formatter.formatAbbreviated(status.balance.totalNight, "NIGHT"))
         append(" · ")
         append(formatter.formatAbbreviated(status.balance.dust, "DUST"))
@@ -258,6 +311,12 @@ private fun pillLabel(status: WalletStatus, formatter: BalanceFormatter): String
     is WalletStatus.Error -> "error"
 }
 
+/**
+ * Prefix glyph signaling "some of this NIGHT is shielded". Only rendered when
+ * [WalletBalance.hasShielded] is true, so non-shielded users never see it.
+ */
+private const val SHIELD_GLYPH = "🛡"
+
 // ── Sheet content ──
 
 @Composable
@@ -266,11 +325,10 @@ private fun WalletSheetContent(
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
     onRefreshBalance: () -> Unit,
-    onWaitForFunding: () -> Unit,
     onRegisterDust: () -> Unit,
+    onReceive: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -290,14 +348,12 @@ private fun WalletSheetContent(
 
         when (status) {
             is WalletStatus.None -> Text(
-                "Read balance to bootstrap the wallet. First press shows a biometric prompt to seal/load the seed via SeedVault.",
+                "Read balance to bootstrap the wallet. First press shows a biometric prompt to seal/load the seed via SeedVault. Then tap receive to see your addresses.",
                 color = colors.onSheetSubtle,
                 fontSize = PanelType.Body,
             )
             is WalletStatus.Loading -> Text(status.stage, color = colors.onSheetDim, fontSize = PanelType.LoadingText)
-            is WalletStatus.Ready -> ReadyBody(status, formatter, colors, onCopy = { txt ->
-                clipboard.setText(AnnotatedString(txt))
-            })
+            is WalletStatus.Ready -> ReadyBody(status, formatter, colors)
             is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
         }
 
@@ -305,13 +361,25 @@ private fun WalletSheetContent(
 
         val busy = status is WalletStatus.Loading ||
             (status is WalletStatus.Ready && status.busy != null)
+        val canReceive = status is WalletStatus.Ready
+        // Two-row button layout. Row 1 is the wallet actions (balance,
+        // register, receive); row 2 is the close affordance. The previous
+        // "fund" button (which called waitForFunding) was removed once the
+        // Receive screen started showing the `mn airdrop` command directly —
+        // the SDK's subscription picks up the credit automatically, so
+        // suspending in the foreground was redundant.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
         ) {
             PanelButton("balance", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRefreshBalance)
-            PanelButton("fund", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onWaitForFunding)
             PanelButton("register", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRegisterDust)
+            // Receive is enabled the moment the wallet is Ready, even during a
+            // background sync — the addresses are deterministic and available
+            // immediately after SDK build, so we don't gate them on the
+            // balance-syncing window. busy=true would needlessly block the
+            // user during the few seconds of PREPROD shielded replay.
+            PanelButton("receive", enabled = canReceive, modifier = Modifier.weight(1f), colors = colors, onClick = onReceive)
         }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
         PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
@@ -324,52 +392,35 @@ private fun ReadyBody(
     status: WalletStatus.Ready,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
-    onCopy: (String) -> Unit,
 ) {
-    // Address — always visible, tap-to-copy.
-    SectionLabel("address", colors)
-    Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-    Text(
-        text = status.address,
-        color = colors.onSheet,
-        fontSize = PanelType.Body,
-        fontFamily = FontFamily.Monospace,
-        modifier = Modifier.clickable { onCopy(status.address) },
-    )
-
-    Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-
-    // Airdrop command — always rendered so the user can copy/paste before
-    // tapping `fund`. waitForFunding may return instantly if already funded,
-    // making this the only chance to see the command otherwise.
-    val airdropCmd = "mn airdrop $DEFAULT_AIRDROP_AMOUNT --wallet ${status.address}"
-    SectionLabel("airdrop command", colors)
-    Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-    Text(
-        text = airdropCmd,
-        color = colors.accent,
-        fontSize = PanelType.AirdropCmd,
-        fontFamily = FontFamily.Monospace,
-        modifier = Modifier.clickable { onCopy(airdropCmd) },
-    )
-
-    Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-
-    // Balance — full precision (sheet has room).
+    // Address + airdrop command moved to [WalletReceiveScreen]; the sheet is
+    // now focused on status + actions only.
+    //
+    // Balance breakdown — three rows so the pool split is legible at a glance.
+    // Always-3-rows (even when shielded is zero) is a deliberate canary choice:
+    // it confirms the SDK is tracking shielded even before any moves into the
+    // shielded pool. A production wallet UI would likely hide the shielded
+    // row when zero — see WalletPanelColors for theming pivots.
     SectionLabel("balance", colors)
     Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-    Text(
-        text = buildString {
-            // Total NIGHT (shielded + unshielded) — pool breakdown is added in
-            // the shielded-render iteration. Once that lands, this single row
-            // splits into three (unshielded NIGHT / shielded NIGHT / DUST).
-            append(formatter.formatCompact(status.balance.totalNight, "NIGHT"))
-            append(" · ")
+    BalanceRow(
+        label = "unshielded",
+        value = formatter.formatCompact(status.balance.unshieldedNight, "NIGHT"),
+        colors = colors,
+    )
+    BalanceRow(
+        label = "shielded",
+        value = formatter.formatCompact(status.balance.shieldedNight, "NIGHT"),
+        valuePrefix = SHIELD_GLYPH.takeIf { status.balance.hasShielded },
+        colors = colors,
+    )
+    BalanceRow(
+        label = "dust",
+        value = buildString {
             append(formatter.formatCompact(status.balance.dust, "DUST"))
             if (status.balance.dustRegistered) append(" · ✓")
         },
-        color = colors.onSheet,
-        fontSize = PanelType.Body,
+        colors = colors,
     )
 
     if (status.busy != null) {
@@ -391,6 +442,48 @@ private fun SectionLabel(text: String, colors: WalletPanelColors) {
         fontSize = PanelType.SectionLabel,
         fontWeight = FontWeight.Medium,
     )
+}
+
+/**
+ * One row of the balance breakdown — label on the left, value on the right.
+ * Label column has a fixed width so the three rows (unshielded / shielded /
+ * dust) line up vertically without depending on the longest value.
+ *
+ * @param valuePrefix Optional glyph (e.g. shield) inserted before [value].
+ *   Null means no prefix — that way the shielded row collapses cleanly when
+ *   shielded NIGHT is zero.
+ */
+@Composable
+private fun BalanceRow(
+    label: String,
+    value: String,
+    colors: WalletPanelColors,
+    valuePrefix: String? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = colors.onSheetDim,
+            fontSize = PanelType.Caption,
+            modifier = Modifier.width(PanelDimens.BalanceRowLabelWidth),
+        )
+        if (valuePrefix != null) {
+            Text(
+                text = "$valuePrefix ",
+                color = colors.accent,
+                fontSize = PanelType.Body,
+            )
+        }
+        Text(
+            text = value,
+            color = colors.onSheet,
+            fontSize = PanelType.Body,
+        )
+    }
+    Spacer(modifier = Modifier.height(PanelDimens.BalanceRowGap))
 }
 
 /** Slight de-emphasis for the secondary message line (vs the busy line). */

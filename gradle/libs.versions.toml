@@ -25,6 +25,7 @@ biometric = "1.1.0"
 credentials = "1.5.0"
 playServicesBlockstore = "16.4.0"
 lottieCompose = "6.6.6"
+zxingCore = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -82,6 +83,8 @@ play-services-blockstore = { group = "com.google.android.gms", name = "play-serv
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 # Lottie for animated progress indicators (8B.1 design sprint)
 lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottieCompose" }
+
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

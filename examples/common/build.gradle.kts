@@ -47,5 +47,11 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
 
+    // ZXing core — QR matrix generation for the Receive screen. `:core` is the
+    // pure-Java module (~500KB); the Android-specific bitmap helpers we
+    // implement ourselves to avoid pulling in `:android-core` (which links
+    // against android.hardware.camera and bloats the APK).
+    implementation(libs.zxing.core)
+
     testImplementation(libs.junit)
 }
