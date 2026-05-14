@@ -8,6 +8,8 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -51,6 +53,21 @@ class GraphQLWebSocketClient(
     private val operationIdCounter = AtomicInteger(0)
     private val activeSubscriptions = mutableMapOf<String, Channel<JsonElement>>()
 
+    /**
+     * Guards [connect] and [close] against concurrent callers.
+     *
+     * Without this lock, two coroutines that both observe `connected.get() == false`
+     * race past the early-return and each opens its own WebSocket session — the
+     * second `subscribe()` then races with `connected.set(true)` and may see the
+     * window where the session exists but the ack hasn't arrived, surfacing as
+     * `IllegalStateException("Not connected. Call connect() first.")`.
+     *
+     * With this lock, the second connect() suspends on the mutex while the first
+     * completes its connection_init → connection_ack handshake, then wakes up,
+     * observes `connected == true`, and returns silently. One handshake, no race.
+     */
+    private val lifecycleMutex = Mutex()
+
     companion object {
         /**
          * Max subscription events buffered before backpressure suspends the producer.
@@ -72,46 +89,54 @@ class GraphQLWebSocketClient(
      * @throws WebSocketException if connection fails
      * @throws TimeoutCancellationException if connection_ack not received in time
      */
-    suspend fun connect() {
-        if (connected.get()) {
-            throw IllegalStateException("Already connected")
-        }
+    suspend fun connect() = lifecycleMutex.withLock {
+        // Idempotent: if a concurrent caller already completed the handshake
+        // while we were waiting on the mutex, just return. Callers should
+        // treat connect() as "ensure the connection is up", not "open a new one".
+        if (connected.get()) return@withLock
 
-        // Open WebSocket connection with graphql-transport-ws sub-protocol
-        // The Sec-WebSocket-Protocol header is REQUIRED by the GraphQL-WS spec
+        // Open WebSocket connection with graphql-transport-ws sub-protocol.
+        // The Sec-WebSocket-Protocol header is REQUIRED by the GraphQL-WS spec.
         // See: https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md
-        session = httpClient.webSocketSession(
+        val newSession = httpClient.webSocketSession(
             urlString = url,
             block = {
                 header(HttpHeaders.SecWebSocketProtocol, "graphql-transport-ws")
             }
         )
+        session = newSession
 
-        // Send connection_init
-        sendMessage(GraphQLWebSocketMessage.ConnectionInit())
+        try {
+            // Send connection_init
+            sendMessage(GraphQLWebSocketMessage.ConnectionInit())
 
-        // Wait for connection_ack with timeout
-        // IMPORTANT: Don't start a separate coroutine here - it would race with message processing!
-        // Instead, read frames directly until we get connection_ack
-        withTimeout(connectionTimeout) {
-            for (frame in session!!.incoming) {
-                when (frame) {
-                    is Frame.Text -> {
-                        val text = frame.readText()
-                        val message = parseMessage(text)
+            // Wait for connection_ack with timeout.
+            // IMPORTANT: Don't start a separate coroutine here — it would race
+            // with message processing! Instead read frames directly until ack.
+            withTimeout(connectionTimeout) {
+                for (frame in newSession.incoming) {
+                    if (frame is Frame.Text) {
+                        val message = parseMessage(frame.readText())
                         if (message is GraphQLWebSocketMessage.ConnectionAck) {
                             connected.set(true)
-                            break  // Got ack, stop consuming and let message processing take over
+                            break
                         }
                     }
-                    else -> {
-                        // Ignore other frame types during connection phase
-                    }
+                    // Ignore other frame types during connection phase
                 }
             }
+        } catch (t: Throwable) {
+            // Handshake failed (timeout, parse error, socket closed early).
+            // Tear the session back down so a retry through the same mutex
+            // can open a fresh one — otherwise we'd leak a half-open session
+            // that subscribe() would happily try to use.
+            runCatching { newSession.close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Handshake failed")) }
+            session = null
+            connected.set(false)
+            throw t
         }
 
-        // Start message processing loop - NOW it won't miss any messages
+        // Start message processing loop — NOW it won't miss any messages
         startMessageProcessing()
     }
 
@@ -196,8 +221,8 @@ class GraphQLWebSocketClient(
      *
      * Completes all active subscriptions and closes WebSocket.
      */
-    suspend fun close() {
-        if (!connected.get()) return
+    suspend fun close() = lifecycleMutex.withLock {
+        if (!connected.get()) return@withLock
 
         // Complete all active subscriptions
         activeSubscriptions.values.forEach { it.close() }

@@ -177,15 +177,10 @@ class IndexerClientImpl(
         return flow {
             val client = getOrCreateWsClient()
 
-            // Connect if not already connected (idempotent via GraphQLWebSocketClient)
-            try {
-                client.connect()
-            } catch (e: IllegalStateException) {
-                // Already connected - this is fine, continue
-                if (e.message?.contains("Already connected") != true) {
-                    throw e
-                }
-            }
+            // connect() is idempotent + mutex-serialized inside GraphQLWebSocketClient,
+            // so concurrent subscribers can all call it safely — only the first
+            // performs the handshake; the rest observe `connected == true` and return.
+            client.connect()
 
             // Now subscribe and emit all updates
             // IMPORTANT: buffer() prevents message loss when rapid transactions arrive
@@ -225,14 +220,7 @@ class IndexerClientImpl(
 
         return flow {
             val client = getOrCreateWsClient()
-
-            try {
-                client.connect()
-            } catch (e: IllegalStateException) {
-                if (e.message?.contains("Already connected") != true) {
-                    throw e
-                }
-            }
+            client.connect()  // idempotent + mutex-serialized
 
             client.subscribe(GraphQLQueries.SUBSCRIBE_DUST_LEDGER_EVENTS, variables)
                 .buffer(Channel.UNLIMITED)
@@ -270,14 +258,7 @@ class IndexerClientImpl(
 
         return flow {
             val client = getOrCreateWsClient()
-
-            try {
-                client.connect()
-            } catch (e: IllegalStateException) {
-                if (e.message?.contains("Already connected") != true) {
-                    throw e
-                }
-            }
+            client.connect()  // idempotent + mutex-serialized
 
             client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
                 .buffer(Channel.UNLIMITED)
