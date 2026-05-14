@@ -4,6 +4,7 @@ import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.BlockInfo
+import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
@@ -104,6 +105,7 @@ class MidnightWalletTest {
         dustRepository: DustRepository = mock(),
         indexerClient: IndexerClient = mock(),
         nodeRpcClient: NodeRpcClient = mock(),
+        balanceRepository: BalanceRepository = mock(),
         walletAddress: String = "test_address",
         dustSeed: ByteArray = ByteArray(32),
         provingKeysDir: String = "/tmp/keys",
@@ -113,6 +115,7 @@ class MidnightWalletTest {
         dustRepository = dustRepository,
         indexerClient = indexerClient,
         nodeRpcClient = nodeRpcClient,
+        balanceRepository = balanceRepository,
         walletAddress = walletAddress,
         dustSeed = dustSeed,
         provingKeysDir = provingKeysDir,

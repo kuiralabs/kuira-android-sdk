@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The SDK's instrumented end-to-end tests hit a running Midnight localnet
+         (indexer at http://10.0.2.2:<port>, node WebSocket at ws://10.0.2.2:9944).
+         The library itself doesn't need these perms — the consuming app provides
+         them — but the test APK needs INTERNET and cleartext traffic to reach
+         localhost during the test run. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application android:usesCleartextTraffic="true" />
+
+</manifest>

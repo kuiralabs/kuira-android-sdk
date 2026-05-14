@@ -1,6 +1,7 @@
 package com.midnight.kuira.sdk
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.midnight.kuira.core.compact.MidnightConfig
@@ -8,15 +9,36 @@ import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
+import com.midnight.kuira.core.crypto.dust.DustKeyDeriver
+import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
 import com.midnight.kuira.core.identity.accesskey.AccessKeyManager
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
 import com.midnight.kuira.core.indexer.database.UtxoDatabase
 import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
+import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.sync.SubscriptionManager
+import com.midnight.kuira.core.indexer.sync.SyncStateManager
+import com.midnight.kuira.core.indexer.utxo.UtxoManager
+import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
+import com.midnight.kuira.core.ledger.api.ProofServerClientImpl
+import com.midnight.kuira.core.ledger.api.TransactionSubmitter
+import com.midnight.kuira.core.ledger.api.TransactionSubmitter.SubmissionResult
+import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
+import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.Arrays
 
@@ -69,15 +91,107 @@ class MidnightSdk private constructor(
     /** HD derivation path of the access key (e.g., "m/44'/2400'/0'/5/0"). */
     val accessKeyPath: String,
 
-    // Resources to close
+    // ── Internals held for [registerForDustGeneration] and lifecycle cleanup ──
+    private val nightPrivateKey: ByteArray,
+    private val dustSeed: ByteArray,
+    private val networkId: String,
+    private val utxoManager: UtxoManager,
+    private val transactionSubmitter: TransactionSubmitter,
+    private val subscriptionScope: CoroutineScope,
+    private val subscriptionJob: Job,
     private val database: UtxoDatabase,
     private val indexerClient: IndexerClientImpl,
 ) {
+    /**
+     * Register this wallet's NIGHT key to generate dust against its public dust key.
+     *
+     * Dust is the fee token Midnight generates from NIGHT holdings over time, but the
+     * generated dust is only *spendable* by a wallet that has registered its DUST
+     * public key against its NIGHT signing key on-chain. Newly-funded wallets must
+     * call this once before they can pay fees on any subsequent transaction —
+     * including contract calls.
+     *
+     * Inputs are pulled from the SDK's already-derived state: NIGHT private key
+     * for the signature, dust seed for the dust pubkey, current NIGHT UTXOs for
+     * the `guaranteed_unshielded_offer`. The unshielded-tx subscription started
+     * at SDK build time keeps [utxoManager] populated, so this method picks up
+     * NIGHT UTXOs the moment a faucet/transfer credits the wallet.
+     *
+     * Submission uses [TransactionSubmitter.submitPrebuiltTransaction] with
+     * [ProvingMode.LOCAL] — same local-prove → seal → submit path that contract
+     * calls already use; no proof server required.
+     *
+     * **Precondition:** the wallet address must hold at least one NIGHT UTXO.
+     * The chain rejects registration with no NIGHT to back the generation. Call
+     * [MidnightWallet.waitForFunding] first if the wallet is fresh.
+     *
+     * @return [SubmissionResult.Success] when the registration tx is finalized on
+     *   chain. [SubmissionResult.Pending] if the tx made it into a block but the
+     *   wait for finalization timed out (it'll usually finalize shortly after).
+     *   [SubmissionResult.Failed] if the chain rejected the tx, or no NIGHT UTXOs
+     *   are available, or the FFI builder returned null.
+     */
+    suspend fun registerForDustGeneration(): SubmissionResult {
+        val nightUtxos = utxoManager.getUnspentUtxos(walletAddress)
+            .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
+
+        if (nightUtxos.isEmpty()) {
+            return SubmissionResult.Failed(
+                txHash = null,
+                reason = "No NIGHT UTXOs at $walletAddress. Fund the wallet first.",
+            )
+        }
+
+        val utxosJson = JSONArray().apply {
+            nightUtxos.forEach { utxo ->
+                put(
+                    JSONObject().apply {
+                        put("value", utxo.value)
+                        put("intent_hash", utxo.intentHash)
+                        put("output_no", utxo.outputIndex)
+                        put("ctime", utxo.ctime)
+                    }
+                )
+            }
+        }.toString()
+
+        val dustPublicKeyHex = DustKeyDeriver.derivePublicKey(dustSeed)
+            ?: return SubmissionResult.Failed(
+                txHash = null,
+                reason = "DustKeyDeriver returned null — native library not loaded?",
+            )
+
+        // Chain-anchored time, NOT wall-clock — same reason as the Error 170 fix
+        // in MidnightWallet.tryBalance (commit 868e0d9). The registration tx
+        // doesn't pay a dust fee but the ctime is still validated against
+        // chain block times.
+        val blockTimestamp = wallet.indexerBlockTimestampMs()
+
+        val unprovenHex = DustRegistrationBuilder.build(
+            nightPrivateKey = nightPrivateKey,
+            dustPublicKeyHex = dustPublicKeyHex,
+            utxosJson = utxosJson,
+            ttlMillis = blockTimestamp + REGISTRATION_TTL_MS,
+            networkId = networkId,
+            currentTimeMillis = blockTimestamp,
+        ) ?: return SubmissionResult.Failed(
+            txHash = null,
+            reason = "DustRegistrationBuilder.build returned null",
+        )
+
+        Log.i(TAG, "Submitting dust registration: ${nightUtxos.size} NIGHT UTXOs, ${unprovenHex.length} hex chars")
+        return transactionSubmitter.submitPrebuiltTransaction(unprovenHex)
+    }
+
     /** Release all resources. */
     fun close() {
+        subscriptionJob.cancel()
+        subscriptionScope.cancel()
         wallet.close()
         indexerClient.close()
         database.close()
+        Arrays.fill(nightPrivateKey, 0.toByte())
+        Arrays.fill(dustSeed, 0.toByte())
     }
 
     /**
@@ -152,6 +266,33 @@ class MidnightSdk private constructor(
 
             val provingKeyManager = ProvingKeyManager(appContext)
 
+            // ── Unshielded UTXO tracking (NIGHT balance + registration inputs) ──
+            //
+            // Lifts the same pieces the Kuira app uses: UtxoManager observes the
+            // Room DAO, SubscriptionManager runs the indexer's unshielded-tx
+            // subscription and feeds UtxoManager. BalanceRepository wraps both
+            // for the Flow-based balance API. Nothing duplicated — see
+            // core/indexer/sync/SubscriptionManager.kt header for the same pattern
+            // used by the parent app.
+            val utxoManager = UtxoManager(database.unshieldedUtxoDao())
+            val syncStateManager = SyncStateManager(appContext)
+            val subscriptionManager = SubscriptionManager(
+                context = appContext,
+                indexerClient = indexerClient,
+                utxoManager = utxoManager,
+                syncStateManager = syncStateManager,
+            )
+            val balanceRepository = BalanceRepository(utxoManager, indexerClient)
+
+            // Launch the long-lived unshielded subscription. The scope lives
+            // for the SDK's lifetime; close() cancels it. SupervisorJob means a
+            // sub-failure (e.g. transient indexer disconnect — already handled
+            // with backoff inside SubscriptionManager) doesn't kill sibling work.
+            val subscriptionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val subscriptionJob = subscriptionScope.launch {
+                subscriptionManager.startSubscription(keys.address).collect { /* state observed inside */ }
+            }
+
             // ── Create wallet with tip-aware dust sync ──
 
             val dustSyncManager = DustSyncManager(
@@ -166,10 +307,33 @@ class MidnightSdk private constructor(
                 dustRepository = dustRepository,
                 indexerClient = indexerClient,
                 nodeRpcClient = nodeRpcClient,
+                balanceRepository = balanceRepository,
                 walletAddress = keys.address,
                 dustSeed = keys.dustSeed,
                 provingKeysDir = provingKeyManager.keysDir.absolutePath,
                 networkId = net.rustNetworkId,
+            )
+
+            // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──
+            //
+            // The proof server URL is provided because the constructor requires a
+            // non-null ProofServerClient, but provingMode = LOCAL means it's
+            // never invoked. NetworkConfig pulls a real localnet URL for
+            // UNDEPLOYED (so the instance is still wired correctly if a future
+            // caller wants REMOTE proving).
+            val serializer = FfiTransactionSerializer(net.rustNetworkId)
+            val proofServerClient = ProofServerClientImpl(
+                proofServerUrl = networkConfig.proofServerUrl,
+                developmentMode = networkConfig.developmentMode,
+            )
+            val transactionSubmitter = TransactionSubmitter(
+                nodeRpcClient = nodeRpcClient,
+                proofServerClient = proofServerClient,
+                indexerClient = indexerClient,
+                serializer = serializer,
+                utxoManager = utxoManager,
+                provingKeyManager = provingKeyManager,
+                provingMode = ProvingMode.LOCAL,
             )
 
             // ── Create config with embedded wallet ──
@@ -188,6 +352,13 @@ class MidnightSdk private constructor(
                 provingKeyManager = provingKeyManager,
                 accessKeyPublicKey = keys.accessKeyPublicKey,
                 accessKeyPath = keys.accessKeyPath,
+                nightPrivateKey = keys.nightPrivateKey,
+                dustSeed = keys.dustSeed,
+                networkId = net.rustNetworkId,
+                utxoManager = utxoManager,
+                transactionSubmitter = transactionSubmitter,
+                subscriptionScope = subscriptionScope,
+                subscriptionJob = subscriptionJob,
                 database = database,
                 indexerClient = indexerClient,
             )
@@ -195,6 +366,16 @@ class MidnightSdk private constructor(
     }
 
     companion object {
+        private const val TAG = "MidnightSdk"
+
+        /**
+         * TTL for the dust registration transaction. 30 minutes mirrors the SDK's
+         * default contract-call TTL — long enough that a sluggish indexer or
+         * slow user interaction (e.g. waiting for a faucet) doesn't expire it,
+         * short enough that a forgotten tx doesn't linger in the mempool.
+         */
+        private const val REGISTRATION_TTL_MS = 30L * 60L * 1_000L
+
         /** DataStore for SDK dust state (separate from Kuira app). */
         private val Context.sdkDustDataStore by preferencesDataStore(name = "sdk_dust_state")
 
@@ -206,6 +387,14 @@ class MidnightSdk private constructor(
 
 internal data class DerivedKeys(
     val address: String,
+    /**
+     * 32-byte NIGHT signing key (secp256k1 private bytes) at m/44'/2400'/account'/0/0.
+     * Same sensitivity envelope as [dustSeed] — held in memory for the lifetime of
+     * the SDK instance so that operations like dust registration (which the chain
+     * requires the NIGHT key to sign) don't need to round-trip through SeedVault.
+     * Wiped in [MidnightSdk.close].
+     */
+    val nightPrivateKey: ByteArray,
     val dustSeed: ByteArray,
     val coinPublicKey: ByteArray,
     val accessKeyPublicKey: ByteArray,
@@ -234,6 +423,10 @@ internal fun deriveKeys(
     val xOnlyPubKey = nightKey.publicKeyBytes.copyOfRange(1, 33) // Skip prefix byte
     val addressData = MessageDigest.getInstance("SHA-256").digest(xOnlyPubKey)
     val address = Bech32m.encode(network.addressPrefix, addressData)
+    // Hold the NIGHT signing key for the lifetime of the SDK — needed when the
+    // dApp calls operations that the chain requires the NIGHT key to sign
+    // (e.g. dust registration). Symmetric to the existing [dustSeed] retention.
+    val nightPrivateKey = nightKey.privateKeyBytes.copyOf()
 
     // Dust seed: m/44'/2400'/account'/2/0
     val dustKey = account.selectRole(MidnightKeyRole.DUST).deriveKeyAt(0)
@@ -255,6 +448,7 @@ internal fun deriveKeys(
 
     return DerivedKeys(
         address = address,
+        nightPrivateKey = nightPrivateKey,
         dustSeed = dustSeed,
         coinPublicKey = coinPublicKey,
         accessKeyPublicKey = accessKeyPublicKey,
