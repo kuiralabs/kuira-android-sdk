@@ -134,6 +134,52 @@ class BalanceFormatter @Inject constructor() {
         }
     }
 
+    /**
+     * Abbreviated whole-token format for tight surfaces (pills, chips, badges).
+     *
+     * Drops the fractional part below 1,000 (integers only) and switches to
+     * K/M/B/T suffixes above that, with a single trimmed decimal. Token symbol
+     * is **not** appended — callers decorate (e.g. append "D" for DUST in
+     * asymmetric layouts where the primary asset is unmarked).
+     *
+     * **Examples (NIGHT, 6 decimals):**
+     *  - `0`                            → `"0"`
+     *  - `1_000_000`         (1 NIGHT)  → `"1"`
+     *  - `850_000_000`       (850)      → `"850"`
+     *  - `1_500_000_000`     (1.5K)     → `"1.5K"`
+     *  - `10_000_000_000`    (10K)      → `"10K"`
+     *  - `2_300_000_000_000` (2.3M)     → `"2.3M"`
+     *
+     * **Examples (DUST, 15 decimals):**
+     *  - `364_409_359_999_999_999` (~364.4)  → `"364"`     (integer below 1K)
+     *  - `1_500_000_000_000_000_000`         → `"1.5K"`
+     *
+     * Truncates (not rounds) so amounts don't visually round up as the
+     * fractional dust generates in the background.
+     */
+    fun formatAbbreviated(amount: BigInteger, tokenType: String): String {
+        require(amount >= BigInteger.ZERO) { "Amount cannot be negative: $amount" }
+        val decimals = getDecimals(tokenType)
+        val whole = amount.divide(BigInteger.TEN.pow(decimals))
+
+        if (whole < THOUSAND) return whole.toString()
+        if (whole < MILLION) return abbreviate(whole, THOUSAND, "K")
+        if (whole < BILLION) return abbreviate(whole, MILLION, "M")
+        if (whole < TRILLION) return abbreviate(whole, BILLION, "B")
+        return abbreviate(whole, TRILLION, "T")
+    }
+
+    /**
+     * Split [whole] into `major.tenth<suffix>` where one decimal digit is shown
+     * unless it's zero (in which case the decimal is dropped → `"10K"` not `"10.0K"`).
+     */
+    private fun abbreviate(whole: BigInteger, factor: BigInteger, suffix: String): String {
+        val major = whole.divide(factor)
+        // remainder / (factor/10) gives the first decimal digit, truncated.
+        val tenth = whole.remainder(factor).divide(factor.divide(BigInteger.TEN))
+        return if (tenth == BigInteger.ZERO) "$major$suffix" else "$major.$tenth$suffix"
+    }
+
     private companion object {
         // Midnight blockchain token precision
         // Reference: https://raw.githubusercontent.com/midnightntwrk/midnight-ledger/refs/heads/main/spec/dust.md
@@ -143,5 +189,11 @@ class BalanceFormatter @Inject constructor() {
         const val DUST_TOKEN_DECIMALS = 15
         const val NIGHT_TOKEN_DECIMALS = 6
         const val DEFAULT_TOKEN_DECIMALS = 6
+
+        // Thresholds for formatAbbreviated.
+        val THOUSAND: BigInteger = BigInteger.valueOf(1_000)
+        val MILLION: BigInteger = BigInteger.valueOf(1_000_000)
+        val BILLION: BigInteger = BigInteger.valueOf(1_000_000_000)
+        val TRILLION: BigInteger = BigInteger.valueOf(1_000_000_000_000L)
     }
 }

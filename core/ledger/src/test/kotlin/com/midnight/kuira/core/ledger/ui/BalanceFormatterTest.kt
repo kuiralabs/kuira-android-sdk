@@ -180,4 +180,102 @@ class BalanceFormatterTest {
         val result = formatter.formatCompact(BigInteger.valueOf(1_100_000), "TNIGHT")
         assertEquals("1.1 TNIGHT", result)
     }
+
+    // ==================== Abbreviated (Pill / Chip Format) ====================
+    //
+    // Spec:
+    //  - whole < 1,000      → integer (no fractional, no suffix)
+    //  - 1K..999.9K         → one decimal, K suffix (trailing .0 dropped)
+    //  - 1M..999.9M         → one decimal, M suffix
+    //  - 1B..999.9B         → B suffix
+    //  - 1T+                → T suffix
+    //  - truncates (does not round) so dust accruing in the background
+    //    doesn't visually jump the integer up
+
+    @Test
+    fun `formatAbbreviated zero`() {
+        assertEquals("0", formatter.formatAbbreviated(BigInteger.ZERO, "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated below 1K shows integer only`() {
+        // 1 NIGHT = 1,000,000 base units → "1"
+        assertEquals("1", formatter.formatAbbreviated(BigInteger.valueOf(1_000_000), "NIGHT"))
+        // 850 NIGHT → "850"
+        assertEquals("850", formatter.formatAbbreviated(BigInteger.valueOf(850_000_000), "NIGHT"))
+        // 999 NIGHT → "999"
+        assertEquals("999", formatter.formatAbbreviated(BigInteger.valueOf(999_000_000), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated truncates fractional below 1K`() {
+        // 364.409… DUST (15 decimals) → "364" (no decimal point below 1K)
+        val dustAmount = BigInteger("364409359999999999")
+        assertEquals("364", formatter.formatAbbreviated(dustAmount, "DUST"))
+    }
+
+    @Test
+    fun `formatAbbreviated K suffix exact thousand drops decimal`() {
+        // 1,000 NIGHT → "1K" not "1.0K"
+        assertEquals("1K", formatter.formatAbbreviated(BigInteger.valueOf(1_000_000_000), "NIGHT"))
+        // 10,000 NIGHT → "10K"
+        assertEquals("10K", formatter.formatAbbreviated(BigInteger.valueOf(10_000_000_000), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated K suffix with one decimal`() {
+        // 1,500 NIGHT → "1.5K"
+        assertEquals("1.5K", formatter.formatAbbreviated(BigInteger.valueOf(1_500_000_000), "NIGHT"))
+        // 12,700 NIGHT → "12.7K"
+        assertEquals("12.7K", formatter.formatAbbreviated(BigInteger.valueOf(12_700_000_000L), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated K suffix truncates not rounds`() {
+        // 1,599 NIGHT → "1.5K" (not "1.6K") — truncating avoids surprise jumps
+        // as dust accrues mid-display.
+        assertEquals("1.5K", formatter.formatAbbreviated(BigInteger.valueOf(1_599_000_000), "NIGHT"))
+        // 1,990 NIGHT → "1.9K"
+        assertEquals("1.9K", formatter.formatAbbreviated(BigInteger.valueOf(1_990_000_000), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated M suffix`() {
+        // 1,000,000 NIGHT → "1M"
+        assertEquals("1M", formatter.formatAbbreviated(BigInteger("1000000000000"), "NIGHT"))
+        // 2,300,000 NIGHT → "2.3M"
+        assertEquals("2.3M", formatter.formatAbbreviated(BigInteger("2300000000000"), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated B suffix`() {
+        // 1B NIGHT → "1B"
+        assertEquals("1B", formatter.formatAbbreviated(BigInteger("1000000000000000"), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated T suffix for very large amounts`() {
+        // 5T NIGHT → "5T"
+        assertEquals("5T", formatter.formatAbbreviated(BigInteger("5000000000000000000"), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated K boundary 999_900 NIGHT stays in K`() {
+        // 999,900 NIGHT → "999.9K" — just under the M boundary
+        assertEquals("999.9K", formatter.formatAbbreviated(BigInteger("999900000000"), "NIGHT"))
+    }
+
+    @Test
+    fun `formatAbbreviated DUST integers below 1K`() {
+        // 1 DUST (10^15 base units) → "1"
+        assertEquals("1", formatter.formatAbbreviated(BigInteger("1000000000000000"), "DUST"))
+        // 999 DUST → "999"
+        assertEquals("999", formatter.formatAbbreviated(BigInteger("999000000000000000"), "DUST"))
+    }
+
+    @Test
+    fun `formatAbbreviated DUST K range`() {
+        // 1,500 DUST → "1.5K"
+        assertEquals("1.5K", formatter.formatAbbreviated(BigInteger("1500000000000000000"), "DUST"))
+    }
 }
