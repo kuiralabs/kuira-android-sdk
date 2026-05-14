@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk
 
+import android.util.Log
 import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.indexer.api.IndexerClient
@@ -184,7 +185,7 @@ class MidnightWallet internal constructor(
         } catch (e: NodeRpcError) {
             if (!isDustSpendProofError(e)) throw e
 
-            android.util.Log.w(TAG, "Error 170, full re-sync and retry once")
+            Log.w(TAG, "Error 170, full re-sync and retry once")
             onProgress?.invoke(BalanceProgress.RetryingDustSync)
             forceFullSync()
             val retryBalanced = doBalance(provenTxHex, onProgress)
@@ -206,7 +207,7 @@ class MidnightWallet internal constructor(
     ): String {
         return tryBalance(provenTxHex, onProgress)
             ?: run {
-                android.util.Log.w(TAG, "Balance failed, forcing full dust re-sync")
+                Log.w(TAG, "Balance failed, forcing full dust re-sync")
                 onProgress?.invoke(BalanceProgress.RetryingDustSync)
                 forceFullSync()
                 tryBalance(provenTxHex, onProgress)
@@ -274,12 +275,12 @@ class MidnightWallet internal constructor(
         try {
             shieldedTracker.resync()
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
+            Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
         }
         try {
             forceFullSync()
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
+            Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
         }
     }
 

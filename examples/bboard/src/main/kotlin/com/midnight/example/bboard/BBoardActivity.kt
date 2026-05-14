@@ -46,6 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import com.midnight.example.common.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -111,7 +114,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     // FragmentActivity (which ComponentActivity extends) hosts SeedVault's
     // biometric prompts. Same instance also satisfies Activity for the
     // legacy sigil-side callbacks.
-    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val activity = LocalContext.current as? FragmentActivity
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -332,7 +335,7 @@ private fun WalletStatusCard(
     onWaitForFunding: () -> Unit,
     onRegisterDust: () -> Unit,
 ) {
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val clipboard = LocalClipboardManager.current
     val balanceFormatter = remember { BalanceFormatter() }
     DarkCard {
         Text("wallet status", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
@@ -367,7 +370,7 @@ private fun WalletStatusCard(
                     fontSize = Type.Caption,
                     fontFamily = if (showFundCmd) FontFamily.Monospace else null,
                     modifier = Modifier.clickable {
-                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(displayText))
+                        clipboard.setText(AnnotatedString(displayText))
                     },
                 )
                 Spacer(modifier = Modifier.height(Spacing.SmallGap))
@@ -480,11 +483,11 @@ private fun ConnectedScreen(
             )
         }
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+        val clipboardManager = LocalClipboardManager.current
         var copied by remember { mutableStateOf(false) }
         Row(
             modifier = Modifier.fillMaxWidth().clickable {
-                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(state.contractAddress))
+                clipboardManager.setText(AnnotatedString(state.contractAddress))
                 copied = true
             },
             verticalAlignment = Alignment.CenterVertically,
