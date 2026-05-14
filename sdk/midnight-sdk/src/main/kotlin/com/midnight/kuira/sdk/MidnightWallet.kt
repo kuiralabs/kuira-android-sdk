@@ -117,12 +117,20 @@ class MidnightWallet internal constructor(
 
         onProgress?.invoke(BalanceProgress.ProvingDust)
 
+        // Use the indexer's view of the latest chain block timestamp, NOT wall-clock.
+        // Reason: the node validates a dust spend by looking up
+        // `dust.utxo.root_history.get(ctime)` (predecessor lookup keyed by block
+        // timestamps). If we send wall-clock ahead of the latest indexed block, the
+        // chain returns the tip root which won't match our locally-replayed root,
+        // and rejects with `MalformedError::InvalidDustSpendProof` (Custom error 170).
+        // The TS wallet does the same: see midnight-wallet/.../RunningV1Variant.ts
+        // (`currentTime ?? blockData.timestamp`).
         return TransactionBalancerNative.nativeBalanceProvenTransaction(
             provenTxHex = provenTxHex,
             dustStatePtr = dustState.getStatePointer(),
             seed = dustSeed,
             ledgerParamsHex = ledgerParamsHex,
-            currentTimeMs = System.currentTimeMillis(),
+            currentTimeMs = blockInfo.timestamp,
             keysDir = provingKeysDir,
             networkId = networkId,
         )
