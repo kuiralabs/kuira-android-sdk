@@ -80,6 +80,16 @@ class MidnightSdk private constructor(
     /** Unshielded wallet address (Bech32m-encoded). */
     val walletAddress: String,
 
+    /**
+     * Shielded receive address (Bech32m-encoded, HRP `mn_shield-addr_<network>`).
+     *
+     * Senders use this to dispatch shielded NIGHT to the wallet; only the
+     * holder of the SDK's zswap key can decrypt the incoming coins. Public,
+     * safe to share / display / encode in a QR. Derived deterministically
+     * from the seed at build time.
+     */
+    val shieldedWalletAddress: String,
+
     /** Proving key manager (for checking/downloading keys). */
     val provingKeyManager: ProvingKeyManager,
 
@@ -373,6 +383,7 @@ class MidnightSdk private constructor(
                 wallet = wallet,
                 coinPublicKey = keys.coinPublicKey,
                 walletAddress = keys.address,
+                shieldedWalletAddress = keys.shieldedAddress,
                 provingKeyManager = provingKeyManager,
                 accessKeyPublicKey = keys.accessKeyPublicKey,
                 accessKeyPath = keys.accessKeyPath,
@@ -417,6 +428,13 @@ class MidnightSdk private constructor(
 
 internal data class DerivedKeys(
     val address: String,
+    /**
+     * Shielded receive address — Bech32m of `coinPublicKey || encryptionPublicKey`
+     * with HRP `mn_shield-addr_<network>`. Senders use this to dispatch shielded
+     * NIGHT to the wallet; only the holder of [zswapSeed] can decrypt the
+     * incoming coins. Public, safe to share / display / encode in a QR.
+     */
+    val shieldedAddress: String,
     /**
      * 32-byte NIGHT signing key (secp256k1 private bytes) at m/44'/2400'/account'/0/0.
      * Same sensitivity envelope as [dustSeed] — held in memory for the lifetime of
@@ -474,6 +492,12 @@ internal fun deriveKeys(
     val shieldedKeys = ShieldedKeyDeriver.deriveKeys(zswapKey.privateKeyBytes)
         ?: throw IllegalStateException("ShieldedKeyDeriver.deriveKeys failed — is native library loaded?")
     val coinPublicKey = hexToBytes(shieldedKeys.coinPublicKey)
+    // Shielded receive address — Bech32m-encoded (coinPubKey || encryptionPubKey)
+    // with network-specific HRP `mn_shield-addr_<network>`. Lace-compatible,
+    // verified by LaceCompatibilityTest in core:crypto.
+    val encryptionPublicKey = hexToBytes(shieldedKeys.encryptionPublicKey)
+    val shieldedAddressData = coinPublicKey + encryptionPublicKey
+    val shieldedAddress = Bech32m.encode(network.shieldedAddressPrefix, shieldedAddressData)
     // Retain the zswap seed for the SDK's lifetime — ShieldedBalanceTracker
     // needs it on every shielded resync to decrypt zswap events.
     val zswapSeed = zswapKey.privateKeyBytes.copyOf()
@@ -488,6 +512,7 @@ internal fun deriveKeys(
 
     return DerivedKeys(
         address = address,
+        shieldedAddress = shieldedAddress,
         nightPrivateKey = nightPrivateKey,
         dustSeed = dustSeed,
         zswapSeed = zswapSeed,
