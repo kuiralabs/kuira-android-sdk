@@ -1,4 +1,4 @@
-package com.midnight.kuira.core.indexer.ui
+package com.midnight.kuira.core.ledger.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Before

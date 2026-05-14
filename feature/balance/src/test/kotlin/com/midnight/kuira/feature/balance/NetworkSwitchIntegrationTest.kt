@@ -130,7 +130,7 @@ class NetworkSwitchIntegrationTest {
         repository = mock(),
         shieldedRepository = mock(),
         subscriptionManagerFactory = subscriptionManagerFactory,
-        formatter = com.midnight.kuira.core.indexer.ui.BalanceFormatter(),
+        formatter = com.midnight.kuira.core.ledger.ui.BalanceFormatter(),
         networkRepository = networkRepository,
         networkClientFactory = mock(),
         walletAddressCache = walletAddressCache,

@@ -48,6 +48,7 @@ dependencies {
     // Core modules
     implementation(project(":core:crypto"))
     implementation(project(":core:indexer"))
+    implementation(project(":core:ledger"))  // BalanceFormatter (token decimals)
     implementation(project(":core:network"))
     implementation(project(":core:auth"))
 

@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import java.math.BigInteger
 
 /**

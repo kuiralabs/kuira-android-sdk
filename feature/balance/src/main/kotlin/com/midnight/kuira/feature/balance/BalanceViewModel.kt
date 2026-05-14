@@ -17,7 +17,7 @@ import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.sync.SyncState
-import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.NetworkClientFactory
 import com.midnight.kuira.core.network.NetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel

@@ -625,7 +625,7 @@ private fun ShieldedBalanceCard(
     visible: Boolean,
     onToggleVisibility: () -> Unit
 ) {
-    val formatter = remember { com.midnight.kuira.core.indexer.ui.BalanceFormatter() }
+    val formatter = remember { com.midnight.kuira.core.ledger.ui.BalanceFormatter() }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

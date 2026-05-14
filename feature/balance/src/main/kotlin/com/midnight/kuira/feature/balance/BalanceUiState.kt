@@ -1,7 +1,7 @@
 package com.midnight.kuira.feature.balance
 
 import com.midnight.kuira.core.indexer.model.TokenBalance
-import com.midnight.kuira.core.indexer.ui.BalanceFormatter
+import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import java.math.BigInteger
 
 /**

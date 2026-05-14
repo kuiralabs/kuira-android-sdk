@@ -1,4 +1,4 @@
-package com.midnight.kuira.core.indexer.ui
+package com.midnight.kuira.core.ledger.ui
 
 import java.math.BigInteger
 import java.text.DecimalFormat
