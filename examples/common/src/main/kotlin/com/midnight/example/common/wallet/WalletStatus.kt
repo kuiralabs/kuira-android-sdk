@@ -1,0 +1,36 @@
+package com.midnight.example.common.wallet
+
+import com.midnight.kuira.sdk.WalletBalance
+
+/**
+ * UI state for [WalletStatusPanel] / [WalletPanelViewModel].
+ *
+ * The panel walks a host's wallet through "no wallet yet → loading →
+ * funded/registered → maybe error". Each variant maps 1:1 to what the pill +
+ * sheet render. See [WalletPanelViewModel] for the transitions.
+ */
+sealed class WalletStatus {
+    /** No SDK built yet — first launch, or after a reset. */
+    data object None : WalletStatus()
+
+    /** Building MidnightSdk and reading the first balance. [stage] feeds the sheet's status line. */
+    data class Loading(val stage: String) : WalletStatus()
+
+    /**
+     * SDK ready, latest balance known.
+     *
+     * @property address Bech32m wallet address — shown verbatim and copy-on-tap.
+     * @property balance Most recent snapshot from `sdk.wallet.balance()`.
+     * @property busy Set while a long-running action (waitForFunding / register) is in flight; null when idle.
+     * @property message One-line status from the last action (success or failure detail).
+     */
+    data class Ready(
+        val address: String,
+        val balance: WalletBalance,
+        val busy: String? = null,
+        val message: String? = null,
+    ) : WalletStatus()
+
+    /** SDK couldn't build or balance couldn't be read. */
+    data class Error(val message: String) : WalletStatus()
+}
