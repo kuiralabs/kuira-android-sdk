@@ -69,11 +69,16 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 // Best-effort dust resync. NIGHT is subscription-driven and live
                 // without this; dust state is local-replay-driven and can be
                 // stale. A transient WS hiccup shouldn't fail the whole read.
-                runCatching { built.wallet.forceResyncDust() }
-                    .onFailure { Log.w(TAG, "forceResyncDust failed (showing cached): ${it.message}") }
+                runCatching { built.wallet.refresh() }
+                    .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
                 val balance = built.wallet.balance()
                 _status.value = WalletStatus.Ready(address = built.walletAddress, balance = balance)
-                Log.i(TAG, "balance: night=${balance.night} dust=${balance.dust} registered=${balance.dustRegistered}")
+                Log.i(
+                    TAG,
+                    "balance: unshieldedNight=${balance.unshieldedNight} " +
+                        "shieldedNight=${balance.shieldedNight} " +
+                        "dust=${balance.dust} registered=${balance.dustRegistered}",
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Balance read failed")
@@ -96,12 +101,14 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                     balance = current,
                     busy = "Waiting for funds…",
                 )
-                Log.i(TAG, "waitForFunding: night=${current.night}")
+                Log.i(TAG, "waitForFunding: unshieldedNight=${current.unshieldedNight}")
                 val funded = built.wallet.waitForFunding(MIN_FUNDING_NIGHT)
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
                     balance = funded,
-                    message = "Funded — NIGHT=${funded.night}",
+                    // External funding lands on the unshielded address, so the
+                    // funded edge is signaled by unshieldedNight crossing the threshold.
+                    message = "Funded — NIGHT=${funded.unshieldedNight}",
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "waitForFunding failed", e)
@@ -156,8 +163,8 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 var latest = built.wallet.balance()
                 while (latest.dust == BigInteger.ZERO && System.currentTimeMillis() < deadline) {
                     delay(DUST_POLL_INTERVAL_MS)
-                    runCatching { built.wallet.forceResyncDust() }
-                        .onFailure { Log.w(TAG, "forceResyncDust failed during poll: ${it.message}") }
+                    runCatching { built.wallet.refresh() }
+                        .onFailure { Log.w(TAG, "wallet.refresh failed during poll: ${it.message}") }
                     latest = built.wallet.balance()
                     _status.value = WalletStatus.Ready(
                         address = built.walletAddress,

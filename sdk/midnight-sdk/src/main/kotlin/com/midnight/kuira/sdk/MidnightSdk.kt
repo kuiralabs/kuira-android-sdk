@@ -18,6 +18,7 @@ import com.midnight.kuira.core.indexer.database.UtxoDatabase
 import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
@@ -101,6 +102,7 @@ class MidnightSdk private constructor(
     private val subscriptionJob: Job,
     private val database: UtxoDatabase,
     private val indexerClient: IndexerClientImpl,
+    private val shieldedTracker: ShieldedBalanceTracker,
 ) {
     /**
      * Register this wallet's NIGHT key to generate dust against its public dust key.
@@ -187,6 +189,7 @@ class MidnightSdk private constructor(
     fun close() {
         subscriptionJob.cancel()
         subscriptionScope.cancel()
+        shieldedTracker.close()
         wallet.close()
         indexerClient.close()
         database.close()
@@ -293,7 +296,27 @@ class MidnightSdk private constructor(
                 subscriptionManager.startSubscription(keys.address).collect { /* state observed inside */ }
             }
 
-            // ── Create wallet with tip-aware dust sync ──
+            // ── Shielded NIGHT tracker (auto-syncs in background) ──
+            //
+            // The SDK fully owns shielded balance freshness so dApps don't
+            // have to wire ShieldedRepository themselves. ShieldedBalanceTracker
+            // runs an initial replay and then re-runs it on chain-tip advance.
+            // Construction is direct (no Hilt) — ShieldedRepository's Hilt
+            // annotations are just metadata, the class is fine to `new` here.
+            val shieldedRepository = ShieldedRepository(
+                dataStore = sdkShieldedStateDataStore(appContext),
+                indexerClient = indexerClient,
+                networkConfig = networkConfig,
+            )
+            val shieldedTracker = ShieldedBalanceTracker(
+                shieldedRepository = shieldedRepository,
+                walletAddress = keys.address,
+                zswapSeed = keys.zswapSeed,
+            )
+            // Launch on the same subscriptionScope so close() cancels it.
+            shieldedTracker.start(subscriptionScope)
+
+            // ── Create wallet with tip-aware dust sync + shielded tracker ──
 
             val dustSyncManager = DustSyncManager(
                 dustRepository = dustRepository,
@@ -308,6 +331,7 @@ class MidnightSdk private constructor(
                 indexerClient = indexerClient,
                 nodeRpcClient = nodeRpcClient,
                 balanceRepository = balanceRepository,
+                shieldedTracker = shieldedTracker,
                 walletAddress = keys.address,
                 dustSeed = keys.dustSeed,
                 provingKeysDir = provingKeyManager.keysDir.absolutePath,
@@ -361,6 +385,7 @@ class MidnightSdk private constructor(
                 subscriptionJob = subscriptionJob,
                 database = database,
                 indexerClient = indexerClient,
+                shieldedTracker = shieldedTracker,
             )
         }
     }
@@ -380,6 +405,11 @@ class MidnightSdk private constructor(
         private val Context.sdkDustDataStore by preferencesDataStore(name = "sdk_dust_state")
 
         internal fun sdkDustStateDataStore(context: Context) = context.sdkDustDataStore
+
+        /** DataStore for SDK shielded (zswap) state. Separate file from the Kuira app's. */
+        private val Context.sdkShieldedDataStore by preferencesDataStore(name = "sdk_shielded_state")
+
+        internal fun sdkShieldedStateDataStore(context: Context) = context.sdkShieldedDataStore
     }
 }
 
@@ -396,6 +426,13 @@ internal data class DerivedKeys(
      */
     val nightPrivateKey: ByteArray,
     val dustSeed: ByteArray,
+    /**
+     * 32-byte zswap seed at m/44'/2400'/account'/3/0. Retained for the SDK's
+     * lifetime because [ShieldedBalanceTracker] needs it to decrypt zswap
+     * events every time the shielded subscription re-syncs. Wiped by
+     * `ShieldedBalanceTracker.close()` (called from [MidnightSdk.close]).
+     */
+    val zswapSeed: ByteArray,
     val coinPublicKey: ByteArray,
     val accessKeyPublicKey: ByteArray,
     val accessKeyPath: String,
@@ -437,6 +474,9 @@ internal fun deriveKeys(
     val shieldedKeys = ShieldedKeyDeriver.deriveKeys(zswapKey.privateKeyBytes)
         ?: throw IllegalStateException("ShieldedKeyDeriver.deriveKeys failed — is native library loaded?")
     val coinPublicKey = hexToBytes(shieldedKeys.coinPublicKey)
+    // Retain the zswap seed for the SDK's lifetime — ShieldedBalanceTracker
+    // needs it on every shielded resync to decrypt zswap events.
+    val zswapSeed = zswapKey.privateKeyBytes.copyOf()
 
     // Access key for sigil identity: m/44'/2400'/account'/5/0
     val accessKeyManager = AccessKeyManager(hdWallet, accountIndex)
@@ -450,6 +490,7 @@ internal fun deriveKeys(
         address = address,
         nightPrivateKey = nightPrivateKey,
         dustSeed = dustSeed,
+        zswapSeed = zswapSeed,
         coinPublicKey = coinPublicKey,
         accessKeyPublicKey = accessKeyPublicKey,
         accessKeyPath = accessKeyPath,

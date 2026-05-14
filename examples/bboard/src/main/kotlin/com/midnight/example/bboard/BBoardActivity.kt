@@ -372,7 +372,7 @@ private fun WalletStatusCard(
                 )
                 Spacer(modifier = Modifier.height(Spacing.SmallGap))
                 Text(
-                    "${balanceFormatter.formatCompact(status.balance.night, "NIGHT")}" +
+                    "${balanceFormatter.formatCompact(status.balance.totalNight, "NIGHT")}" +
                         " · ${balanceFormatter.formatCompact(status.balance.dust, "DUST")}" +
                         if (status.balance.dustRegistered) " · ✓" else "",
                     color = Colors.OnSurfaceDim,

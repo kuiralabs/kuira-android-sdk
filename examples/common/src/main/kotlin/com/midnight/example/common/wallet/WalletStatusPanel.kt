@@ -185,7 +185,12 @@ private fun pillLabel(status: WalletStatus, formatter: BalanceFormatter): String
         // Asymmetric: NIGHT is the primary asset (unmarked), DUST gets a "D"
         // suffix. K/M/B abbreviations so the pill width stays predictable as
         // amounts grow; integer-only below 1K. Full precision is in the sheet.
-        append(formatter.formatAbbreviated(status.balance.night, "NIGHT"))
+        //
+        // NIGHT aggregates shielded + unshielded — the pill is a "do I have
+        // enough to do something?" signal, not a portfolio view. The shielded
+        // breakdown lives in the sheet; the next iteration adds a shield
+        // badge here when status.balance.hasShielded.
+        append(formatter.formatAbbreviated(status.balance.totalNight, "NIGHT"))
         append(" · ")
         append(formatter.formatAbbreviated(status.balance.dust, "DUST"))
         append("D")
@@ -296,7 +301,10 @@ private fun ReadyBody(
     Spacer(modifier = Modifier.height(4.dp))
     Text(
         text = buildString {
-            append(formatter.formatCompact(status.balance.night, "NIGHT"))
+            // Total NIGHT (shielded + unshielded) — pool breakdown is added in
+            // the shielded-render iteration. Once that lands, this single row
+            // splits into three (unshielded NIGHT / shielded NIGHT / DUST).
+            append(formatter.formatCompact(status.balance.totalNight, "NIGHT"))
             append(" · ")
             append(formatter.formatCompact(status.balance.dust, "DUST"))
             if (status.balance.dustRegistered) append(" · ✓")

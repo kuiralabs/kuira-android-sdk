@@ -96,7 +96,7 @@ class SdkRegistrationE2ETest {
                     "Is docker running and indexer at http://10.0.2.2:8088 healthy?",
                 initial != null,
             )
-            Log.i(TAG, "Initial balance: night=${initial!!.night}  dust=${initial.dust}  dustRegistered=${initial.dustRegistered}")
+            Log.i(TAG, "Initial balance: night=${initial!!.unshieldedNight}  dust=${initial.dust}  dustRegistered=${initial.dustRegistered}")
 
             // ── Step 2: ensure the wallet is funded ──
             //
@@ -104,8 +104,8 @@ class SdkRegistrationE2ETest {
             // because the first emission from the underlying balance Flow already
             // satisfies the predicate. If not, sleep up to FUNDING_TIMEOUT_MS while
             // the user runs `mn transfer`.
-            val funded = if (initial.night >= MIN_NIGHT) {
-                Log.i(TAG, "Already funded (NIGHT=${initial.night}) — skipping waitForFunding")
+            val funded = if (initial.unshieldedNight >= MIN_NIGHT) {
+                Log.i(TAG, "Already funded (NIGHT=${initial.unshieldedNight}) — skipping waitForFunding")
                 initial
             } else {
                 Log.i(TAG, "Waiting up to ${FUNDING_TIMEOUT_MS / 1000}s for NIGHT >= $MIN_NIGHT...")
@@ -114,8 +114,8 @@ class SdkRegistrationE2ETest {
                     timeoutMs = FUNDING_TIMEOUT_MS,
                 )
             }
-            Log.i(TAG, "Funded balance:  night=${funded.night}  dust=${funded.dust}  dustRegistered=${funded.dustRegistered}")
-            assertTrue("Expected NIGHT >= $MIN_NIGHT after funding", funded.night >= MIN_NIGHT)
+            Log.i(TAG, "Funded balance:  night=${funded.unshieldedNight}  dust=${funded.dust}  dustRegistered=${funded.dustRegistered}")
+            assertTrue("Expected NIGHT >= $MIN_NIGHT after funding", funded.unshieldedNight >= MIN_NIGHT)
 
             // ── Step 3: register for dust generation ──
             //
@@ -142,11 +142,11 @@ class SdkRegistrationE2ETest {
             // local dust state; the wait is loose because exact timing depends
             // on localnet's block production rate.
             val afterRegister = sdk.wallet.balance()
-            Log.i(TAG, "Post-register balance: night=${afterRegister.night}  dust=${afterRegister.dust}  dustRegistered=${afterRegister.dustRegistered}")
+            Log.i(TAG, "Post-register balance: night=${afterRegister.unshieldedNight}  dust=${afterRegister.dust}  dustRegistered=${afterRegister.dustRegistered}")
             assertNotEquals(
                 "NIGHT shouldn't have been consumed by registration (UnshieldedOffer consolidates back to self)",
                 BigInteger.ZERO,
-                afterRegister.night,
+                afterRegister.unshieldedNight,
             )
         } finally {
             sdk.close()

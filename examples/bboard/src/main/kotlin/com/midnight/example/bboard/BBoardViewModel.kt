@@ -199,16 +199,16 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 // — we'd rather show slightly-stale dust than fail the whole
                 // refresh. Subsequent taps usually succeed.
                 try {
-                    builtSdk.wallet.forceResyncDust()
+                    builtSdk.wallet.refresh()
                 } catch (e: Exception) {
-                    Log.w(TAG, "forceResyncDust failed (showing cached): ${e.message}")
+                    Log.w(TAG, "wallet.refresh failed (showing cached): ${e.message}")
                 }
                 val balance = builtSdk.wallet.balance()
                 _walletStatus.value = WalletStatusState.Ready(
                     address = builtSdk.walletAddress,
                     balance = balance,
                 )
-                Log.i(TAG, "balance: night=${balance.night} dust=${balance.dust} registered=${balance.dustRegistered}")
+                Log.i(TAG, "balance: night=${balance.totalNight} dust=${balance.dust} registered=${balance.dustRegistered}")
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _walletStatus.value = WalletStatusState.Error(e.message ?: "Balance read failed")
@@ -232,14 +232,14 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     balance = current,
                     busy = "Waiting for funds…",
                 )
-                Log.i(TAG, "waitForFunding: night=${current.night}, waiting up to 5min")
+                Log.i(TAG, "waitForFunding: night=${current.totalNight}, waiting up to 5min")
                 val funded = builtSdk.wallet.waitForFunding(MIN_FUNDING_NIGHT)
                 _walletStatus.value = WalletStatusState.Ready(
                     address = builtSdk.walletAddress,
                     balance = funded,
-                    message = "Funded — NIGHT=${funded.night}",
+                    message = "Funded — NIGHT=${funded.unshieldedNight}",
                 )
-                Log.i(TAG, "waitForFunding: funded (night=${funded.night})")
+                Log.i(TAG, "waitForFunding: funded (night=${funded.unshieldedNight})")
             } catch (e: Exception) {
                 Log.e(TAG, "waitForFunding failed", e)
                 _walletStatus.value = WalletStatusState.Error(e.message ?: "Wait for funding failed")
@@ -301,9 +301,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                     // Best-effort: a transient WS hiccup just means we wait
                     // another tick and try again.
                     try {
-                        builtSdk.wallet.forceResyncDust()
+                        builtSdk.wallet.refresh()
                     } catch (e: Exception) {
-                        Log.w(TAG, "forceResyncDust failed during poll: ${e.message}")
+                        Log.w(TAG, "wallet.refresh failed during poll: ${e.message}")
                     }
                     latest = builtSdk.wallet.balance()
                     _walletStatus.value = WalletStatusState.Ready(
@@ -312,7 +312,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                         busy = if (latest.dust == BigInteger.ZERO) "Waiting for first dust generation…" else null,
                     )
                 }
-                Log.i(TAG, "registerDust: final balance night=${latest.night} dust=${latest.dust}")
+                Log.i(TAG, "registerDust: final balance night=${latest.totalNight} dust=${latest.dust}")
                 _walletStatus.value = WalletStatusState.Ready(
                     address = builtSdk.walletAddress,
                     balance = latest,

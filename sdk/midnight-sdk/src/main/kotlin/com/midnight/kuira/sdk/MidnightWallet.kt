@@ -32,6 +32,7 @@ class MidnightWallet internal constructor(
     private val indexerClient: IndexerClient,
     private val nodeRpcClient: NodeRpcClient,
     private val balanceRepository: BalanceRepository,
+    private val shieldedTracker: ShieldedBalanceTracker,
     private val walletAddress: String,
     private val dustSeed: ByteArray,
     private val provingKeysDir: String,
@@ -44,26 +45,37 @@ class MidnightWallet internal constructor(
     val address: String get() = walletAddress
 
     /**
-     * Current NIGHT and dust balance for this wallet.
+     * Current snapshot of every balance the SDK tracks for this wallet —
+     * unshielded NIGHT, shielded NIGHT, DUST, and the registration flag.
      *
-     * NIGHT comes from the unshielded-tx subscription's local view of available
-     * UTXOs (driven by [BalanceRepository] / [UtxoManager]). DUST comes from the
-     * dust state replay ([DustRepository.getCurrentBalance]).
+     * **Sources (all kept fresh by the SDK; no consumer action required):**
+     *  - Unshielded NIGHT: [BalanceRepository] flow over the unshielded-tx
+     *    subscription started at SDK-build time.
+     *  - Shielded NIGHT: [ShieldedBalanceTracker]'s cache, refreshed by the
+     *    zswap-event subscription started at SDK-build time. Returns 0 until
+     *    the first sync lands (a few hundred ms on localnet, a few seconds
+     *    on PREPROD on first run).
+     *  - DUST: [DustRepository] local replay state.
      *
-     * `dustRegistered` is a *best-effort* heuristic: true if the wallet currently
-     * holds dust UTXOs (chain-side, only registered wallets accumulate spendable
-     * dust). For a fresh wallet that hasn't yet been registered, this returns
-     * false even if NIGHT has arrived — registration must be explicit.
+     * `dustRegistered` is a best-effort heuristic — true iff DUST > 0. A
+     * fresh wallet that hasn't called [MidnightSdk.registerForDustGeneration]
+     * reports false here even with NIGHT funded, because the chain doesn't
+     * release spendable dust to an unregistered key.
+     *
+     * For a forced resync (e.g. before a sequential tx or when the UI wants
+     * to skip the subscription's natural cadence), call [refresh] first.
      */
     suspend fun balance(): WalletBalance {
         val tokenBalances = balanceRepository.observeBalances(walletAddress).first()
-        val night = tokenBalances
+        val unshielded = tokenBalances
             .firstOrNull { it.tokenType == TokenTypeMapper.NIGHT_SYMBOL }
             ?.balance
             ?: BigInteger.ZERO
+        val shielded = shieldedTracker.currentNight()
         val dust = dustRepository.getCurrentBalance(walletAddress)
         return WalletBalance(
-            night = night,
+            unshieldedNight = unshielded,
+            shieldedNight = shielded,
             dust = dust,
             dustRegistered = dust > BigInteger.ZERO,
         )
@@ -104,13 +116,18 @@ class MidnightWallet internal constructor(
         // Funding arrived → force a dust resync so subsequent ops aren't stale.
         dustSyncManager.invalidateMemo()
         dustSyncManager.ensureSynced()
-        val night = funded
+        val unshielded = funded
             .firstOrNull { it.tokenType == TokenTypeMapper.NIGHT_SYMBOL }
             ?.balance
             ?: BigInteger.ZERO
         val dust = dustRepository.getCurrentBalance(walletAddress)
         return WalletBalance(
-            night = night,
+            unshieldedNight = unshielded,
+            // Shielded NIGHT is the SDK's cached value — external funding
+            // lands on the unshielded address, so we don't trigger a shielded
+            // resync here. Consumers that need a fresh shielded reading can
+            // call [refresh] after waitForFunding returns.
+            shieldedNight = shieldedTracker.currentNight(),
             dust = dust,
             dustRegistered = dust > BigInteger.ZERO,
         )
@@ -235,9 +252,35 @@ class MidnightWallet internal constructor(
         dustSyncManager.ensureSynced()
     }
 
-    /** Force a fresh dust sync. Call between sequential transactions to avoid stale UTXO state. */
-    suspend fun forceResyncDust() {
-        forceFullSync()
+    /**
+     * Force a fresh resync of both shielded and dust state.
+     *
+     * Unshielded NIGHT is already kept live by the subscription started at
+     * SDK build time, so it's not re-pulled here. Shielded NIGHT and DUST
+     * are local-replay-driven and can lag if the SDK's subscriptions had a
+     * transient hiccup; calling [refresh] catches them up immediately.
+     *
+     * Use cases:
+     *  - Between sequential transactions (avoid stale UTXO state for fees).
+     *  - When the UI shows a "refresh" affordance and the user wants
+     *    on-demand freshness rather than waiting on the natural cadence.
+     *  - After [waitForFunding] returns, if you also need shielded NIGHT
+     *    fresh (waitForFunding only refreshes dust).
+     *
+     * Errors in shielded resync don't abort the dust resync (and vice versa) —
+     * partial freshness is better than no freshness.
+     */
+    suspend fun refresh() {
+        try {
+            shieldedTracker.resync()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
+        }
+        try {
+            forceFullSync()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
+        }
     }
 
     private fun isDustSpendProofError(e: NodeRpcError): Boolean {
@@ -264,19 +307,46 @@ class MidnightWallet internal constructor(
 }
 
 /**
- * Snapshot of a wallet's funding state.
+ * Snapshot of a wallet's full balance state across both pools.
  *
- * @property night Available NIGHT in u128 base units (sum of unspent UTXOs).
- * @property dust Available DUST in u128 base units (the wallet's locally-replayed
- *   dust state — what the SDK would use to pay the next fee).
+ * **Pool semantics:**
+ *  - Unshielded NIGHT lives in UTXOs on the public ledger; this is what
+ *    external transfers ("fund this address") land in.
+ *  - Shielded NIGHT lives in Zswap coins on the private ledger; the wallet
+ *    moves NIGHT here for transactions whose amounts/recipients shouldn't
+ *    be public.
+ *  - DUST is a separate fee token, generated by the chain at a rate tied
+ *    to the wallet's registered NIGHT. Not held in either pool's
+ *    coin/UTXO graph; tracked in the ledger's dust state.
+ *
+ * **Why DUST has no "shielded" half:** Midnight's protocol generates DUST
+ * against a registered NIGHT key directly. It's never wrapped in a Zswap
+ * coin and never appears as a shielded balance — by design, since DUST
+ * is the *fee* substrate, not a transferrable shielded asset.
+ *
+ * @property unshieldedNight Sum of unspent NIGHT UTXOs at this wallet's
+ *   Bech32m address. u128 base units.
+ * @property shieldedNight Sum of shielded NIGHT coins decryptable by this
+ *   wallet's zswap key. u128 base units. Zero until the SDK's shielded
+ *   subscription has completed its first replay (a few hundred ms on
+ *   localnet, a few seconds on PREPROD).
+ * @property dust Wallet's locally-replayed DUST state — what the SDK would
+ *   spend on the next fee. u128 base units.
  * @property dustRegistered Best-effort signal: true iff the wallet currently
- *   holds spendable dust. A newly-funded wallet that hasn't run
- *   [MidnightSdk.registerForDustGeneration] yet will report `false` here even
- *   with NIGHT > 0, because the chain doesn't release spendable dust to an
+ *   holds spendable dust. A fresh wallet that hasn't run
+ *   [MidnightSdk.registerForDustGeneration] reports `false` even with NIGHT
+ *   funded, because the chain doesn't release spendable dust to an
  *   unregistered key.
  */
 data class WalletBalance(
-    val night: BigInteger,
+    val unshieldedNight: BigInteger,
+    val shieldedNight: BigInteger,
     val dust: BigInteger,
     val dustRegistered: Boolean,
-)
+) {
+    /** Sum of both NIGHT pools — what the wallet "has" in NIGHT terms. */
+    val totalNight: BigInteger get() = unshieldedNight + shieldedNight
+
+    /** True iff any shielded NIGHT is present. UIs use this to gate the privacy badge. */
+    val hasShielded: Boolean get() = shieldedNight > BigInteger.ZERO
+}
