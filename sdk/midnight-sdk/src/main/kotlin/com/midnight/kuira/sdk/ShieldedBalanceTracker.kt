@@ -99,11 +99,30 @@ internal class ShieldedBalanceTracker(
             // last observed event id; the indexer's `maxId` signals how far
             // back the visible event log goes, so `event.id >= maxId` means
             // we're caught up to the tip and the next event is genuinely new.
+            //
+            // **Log noise control:**
+            // We log a warning only on the *first* error of an outage streak,
+            // and the next info-level "recovered" when the next collect()
+            // succeeds. Without this the loop hammers logcat every few seconds
+            // during a docker outage / adb-reverse drop — the underlying retry
+            // is correct behavior, the noise isn't.
+            //
+            // **Backoff:**
+            // 3s → 6s → 12s → 30s cap. Aggressive enough to recover quickly
+            // once connectivity returns, sparse enough not to flood the
+            // network stack during a long outage.
             var lastMaxId = 0L
+            var consecutiveErrors = 0
+            var backoffMs = INITIAL_RECONNECT_DELAY_MS
             while (isActive) {
                 try {
                     shieldedRepository.subscribeToZswapEvents(fromId = lastMaxId)
                         .collect { event ->
+                            if (consecutiveErrors > 0) {
+                                Log.i(TAG, "Shielded subscription recovered after $consecutiveErrors failure(s)")
+                                consecutiveErrors = 0
+                                backoffMs = INITIAL_RECONNECT_DELAY_MS
+                            }
                             val previousMax = lastMaxId
                             lastMaxId = maxOf(lastMaxId, event.id)
                             if (event.id >= event.maxId && event.maxId > previousMax - 1) {
@@ -113,8 +132,12 @@ internal class ShieldedBalanceTracker(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.w(TAG, "Shielded subscription error, reconnect in ${RECONNECT_DELAY_MS}ms: ${e.message}")
-                    delay(RECONNECT_DELAY_MS)
+                    consecutiveErrors++
+                    if (consecutiveErrors == 1) {
+                        Log.w(TAG, "Shielded subscription error, retrying with backoff: ${e.message}")
+                    }
+                    delay(backoffMs)
+                    backoffMs = (backoffMs * 2).coerceAtMost(MAX_RECONNECT_DELAY_MS)
                 }
             }
         }
@@ -130,7 +153,10 @@ internal class ShieldedBalanceTracker(
     private companion object {
         const val TAG = "ShieldedTracker"
 
-        /** Backoff between WebSocket reconnect attempts on the shielded subscription. */
-        const val RECONNECT_DELAY_MS = 3_000L
+        /** First backoff after a failed subscription — short so transient blips recover fast. */
+        const val INITIAL_RECONNECT_DELAY_MS = 3_000L
+
+        /** Cap on the exponential backoff. Stops the loop from hammering during a long outage. */
+        const val MAX_RECONNECT_DELAY_MS = 30_000L
     }
 }

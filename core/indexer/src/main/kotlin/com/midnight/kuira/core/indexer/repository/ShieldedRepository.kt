@@ -151,26 +151,42 @@ class ShieldedRepository @Inject constructor(
         }
 
         return flow {
+            // Each subscription gets its own WebSocket client (per the class-level
+            // comment about isolation from the shared IndexerClient). The
+            // try/finally is critical: when the collector is cancelled — e.g.
+            // ShieldedBalanceTracker.close() during an SDK rebuild on network
+            // switch — we MUST close this client. Without it the underlying
+            // OkHttp dispatcher keeps retrying connections from the dead SDK
+            // and floods logcat with `ConnectException` from the previous
+            // network's host. Symptom: switching networks leaves "phantom"
+            // shielded subscriptions hammering the old endpoint forever.
             val client = createFreshWsClient()
-            client.connect()
+            try {
+                client.connect()
+                client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
+                    .buffer(Channel.UNLIMITED)
+                    .collect { jsonElement ->
+                        val dataElement = jsonElement.jsonObject["data"]
+                        if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+                            return@collect
+                        }
 
-            client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
-                .buffer(Channel.UNLIMITED)
-                .collect { jsonElement ->
-                    val dataElement = jsonElement.jsonObject["data"]
-                    if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
-                        return@collect
+                        val eventObj = dataElement.jsonObject["zswapLedgerEvents"]?.jsonObject
+                            ?: return@collect
+
+                        val id = eventObj["id"]?.jsonPrimitive?.long ?: return@collect
+                        val rawHex = eventObj["raw"]?.jsonPrimitive?.content ?: return@collect
+                        val maxId = eventObj["maxId"]?.jsonPrimitive?.long ?: return@collect
+
+                        emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
                     }
-
-                    val eventObj = dataElement.jsonObject["zswapLedgerEvents"]?.jsonObject
-                        ?: return@collect
-
-                    val id = eventObj["id"]?.jsonPrimitive?.long ?: return@collect
-                    val rawHex = eventObj["raw"]?.jsonPrimitive?.content ?: return@collect
-                    val maxId = eventObj["maxId"]?.jsonPrimitive?.long ?: return@collect
-
-                    emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
-                }
+            } finally {
+                // close() is suspend; runCatching isn't suspend-aware, so a plain
+                // try/catch keeps the suspension context. Swallow failures —
+                // we're tearing down, double-faulting in the cleanup path would
+                // mask the real exception from the body.
+                try { client.close() } catch (_: Throwable) { }
+            }
         }
     }
 
