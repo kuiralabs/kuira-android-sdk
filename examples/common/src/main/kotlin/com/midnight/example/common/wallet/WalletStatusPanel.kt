@@ -21,6 +21,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
 import kotlinx.coroutines.launch
@@ -133,8 +136,9 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
  * wallet state. If a host wants to drive the panel from its own ViewModel
  * (e.g. share the SDK with other features), pass a custom [viewModel].
  *
- * @param network The Midnight network all actions target. Switching networks
- *   rebuilds the SDK on next action.
+ * @param initialNetwork Network the panel starts on. The user can change it
+ *   via the sheet's network chip row — that selection is owned inside the
+ *   panel from then on, the host doesn't need to track it.
  * @param modifier Modifier applied to the pill — typical placement is
  *   `Modifier.align(Alignment.TopEnd).padding(...)`.
  * @param colors UI palette; defaults match dark-themed example apps.
@@ -143,7 +147,7 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletStatusPanel(
-    network: MidnightNetwork,
+    initialNetwork: MidnightNetwork = MidnightNetwork.UNDEPLOYED,
     modifier: Modifier = Modifier,
     colors: WalletPanelColors = WalletPanelColors.Default,
     viewModel: WalletPanelViewModel = viewModel(factory = WalletPanelViewModel.Factory),
@@ -155,9 +159,20 @@ fun WalletStatusPanel(
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
 
+    // Panel owns the full wallet config now (network + proving mode + proof
+    // server URL). User picks any of these in the sheet, the LaunchedEffect
+    // below re-fires with the new config and the VM rebuilds the SDK.
+    var network by rememberSaveable { mutableStateOf(initialNetwork) }
+    var provingMode by rememberSaveable { mutableStateOf(ProvingMode.DEFAULT) }
+    var proofServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    val config = remember(network, provingMode, proofServerUrl) {
+        WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
+    }
+
     // The pill — always rendered. Tap opens the sheet.
     WalletPill(
         status = status,
+        network = network,
         formatter = formatter,
         colors = colors,
         modifier = modifier.clickable { sheetOpen = true },
@@ -169,29 +184,20 @@ fun WalletStatusPanel(
     // a FragmentActivity-derived host (ComponentActivity counts).
     val activity = LocalContext.current as? FragmentActivity
 
-    // Auto-bootstrap on panel mount AND on network change. The pill should
-    // start syncing the moment the host app surfaces it — the user shouldn't
-    // have to tap to see their wallet status. This intentionally triggers
-    // the biometric prompt on first launch (unlike the parent Kuira wallet,
-    // which defers it): the panel serves dApps where the user has already
-    // consented to wallet access by dropping the host into their device.
-    // See feedback_sdk_devx_principle for the wider rationale.
+    // Auto-bootstrap on panel mount AND on any config change (network,
+    // proving mode, proof server URL). The pill should start syncing the
+    // moment the host app surfaces it. Intentionally triggers the biometric
+    // prompt on first launch — see feedback_sdk_devx_principle.
     //
-    // **Keyed on (activity, network)** — not status — for two reasons:
-    //  1. First mount fires once; activity-null branch is a no-op until
-    //     a FragmentActivity is reachable through LocalContext.
-    //  2. When the host switches the network chip, this re-fires with the
-    //     new network. `WalletPanelViewModel.buildOrReuseSdk` detects the
-    //     mismatch, tears down the old SDK (cancels its subscriptions +
-    //     wipes its zswap seed), and builds a fresh one — so the Receive
-    //     screen and pill pick up the new network's addresses without the
-    //     user having to tap `balance` themselves.
+    // Keyed on (activity, config). WalletPanelViewModel.buildOrReuseSdk
+    // compares the full config (not just network) so flipping proving mode
+    // also tears down the SDK and builds fresh.
     //
     // Not keyed on status so that a failed bootstrap (Error) doesn't loop —
     // the user retries via the explicit `balance` button.
-    LaunchedEffect(activity, network) {
+    LaunchedEffect(activity, config) {
         if (activity != null) {
-            viewModel.refreshBalance(network, activity)
+            viewModel.refreshBalance(config, activity)
         }
     }
 
@@ -204,10 +210,14 @@ fun WalletStatusPanel(
         ) {
             WalletSheetContent(
                 status = status,
+                config = config,
                 formatter = formatter,
                 colors = colors,
-                onRefreshBalance = { activity?.let { viewModel.refreshBalance(network, it) } },
-                onRegisterDust = { activity?.let { viewModel.registerDust(network, it) } },
+                onNetworkChange = { network = it },
+                onProvingModeChange = { provingMode = it },
+                onProofServerUrlChange = { proofServerUrl = it },
+                onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it) } },
+                onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
                 onReceive = {
                     // Dismiss the sheet first, then open the Receive screen on
                     // the next frame so the sheet's exit animation isn't
@@ -250,11 +260,12 @@ fun WalletStatusPanel(
 @Composable
 private fun WalletPill(
     status: WalletStatus,
+    network: MidnightNetwork,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
 ) {
-    val label = pillLabel(status, formatter)
+    val label = pillLabel(status, network, formatter)
     val isError = status is WalletStatus.Error
     val borderColor = if (isError) colors.error else colors.pillBorder
 
@@ -294,10 +305,19 @@ private fun WalletPill(
     }
 }
 
-private fun pillLabel(status: WalletStatus, formatter: BalanceFormatter): String = when (status) {
-    is WalletStatus.None -> "wallet"
-    is WalletStatus.Loading -> "loading…"
+private fun pillLabel(
+    status: WalletStatus,
+    network: MidnightNetwork,
+    formatter: BalanceFormatter,
+): String = when (status) {
+    is WalletStatus.None -> "${network.pillName} · wallet"
+    is WalletStatus.Loading -> "${network.pillName} · loading…"
     is WalletStatus.Ready -> buildString {
+        // Network prefix anchors the rest of the pill. Knowing which chain
+        // these numbers are for matters more than the numbers themselves
+        // once you start switching networks during dev.
+        append(network.pillName)
+        append(" · ")
         // Asymmetric: NIGHT is the primary asset (unmarked), DUST gets a "D"
         // suffix. K/M/B abbreviations so the pill width stays predictable as
         // amounts grow; integer-only below 1K. Full precision is in the sheet.
@@ -316,8 +336,20 @@ private fun pillLabel(status: WalletStatus, formatter: BalanceFormatter): String
         append("D")
         if (status.balance.dustRegistered) append(" · ✓")
     }
-    is WalletStatus.Error -> "error"
+    is WalletStatus.Error -> "${network.pillName} · error"
 }
+
+/**
+ * Short label used in the pill (`localnet`, `preview`, `preprod`). Lower-case
+ * so it sits visually below the numeric portion of the pill rather than
+ * competing with it.
+ */
+private val MidnightNetwork.pillName: String
+    get() = when (this) {
+        MidnightNetwork.UNDEPLOYED -> "localnet"
+        MidnightNetwork.PREVIEW -> "preview"
+        MidnightNetwork.PREPROD -> "preprod"
+    }
 
 /**
  * Prefix glyph signaling "some of this NIGHT is shielded". Only rendered when
@@ -330,8 +362,12 @@ private const val SHIELD_GLYPH = "🛡"
 @Composable
 private fun WalletSheetContent(
     status: WalletStatus,
+    config: WalletConfig,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
+    onNetworkChange: (MidnightNetwork) -> Unit,
+    onProvingModeChange: (ProvingMode) -> Unit,
+    onProofServerUrlChange: (String?) -> Unit,
     onRefreshBalance: () -> Unit,
     onRegisterDust: () -> Unit,
     onReceive: () -> Unit,
@@ -364,6 +400,24 @@ private fun WalletSheetContent(
             is WalletStatus.Ready -> ReadyBody(status, formatter, colors)
             is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
         }
+
+        Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
+
+        // Config controls — network + proving mode. Picking any of these
+        // tears down the in-memory SDK and rebuilds for the new config.
+        NetworkChipRow(
+            selected = config.network,
+            colors = colors,
+            onSelect = onNetworkChange,
+        )
+        Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
+        ProvingModeToggle(
+            selected = config.provingMode,
+            proofServerUrl = config.proofServerUrl,
+            colors = colors,
+            onSelect = onProvingModeChange,
+            onUrlChange = onProofServerUrlChange,
+        )
 
         Spacer(modifier = Modifier.height(PanelDimens.SheetActionsTopGap))
 
@@ -496,6 +550,130 @@ private fun BalanceRow(
 
 /** Slight de-emphasis for the secondary message line (vs the busy line). */
 private const val MESSAGE_ALPHA = 0.8f
+
+/**
+ * Three-way chip row for [MidnightNetwork]. Picking a chip propagates up
+ * via [onSelect]; the panel's LaunchedEffect then re-fires with the new
+ * config and the VM rebuilds the SDK for that network.
+ */
+@Composable
+private fun NetworkChipRow(
+    selected: MidnightNetwork,
+    colors: WalletPanelColors,
+    onSelect: (MidnightNetwork) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SectionLabel("network", colors)
+        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
+        ) {
+            MidnightNetwork.entries.forEach { network ->
+                ChipButton(
+                    text = network.pillName,
+                    selected = network == selected,
+                    colors = colors,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelect(network) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Two-way chip row for [ProvingMode] plus an optional URL field that
+ * appears only when REMOTE is selected. URL is debounced on focus-loss /
+ * blur (text edits propagate as typed; the LaunchedEffect on `config` will
+ * rebuild the SDK each keystroke, so prefer settling on a value before
+ * picking REMOTE).
+ */
+@Composable
+private fun ProvingModeToggle(
+    selected: ProvingMode,
+    proofServerUrl: String?,
+    colors: WalletPanelColors,
+    onSelect: (ProvingMode) -> Unit,
+    onUrlChange: (String?) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SectionLabel("proving", colors)
+        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
+        ) {
+            ProvingMode.entries.forEach { mode ->
+                ChipButton(
+                    text = mode.name.lowercase(),
+                    selected = mode == selected,
+                    colors = colors,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelect(mode) },
+                )
+            }
+        }
+        if (selected == ProvingMode.REMOTE) {
+            Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
+            OutlinedTextField(
+                value = proofServerUrl.orEmpty(),
+                onValueChange = { onUrlChange(it.ifBlank { null }) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = {
+                    Text(
+                        "proof server url (default: localhost:6300)",
+                        color = colors.onSheetSubtle,
+                        fontSize = PanelType.AirdropCmd,
+                    )
+                },
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = colors.onSheet,
+                    fontSize = PanelType.AirdropCmd,
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.accent,
+                    unfocusedBorderColor = colors.pillBorder,
+                    cursorColor = colors.accent,
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Compact chip rendered as a filled button when selected, outlined when
+ * not. Shared between [NetworkChipRow] and [ProvingModeToggle].
+ */
+@Composable
+private fun ChipButton(
+    text: String,
+    selected: Boolean,
+    colors: WalletPanelColors,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val bg = if (selected) colors.onSheet else colors.button
+    val fg = if (selected) colors.sheetBackground else colors.onSheetDim
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .height(PanelDimens.ButtonHeight)
+            .clip(RoundedCornerShape(PanelDimens.ButtonCornerRadius))
+            .background(bg)
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            text = text,
+            color = fg,
+            fontSize = PanelType.ButtonText,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 @Composable
 private fun PanelButton(

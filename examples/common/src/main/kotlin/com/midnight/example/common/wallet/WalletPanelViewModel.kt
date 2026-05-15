@@ -56,7 +56,13 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
     val status: StateFlow<WalletStatus> = _status
 
     private var sdk: MidnightSdk? = null
-    private var sdkNetwork: MidnightNetwork? = null
+    /**
+     * Config the current [sdk] was built with. Null when no SDK exists yet.
+     * A `null` here OR a `sdkConfig != requestedConfig` triggers a full
+     * rebuild in [buildOrReuseSdk] — same handler covers initial bootstrap
+     * AND any subsequent user toggle (network, proving mode, proof URL).
+     */
+    private var sdkConfig: WalletConfig? = null
 
     /**
      * Bootstrap (if needed) and refresh balances. Progressive: emits Ready as
@@ -78,9 +84,10 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
      * the rest of the screen.
      *
      * Triggers seed unlock (biometric) on first call per session; subsequent
-     * calls reuse the existing SDK as long as [network] doesn't change.
+     * calls reuse the existing SDK as long as every field of [config] matches
+     * what the SDK was built with.
      */
-    fun refreshBalance(network: MidnightNetwork, activity: FragmentActivity) {
+    fun refreshBalance(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
             // Don't overwrite the Ready state on a refresh — that would flash
             // the sheet through Loading and lose the in-screen address. Only
@@ -89,7 +96,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 _status.value = WalletStatus.Loading("Bootstrapping wallet…")
             }
             try {
-                val built = buildOrReuseSdk(network, activity)
+                val built = buildOrReuseSdk(config, activity)
                 // Phase 1 — addresses up immediately. balance() is a cheap
                 // read against already-populated state; whatever it returns
                 // (often zero on a fresh wallet, or stale on a long-idle
@@ -134,10 +141,10 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
      * once after the wallet first holds NIGHT — until then the chain won't
      * release spendable dust and contract calls (fee-paying) fail.
      */
-    fun registerDust(network: MidnightNetwork, activity: FragmentActivity) {
+    fun registerDust(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
             try {
-                val built = buildOrReuseSdk(network, activity)
+                val built = buildOrReuseSdk(config, activity)
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
                     shieldedAddress = built.shieldedWalletAddress,
@@ -209,10 +216,12 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Internal: SDK + seed plumbing ──
 
-    private suspend fun buildOrReuseSdk(network: MidnightNetwork, activity: FragmentActivity): MidnightSdk {
+    private suspend fun buildOrReuseSdk(config: WalletConfig, activity: FragmentActivity): MidnightSdk {
         sdk?.let { existing ->
-            if (sdkNetwork == network) return existing
-            // Network changed — tear down the old subscription/db before rebuilding.
+            // Full-config match → reuse. Any toggle (network / proving mode /
+            // proof URL) forces a rebuild because each changes how the SDK
+            // routes transactions or which chain it talks to.
+            if (sdkConfig == config) return existing
             existing.close()
             sdk = null
         }
@@ -220,14 +229,18 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
         val seed = ensureSeedReady(activity)
         return try {
             val built = MidnightSdk.Builder(getApplication())
-                .network(network)
+                .network(config.network)
                 .seed(seed)
+                .provingMode(config.provingMode)
+                .also { builder ->
+                    config.proofServerUrl?.let { builder.proofServerUrl(it) }
+                }
                 .build()
             sdk = built
-            sdkNetwork = network
+            sdkConfig = config
             // Non-zero-fee networks need wallet proving keys downloaded at
             // runtime; UNDEPLOYED ships them via adb-push for the canary loop.
-            if (!built.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
+            if (!built.provingKeyManager.hasWalletKeys() && config.network != MidnightNetwork.UNDEPLOYED) {
                 built.provingKeyManager.downloadWalletKeys { /* progress ignored — host decides UX */ }
             }
             built

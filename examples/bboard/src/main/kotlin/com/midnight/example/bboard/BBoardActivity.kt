@@ -194,7 +194,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
         // period. Follows the host's network chip selection above — switching
         // chips rebuilds the panel's SDK on the next action.
         WalletStatusPanel(
-            network = midnightNetwork,
+            initialNetwork = midnightNetwork,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
