@@ -320,19 +320,25 @@ internal fun pillLabel(
         // once you start switching networks during dev.
         append(network.pillName)
         append(" · ")
-        // Asymmetric: NIGHT is the primary asset (unmarked), DUST gets a "D"
-        // suffix. K/M/B abbreviations so the pill width stays predictable as
-        // amounts grow; integer-only below 1K. Full precision is in the sheet.
+        // Asymmetric format: NIGHT is the primary asset (unmarked), DUST
+        // gets a "D" suffix. K/M/B abbreviations so the pill width stays
+        // predictable as amounts grow; integer-only below 1K. Full
+        // precision is in the sheet.
         //
-        // NIGHT aggregates shielded + unshielded — the pill is a "do I have
-        // enough to do something?" signal, not a portfolio view. The shield
-        // glyph appears iff any portion is shielded, so non-shielded users
-        // never see the badge and the layout stays clean.
+        // **Unshielded vs shielded split:** the pill shows unshielded NIGHT
+        // as its own slot, and only inserts a separate shielded slot when
+        // there's non-zero shielded NIGHT. Earlier iterations aggregated
+        // into `totalNight` and used a single shield glyph, which was
+        // ambiguous — you couldn't tell how much of the number was private.
+        // Two slots are clearer at a glance and degrade cleanly to a single
+        // slot for users without any shielded balance.
+        append(formatter.formatAbbreviated(status.balance.unshieldedNight, "NIGHT"))
         if (status.balance.hasShielded) {
+            append(" · ")
             append(SHIELD_GLYPH)
             append(" ")
+            append(formatter.formatAbbreviated(status.balance.shieldedNight, "NIGHT"))
         }
-        append(formatter.formatAbbreviated(status.balance.totalNight, "NIGHT"))
         append(" · ")
         append(formatter.formatAbbreviated(status.balance.dust, "DUST"))
         append("D")

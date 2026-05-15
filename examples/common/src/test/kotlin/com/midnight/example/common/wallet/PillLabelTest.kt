@@ -20,7 +20,9 @@ import java.math.BigInteger
  *    `preview`, `preprod`) — never the full enum constant or "UNDEPLOYED".
  *  - NIGHT is abbreviated via [BalanceFormatter.formatAbbreviated] (K/M/B/T
  *    suffixes, integer below 1K). DUST gets a "D" suffix.
- *  - Shield glyph `🛡` only appears when `hasShielded == true`.
+ *  - Unshielded NIGHT always takes its own slot; shielded NIGHT gets a
+ *    second slot prefixed with `🛡` **only when non-zero** — so users
+ *    without any shielded balance don't pay UI tax for it.
  *  - `dustRegistered = true` adds a trailing `✓`.
  *  - None / Loading / Error states still carry the network prefix so the
  *    user knows which chain the failure is on.
@@ -110,7 +112,7 @@ class PillLabelTest {
     // ── Ready: shielded glyph ──
 
     @Test
-    fun `ready — shielded portion shows shield glyph and aggregates totalNight`() {
+    fun `ready — shielded portion shows as a separate slot, not aggregated`() {
         val label = pillLabel(
             ready(
                 unshieldedNight = nightOf(10_000),
@@ -121,8 +123,10 @@ class PillLabelTest {
             MidnightNetwork.UNDEPLOYED,
             formatter,
         )
-        // totalNight = 12,500 → "12.5K"; shield glyph prefixes the numeric block.
-        assertEquals("localnet · 🛡 12.5K · 364D · ✓", label)
+        // Unshielded ("10K") stays as the primary slot; shielded ("2.5K") gets
+        // its own slot prefixed with the shield glyph. User can see at a
+        // glance how much of their NIGHT is private without doing arithmetic.
+        assertEquals("localnet · 10K · 🛡 2.5K · 364D · ✓", label)
     }
 
     @Test
