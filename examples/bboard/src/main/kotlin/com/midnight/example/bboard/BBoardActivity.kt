@@ -50,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import com.midnight.example.common.PanelBar
 import com.midnight.example.common.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -125,23 +126,32 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     var midnightNetwork by rememberSaveable { mutableStateOf(MidnightNetwork.UNDEPLOYED) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
-        Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())  // Scrollable — cards may overflow on smaller screens.
-                .padding(
-                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
-                    start = Spacing.ScreenPadding,
-                    end = Spacing.ScreenPadding,
-                    bottom = Spacing.ScreenPadding,
-                )
-        ) {
-            Text("bboard", color = Colors.OnSurface, fontSize = Type.Title, fontWeight = FontWeight.W300, letterSpacing = 4.sp)
-            Text("midnight bulletin board", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-            Spacer(modifier = Modifier.height(Spacing.SectionGap))
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top panel bar: sigil chip (left) + wallet chip (right). Pulled
+            // out of the scroll container so the chips stay pinned to the top
+            // of the screen as the host content scrolls underneath. Pushes
+            // the BBoard title below it — title no longer fights chip widths
+            // for the same row on narrow phones.
+            PanelBar(
+                network = midnightNetwork,
+                onNetworkChange = { midnightNetwork = it },
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        top = Spacing.SectionGap,
+                        start = Spacing.ScreenPadding,
+                        end = Spacing.ScreenPadding,
+                        bottom = Spacing.ScreenPadding,
+                    )
+            ) {
+                Text("bboard", color = Colors.OnSurface, fontSize = Type.Title, fontWeight = FontWeight.W300, letterSpacing = 4.sp)
+                Text("midnight bulletin board", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+                Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-            when (val s = state) {
+                when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilState = sigilState,
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
@@ -157,35 +167,19 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
-                is BBoardState.Connected -> ConnectedScreen(
-                    state = s,
-                    sigilState = sigilState,
-                    onAuthorize = { activity?.let { viewModel.authorizeAccessKey(it) } },
-                    onBackup = { activity?.let { viewModel.backupSeed(it) } },
-                    onRestore = { activity?.let { viewModel.restoreSeed(it) } },
-                    onPost = viewModel::post,
-                    onTakeDown = viewModel::takeDown,
-                    onRefresh = viewModel::refresh,
-                    onDisconnect = viewModel::disconnect,
-                )
+                    is BBoardState.Connected -> ConnectedScreen(
+                        state = s,
+                        sigilState = sigilState,
+                        onAuthorize = { activity?.let { viewModel.authorizeAccessKey(it) } },
+                        onBackup = { activity?.let { viewModel.backupSeed(it) } },
+                        onRestore = { activity?.let { viewModel.restoreSeed(it) } },
+                        onPost = viewModel::post,
+                        onTakeDown = viewModel::takeDown,
+                        onRefresh = viewModel::refresh,
+                        onDisconnect = viewModel::disconnect,
+                    )
+                }
             }
-        }
-        // Reusable wallet panel anchored top-right. Owns the network chip
-        // now (BBoard's in-screen chip was removed). Self-contained SDK
-        // build from a SeedVault-backed seed. The onNetworkChange callback
-        // mirrors the chip selection into BBoard's `midnightNetwork` state
-        // so contract deploy/connect operations target the same chain the
-        // wallet is on.
-        WalletStatusPanel(
-            initialNetwork = midnightNetwork,
-            onNetworkChange = { midnightNetwork = it },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(
-                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
-                    end = 12.dp,
-                ),
-        )
         }
     }
 }

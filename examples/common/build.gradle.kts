@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":sdk:midnight-sdk"))
     implementation(project(":core:auth"))      // SeedVault, WalletKeyManager
     implementation(project(":core:crypto"))    // BIP39 seed generation
+    implementation(project(":core:identity"))  // PasskeyManager, DidKeyGenerator, SigilBackup — sigil panel
     implementation(project(":core:ledger"))    // BalanceFormatter + SubmissionResult
     implementation(project(":core:network"))   // MidnightNetwork
     implementation(project(":core:compact-engine"))  // ProvingKeyManager.installFromLocalTmp
