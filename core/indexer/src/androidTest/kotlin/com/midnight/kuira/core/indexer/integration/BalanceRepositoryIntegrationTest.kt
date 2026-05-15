@@ -32,8 +32,10 @@ import java.math.BigInteger
  * - Ensure Flow emissions work correctly
  *
  * **Prerequisites:**
- * 1. Local Midnight testnet running: `docker compose -f v3-full-stack-compose.yml up -d`
- * 2. Indexer API v4 accessible at http://10.0.2.2:8088 (Android emulator)
+ * 1. Local Midnight testnet running (see midnight-local-network's docker compose)
+ * 2. Indexer reachable at the URL returned by
+ *    [com.midnight.kuira.core.network.NetworkConfig.forNetwork] for `UNDEPLOYED`
+ *    (10.0.2.2:8088 on the Android emulator)
  * 3. Test address funded with UTXOs (genesis wallet has funds by default)
  *
  * **Test Strategy:**
@@ -73,10 +75,11 @@ class BalanceRepositoryIntegrationTest {
     private val TEST_UNSHIELDED_ADDRESS = "mn_addr_undeployed1gkasr3z3vwyscy2jpp53nzr37v7n4r3lsfgj6v5g584dakjzt0xqun4d4r"
 
     /**
-     * Indexer API endpoint (Android emulator uses 10.0.2.2 for host localhost).
+     * Indexer API endpoint composed by [com.midnight.kuira.core.network.NetworkConfig].
+     * Android emulator resolves localhost via 10.0.2.2 through [DeviceType.localhostHost].
      *
      * **Prerequisites:**
-     * 1. Start Midnight testnet: `docker compose -f v3-full-stack-compose.yml up -d`
+     * 1. Start Midnight testnet (see midnight-local-network's docker compose)
      * 2. Indexer runs on http://localhost:8088
      * 3. Android emulator accesses via http://10.0.2.2:8088
      *
@@ -140,8 +143,10 @@ class BalanceRepositoryIntegrationTest {
      * 4. Verify data was inserted correctly
      *
      * **Prerequisites:**
-     * - Docker services running: `docker compose -f v3-full-stack-compose.yml up -d`
-     * - Indexer API accessible at http://10.0.2.2:8088 (Android emulator)
+     * - Docker services running (see midnight-local-network's compose file)
+     * - Indexer reachable at the URL returned by
+     *   [com.midnight.kuira.core.network.NetworkConfig.forNetwork] for `UNDEPLOYED`
+     *   (10.0.2.2:8088 on the Android emulator)
      * - Test address must have UTXOs (genesis wallet always has funds)
      */
     @Test

@@ -14,7 +14,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 /**
- * Loads real UTXO data from Midnight Indexer API v4 into test database using production code path.
+ * Loads real UTXO data from the Midnight indexer GraphQL API into the test
+ * database using the production code path.
+ *
+ * See [com.midnight.kuira.core.network.NetworkConfig] for the URL / API path
+ * that's actually used at runtime — this loader doesn't pin a specific
+ * version, it just rides whatever `NetworkConfig` exposes.
  *
  * **Purpose:**
  * - Integration testing with real blockchain data
@@ -23,7 +28,7 @@ import kotlinx.coroutines.withTimeout
  *
  * **Architecture (CORRECT - Production Code Path):**
  * ```
- * Indexer API v4 (GraphQL WebSocket)
+ * Indexer GraphQL (WebSocket)
  *   └─> IndexerClient.subscribeToUnshieldedTransactions()
  *       └─> GraphQLWebSocketClient (graphql-transport-ws protocol)
  *           └─> SubscriptionManager orchestrates flow

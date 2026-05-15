@@ -169,20 +169,28 @@ fun WalletStatusPanel(
     // a FragmentActivity-derived host (ComponentActivity counts).
     val activity = LocalContext.current as? FragmentActivity
 
-    // Auto-bootstrap on panel mount. The pill should start syncing the
-    // moment the host app surfaces it — the user shouldn't have to tap to
-    // see their wallet status. This intentionally triggers the biometric
-    // prompt on first launch (unlike the parent Kuira wallet, which defers
-    // it): the panel serves dApps where the user has already consented to
-    // wallet access by dropping the host into their device. See
-    // feedback_sdk_devx_principle for the wider rationale.
+    // Auto-bootstrap on panel mount AND on network change. The pill should
+    // start syncing the moment the host app surfaces it — the user shouldn't
+    // have to tap to see their wallet status. This intentionally triggers
+    // the biometric prompt on first launch (unlike the parent Kuira wallet,
+    // which defers it): the panel serves dApps where the user has already
+    // consented to wallet access by dropping the host into their device.
+    // See feedback_sdk_devx_principle for the wider rationale.
     //
-    // Keyed on (activity, status) so the bootstrap fires once when the
-    // panel composes with an available activity, and won't loop if the
-    // first attempt failed (the resulting Error / Ready states both block
-    // re-entry; the user retries via the `balance` button).
-    LaunchedEffect(activity, status) {
-        if (status is WalletStatus.None && activity != null) {
+    // **Keyed on (activity, network)** — not status — for two reasons:
+    //  1. First mount fires once; activity-null branch is a no-op until
+    //     a FragmentActivity is reachable through LocalContext.
+    //  2. When the host switches the network chip, this re-fires with the
+    //     new network. `WalletPanelViewModel.buildOrReuseSdk` detects the
+    //     mismatch, tears down the old SDK (cancels its subscriptions +
+    //     wipes its zswap seed), and builds a fresh one — so the Receive
+    //     screen and pill pick up the new network's addresses without the
+    //     user having to tap `balance` themselves.
+    //
+    // Not keyed on status so that a failed bootstrap (Error) doesn't loop —
+    // the user retries via the explicit `balance` button.
+    LaunchedEffect(activity, network) {
+        if (activity != null) {
             viewModel.refreshBalance(network, activity)
         }
     }
