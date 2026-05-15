@@ -1117,14 +1117,26 @@ private fun String.hexToBytes(): ByteArray =
 private fun ByteArray.toHex(): String =
     joinToString("") { "%02x".format(it) }
 
-/** Network configuration presets (for remote wallet mode). */
+/**
+ * Network configuration presets (for remote wallet mode).
+ *
+ * Indexer URLs come from the central `NetworkConfig` so we never bake the
+ * indexer API version into this file. The wallet URL stays hardcoded
+ * because it points at the local `mn serve` daemon, not the indexer.
+ */
 enum class NetworkChoice(
     val label: String,
     val networkId: String,
-    val indexerUrl: String,
+    val midnightNetwork: com.midnight.kuira.core.network.MidnightNetwork,
     val walletUrl: String,
 ) {
-    LOCALNET("Localnet", "undeployed", "http://10.0.2.2:8088/api/v3", "ws://10.0.2.2:9932"),
-    PREVIEW("Preview", "preview", "https://indexer.preview.midnight.network/api/v3", "ws://10.0.2.2:9932"),
-    PREPROD("PreProd", "preprod", "https://indexer.preprod.midnight.network/api/v3", "ws://10.0.2.2:9932"),
+    LOCALNET("Localnet", "undeployed", com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED, "ws://10.0.2.2:9932"),
+    PREVIEW("Preview", "preview", com.midnight.kuira.core.network.MidnightNetwork.PREVIEW, "ws://10.0.2.2:9932"),
+    PREPROD("PreProd", "preprod", com.midnight.kuira.core.network.MidnightNetwork.PREPROD, "ws://10.0.2.2:9932");
+
+    /** Indexer base URL composed via the central [NetworkConfig]. */
+    val indexerUrl: String
+        get() = com.midnight.kuira.core.network.NetworkConfig
+            .forNetwork(midnightNetwork)
+            .indexerBaseUrl
 }

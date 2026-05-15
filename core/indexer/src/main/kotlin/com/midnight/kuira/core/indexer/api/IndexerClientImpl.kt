@@ -6,6 +6,8 @@ import com.midnight.kuira.core.indexer.model.NetworkState
 import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.websocket.GraphQLWebSocketClient
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -33,7 +35,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 
 /**
- * Ktor-based implementation of IndexerClient for Midnight v3 GraphQL API.
+ * Ktor-based implementation of IndexerClient for the Midnight indexer GraphQL API.
  *
  * **Connection:**
  * - HTTPS endpoint: `{baseUrl}/graphql` (with TLS certificate pinning)
@@ -48,13 +50,14 @@ import kotlinx.serialization.json.long
  * - Development mode allows localhost HTTP (for local testing)
  *
  * @param httpClient HTTP client for making requests (injectable for testing)
- * @param baseUrl Indexer API base URL (e.g., "https://indexer.testnet-02.midnight.network/api/v3")
+ * @param baseUrl Indexer API base URL. Typical values come from
+ *   [NetworkConfig.forNetwork(...).indexerBaseUrl][NetworkConfig.forNetwork].
  * @param pinnedCertificates List of SHA-256 certificate fingerprints for pinning (production only)
  * @param developmentMode If true, allows HTTP to localhost (INSECURE - testing only)
  */
 class IndexerClientImpl(
     private val httpClient: HttpClient,
-    private val baseUrl: String = "https://indexer.testnet-02.midnight.network/api/v3",
+    private val baseUrl: String = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW).indexerBaseUrl,
     private val pinnedCertificates: List<String> = emptyList(),
     private val developmentMode: Boolean = false
 ) : IndexerClient {
@@ -63,7 +66,7 @@ class IndexerClientImpl(
      * Convenience constructor for production use (creates default HTTP client).
      */
     constructor(
-        baseUrl: String = "https://indexer.testnet-02.midnight.network/api/v3",
+        baseUrl: String = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW).indexerBaseUrl,
         pinnedCertificates: List<String> = emptyList(),
         developmentMode: Boolean = false
     ) : this(

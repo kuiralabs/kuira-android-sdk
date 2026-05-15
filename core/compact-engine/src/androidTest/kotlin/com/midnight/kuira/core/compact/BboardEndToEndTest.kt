@@ -296,7 +296,7 @@ class BboardEndToEndTest {
      * Allows testing against preview/preprod without code changes.
      *
      * Push with:
-     *   echo "https://indexer.preview.midnight.network/api/v3" | adb shell "cat > /data/local/tmp/bboard_keys/indexer_url.txt"
+     *   echo "https://indexer.preview.midnight.network" | adb shell "cat > /data/local/tmp/bboard_keys/indexer_url.txt"
      */
     private fun readIndexerUrl(): String {
         val file = File("/data/local/tmp/bboard_keys/indexer_url.txt")
@@ -307,7 +307,7 @@ class BboardEndToEndTest {
         private const val TAG = "BboardE2E"
 
         /** Default URLs — Android emulator reaches host at 10.0.2.2 */
-        private const val DEFAULT_INDEXER_URL = "http://10.0.2.2:8088/api/v3"
+        private val DEFAULT_INDEXER_URL = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl
         private const val DAPP_CONNECTOR_URL = "ws://10.0.2.2:9932"
 
         /** Fallback contract address — update after each `mn contract deploy` */

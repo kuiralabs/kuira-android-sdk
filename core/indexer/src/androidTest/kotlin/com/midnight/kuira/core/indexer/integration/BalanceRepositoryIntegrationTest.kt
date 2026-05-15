@@ -33,7 +33,7 @@ import java.math.BigInteger
  *
  * **Prerequisites:**
  * 1. Local Midnight testnet running: `docker compose -f v3-full-stack-compose.yml up -d`
- * 2. Indexer API v3 accessible at http://10.0.2.2:8088 (Android emulator)
+ * 2. Indexer API v4 accessible at http://10.0.2.2:8088 (Android emulator)
  * 3. Test address funded with UTXOs (genesis wallet has funds by default)
  *
  * **Test Strategy:**
@@ -83,7 +83,10 @@ class BalanceRepositoryIntegrationTest {
      * **For physical device:** Replace with computer's local IP
      * Example: "http://192.168.1.100:8088"
      */
-    private val INDEXER_BASE_URL = "http://10.0.2.2:8088/api/v3"
+    private val INDEXER_BASE_URL =
+        com.midnight.kuira.core.network.NetworkConfig
+            .forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED)
+            .indexerBaseUrl
 
     @Before
     fun setup() {

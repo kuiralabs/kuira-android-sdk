@@ -142,7 +142,7 @@ class MidnightContractTest {
 
     companion object {
         private const val TAG = "MidnightContractTest"
-        private const val DEFAULT_INDEXER_URL = "http://10.0.2.2:8088/api/v3"
+        private val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl
         private const val DAPP_CONNECTOR_URL = "ws://10.0.2.2:9932"
 
         private val BBOARD_CIRCUITS = listOf("post", "takeDown")

@@ -32,6 +32,22 @@ data class NetworkConfig(
 ) {
     companion object {
 
+        /**
+         * Path component of every Midnight indexer GraphQL endpoint, including
+         * the API version segment. Single source of truth — when the indexer
+         * cuts a new major (v5, v6, …) this constant is the only line that
+         * changes; every per-network URL composes from it.
+         *
+         * The path includes the leading `/` so callers can append it directly
+         * to a host: `"https://indexer.preprod.midnight.network$INDEXER_API_PATH"`.
+         *
+         * Background: `/api/v3` is an alias to `/api/v4` in the indexer source
+         * (see midnight-indexer/indexer-api/src/infra/api.rs), so a path bump
+         * is cosmetic from a behavior standpoint — but centralizing it here
+         * means we never have to sed across the repo again.
+         */
+        const val INDEXER_API_PATH = "/api/v4"
+
         // Localnet ports — keep in sync with the docker-compose / Gradle adbReverseLocalnet task
         const val LOCALNET_INDEXER_PORT = 8088
         const val LOCALNET_NODE_RPC_PORT = 9944
@@ -58,7 +74,7 @@ data class NetworkConfig(
             return when (network) {
                 MidnightNetwork.PREPROD -> NetworkConfig(
                     network = network,
-                    indexerBaseUrl = "https://indexer.preprod.midnight.network/api/v3",
+                    indexerBaseUrl = "https://indexer.preprod.midnight.network$INDEXER_API_PATH",
                     nodeRpcUrl = "wss://rpc.preprod.midnight.network",
                     proofServerUrl = proofServerUrl,
                     developmentMode = true // Allow local proof server HTTP
@@ -66,7 +82,7 @@ data class NetworkConfig(
 
                 MidnightNetwork.PREVIEW -> NetworkConfig(
                     network = network,
-                    indexerBaseUrl = "https://indexer.preview.midnight.network/api/v3",
+                    indexerBaseUrl = "https://indexer.preview.midnight.network$INDEXER_API_PATH",
                     nodeRpcUrl = "wss://rpc.preview.midnight.network",
                     proofServerUrl = proofServerUrl,
                     developmentMode = true // Allow local proof server HTTP
@@ -74,7 +90,7 @@ data class NetworkConfig(
 
                 MidnightNetwork.UNDEPLOYED -> NetworkConfig(
                     network = network,
-                    indexerBaseUrl = "http://$host:$LOCALNET_INDEXER_PORT/api/v3",
+                    indexerBaseUrl = "http://$host:$LOCALNET_INDEXER_PORT$INDEXER_API_PATH",
                     nodeRpcUrl = "ws://$host:$LOCALNET_NODE_RPC_PORT",
                     proofServerUrl = proofServerUrl,
                     developmentMode = true // All local services

@@ -21,18 +21,20 @@ import java.net.URL
  * - **Embedded wallet:** provide a [TransactionBalancer] directly (e.g., `MidnightWallet`)
  *
  * ```kotlin
+ * val previewConfig = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW)
+ *
  * // Remote wallet (existing pattern)
  * val config = MidnightConfig.Builder(context)
- *     .indexerUrl("https://indexer.preview.midnight.network/api/v3")
+ *     .indexerUrl(previewConfig.indexerBaseUrl)
  *     .walletUrl("ws://10.0.2.2:9932")
- *     .networkId("preview")
+ *     .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
  *     .build()
  *
  * // Embedded wallet (new pattern)
  * val config = MidnightConfig.Builder(context)
- *     .indexerUrl("https://indexer.preview.midnight.network/api/v3")
+ *     .indexerUrl(previewConfig.indexerBaseUrl)
  *     .transactionBalancer(myWallet)
- *     .networkId("preview")
+ *     .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
  *     .build()
  * ```
  */
@@ -223,10 +225,15 @@ class MidnightConfig private constructor(
         private const val READ_TIMEOUT_MS = 30_000
 
         /** Convenience factory for local development (Android emulator). */
-        fun localDev(context: Context): MidnightConfig = Builder(context)
-            .indexerUrl("http://10.0.2.2:8088/api/v3")
-            .walletUrl("ws://10.0.2.2:9932")
-            .networkId("undeployed")
-            .build()
+        fun localDev(context: Context): MidnightConfig {
+            val local = com.midnight.kuira.core.network.NetworkConfig.forNetwork(
+                com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED,
+            )
+            return Builder(context)
+                .indexerUrl(local.indexerBaseUrl)
+                .walletUrl("ws://10.0.2.2:9932")
+                .networkId(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED.rustNetworkId)
+                .build()
+        }
     }
 }

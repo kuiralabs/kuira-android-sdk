@@ -64,7 +64,7 @@ class TransactionBalancerTest {
         // context.applicationContext returns null with isReturnDefaultValues = true,
         // but the require check fires before that. Builder.build() validates inputs.
         MidnightConfig.Builder(android.content.ContextWrapper(null))
-            .indexerUrl("http://localhost:8088/api/v3")
+            .indexerUrl(TEST_INDEXER_URL)
             .networkId("preview")
             .build()
     }
@@ -72,7 +72,7 @@ class TransactionBalancerTest {
     @Test(expected = IllegalArgumentException::class)
     fun `builder rejects walletUrl without ws scheme`() {
         MidnightConfig.Builder(android.content.ContextWrapper(null))
-            .indexerUrl("http://localhost:8088/api/v3")
+            .indexerUrl(TEST_INDEXER_URL)
             .walletUrl("http://localhost:9932")
             .networkId("preview")
             .build()
@@ -91,7 +91,7 @@ class TransactionBalancerTest {
         // receive null. That's fine for validating the builder logic.
         try {
             MidnightConfig.Builder(android.content.ContextWrapper(null))
-                .indexerUrl("http://localhost:8088/api/v3")
+                .indexerUrl(TEST_INDEXER_URL)
                 .transactionBalancer(balancer)
                 .networkId("preview")
                 .build()
@@ -101,5 +101,15 @@ class TransactionBalancerTest {
             // Other exceptions (NullPointerException from null context) are OK —
             // we're testing builder validation, not full config construction.
         }
+    }
+
+    private companion object {
+        // Composed from NetworkConfig so we don't bake the indexer API version
+        // into a test string. `localhost` here (rather than UNDEPLOYED's host
+        // resolution via DeviceType) because this is a JVM unit test, not
+        // androidTest — Build markers are mocked to null.
+        private val TEST_INDEXER_URL =
+            "http://localhost:${com.midnight.kuira.core.network.NetworkConfig.LOCALNET_INDEXER_PORT}" +
+                com.midnight.kuira.core.network.NetworkConfig.INDEXER_API_PATH
     }
 }

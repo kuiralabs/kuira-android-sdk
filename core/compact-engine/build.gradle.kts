@@ -144,7 +144,16 @@ val bboardSetup by tasks.registering {
             tmp.delete()
         }
         pushConfig("contract_address.txt", contractAddress)
-        pushConfig("indexer_url.txt", "http://10.0.2.2:8088/api/v3")
+        // Read the indexer API path from NetworkConfig.kt so this gradle file
+        // doesn't have to be edited on a version bump. The Kotlin sibling and
+        // this task push the same string into /data/local/tmp/.
+        val networkConfigSrc = file("${rootProject.projectDir}/core/network/src/main/kotlin/com/midnight/kuira/core/network/NetworkConfig.kt")
+        val apiPath = Regex("""INDEXER_API_PATH\s*=\s*"([^"]+)"""")
+            .find(networkConfigSrc.readText())
+            ?.groupValues
+            ?.get(1)
+            ?: throw GradleException("Couldn't extract INDEXER_API_PATH from ${networkConfigSrc.absolutePath}")
+        pushConfig("indexer_url.txt", "http://10.0.2.2:8088$apiPath")
         pushConfig("network_id.txt", network)
 
         logger.lifecycle("BBoard e2e setup complete!")
@@ -159,6 +168,10 @@ tasks.matching { it.name.startsWith("connected") && it.name.contains("AndroidTes
 dependencies {
     // QuickJS engine
     implementation(libs.quickjs.kt)
+
+    // Network — exposes the canonical indexer URL (NetworkConfig.forNetwork)
+    // so MidnightConfig.localDev doesn't bake the version into a string.
+    implementation(project(":core:network"))
 
     // Proving + state classes are in this module directly.
     // Native .so comes from core:crypto's CMake (in-project) or jniLibs (standalone AAR).

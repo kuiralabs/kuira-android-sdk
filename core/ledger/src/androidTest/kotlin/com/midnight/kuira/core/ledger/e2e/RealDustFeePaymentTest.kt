@@ -15,6 +15,8 @@ import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -206,7 +208,7 @@ class RealDustFeePaymentTest {
     @Test
     fun test1_QueryAndReplayDustEvents() = runBlocking {
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
-            baseUrl = "http://10.0.2.2:8088/api/v3",
+            baseUrl = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl,
             developmentMode = true
         )
 
@@ -263,7 +265,7 @@ class RealDustFeePaymentTest {
     fun test2_SerializeTransactionWithDustFee() = runBlocking {
         // Query dust events and restore state
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
-            baseUrl = "http://10.0.2.2:8088/api/v3",
+            baseUrl = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl,
             developmentMode = true
         )
 

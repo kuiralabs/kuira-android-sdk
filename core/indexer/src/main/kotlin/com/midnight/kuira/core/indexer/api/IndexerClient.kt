@@ -8,7 +8,7 @@ import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Client for Midnight indexer GraphQL API (v3).
+ * Client for the Midnight indexer GraphQL API.
  *
  * Provides access to ledger events, blocks, and network state for light wallet implementation.
  *
@@ -18,11 +18,12 @@ import kotlinx.coroutines.flow.Flow
  * - Calculate balances from UTXO set
  * - No full node required
  *
- * **GraphQL Endpoints:**
- * - HTTP Queries: `https://indexer.testnet-02.midnight.network/api/v3/graphql`
- * - WebSocket Subscriptions: `wss://indexer.testnet-02.midnight.network/api/v3/graphql/ws`
+ * **GraphQL Endpoints** (composed from `NetworkConfig.forNetwork(...).indexerBaseUrl`):
+ * - HTTP Queries: `{baseUrl}/graphql`
+ * - WebSocket Subscriptions: `{baseUrl}/graphql/ws` (scheme switched to `ws(s)://`)
  *
  * @see IndexerClientImpl for implementation details
+ * @see com.midnight.kuira.core.network.NetworkConfig for the canonical URL source
  */
 interface IndexerClient {
 
