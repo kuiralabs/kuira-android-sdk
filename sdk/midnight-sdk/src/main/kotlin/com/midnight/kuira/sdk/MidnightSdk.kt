@@ -210,7 +210,9 @@ class MidnightSdk private constructor(
     /**
      * Builder for [MidnightSdk].
      *
-     * Required: [network] and [seed]. Optional: [accountIndex] (default 0).
+     * **Required:** [network], [seed].
+     * **Optional:** [accountIndex] (default 0), [provingMode] (default LOCAL),
+     * [proofServerUrl] (default null → network's local-dev proof server).
      */
     class Builder(private val context: Context) {
         private var network: MidnightNetwork? = null

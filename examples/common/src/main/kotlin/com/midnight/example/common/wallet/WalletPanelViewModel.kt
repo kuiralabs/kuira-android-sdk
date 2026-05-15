@@ -29,11 +29,13 @@ import java.security.SecureRandom
  * Self-contained wallet bootstrap + lifecycle for example apps.
  *
  * The panel's contract with the host app:
- *  - host owns nothing wallet-related — pass [MidnightNetwork], get a usable SDK
+ *  - host owns nothing wallet-related — the panel manages its own
+ *    [WalletConfig] (network, proving mode, proof-server URL) and rebuilds
+ *    the SDK whenever the user changes any of them
  *  - first action triggers a biometric prompt to seal a freshly-generated BIP-39
  *    seed via [SeedVault]; subsequent runs reuse it transparently
- *  - the SDK is built lazily on first action, reused while [network] stays the
- *    same, rebuilt when it changes
+ *  - the SDK is built lazily on first action, reused while [WalletConfig]
+ *    matches what the in-memory SDK was built with, rebuilt on any mismatch
  *
  * **Public surface:** [status] (observe), [refreshBalance] / [registerDust]
  * (act). Funding doesn't need a panel-side handler — the Receive screen shows
