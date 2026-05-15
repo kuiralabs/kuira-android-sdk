@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,6 +117,18 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     // legacy sigil-side callbacks.
     val activity = LocalContext.current as? FragmentActivity
 
+    // Network selection lives at the BBoardApp level so the WalletStatusPanel
+    // (anchored top-right outside SetupScreen's Column) can follow the user's
+    // chip selection. `rememberSaveable` so the choice survives configuration
+    // changes / Activity recreation. Mapping to the SDK's MidnightNetwork
+    // happens here too — keeps the panel agnostic of BBoard's local enum.
+    var networkChoice by rememberSaveable { mutableStateOf(NetworkChoice.LOCALNET) }
+    val midnightNetwork = when (networkChoice) {
+        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
+        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
+        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
+    }
+
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -137,6 +150,8 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilState = sigilState,
                     walletStatus = walletStatus,
+                    network = networkChoice,
+                    onNetworkChange = { networkChoice = it },
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                     onTestPrf = { activity?.let { viewModel.testPrf(it) } },
                     onBackup = { activity?.let { viewModel.backupSeed(it) } },
@@ -173,13 +188,13 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 )
             }
         }
-        // Reusable wallet panel anchored top-right. Self-contained: builds its own
-        // SDK from a SeedVault-backed seed on first tap, so it works alongside (not
-        // through) BBoard's existing connect/deploy flows during the canary period.
-        // UNDEPLOYED for the localnet canary; in production examples this would be
-        // hoisted to follow the host's network choice.
+        // Reusable wallet panel anchored top-right. Self-contained: builds its
+        // own SDK from a SeedVault-backed seed, so it works alongside (not
+        // through) BBoard's existing connect/deploy flows during the canary
+        // period. Follows the host's network chip selection above — switching
+        // chips rebuilds the panel's SDK on the next action.
         WalletStatusPanel(
-            network = MidnightNetwork.UNDEPLOYED,
+            network = midnightNetwork,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
@@ -202,6 +217,8 @@ private enum class ConnectionMode(val label: String) {
 private fun SetupScreen(
     sigilState: SigilState,
     walletStatus: WalletStatusState,
+    network: NetworkChoice,
+    onNetworkChange: (NetworkChoice) -> Unit,
     onForgeSigil: () -> Unit,
     onTestPrf: () -> Unit,
     onBackup: () -> Unit,
@@ -214,8 +231,10 @@ private fun SetupScreen(
     onRegisterDust: (MidnightNetwork) -> Unit,
 ) {
     var address by remember { mutableStateOf("") }
-    var network by remember { mutableStateOf(NetworkChoice.LOCALNET) }
     var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
+    // Network is hoisted to BBoardApp (so WalletStatusPanel follows it too);
+    // we re-derive MidnightNetwork locally for the connect/deploy callbacks
+    // that still take it. Single source of truth = the [network] param.
     val midnightNetwork = when (network) {
         NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
         NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
@@ -263,7 +282,7 @@ private fun SetupScreen(
         ChipRow(
             options = NetworkChoice.entries.map { it.label },
             selectedIndex = network.ordinal,
-            onSelect = { network = NetworkChoice.entries[it] },
+            onSelect = { onNetworkChange(NetworkChoice.entries[it]) },
         )
 
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
