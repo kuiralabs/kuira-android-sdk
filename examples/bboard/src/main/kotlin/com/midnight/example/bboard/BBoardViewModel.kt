@@ -18,12 +18,9 @@ import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
 import com.midnight.kuira.core.crypto.bip39.BIP39
+import com.midnight.example.common.sigil.SigilStatus
 import com.midnight.kuira.core.identity.auth.AuthorizationScope
 import com.midnight.kuira.core.identity.auth.KeyAuthorization
-import com.midnight.kuira.core.identity.backup.BackupException
-import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
-import com.midnight.kuira.core.identity.backup.SigilBackup
-import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
@@ -54,8 +51,21 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
 
-    private val _sigilState = MutableStateFlow<SigilState>(SigilState.None)
-    val sigilState: StateFlow<SigilState> = _sigilState
+    /**
+     * BBoard-specific access-key authorization state. Tracks whether the
+     * user's sigil has signed an authorization for the wallet SDK's access
+     * key — that's the BBoard-side concern that couldn't move to the
+     * panel (it needs both a sigil AND an SDK instance, and the wallet
+     * panel intentionally doesn't expose its SDK to the sigil panel).
+     *
+     * The sigil itself (forge / backup / restore / testPrf / persisted
+     * identity) is fully owned by `SigilPanelViewModel` now —
+     * `BBoardViewModel` consumes the panel's [SigilStatus.Forged] when
+     * the user taps authorize and stores the resulting authorization
+     * verdict here.
+     */
+    private val _accessKeyAuth = MutableStateFlow<AccessKeyAuthState>(AccessKeyAuthState.None)
+    val accessKeyAuth: StateFlow<AccessKeyAuthState> = _accessKeyAuth
 
     private var config: MidnightConfig? = null
     private var sdk: MidnightSdk? = null
@@ -65,50 +75,17 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private var repository: BBoardRepository? = null
     private var currentAddress: String? = null
 
-    /** Simulated app metadata — generated after posting, backed up with the seed. */
-    private var appMetadata: ByteArray? = null
-
+    /**
+     * Passkey manager held for the access-key authorize flow only — the
+     * forge / backup / restore / testPrf flows that also used it have
+     * moved to `SigilPanelViewModel`. RP id must match the sigil panel's
+     * (`nel349.github.io`) so both VMs talk to the same WebAuthn
+     * credential. Keeping that string in sync is fragile; the comment
+     * is the only enforcement today.
+     */
     private val passkeyManager = PasskeyManager(
         config = PasskeyConfig(rpId = "nel349.github.io"),
     )
-
-    // Persist sigil identity across app restarts
-    private val sigilPrefs by lazy {
-        getApplication<Application>().getSharedPreferences("sigil_identity", android.content.Context.MODE_PRIVATE)
-    }
-
-    init {
-        // Load persisted sigil on startup
-        loadPersistedSigil()
-    }
-
-    private fun loadPersistedSigil() {
-        val did = sigilPrefs.getString("did", null) ?: return
-        val credentialId = sigilPrefs.getString("credentialId", null) ?: return
-        val publicKeyHex = sigilPrefs.getString("publicKeyHex", null) ?: return
-
-        _sigilState.value = SigilState.Forged(
-            did = did,
-            credentialId = credentialId,
-            publicKeyHex = publicKeyHex,
-        )
-        Log.i(TAG, "Loaded persisted sigil: ${did.take(30)}...")
-    }
-
-    private fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
-        sigilPrefs.edit()
-            .putString("did", did)
-            .putString("credentialId", credentialId)
-            .putString("publicKeyHex", publicKeyHex)
-            .apply()
-    }
-
-    private val sigilBackup by lazy {
-        SigilBackup(
-            passkeyManager = passkeyManager,
-            storage = BlockStoreBackupStorage(getApplication()),
-        )
-    }
 
     // ── Seed storage (canary for the "dApp creates its own wallet" flow) ──
     //
@@ -183,228 +160,29 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     // deployAndConnect) remains in this file because it owns the contract
     // lifecycle, which is BBoard-specific.
 
-
-    /**
-     * Create a passkey and derive the user's DID.
-     * This is "Forge your Sigil" — the root of the identity stack.
-     */
-    fun forgeSigil(activity: Activity) {
-        viewModelScope.launch {
-            _sigilState.value = SigilState.Creating("Creating passkey...")
-            try {
-                // Generate a random user ID (in production this comes from the app's user system)
-                val userId = java.security.SecureRandom().let { rng ->
-                    ByteArray(16).also { rng.nextBytes(it) }
-                }
-
-                val result = passkeyManager.createPasskey(
-                    activity = activity,
-                    userId = userId,
-                    userName = "BBoard Test User",
-                )
-
-                val did = DidKeyGenerator.fromCompressedP256(result.publicKey.compressed)
-
-                Log.i(TAG, "Sigil forged — DID: $did")
-                Log.i(TAG, "  Credential ID: ${result.credentialId}")
-                Log.i(TAG, "  P-256 pubkey: ${result.publicKey.compressedHex()}")
-
-                val forged = SigilState.Forged(
-                    did = did,
-                    credentialId = result.credentialId,
-                    publicKeyHex = result.publicKey.compressedHex(),
-                )
-                _sigilState.value = forged
-                persistSigil(did, result.credentialId, result.publicKey.compressedHex())
-            } catch (e: Exception) {
-                Log.e(TAG, "Forge sigil failed", e)
-                _sigilState.value = SigilState.Error(e.message ?: "Passkey creation failed")
-            }
-        }
-    }
-
-    /**
-     * Test PRF extension — verify the emulator returns a 32-byte PRF output.
-     * Quick spike before building the full backup stack.
-     */
-    fun testPrf(activity: Activity) {
-        viewModelScope.launch {
-            try {
-                val challenge = java.security.SecureRandom().let { rng ->
-                    ByteArray(32).also { rng.nextBytes(it) }
-                }
-                // Purpose-bound salt: SHA-256("kuira:backup:v1")
-                val salt = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest("kuira:backup:v1".toByteArray(Charsets.UTF_8))
-
-                Log.i(TAG, "Testing PRF with salt: ${salt.toHex()}")
-
-                val result = passkeyManager.authenticateWithPrf(
-                    activity = activity,
-                    challenge = challenge,
-                    prfSalt = salt,
-                )
-
-                val prfBytes = result.prfOutput
-                if (prfBytes != null && prfBytes.size == 32) {
-                    Log.i(TAG, "PRF SUCCESS! Output (${prfBytes.size} bytes): ${prfBytes.toHex()}")
-
-                    // Test determinism — authenticate again with same salt
-                    Log.i(TAG, "Testing PRF determinism (same salt, second auth)...")
-                    val result2 = passkeyManager.authenticateWithPrf(
-                        activity = activity,
-                        challenge = challenge,
-                        prfSalt = salt,
-                    )
-                    val prfBytes2 = result2.prfOutput
-                    if (prfBytes2 != null && prfBytes2.size == 32) {
-                        val match = prfBytes.contentEquals(prfBytes2)
-                        Log.i(TAG, "PRF determinism: ${if (match) "PASS (same output)" else "FAIL (different output)"}")
-                        Log.i(TAG, "  First:  ${prfBytes.toHex()}")
-                        Log.i(TAG, "  Second: ${prfBytes2.toHex()}")
-                    }
-                } else {
-                    Log.w(TAG, "PRF returned null — extension not supported on this authenticator")
-                    Log.i(TAG, "Full response: ${result.assertionResponseJson}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "PRF test failed", e)
-            }
-        }
-    }
-
-    /**
-     * Backup the test seed to Google Block Store via PRF-encrypted blob.
-     * Tests the full backup pipeline: PRF → HKDF → AES-GCM → Block Store.
-     */
-    fun backupSeed(activity: FragmentActivity) {
-        viewModelScope.launch {
-            try {
-                Log.i(TAG, "Starting PRF backup of the SeedVault-stored seed...")
-
-                // Load the user's actual seed from SeedVault (biometric prompt).
-                // SigilBackup then re-encrypts (entropy, bip39Seed) under a
-                // PRF-derived AES key before pushing to Block Store.
-                val plaintext = seedVault.loadSeed(activity)
-                val entropy = plaintext.mnemonicEntropy.copyOf()
-                val bip39Seed = plaintext.bip39Seed.copyOf()
-                plaintext.wipe()
-
-                val sigil = _sigilState.value
-                val did = when (sigil) {
-                    is SigilState.Forged -> sigil.did
-                    is SigilState.Authorized -> sigil.did
-                    else -> "unknown"
-                }
-                val credId = when (sigil) {
-                    is SigilState.Forged -> sigil.credentialId
-                    is SigilState.Authorized -> sigil.credentialId
-                    else -> ""
-                }
-                val pubKeyHex = when (sigil) {
-                    is SigilState.Forged -> sigil.publicKeyHex
-                    is SigilState.Authorized -> sigil.publicKeyHex
-                    else -> ""
-                }
-
-                val meta = appMetadata
-                if (meta != null) {
-                    Log.i(TAG, "Backing up metadata (${meta.size} bytes): ${String(meta, Charsets.UTF_8)}")
-                }
-
-                sigilBackup.backup(
-                    activity = activity,
-                    entropy = entropy,
-                    bip39Seed = bip39Seed,
-                    did = did,
-                    credentialId = credId,
-                    publicKeyHex = pubKeyHex,
-                    appMetadata = meta,
-                )
-
-                Log.i(TAG, "Backup SUCCESS — seed + sigil identity + ${meta?.size ?: 0} bytes app metadata")
-                _sigilState.value = when (val current = _sigilState.value) {
-                    is SigilState.Forged -> SigilState.Forged(
-                        did = current.did,
-                        credentialId = current.credentialId,
-                        publicKeyHex = current.publicKeyHex,
-                    )
-                    else -> current
-                }
-            } catch (e: BackupException) {
-                Log.e(TAG, "Backup failed: ${e.message}", e)
-            } catch (e: Exception) {
-                Log.e(TAG, "Backup failed", e)
-            }
-        }
-    }
-
-    /**
-     * Restore the seed from Google Block Store via PRF decryption.
-     * Tests the full restore pipeline: Block Store → PRF → HKDF → AES-GCM → seed.
-     */
-    fun restoreSeed(activity: FragmentActivity) {
-        viewModelScope.launch {
-            try {
-                Log.i(TAG, "Starting PRF restore...")
-
-                val restored = sigilBackup.restore(activity)
-                try {
-                    Log.i(TAG, "Restore SUCCESS!")
-                    Log.i(TAG, "  Restored seed size: ${restored.bip39Seed.size} bytes")
-
-                    val restoredDid = restored.did
-                    val restoredCredId = restored.credentialId
-                    val restoredPubKey = restored.publicKeyHex
-                    if (restoredDid != null) {
-                        Log.i(TAG, "  DID: $restoredDid")
-                        Log.i(TAG, "  Credential ID: $restoredCredId")
-                        Log.i(TAG, "  Public key: $restoredPubKey")
-
-                        // Restore the sigil state
-                        _sigilState.value = SigilState.Forged(
-                            did = restoredDid,
-                            credentialId = restoredCredId ?: "",
-                            publicKeyHex = restoredPubKey ?: "",
-                        )
-                        persistSigil(restoredDid, restoredCredId ?: "", restoredPubKey ?: "")
-                        Log.i(TAG, "  Sigil identity restored!")
-                    }
-
-                    val restoredMeta = restored.appMetadata
-                    if (restoredMeta != null) {
-                        Log.i(TAG, "  App metadata: ${restoredMeta.size} bytes")
-                        Log.i(TAG, "  App metadata: ${String(restoredMeta, Charsets.UTF_8)}")
-                    }
-                } finally {
-                    restored.wipe()
-                }
-            } catch (e: BackupException) {
-                Log.e(TAG, "Restore failed: ${e.message}", e)
-            } catch (e: Exception) {
-                Log.e(TAG, "Restore failed", e)
-            }
-        }
-    }
-
     /**
      * Build a keyAuthorization payload and sign it with the passkey.
      * This authorizes the SDK's access key to sign Midnight transactions.
+     *
+     * @param sigil The user's forged sigil — passed in from the panel
+     *   (`SigilPanelViewModel`) via the BBoardActivity callback rather than
+     *   read from BBoardViewModel's own state. BBoardViewModel no longer
+     *   owns the sigil identity (step 4 of the panel migration); it only
+     *   owns this authorization verdict.
+     * @param activity Required for the passkey assertion prompt.
      */
-    fun authorizeAccessKey(activity: Activity) {
-        val sigil = _sigilState.value as? SigilState.Forged
-        if (sigil == null) {
-            Log.w(TAG, "Authorize skipped — sigil state is ${_sigilState.value::class.simpleName}, not Forged")
-            return
-        }
+    fun authorizeAccessKey(sigil: SigilStatus.Forged, activity: Activity) {
         val midnightSdk = sdk
         if (midnightSdk == null) {
             Log.w(TAG, "Authorize skipped — SDK not initialized (connect with standalone SDK first)")
+            _accessKeyAuth.value = AccessKeyAuthState.Error(
+                "SDK not initialized — connect or deploy a contract first.",
+            )
             return
         }
 
         viewModelScope.launch {
-            _sigilState.value = SigilState.Authorizing(sigil, "Building authorization...")
+            _accessKeyAuth.value = AccessKeyAuthState.Authorizing(sigil, "Building authorization...")
             try {
                 // Build the payload: root P-256 key authorizes SDK's secp256k1 access key
                 val rootPublicKey = sigil.publicKeyHex.hexToBytes()
@@ -420,7 +198,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 // Hash the payload — this becomes the WebAuthn challenge
                 val challengeHash = KeyAuthorization.hashPayload(payload)
 
-                _sigilState.value = SigilState.Authorizing(sigil, "Sign with passkey...")
+                _accessKeyAuth.value = AccessKeyAuthState.Authorizing(sigil, "Sign with passkey...")
 
                 // Passkey signs the challenge (user sees biometric prompt)
                 val assertion = passkeyManager.authenticate(
@@ -433,16 +211,14 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 Log.i(TAG, "  Path: ${midnightSdk.accessKeyPath}")
                 Log.i(TAG, "  Signature: ${assertion.signature.size} bytes")
 
-                _sigilState.value = SigilState.Authorized(
-                    did = sigil.did,
-                    credentialId = sigil.credentialId,
-                    publicKeyHex = sigil.publicKeyHex,
+                _accessKeyAuth.value = AccessKeyAuthState.Authorized(
+                    sigil = sigil,
                     accessKeyHex = midnightSdk.accessKeyPublicKey.toHex(),
                     accessKeyPath = midnightSdk.accessKeyPath,
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Authorization failed", e)
-                _sigilState.value = SigilState.Error(e.message ?: "Authorization failed")
+                _accessKeyAuth.value = AccessKeyAuthState.Error(e.message ?: "Authorization failed")
             }
         }
     }
@@ -702,10 +478,12 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 if (receipt.status == TransactionStatus.SUBMITTED) {
                     Log.i(TAG, "Post submitted! total=${receipt.timings.totalMs}ms")
 
-                    // Generate metadata — simulates game state computed after a tx
-                    val meta = buildAppMetadata(message, receipt.timings.totalMs)
-                    appMetadata = meta
-                    Log.i(TAG, "Generated ${meta.size} bytes of app metadata")
+                    // `appMetadata` (a simulated game-state blob computed post-tx
+                    // and round-tripped through the backup pipeline) used to be
+                    // populated here. The backup pipeline lives in the sigil
+                    // panel module now and doesn't take host-specific metadata
+                    // in its v1 API — when the panel grows a metadata hook,
+                    // re-introduce the buildAppMetadata call site here.
 
                     _state.value = current.copy(
                         boardState = BoardState.Occupied(message = message),
@@ -737,9 +515,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 Log.i(TAG, "TakeDown submitted!")
 
-                val meta = buildAppMetadata("takeDown", 0)
-                appMetadata = meta
-                Log.i(TAG, "Generated ${meta.size} bytes of app metadata (takeDown)")
+                // Same as post(): appMetadata generation removed alongside the
+                // sigil-panel migration. Re-introduce buildAppMetadata when
+                // metadata round-trip lands as a panel-side API.
 
                 _state.value = current.copy(boardState = BoardState.Vacant, lastTimingMs = null)
             } catch (e: ContractCallException) {
@@ -900,24 +678,37 @@ sealed class BoardState {
     data class CallError(val message: String) : BoardState()
 }
 
-/** Sigil identity state — tracks passkey creation and access key authorization. */
-sealed class SigilState {
-    data object None : SigilState()
-    data class Creating(val stage: String) : SigilState()
-    data class Forged(
-        val did: String,
-        val credentialId: String,
-        val publicKeyHex: String,
-    ) : SigilState()
-    data class Authorizing(val sigil: Forged, val stage: String) : SigilState()
+/**
+ * Authorization verdict for the wallet SDK's access key.
+ *
+ * BBoard-specific concern: bridges the sigil (which the
+ * `SigilStatusPanel` owns) with the wallet SDK's access key (which the
+ * `WalletStatusPanel` owns). Neither panel can own this state in
+ * isolation, so it lives in `BBoardViewModel` and gets the sigil
+ * triple passed in from the host's panel-status mirror at
+ * authorize-time.
+ */
+sealed class AccessKeyAuthState {
+    /** No authorization attempted. Authorize button is shown when both a sigil + SDK exist. */
+    data object None : AccessKeyAuthState()
+
+    /** Authorize flow in flight. [stage] feeds the UI's status line. */
+    data class Authorizing(val sigil: SigilStatus.Forged, val stage: String) : AccessKeyAuthState()
+
+    /**
+     * Sigil successfully signed a [KeyAuthorization] payload over the
+     * wallet SDK's access key. The signed authorization isn't stored
+     * here — for now we just remember the success + key info; future
+     * iterations will persist the assertion for proof verification.
+     */
     data class Authorized(
-        val did: String,
-        val credentialId: String,
-        val publicKeyHex: String,
+        val sigil: SigilStatus.Forged,
         val accessKeyHex: String,
         val accessKeyPath: String,
-    ) : SigilState()
-    data class Error(val message: String) : SigilState()
+    ) : AccessKeyAuthState()
+
+    /** Authorization failed (user cancelled the passkey prompt, SDK absent, etc.). */
+    data class Error(val message: String) : AccessKeyAuthState()
 }
 
 private fun String.hexToBytes(): ByteArray =
