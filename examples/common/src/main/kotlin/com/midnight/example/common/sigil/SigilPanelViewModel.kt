@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.midnight.example.common.BuildConfig
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
@@ -116,7 +117,14 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                 val did = DidKeyGenerator.fromCompressedP256(result.publicKey.compressed)
                 val publicKeyHex = result.publicKey.compressedHex()
 
-                Log.i(TAG, "Sigil forged — did=${did.take(30)}…")
+                // Full diagnostic block: DID, credential ID, raw P-256 pubkey hex.
+                // All public material — DID and pubkey by definition, credential ID
+                // is just an authenticator-side opaque identifier (not a secret).
+                // Useful for cross-referencing with the authenticator's stored
+                // credentials or verifying the DID-from-pubkey derivation by hand.
+                Log.i(TAG, "Sigil forged — DID: $did")
+                Log.i(TAG, "  Credential ID: ${result.credentialId}")
+                Log.i(TAG, "  P-256 pubkey: $publicKeyHex")
                 persistSigil(did = did, credentialId = result.credentialId, publicKeyHex = publicKeyHex)
                 _status.value = SigilStatus.Forged(
                     did = did,
@@ -133,9 +141,21 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
     /**
      * Probe the passkey's PRF extension. Builds a deterministic salt from a
      * versioned purpose string, runs an assertion twice with the same salt,
-     * and logs whether the outputs match. No state change — purely a debug
-     * affordance to verify a freshly forged authenticator supports PRF
-     * before relying on it for backup.
+     * and reports whether the outputs match — used during canary to confirm
+     * an authenticator supports CTAP2's hmac-secret extension before relying
+     * on it for backup.
+     *
+     * **Logging gates.** Two tiers:
+     *
+     *  - **Always-on (`Log.i`):** PASS / FAIL determinism verdict, plus the
+     *    salt (a SHA-256 of a public purpose string — not sensitive). Safe
+     *    for production.
+     *  - **Debug-only (`debugLog`):** the raw PRF output bytes in hex. These
+     *    ARE the key material the backup blob is encrypted under — combined
+     *    with the salt, anyone with logcat access can decrypt a captured
+     *    blob. Gated behind `BuildConfig.DEBUG`, which is `const val false`
+     *    in release builds; R8 dead-code-eliminates the whole conditional
+     *    including the `.toHex()` allocations.
      */
     fun testPrf(activity: Activity) {
         viewModelScope.launch {
@@ -144,16 +164,23 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                 val salt = MessageDigest.getInstance("SHA-256")
                     .digest(PRF_BACKUP_PURPOSE.toByteArray(Charsets.UTF_8))
 
-                Log.i(TAG, "Testing PRF (purpose=$PRF_BACKUP_PURPOSE)")
+                Log.i(TAG, "Testing PRF with salt: ${salt.toHex()} (purpose=$PRF_BACKUP_PURPOSE)")
                 val first = passkeyManager.authenticateWithPrf(
                     activity = activity, challenge = challenge, prfSalt = salt,
                 )
                 val firstOut = first.prfOutput
                 if (firstOut == null || firstOut.size != PRF_OUTPUT_BYTES) {
                     Log.w(TAG, "PRF returned null/wrong size — extension not supported on this authenticator")
+                    debugLog(TAG) { "Full response: ${first.assertionResponseJson}" }
                     return@launch
                 }
-                Log.i(TAG, "PRF first output: ${firstOut.size}B")
+                debugLog(TAG) { "PRF first output (${firstOut.size} bytes): ${firstOut.toHex()}" }
+
+                // Same salt second auth — same authenticator should produce
+                // the same output. CTAP2 hmac-secret is defined deterministic;
+                // any mismatch here is either an authenticator bug or a Credential
+                // Manager quirk we want to know about.
+                Log.i(TAG, "Testing PRF determinism (same salt, second auth)…")
                 val second = passkeyManager.authenticateWithPrf(
                     activity = activity, challenge = challenge, prfSalt = salt,
                 )
@@ -163,7 +190,9 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                     return@launch
                 }
                 val deterministic = firstOut.contentEquals(secondOut)
-                Log.i(TAG, "PRF determinism: ${if (deterministic) "PASS" else "FAIL (outputs differ)"}")
+                Log.i(TAG, "PRF determinism: ${if (deterministic) "PASS (same output)" else "FAIL (different output)"}")
+                debugLog(TAG) { "  First:  ${firstOut.toHex()}" }
+                debugLog(TAG) { "  Second: ${secondOut.toHex()}" }
             } catch (e: Exception) {
                 Log.e(TAG, "PRF test failed", e)
             }
@@ -192,11 +221,14 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                 return@launch
             }
             try {
-                Log.i(TAG, "Starting PRF backup…")
+                Log.i(TAG, "Starting PRF backup of the SeedVault-stored seed…")
+                Log.i(TAG, "  DID: ${sigil.did}")
+                Log.i(TAG, "  Credential ID: ${sigil.credentialId}")
                 val plaintext = seedVault.loadSeed(activity)
                 val entropy = plaintext.mnemonicEntropy.copyOf()
                 val bip39Seed = plaintext.bip39Seed.copyOf()
                 plaintext.wipe()
+                Log.i(TAG, "  Seed loaded from SeedVault: ${bip39Seed.size}B (entropy: ${entropy.size}B)")
                 sigilBackup.backup(
                     activity = activity,
                     entropy = entropy,
@@ -206,7 +238,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                     publicKeyHex = sigil.publicKeyHex,
                     appMetadata = null,
                 )
-                Log.i(TAG, "Backup SUCCESS — seed + sigil identity stored in Block Store")
+                Log.i(TAG, "Backup SUCCESS — seed + sigil identity stored in Block Store (no appMetadata)")
             } catch (e: BackupException) {
                 Log.e(TAG, "Backup failed: ${e.message}", e)
             } catch (e: Exception) {
@@ -230,19 +262,31 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                 Log.i(TAG, "Starting PRF restore…")
                 val restored = sigilBackup.restore(activity)
                 try {
+                    Log.i(TAG, "Restore SUCCESS!")
+                    Log.i(TAG, "  Restored seed size: ${restored.bip39Seed.size} bytes")
                     val did = restored.did
                     if (did != null) {
                         val credentialId = restored.credentialId.orEmpty()
                         val publicKeyHex = restored.publicKeyHex.orEmpty()
+                        Log.i(TAG, "  DID: $did")
+                        Log.i(TAG, "  Credential ID: $credentialId")
+                        Log.i(TAG, "  Public key: $publicKeyHex")
                         persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
                         _status.value = SigilStatus.Forged(
                             did = did,
                             credentialId = credentialId,
                             publicKeyHex = publicKeyHex,
                         )
-                        Log.i(TAG, "Sigil restored: did=${did.take(30)}…")
+                        Log.i(TAG, "  Sigil identity restored into prefs + status")
                     } else {
                         Log.w(TAG, "Restore returned a seed but no sigil triple — leaving status unchanged")
+                    }
+                    // App metadata is intentionally null on the backup side
+                    // (panel doesn't manage host-specific blobs). If a future
+                    // host wires metadata through, surface its size here.
+                    val meta = restored.appMetadata
+                    if (meta != null) {
+                        Log.i(TAG, "  App metadata: ${meta.size} bytes (raw, host-specific encoding)")
                     }
                 } finally {
                     restored.wipe()
@@ -327,4 +371,29 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
             }
         }
     }
+}
+
+/**
+ * `0x05ff…` style hex render for byte arrays. Kept local to the panel module
+ * — only used for diagnostic logging. Lowercase to match the rest of the
+ * Kuira tooling (CLI output, indexer dumps) so values grep cleanly across logs.
+ */
+private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+/**
+ * Inline `Log.i` wrapper that's a no-op in release builds.
+ *
+ * `BuildConfig.DEBUG` is a `const val false` generated by AGP for release
+ * variants, so the compiler folds `if (false) …` to nothing and R8 then
+ * strips the whole conditional — including the lazy [message] lambda
+ * (eliminated as unused) and any `.toHex()` / string-template work inside
+ * it. Zero overhead, zero leakage in release APKs.
+ *
+ * Use this for log lines that carry sensitive intermediate values (raw
+ * PRF outputs, derived key bytes, etc.) where a canary-grade trace is
+ * valuable but production logging is not. For genuinely public info
+ * (DID, credentialId, pubkey hex) just call `Log.i` directly.
+ */
+private inline fun debugLog(tag: String, message: () -> String) {
+    if (BuildConfig.DEBUG) Log.i(tag, message())
 }

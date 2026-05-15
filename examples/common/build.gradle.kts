@@ -24,6 +24,11 @@ android {
     }
     buildFeatures {
         compose = true
+        // Needed for `BuildConfig.DEBUG` — the panel modules use it to gate
+        // canary-only verbose logging (raw PRF outputs, etc.) so release
+        // builds R8-strip those lines and the strings they interpolate.
+        // See `SigilPanelViewModel.testPrf` for the canonical example.
+        buildConfig = true
     }
 }
 
