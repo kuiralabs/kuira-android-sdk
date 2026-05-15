@@ -111,23 +111,18 @@ class BBoardActivity : FragmentActivity() {
 fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     val sigilState by viewModel.sigilState.collectAsState()
-    val walletStatus by viewModel.walletStatus.collectAsState()
     // FragmentActivity (which ComponentActivity extends) hosts SeedVault's
     // biometric prompts. Same instance also satisfies Activity for the
     // legacy sigil-side callbacks.
     val activity = LocalContext.current as? FragmentActivity
 
-    // Network selection lives at the BBoardApp level so the WalletStatusPanel
-    // (anchored top-right outside SetupScreen's Column) can follow the user's
-    // chip selection. `rememberSaveable` so the choice survives configuration
-    // changes / Activity recreation. Mapping to the SDK's MidnightNetwork
-    // happens here too — keeps the panel agnostic of BBoard's local enum.
-    var networkChoice by rememberSaveable { mutableStateOf(NetworkChoice.LOCALNET) }
-    val midnightNetwork = when (networkChoice) {
-        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
-        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
-        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
-    }
+    // Mirror of the network the WalletStatusPanel is on — the panel owns
+    // the selection (chip lives in its sheet), but BBoard's deploy/connect
+    // operations need to target the same chain. The panel's
+    // `onNetworkChange` callback keeps this in sync; we seed it with
+    // UNDEPLOYED so the first deploy goes to localnet if the user hasn't
+    // touched the panel chip yet.
+    var midnightNetwork by rememberSaveable { mutableStateOf(MidnightNetwork.UNDEPLOYED) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -149,28 +144,15 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
             when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilState = sigilState,
-                    walletStatus = walletStatus,
-                    network = networkChoice,
-                    onNetworkChange = { networkChoice = it },
                     onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                     onTestPrf = { activity?.let { viewModel.testPrf(it) } },
                     onBackup = { activity?.let { viewModel.backupSeed(it) } },
                     onRestore = { activity?.let { viewModel.restoreSeed(it) } },
-                    onConnectRemote = viewModel::connect,
-                    onConnectSdk = { addr, network ->
-                        activity?.let { viewModel.connectWithSdk(addr, network, it) }
+                    onConnectSdk = { addr ->
+                        activity?.let { viewModel.connectWithSdk(addr, midnightNetwork, it) }
                     },
-                    onDeploySdk = { network ->
-                        activity?.let { viewModel.deployAndConnect(network, it) }
-                    },
-                    onRefreshBalance = { network ->
-                        activity?.let { viewModel.refreshBalance(network, it) }
-                    },
-                    onWaitForFunding = { network ->
-                        activity?.let { viewModel.waitForFunding(network, it) }
-                    },
-                    onRegisterDust = { network ->
-                        activity?.let { viewModel.registerDust(network, it) }
+                    onDeploySdk = {
+                        activity?.let { viewModel.deployAndConnect(midnightNetwork, it) }
                     },
                 )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
@@ -188,13 +170,15 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
                 )
             }
         }
-        // Reusable wallet panel anchored top-right. Self-contained: builds its
-        // own SDK from a SeedVault-backed seed, so it works alongside (not
-        // through) BBoard's existing connect/deploy flows during the canary
-        // period. Follows the host's network chip selection above — switching
-        // chips rebuilds the panel's SDK on the next action.
+        // Reusable wallet panel anchored top-right. Owns the network chip
+        // now (BBoard's in-screen chip was removed). Self-contained SDK
+        // build from a SeedVault-backed seed. The onNetworkChange callback
+        // mirrors the chip selection into BBoard's `midnightNetwork` state
+        // so contract deploy/connect operations target the same chain the
+        // wallet is on.
         WalletStatusPanel(
             initialNetwork = midnightNetwork,
+            onNetworkChange = { midnightNetwork = it },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
@@ -207,39 +191,25 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 }
 
 // ── Setup Screen ──
-
-private enum class ConnectionMode(val label: String) {
-    REMOTE("Remote Wallet"),
-    STANDALONE("Standalone SDK"),
-}
+//
+// Stripped to two cards: sigil identity + contract connection. Network
+// selection lives in WalletStatusPanel's sheet (anchored top-right by
+// BBoardApp). Wallet status (balance / fund / register) is the panel too —
+// the in-screen WalletStatusCard was redundant with that and was removed.
+// Only one connection mode remains: standalone SDK. The old "Remote Wallet"
+// (mn serve via WebSocket) path is gone — see commit log for rationale.
 
 @Composable
 private fun SetupScreen(
     sigilState: SigilState,
-    walletStatus: WalletStatusState,
-    network: NetworkChoice,
-    onNetworkChange: (NetworkChoice) -> Unit,
     onForgeSigil: () -> Unit,
     onTestPrf: () -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
-    onConnectRemote: (String, NetworkChoice) -> Unit,
-    onConnectSdk: (String, MidnightNetwork) -> Unit,
-    onDeploySdk: (MidnightNetwork) -> Unit,
-    onRefreshBalance: (MidnightNetwork) -> Unit,
-    onWaitForFunding: (MidnightNetwork) -> Unit,
-    onRegisterDust: (MidnightNetwork) -> Unit,
+    onConnectSdk: (String) -> Unit,
+    onDeploySdk: () -> Unit,
 ) {
     var address by remember { mutableStateOf("") }
-    var mode by remember { mutableStateOf(ConnectionMode.REMOTE) }
-    // Network is hoisted to BBoardApp (so WalletStatusPanel follows it too);
-    // we re-derive MidnightNetwork locally for the connect/deploy callbacks
-    // that still take it. Single source of truth = the [network] param.
-    val midnightNetwork = when (network) {
-        NetworkChoice.LOCALNET -> MidnightNetwork.UNDEPLOYED
-        NetworkChoice.PREVIEW -> MidnightNetwork.PREVIEW
-        NetworkChoice.PREPROD -> MidnightNetwork.PREPROD
-    }
 
     // ── Sigil Identity Card ──
     SigilCard(
@@ -251,40 +221,9 @@ private fun SetupScreen(
     )
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-    // ── Wallet Status Card (canary for the new SDK APIs) ──
-    WalletStatusCard(
-        status = walletStatus,
-        network = midnightNetwork,
-        onRefreshBalance = { onRefreshBalance(midnightNetwork) },
-        onWaitForFunding = { onWaitForFunding(midnightNetwork) },
-        onRegisterDust = { onRegisterDust(midnightNetwork) },
-    )
-    Spacer(modifier = Modifier.height(Spacing.SectionGap))
-
     // ── Contract Connection Card ──
     DarkCard {
         Text("connect to contract", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-
-        Text("mode", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        ChipRow(
-            options = ConnectionMode.entries.map { it.label },
-            selectedIndex = mode.ordinal,
-            accentSelected = mode == ConnectionMode.STANDALONE,
-            onSelect = { mode = ConnectionMode.entries[it] },
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-
-        Text("network", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        ChipRow(
-            options = NetworkChoice.entries.map { it.label },
-            selectedIndex = network.ordinal,
-            onSelect = { onNetworkChange(NetworkChoice.entries[it]) },
-        )
-
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
         OutlinedTextField(
@@ -297,164 +236,34 @@ private fun SetupScreen(
             singleLine = true,
         )
 
-        val hint = if (mode == ConnectionMode.STANDALONE)
-            "Uses embedded wallet (no mn serve needed). Test seed."
-        else
-            "Requires mn serve --approve-all running on host"
         Text(
-            hint,
-            color = if (mode == ConnectionMode.STANDALONE) Colors.Accent.copy(alpha = 0.6f) else Colors.OnSurfaceSubtle,
+            "Uses the standalone SDK (no mn serve needed). Network follows the wallet panel.",
+            color = Colors.Accent.copy(alpha = 0.6f),
             fontSize = Type.Caption,
             modifier = Modifier.padding(top = Spacing.TinyGap),
         )
 
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-        val buttonLabel = if (mode == ConnectionMode.STANDALONE) "connect (standalone)" else "connect"
-        ActionButton(buttonLabel, enabled = address.length == 64) {
-            when (mode) {
-                ConnectionMode.REMOTE -> onConnectRemote(address, network)
-                ConnectionMode.STANDALONE -> onConnectSdk(address, midnightNetwork)
-            }
+        ActionButton("connect", enabled = address.length == 64) {
+            onConnectSdk(address)
         }
 
-        if (mode == ConnectionMode.STANDALONE) {
-            Spacer(modifier = Modifier.height(Spacing.SmallGap))
-            Text("— or deploy a fresh instance —", color = Colors.OnSurfaceSubtle, fontSize = Type.Caption,
-                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(Spacing.SmallGap))
-            ActionButton("deploy new contract", enabled = true) {
-                onDeploySdk(midnightNetwork)
-            }
-        }
-    }
-}
-
-/**
- * Wallet bootstrap / funding / dust-registration card — the canary surface
- * for the new SDK APIs (`balance`, `waitForFunding`, `registerForDustGeneration`).
- *
- * Three buttons:
- *  - **read balance** — builds the SDK (biometric prompt the first time),
- *    fetches `sdk.wallet.balance()`, displays NIGHT/dust.
- *  - **wait for funding** — calls `sdk.wallet.waitForFunding(1 NIGHT)`. While
- *    waiting, run `mn transfer <addr> 100` from a host terminal.
- *  - **register dust** — calls `sdk.registerForDustGeneration()`. Required
- *    once after funding before the wallet can pay fees on contract calls.
- *
- * Currently only meaningful on UNDEPLOYED (localnet); the buttons stay
- * enabled on other networks but the funding flow assumes localnet for
- * the canary path.
- */
-@Composable
-private fun WalletStatusCard(
-    status: WalletStatusState,
-    network: MidnightNetwork,
-    onRefreshBalance: () -> Unit,
-    onWaitForFunding: () -> Unit,
-    onRegisterDust: () -> Unit,
-) {
-    val clipboard = LocalClipboardManager.current
-    val balanceFormatter = remember { BalanceFormatter() }
-    DarkCard {
-        Text("wallet status", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-
-        when (status) {
-            is WalletStatusState.None -> {
-                Text(
-                    "Read balance to bootstrap the SDK. First press shows a biometric prompt to seal/load the wallet seed via SeedVault.",
-                    color = Colors.OnSurfaceSubtle,
-                    fontSize = Type.Caption,
-                )
-            }
-            is WalletStatusState.Loading -> {
-                Text(status.stage, color = Colors.OnSurfaceDim, fontSize = Type.Body)
-            }
-            is WalletStatusState.Ready -> {
-                // While waiting for funds: show ONLY the airdrop command (the
-                // address is inside it). Otherwise: show the address alone.
-                // Either way, the visible content is one tap-to-copy line —
-                // no duplicate address, no "tap to copy" labels.
-                val showFundCmd = status.busy != null
-                val displayText = if (showFundCmd) {
-                    // 10000 NIGHT — dust outpaces a slow tester (~1 block to spendable).
-                    "mn airdrop 10000 --wallet ${status.address}"
-                } else {
-                    status.address
-                }
-                Text(
-                    displayText,
-                    color = Colors.OnSurface,
-                    fontSize = Type.Caption,
-                    fontFamily = if (showFundCmd) FontFamily.Monospace else null,
-                    modifier = Modifier.clickable {
-                        clipboard.setText(AnnotatedString(displayText))
-                    },
-                )
-                Spacer(modifier = Modifier.height(Spacing.SmallGap))
-                Text(
-                    "${balanceFormatter.formatCompact(status.balance.totalNight, "NIGHT")}" +
-                        " · ${balanceFormatter.formatCompact(status.balance.dust, "DUST")}" +
-                        if (status.balance.dustRegistered) " · ✓" else "",
-                    color = Colors.OnSurfaceDim,
-                    fontSize = Type.Caption,
-                )
-                if (status.busy != null) {
-                    Spacer(modifier = Modifier.height(Spacing.TinyGap))
-                    Text(status.busy, color = Colors.Accent, fontSize = Type.Caption)
-                }
-                if (status.message != null) {
-                    Spacer(modifier = Modifier.height(Spacing.TinyGap))
-                    Text(status.message, color = Colors.Accent.copy(alpha = 0.8f), fontSize = Type.Caption)
-                }
-            }
-            is WalletStatusState.Error -> {
-                Text("error: ${status.message}", color = Colors.OnSurfaceDim, fontSize = Type.Caption)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(Spacing.SectionGap))
-
-        // Three actions in one row — labels intentionally short. The status
-        // text above this row tells the user what each one does in context
-        // (e.g. "Waiting for `mn transfer ... 100`..." appears while waiting).
-        val busy = status is WalletStatusState.Loading ||
-            (status is WalletStatusState.Ready && status.busy != null)
-        Row(
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        Text(
+            "— or deploy a fresh instance —",
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.SmallGap),
-        ) {
-            ActionButton(
-                text = "balance",
-                enabled = !busy,
-                modifier = Modifier.weight(1f),
-                onClick = onRefreshBalance,
-            )
-            ActionButton(
-                text = "fund",
-                enabled = !busy,
-                modifier = Modifier.weight(1f),
-                onClick = onWaitForFunding,
-            )
-            ActionButton(
-                text = "register",
-                enabled = !busy,
-                modifier = Modifier.weight(1f),
-                onClick = onRegisterDust,
-            )
-        }
-
-        if (network != MidnightNetwork.UNDEPLOYED) {
-            Spacer(modifier = Modifier.height(Spacing.SmallGap))
-            Text(
-                "canary is for localnet (UNDEPLOYED) — on ${network.name}, fund the address externally first.",
-                color = Colors.OnSurfaceSubtle,
-                fontSize = Type.Caption,
-            )
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        ActionButton("deploy new contract", enabled = true) {
+            onDeploySdk()
         }
     }
 }
+
 
 // ── Connected Screen ──
 

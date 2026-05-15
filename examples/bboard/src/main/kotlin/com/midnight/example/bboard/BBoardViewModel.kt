@@ -120,8 +120,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private val biometricGate by lazy { BiometricGate(walletKeyManager) }
     private val seedVault by lazy { SeedVault(getApplication(), biometricGate) }
 
-    private val _walletStatus = MutableStateFlow<WalletStatusState>(WalletStatusState.None)
-    val walletStatus: StateFlow<WalletStatusState> = _walletStatus
+    // Wallet status (balance / fund / register / addresses) lives in the
+    // WalletStatusPanel module now. BBoard's prior `_walletStatus` flow +
+    // refreshBalance / waitForFunding / registerDust methods were removed —
+    // they duplicated work the panel does. SeedVault + WalletKeyManager
+    // stay because the SDK build path below (connectWithSdk /
+    // deployAndConnect) still needs to derive the BBoard wallet seed for
+    // contract operations.
 
     /**
      * Bootstraps the wallet seed:
@@ -171,159 +176,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         return requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
     }
 
-    // ── Canary wallet actions (exercise the new SDK APIs end-to-end) ──
-    //
-    // Each method below ensures the SDK is built for the given network (loading
-    // the seed via biometric prompt the first time per session), then calls one
-    // of the new MidnightSdk / MidnightWallet methods we just shipped:
-    //   - refreshBalance  → wallet.balance()
-    //   - waitForFunding  → wallet.waitForFunding(...)
-    //   - registerDust    → sdk.registerForDustGeneration()
-    //
-    // Used by the Wallet Status card in the setup screen.
+    // Wallet bootstrap / balance / fund / register-dust methods used to
+    // live here as the in-screen canary card's backing logic. All of that
+    // moved to WalletPanelViewModel in :examples:common — BBoard no longer
+    // needs its own implementation. The SDK build path (connectWithSdk +
+    // deployAndConnect) remains in this file because it owns the contract
+    // lifecycle, which is BBoard-specific.
 
-    /**
-     * Build (or reuse) the SDK and read the current NIGHT/dust balance from chain.
-     * Emits [WalletStatusState.Ready] with the snapshot on success.
-     */
-    fun refreshBalance(network: MidnightNetwork, activity: FragmentActivity) {
-        viewModelScope.launch {
-            _walletStatus.value = WalletStatusState.Loading("Reading balance...")
-            try {
-                val builtSdk = buildOrReuseSdk(network, activity)
-                // Best-effort dust resync. NIGHT balance is subscription-driven
-                // and live without this; dust state is local-replay-driven and
-                // can be stale until we pull fresh events. If the indexer
-                // WebSocket isn't ready yet (race on first launch, or a
-                // transient disconnect), DO NOT let that kill the balance read
-                // — we'd rather show slightly-stale dust than fail the whole
-                // refresh. Subsequent taps usually succeed.
-                try {
-                    builtSdk.wallet.refresh()
-                } catch (e: Exception) {
-                    Log.w(TAG, "wallet.refresh failed (showing cached): ${e.message}")
-                }
-                val balance = builtSdk.wallet.balance()
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = balance,
-                )
-                Log.i(TAG, "balance: night=${balance.totalNight} dust=${balance.dust} registered=${balance.dustRegistered}")
-            } catch (e: Exception) {
-                Log.e(TAG, "refreshBalance failed", e)
-                _walletStatus.value = WalletStatusState.Error(e.message ?: "Balance read failed")
-            }
-        }
-    }
-
-    /**
-     * Suspend until the wallet's NIGHT balance reaches [MIN_FUNDING_NIGHT]
-     * (default 1 NIGHT base unit), or timeout. While waiting, the UI shows
-     * the wallet address so the user can run `mn transfer <addr> 100` from a
-     * host terminal.
-     */
-    fun waitForFunding(network: MidnightNetwork, activity: FragmentActivity) {
-        viewModelScope.launch {
-            try {
-                val builtSdk = buildOrReuseSdk(network, activity)
-                val current = builtSdk.wallet.balance()
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = current,
-                    busy = "Waiting for funds…",
-                )
-                Log.i(TAG, "waitForFunding: night=${current.totalNight}, waiting up to 5min")
-                val funded = builtSdk.wallet.waitForFunding(MIN_FUNDING_NIGHT)
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = funded,
-                    message = "Funded — NIGHT=${funded.unshieldedNight}",
-                )
-                Log.i(TAG, "waitForFunding: funded (night=${funded.unshieldedNight})")
-            } catch (e: Exception) {
-                Log.e(TAG, "waitForFunding failed", e)
-                _walletStatus.value = WalletStatusState.Error(e.message ?: "Wait for funding failed")
-            }
-        }
-    }
-
-    /**
-     * Register this wallet's NIGHT key for dust generation. Must be called
-     * once after the wallet first holds NIGHT — until then the chain won't
-     * release spendable dust, and contract calls (which pay fees in dust)
-     * fail.
-     */
-    fun registerDust(network: MidnightNetwork, activity: FragmentActivity) {
-        viewModelScope.launch {
-            try {
-                val builtSdk = buildOrReuseSdk(network, activity)
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = builtSdk.wallet.balance(),
-                    busy = "Registering for dust generation…",
-                )
-                val result = builtSdk.registerForDustGeneration()
-                Log.i(TAG, "registerDust result: $result")
-
-                val ok = result is TransactionSubmitter.SubmissionResult.Success ||
-                    result is TransactionSubmitter.SubmissionResult.Pending
-                if (!ok) {
-                    val reason = when (result) {
-                        is TransactionSubmitter.SubmissionResult.Failed -> result.reason
-                        is TransactionSubmitter.SubmissionResult.StaleUtxo -> "stale UTXO"
-                        else -> "unknown"
-                    }
-                    _walletStatus.value = WalletStatusState.Ready(
-                        address = builtSdk.walletAddress,
-                        balance = builtSdk.wallet.balance(),
-                        message = "Registration failed: $reason",
-                    )
-                    return@launch
-                }
-
-                // Registration accepted — dust generates from the NEXT block and
-                // surfaces in the local replay shortly after. Poll for ~20s with
-                // live status updates so the user sees dust climb instead of a
-                // stale "dust 0" reading.
-                Log.i(TAG, "registerDust: tx accepted, polling dust until visible")
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = builtSdk.wallet.balance(),
-                    busy = "Waiting for first dust generation…",
-                )
-                val deadline = System.currentTimeMillis() + DUST_VISIBLE_TIMEOUT_MS
-                var latest = builtSdk.wallet.balance()
-                while (latest.dust == BigInteger.ZERO && System.currentTimeMillis() < deadline) {
-                    kotlinx.coroutines.delay(DUST_POLL_INTERVAL_MS)
-                    // Force a fresh dust sync each tick — without this, balance()
-                    // reads the same stale cached state and would never see
-                    // freshly-generated dust until the next subscription tick.
-                    // Best-effort: a transient WS hiccup just means we wait
-                    // another tick and try again.
-                    try {
-                        builtSdk.wallet.refresh()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "wallet.refresh failed during poll: ${e.message}")
-                    }
-                    latest = builtSdk.wallet.balance()
-                    _walletStatus.value = WalletStatusState.Ready(
-                        address = builtSdk.walletAddress,
-                        balance = latest,
-                        busy = if (latest.dust == BigInteger.ZERO) "Waiting for first dust generation…" else null,
-                    )
-                }
-                Log.i(TAG, "registerDust: final balance night=${latest.totalNight} dust=${latest.dust}")
-                _walletStatus.value = WalletStatusState.Ready(
-                    address = builtSdk.walletAddress,
-                    balance = latest,
-                    message = if (latest.dust > BigInteger.ZERO) "✓ Registered" else "Registered — dust still propagating, tap balance again in a moment.",
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "registerDust failed", e)
-                _walletStatus.value = WalletStatusState.Error(e.message ?: "Dust registration failed")
-            }
-        }
-    }
 
     /**
      * Create a passkey and derive the user's DID.
@@ -588,27 +447,11 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Connect using a remote wallet (mn serve). */
-    fun connect(contractAddress: String, network: NetworkChoice) {
-        viewModelScope.launch {
-            _state.value = BBoardState.Connecting("Initializing (remote wallet)...")
-            try {
-                installProvingKeys()
-
-                val cfg = MidnightConfig.Builder(getApplication())
-                    .indexerUrl(network.indexerUrl)
-                    .walletUrl(network.walletUrl)
-                    .networkId(network.networkId)
-                    .build()
-                config = cfg
-
-                setupContract(cfg, contractAddress, network.networkId)
-            } catch (e: Exception) {
-                Log.e(TAG, "Connect failed", e)
-                _state.value = BBoardState.Error(e.message ?: "Connection failed")
-            }
-        }
-    }
+    // Remote Wallet (`mn serve` over WebSocket) was the legacy connection
+    // path — removed since the standalone SDK is the only supported route
+    // now (see commit log + `feedback_sdk_devx_principle` memory). The
+    // `NetworkChoice` enum that this method consumed is gone too;
+    // contract operations take `MidnightNetwork` directly.
 
     /**
      * Lazily build (or rebuild) the SDK against [network]. Reuses the existing
@@ -1050,40 +893,6 @@ sealed class DustSyncStatus {
     data class Processing(val detail: String) : DustSyncStatus()
 }
 
-/**
- * Wallet bootstrap / funding / dust-registration status for the canary card.
- *
- * Tracks the "create wallet → fund → register dust" lifecycle that BBoard now
- * exercises against the new SDK methods (`balance`, `waitForFunding`,
- * `registerForDustGeneration`). Each variant maps 1:1 to UI text in the
- * Wallet Status card on the setup screen.
- */
-sealed class WalletStatusState {
-    /** No SDK built yet — bare app launch. */
-    data object None : WalletStatusState()
-
-    /** Building MidnightSdk and reading the first balance. */
-    data class Loading(val stage: String) : WalletStatusState()
-
-    /**
-     * SDK ready, current balance known.
-     *
-     * @property address Wallet's Bech32m address (display + paste into `mn transfer`).
-     * @property balance Latest [WalletBalance] snapshot from `sdk.wallet.balance()`.
-     * @property busy Set while a long-running action (waitForFunding / register) is in flight.
-     * @property message Optional one-line status — last action's result or an error.
-     */
-    data class Ready(
-        val address: String,
-        val balance: WalletBalance,
-        val busy: String? = null,
-        val message: String? = null,
-    ) : WalletStatusState()
-
-    /** SDK couldn't build or balance couldn't be read. */
-    data class Error(val message: String) : WalletStatusState()
-}
-
 sealed class BoardState {
     data object Vacant : BoardState()
     data class Working(val stage: String) : BoardState()
@@ -1117,26 +926,7 @@ private fun String.hexToBytes(): ByteArray =
 private fun ByteArray.toHex(): String =
     joinToString("") { "%02x".format(it) }
 
-/**
- * Network configuration presets (for remote wallet mode).
- *
- * Indexer URLs come from the central `NetworkConfig` so we never bake the
- * indexer API version into this file. The wallet URL stays hardcoded
- * because it points at the local `mn serve` daemon, not the indexer.
- */
-enum class NetworkChoice(
-    val label: String,
-    val networkId: String,
-    val midnightNetwork: com.midnight.kuira.core.network.MidnightNetwork,
-    val walletUrl: String,
-) {
-    LOCALNET("Localnet", "undeployed", com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED, "ws://10.0.2.2:9932"),
-    PREVIEW("Preview", "preview", com.midnight.kuira.core.network.MidnightNetwork.PREVIEW, "ws://10.0.2.2:9932"),
-    PREPROD("PreProd", "preprod", com.midnight.kuira.core.network.MidnightNetwork.PREPROD, "ws://10.0.2.2:9932");
+// NetworkChoice + the Remote Wallet preset table were removed along with
+// the `connect(addr, NetworkChoice)` Remote Wallet path. Contract code
+// now takes `MidnightNetwork` directly; URLs come from `NetworkConfig.forNetwork(...)`.
 
-    /** Indexer base URL composed via the central [NetworkConfig]. */
-    val indexerUrl: String
-        get() = com.midnight.kuira.core.network.NetworkConfig
-            .forNetwork(midnightNetwork)
-            .indexerBaseUrl
-}

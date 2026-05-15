@@ -138,11 +138,15 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
  *
  * @param initialNetwork Network the panel starts on. The user can change it
  *   via the sheet's network chip row — that selection is owned inside the
- *   panel from then on, the host doesn't need to track it.
+ *   panel from then on, the host doesn't need to track it for wallet use.
  * @param modifier Modifier applied to the pill — typical placement is
  *   `Modifier.align(Alignment.TopEnd).padding(...)`.
  * @param colors UI palette; defaults match dark-themed example apps.
  * @param viewModel Custom panel VM. Defaults to one created by [WalletPanelViewModel.Factory].
+ * @param onNetworkChange Fires after the user picks a new network in the
+ *   sheet's chip row. Defaults to no-op; useful for example apps whose
+ *   contract operations (deploy / connect) need to target the same chain
+ *   the wallet is on — they can mirror this into their own state.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,6 +155,7 @@ fun WalletStatusPanel(
     modifier: Modifier = Modifier,
     colors: WalletPanelColors = WalletPanelColors.Default,
     viewModel: WalletPanelViewModel = viewModel(factory = WalletPanelViewModel.Factory),
+    onNetworkChange: (MidnightNetwork) -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -213,7 +218,10 @@ fun WalletStatusPanel(
                 config = config,
                 formatter = formatter,
                 colors = colors,
-                onNetworkChange = { network = it },
+                onNetworkChange = {
+                    network = it
+                    onNetworkChange(it)
+                },
                 onProvingModeChange = { provingMode = it },
                 onProofServerUrlChange = { proofServerUrl = it },
                 onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it) } },
