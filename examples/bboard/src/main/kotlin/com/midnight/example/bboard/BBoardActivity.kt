@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import com.midnight.example.common.PanelBar
+import com.midnight.example.common.sigil.SigilStatus
 import com.midnight.example.common.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -125,6 +126,17 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
     // touched the panel chip yet.
     var midnightNetwork by rememberSaveable { mutableStateOf(MidnightNetwork.UNDEPLOYED) }
 
+    // Mirror of the sigil panel's status so BBoard can gate the onboarding
+    // banner. Panel emits None on first composition until it loads any
+    // persisted sigil + then transitions to Forged. The banner only renders
+    // while status is None (or has flipped to Error during a forge attempt)
+    // — once Forged the user has all the affordances they need in the chip.
+    //
+    // Plain `remember` (not `rememberSaveable`) because [SigilStatus] is a
+    // sealed class with non-parcelable variants; the panel re-emits on
+    // recomposition / process restore anyway, so this is fine.
+    var sigilStatus: SigilStatus by remember { mutableStateOf<SigilStatus>(SigilStatus.None) }
+
     Surface(modifier = Modifier.fillMaxSize(), color = Colors.Background) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top panel bar: sigil chip (left) + wallet chip (right). Pulled
@@ -135,6 +147,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
             PanelBar(
                 network = midnightNetwork,
                 onNetworkChange = { midnightNetwork = it },
+                onSigilStatusChange = { sigilStatus = it },
             )
             Column(
                 modifier = Modifier
@@ -153,11 +166,7 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 
                 when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
-                    sigilState = sigilState,
-                    onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
-                    onTestPrf = { activity?.let { viewModel.testPrf(it) } },
-                    onBackup = { activity?.let { viewModel.backupSeed(it) } },
-                    onRestore = { activity?.let { viewModel.restoreSeed(it) } },
+                    sigilStatus = sigilStatus,
                     onConnectSdk = { addr ->
                         activity?.let { viewModel.connectWithSdk(addr, midnightNetwork, it) }
                     },
@@ -195,25 +204,34 @@ fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
 
 @Composable
 private fun SetupScreen(
-    sigilState: SigilState,
-    onForgeSigil: () -> Unit,
-    onTestPrf: () -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
+    sigilStatus: SigilStatus,
     onConnectSdk: (String) -> Unit,
     onDeploySdk: () -> Unit,
 ) {
     var address by remember { mutableStateOf("") }
 
-    // ── Sigil Identity Card ──
-    SigilCard(
-        sigilState = sigilState,
-        onForgeSigil = onForgeSigil,
-        onTestPrf = onTestPrf,
-        onBackup = onBackup,
-        onRestore = onRestore,
-    )
-    Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    // ── Sigil onboarding nudge (only when no identity yet) ──
+    //
+    // The full identity flow (forge, backup, restore, test prf, DID display)
+    // lives in `SigilStatusPanel`'s top sheet — tapped via the sigil chip in
+    // the panel bar above. This banner is a one-time-ish onboarding cue: it
+    // points the user at the chip when they don't have a sigil yet so they
+    // don't try to deploy/connect a contract before they have an identity.
+    //
+    // Auto-hides once the user has forged (or restored) a sigil — the chip
+    // is then the canonical entry point.
+    if (sigilStatus is SigilStatus.None || sigilStatus is SigilStatus.Error) {
+        DarkCard {
+            Text("identity required", color = Colors.Accent, fontSize = Type.Caption, letterSpacing = 2.sp)
+            Spacer(modifier = Modifier.height(Spacing.SmallGap))
+            Text(
+                "You need a sigil before posting to the board. Tap the sigil chip in the top bar to forge one.",
+                color = Colors.OnSurfaceDim,
+                fontSize = Type.Caption,
+            )
+        }
+        Spacer(modifier = Modifier.height(Spacing.SectionGap))
+    }
 
     // ── Contract Connection Card ──
     DarkCard {
@@ -426,60 +444,6 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
     ActionButton("retry", enabled = true, dimmed = true, onClick = onRetry)
 }
 
-// ── Sigil Identity Components ──
-
-@Composable
-private fun SigilCard(
-    sigilState: SigilState,
-    onForgeSigil: () -> Unit,
-    onTestPrf: () -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
-) {
-    DarkCard {
-        Text("sigil identity", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(Spacing.ItemGap))
-
-        when (sigilState) {
-            is SigilState.None -> {
-                Text(
-                    "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
-                    color = Colors.OnSurfaceSubtle,
-                    fontSize = Type.Caption,
-                )
-                Spacer(modifier = Modifier.height(Spacing.ItemGap))
-                ActionButton("forge sigil", enabled = true, onClick = onForgeSigil)
-                Spacer(modifier = Modifier.height(Spacing.SmallGap))
-                ActionButton("restore from cloud", enabled = true, dimmed = true, onClick = onRestore)
-            }
-            is SigilState.Creating -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = Colors.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(Spacing.SmallGap))
-                    Text(sigilState.stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
-                }
-            }
-            is SigilState.Forged -> {
-                SigilInfo(did = sigilState.did, publicKeyHex = sigilState.publicKeyHex)
-                Spacer(modifier = Modifier.height(Spacing.SmallGap))
-                ActionButton("backup to cloud", enabled = true, dimmed = true, onClick = onBackup)
-                Spacer(modifier = Modifier.height(Spacing.TinyGap))
-                ActionButton("test prf", enabled = true, dimmed = true, onClick = onTestPrf)
-            }
-            is SigilState.Authorizing -> SigilInfo(did = sigilState.sigil.did, publicKeyHex = sigilState.sigil.publicKeyHex)
-            is SigilState.Authorized -> SigilInfo(
-                did = sigilState.did,
-                publicKeyHex = sigilState.publicKeyHex,
-                accessKeyHex = sigilState.accessKeyHex,
-            )
-            is SigilState.Error -> {
-                Text(sigilState.message, color = Colors.Error, fontSize = Type.Label)
-                Spacer(modifier = Modifier.height(Spacing.SmallGap))
-                ActionButton("retry", enabled = true, dimmed = true, onClick = onForgeSigil)
-            }
-        }
-    }
-}
 
 @Composable
 private fun SigilInfo(did: String, publicKeyHex: String, accessKeyHex: String? = null) {

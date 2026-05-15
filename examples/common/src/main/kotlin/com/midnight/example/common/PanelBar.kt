@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.midnight.example.common.sigil.SigilStatus
 import com.midnight.example.common.sigil.SigilStatusPanel
 import com.midnight.example.common.wallet.WalletStatusPanel
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -53,12 +54,18 @@ import com.midnight.kuira.core.network.MidnightNetwork
  *   so contract operations target the same chain the wallet is on.
  * @param onNetworkChange Fires when the user picks a different network in
  *   the wallet sheet's chip row. Default no-op.
+ * @param onSigilStatusChange Fires when the sigil panel's status transitions
+ *   (None → Creating → Forged, restore, etc.). Hosts that need to gate UI
+ *   on "is there a sigil?" — e.g. an onboarding banner that pushes the
+ *   user to forge before they can use the dApp — mirror this into their
+ *   own state. Default no-op.
  * @param modifier Modifier applied to the bar's outer Row.
  */
 @Composable
 fun PanelBar(
     network: MidnightNetwork = MidnightNetwork.UNDEPLOYED,
     onNetworkChange: (MidnightNetwork) -> Unit = {},
+    onSigilStatusChange: (SigilStatus) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -73,7 +80,7 @@ fun PanelBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SigilStatusPanel()
+        SigilStatusPanel(onStatusChange = onSigilStatusChange)
         WalletStatusPanel(
             initialNetwork = network,
             onNetworkChange = onNetworkChange,

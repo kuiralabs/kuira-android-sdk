@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,8 +70,16 @@ fun SigilStatusPanel(
     modifier: Modifier = Modifier,
     colors: SigilPanelColors = SigilPanelColors.Default,
     viewModel: SigilPanelViewModel = viewModel(factory = SigilPanelViewModel.Factory),
+    /**
+     * Fires whenever the panel's internal [SigilStatus] changes. Hosts that
+     * want to gate UI on "is there a sigil?" — e.g. an onboarding banner
+     * that warns the user they need a sigil before posting — mirror this
+     * into their own state. Default no-op.
+     */
+    onStatusChange: (SigilStatus) -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
+    LaunchedEffect(status) { onStatusChange(status) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
 
     // Activity is required by PasskeyManager.createPasskey — the Credential
@@ -94,6 +103,9 @@ fun SigilStatusPanel(
                 status = status,
                 colors = colors,
                 onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
+                onBackup = { activity?.let { viewModel.backupSeed(it) } },
+                onRestore = { activity?.let { viewModel.restoreSeed(it) } },
+                onTestPrf = { activity?.let { viewModel.testPrf(it) } },
             )
         }
     }
@@ -123,13 +135,11 @@ private fun SigilPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SigilDimens.PillItemGap),
     ) {
-        if (status is SigilStatus.Creating) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(SigilDimens.PillSpinnerSize),
-                strokeWidth = SigilDimens.PillSpinnerStroke,
-                color = colors.accent,
-            )
-        }
+        // Left-side avatar slot. Real Midnames / user-uploaded avatars land
+        // here later; for now, a deterministic placeholder derived from the
+        // DID (forged states) or a neutral icon (None / Error states).
+        // Spinner takes over the slot while a passkey ceremony is in flight.
+        PillAvatar(status = status, colors = colors)
         Text(
             text = label,
             color = if (isError) colors.error else colors.onPill,
@@ -145,6 +155,104 @@ private fun SigilPill(
         )
     }
 }
+
+/**
+ * Tiny round icon that anchors the left edge of the pill.
+ *
+ *  - [SigilStatus.None]: muted gray circle, no glyph — the "you have no
+ *    identity yet" placeholder.
+ *  - [SigilStatus.Creating]: a spinner replaces the circle so the user
+ *    sees their tap was registered. Same size as the circle so the pill
+ *    width doesn't jump between states.
+ *  - [SigilStatus.Forged]: filled circle whose color is derived from the
+ *    DID (so the same DID always renders the same hue across sessions
+ *    and devices) plus a single letter — the first multibase character
+ *    after the `did:key:` prefix. Deterministic, no network round-trip.
+ *  - [SigilStatus.Error]: red circle with `!`.
+ *
+ * Real avatars (Midnames profile, user-uploaded) replace this layer in a
+ * follow-up; the API stays — a fixed-size composable that takes a
+ * [SigilStatus].
+ */
+@Composable
+private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
+    if (status is SigilStatus.Creating) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(SigilDimens.PillAvatarSize),
+            strokeWidth = SigilDimens.PillSpinnerStroke,
+            color = colors.accent,
+        )
+        return
+    }
+    val (bg, fg, glyph) = when (status) {
+        is SigilStatus.None -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, null)
+        is SigilStatus.Forged -> Triple(
+            avatarColorFromDid(status.did),
+            Color.White,
+            avatarGlyphFromDid(status.did),
+        )
+        is SigilStatus.Error -> Triple(colors.error, Color.White, "!")
+        is SigilStatus.Creating -> error("unreachable — handled above")
+    }
+    Box(
+        modifier = Modifier
+            .size(SigilDimens.PillAvatarSize)
+            .clip(RoundedCornerShape(SigilDimens.PillAvatarSize / 2))
+            .background(bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (glyph != null) {
+            Text(
+                text = glyph,
+                color = fg,
+                fontSize = SigilType.PillAvatarGlyph,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+/**
+ * Deterministic background hue for a DID's placeholder avatar. Hashes the
+ * multibase tail (skip the always-identical `did:key:` prefix) and reduces
+ * to one of a small palette of pre-picked colors that read well against
+ * the dark pill background.
+ *
+ * The palette is intentionally small (8 entries) — collisions are fine
+ * because the colored circle is paired with the glyph + the truncated DID
+ * label; ambiguity in the color alone won't matter at a glance.
+ */
+internal fun avatarColorFromDid(did: String): Color {
+    val tail = did.removePrefix("did:key:")
+    val idx = (tail.hashCode().rem(AVATAR_PALETTE.size) + AVATAR_PALETTE.size) % AVATAR_PALETTE.size
+    return AVATAR_PALETTE[idx]
+}
+
+/**
+ * First uppercase letter of the DID's multibase tail. We skip the `z`
+ * prefix that every `did:key` over multibase Base58btc starts with — it
+ * conveys nothing identity-wise — and use the next character. Letters
+ * are uppercased so they read as monogram-style avatars.
+ */
+internal fun avatarGlyphFromDid(did: String): String {
+    val tail = did.removePrefix("did:key:")
+    // `z` is the multibase prefix indicating Base58btc — same on every did:key,
+    // so it's noise. Take the next character; fall back to `?` if the tail is
+    // shorter than expected (defensive — shouldn't happen with valid DIDs).
+    val candidate = tail.drop(1).firstOrNull()?.uppercaseChar() ?: '?'
+    return candidate.toString()
+}
+
+private val AVATAR_PALETTE = listOf(
+    Color(0xFF64B5F6), // blue (matches the accent color for visual continuity)
+    Color(0xFF81C784), // green
+    Color(0xFFFFB74D), // amber
+    Color(0xFFBA68C8), // purple
+    Color(0xFFE57373), // soft red
+    Color(0xFF4DB6AC), // teal
+    Color(0xFFF06292), // pink
+    Color(0xFFFFD54F), // yellow
+)
 
 internal fun pillLabel(status: SigilStatus): String = when (status) {
     is SigilStatus.None -> "no sigil"
@@ -237,6 +345,9 @@ private fun SigilSheetContent(
     status: SigilStatus,
     colors: SigilPanelColors,
     onForgeSigil: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onTestPrf: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
 
@@ -249,12 +360,19 @@ private fun SigilSheetContent(
     Spacer(modifier = Modifier.height(SigilDimens.SheetTitleGap))
 
     when (status) {
-        is SigilStatus.None -> NoneBody(colors = colors, onForgeSigil = onForgeSigil)
+        is SigilStatus.None -> NoneBody(
+            colors = colors,
+            onForgeSigil = onForgeSigil,
+            onRestore = onRestore,
+        )
         is SigilStatus.Creating -> CreatingBody(stage = status.stage, colors = colors)
         is SigilStatus.Forged -> ForgedBody(
             forged = status,
             colors = colors,
             onCopy = { clipboard.setText(AnnotatedString(it)) },
+            onBackup = onBackup,
+            onRestore = onRestore,
+            onTestPrf = onTestPrf,
         )
         is SigilStatus.Error -> ErrorBody(
             message = status.message,
@@ -265,7 +383,11 @@ private fun SigilSheetContent(
 }
 
 @Composable
-private fun NoneBody(colors: SigilPanelColors, onForgeSigil: () -> Unit) {
+private fun NoneBody(
+    colors: SigilPanelColors,
+    onForgeSigil: () -> Unit,
+    onRestore: () -> Unit,
+) {
     Text(
         "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
         color = colors.onSheetSubtle,
@@ -273,6 +395,8 @@ private fun NoneBody(colors: SigilPanelColors, onForgeSigil: () -> Unit) {
     )
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
     SheetButton(text = "forge sigil", enabled = true, colors = colors, onClick = onForgeSigil)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
 }
 
 @Composable
@@ -293,10 +417,19 @@ private fun ForgedBody(
     forged: SigilStatus.Forged,
     colors: SigilPanelColors,
     onCopy: (String) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onTestPrf: () -> Unit,
 ) {
     MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
     MonoField(label = "root key (P-256)", value = forged.publicKeyHex, colors = colors, onCopy = onCopy)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+    SheetButton(text = "backup to cloud", enabled = true, colors = colors, onClick = onBackup, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "test prf", enabled = true, colors = colors, onClick = onTestPrf, dimmed = true)
 }
 
 @Composable
@@ -330,6 +463,13 @@ private fun SheetButton(
     enabled: Boolean,
     colors: SigilPanelColors,
     onClick: () -> Unit,
+    /**
+     * Visual de-emphasis for secondary actions (backup / restore / test prf
+     * once a sigil exists, restore-from-cloud when one doesn't yet). Dimmed
+     * buttons share the same shape + size but use a lower-contrast text
+     * color so they sit visually below the primary action.
+     */
+    dimmed: Boolean = false,
 ) {
     Button(
         onClick = onClick,
@@ -340,7 +480,7 @@ private fun SheetButton(
         shape = RoundedCornerShape(SigilDimens.ButtonCornerRadius),
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.button,
-            contentColor = colors.onButton,
+            contentColor = if (dimmed) colors.onSheetDim else colors.onButton,
         ),
     ) {
         Text(text, fontSize = SigilType.ButtonText)
@@ -357,6 +497,7 @@ private object SigilDimens {
     val PillItemGap = 8.dp
     val PillSpinnerSize = 14.dp
     val PillSpinnerStroke = 2.dp
+    val PillAvatarSize = 22.dp   // Matches the visual weight of the spinner that replaces it during Creating.
 
     // Top sheet.
     val SheetCornerRadius = 20.dp
@@ -364,6 +505,7 @@ private object SigilDimens {
     val SheetVerticalPadding = 20.dp
     val SheetTitleGap = 20.dp
     val SheetSectionGap = 14.dp
+    val SheetSmallGap = 8.dp
     val SheetLabelGap = 4.dp
     val SheetSpinnerSize = 16.dp
 
@@ -374,6 +516,7 @@ private object SigilDimens {
 
 private object SigilType {
     val PillText = 14.sp
+    val PillAvatarGlyph = 11.sp   // Monogram letter inside the avatar circle.
     val SheetTitle = 14.sp
     val Body = 13.sp
     val FieldLabel = 11.sp
@@ -393,6 +536,7 @@ data class SigilPanelColors(
     val pillBorder: Color,
     val onPill: Color,
     val onPillDim: Color,
+    val avatarPlaceholderBg: Color,
     val sheetBackground: Color,
     val onSheet: Color,
     val onSheetDim: Color,
@@ -409,6 +553,7 @@ data class SigilPanelColors(
             pillBorder = Color.White.copy(alpha = 0.12f),
             onPill = Color.White.copy(alpha = 0.85f),
             onPillDim = Color.White.copy(alpha = 0.35f),
+            avatarPlaceholderBg = Color.White.copy(alpha = 0.08f),
             sheetBackground = Color(0xFF111111),
             onSheet = Color.White,
             onSheetDim = Color.White.copy(alpha = 0.45f),
