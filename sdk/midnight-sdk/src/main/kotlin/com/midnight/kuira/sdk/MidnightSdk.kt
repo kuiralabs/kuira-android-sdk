@@ -216,6 +216,8 @@ class MidnightSdk private constructor(
         private var network: MidnightNetwork? = null
         private var seed: ByteArray? = null
         private var accountIndex: Int = 0
+        private var provingMode: ProvingMode = ProvingMode.DEFAULT
+        private var proofServerUrl: String? = null
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
         fun network(network: MidnightNetwork) = apply { this.network = network }
@@ -225,6 +227,28 @@ class MidnightSdk private constructor(
 
         /** Set the HD wallet account index (default 0). */
         fun accountIndex(index: Int) = apply { this.accountIndex = index }
+
+        /**
+         * Pick how transactions are proved. Defaults to [ProvingMode.LOCAL] —
+         * on-device proving with cached keys, no network round-trip per tx.
+         *
+         * [ProvingMode.REMOTE] off-loads proving to a proof server reachable
+         * at the URL supplied via [proofServerUrl]; useful on devices that
+         * can't carry the proving-key bundle, or when the host wants to keep
+         * the keys out of process memory. Set the URL **before** [build]
+         * when picking REMOTE — otherwise we fall back to the network's
+         * default proof-server URL (`NetworkConfig.proofServerUrl`).
+         */
+        fun provingMode(mode: ProvingMode) = apply { this.provingMode = mode }
+
+        /**
+         * Override the proof-server URL used when [provingMode] is REMOTE.
+         * Null (default) means "use the network's default proof-server URL"
+         * (`NetworkConfig.forNetwork(network).proofServerUrl`, which points
+         * at a local proof server on `localhost:6300` for every network the
+         * SDK supports). Pass an explicit URL to point at a hosted prover.
+         */
+        fun proofServerUrl(url: String?) = apply { this.proofServerUrl = url }
 
         /**
          * Build the SDK. This is a blocking operation on first launch:
@@ -350,14 +374,21 @@ class MidnightSdk private constructor(
 
             // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──
             //
-            // The proof server URL is provided because the constructor requires a
-            // non-null ProofServerClient, but provingMode = LOCAL means it's
-            // never invoked. NetworkConfig pulls a real localnet URL for
-            // UNDEPLOYED (so the instance is still wired correctly if a future
-            // caller wants REMOTE proving).
+            // [provingMode] picks where ZK proofs are generated:
+            //   - LOCAL  → on-device prover using cached keys; no proof-server
+            //              round-trip per transaction. Default.
+            //   - REMOTE → off-load to a proof server reachable at
+            //              [proofServerUrl] (falls back to the network's
+            //              local-dev proof server on `localhost:6300` when null).
+            //
+            // [ProofServerClientImpl] always gets a non-null URL even in LOCAL
+            // mode because the [TransactionSubmitter] constructor requires a
+            // non-null client. In LOCAL mode the client is constructed but
+            // never used; the URL just has to be parseable.
+            val effectiveProofServerUrl = this.proofServerUrl ?: networkConfig.proofServerUrl
             val serializer = FfiTransactionSerializer(net.rustNetworkId)
             val proofServerClient = ProofServerClientImpl(
-                proofServerUrl = networkConfig.proofServerUrl,
+                proofServerUrl = effectiveProofServerUrl,
                 developmentMode = networkConfig.developmentMode,
             )
             val transactionSubmitter = TransactionSubmitter(
@@ -367,7 +398,7 @@ class MidnightSdk private constructor(
                 serializer = serializer,
                 utxoManager = utxoManager,
                 provingKeyManager = provingKeyManager,
-                provingMode = ProvingMode.LOCAL,
+                provingMode = provingMode,
             )
 
             // ── Create config with embedded wallet ──
