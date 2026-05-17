@@ -37,6 +37,7 @@ include(":feature:send")
 include(":feature:dust")
 include(":feature:onboarding")
 include(":feature:settings")
-include(":examples:bboard")
+// :examples:bboard is now a standalone Gradle project under examples/bboard/
+// (consumes Kuira via mavenLocal), like :examples:midnight-kicks. Not registered here.
 include(":examples:common")
 include(":sdk:midnight-sdk")
