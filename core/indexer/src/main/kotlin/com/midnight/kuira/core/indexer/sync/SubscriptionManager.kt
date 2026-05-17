@@ -60,7 +60,12 @@ class SubscriptionManager(
 ) {
     companion object {
         private const val TAG = "SubscriptionManager"
-        private const val MAX_RETRY_ATTEMPTS = 5
+        // No retry cap — keep reconnecting forever with exponential backoff
+        // capped at MAX_RETRY_DELAY_MS. Previous cap (5 attempts) was getting
+        // burned through when Android froze the app on background, leaving the
+        // subscription "permanently failed" with no auto-recovery on resume.
+        // Cancellation still aborts cleanly via the CancellationException
+        // branch in retryWhen.
         private const val INITIAL_RETRY_DELAY_MS = 1000L
         private const val MAX_RETRY_DELAY_MS = 32000L
 
@@ -167,41 +172,32 @@ class SubscriptionManager(
         emitAll(
             createSubscriptionFlow(address)
                 .retryWhen { cause, attempt ->
-                    // Retry all errors except cancellation (user-initiated stop)
-                    when {
-                        cause is CancellationException -> {
-                            // User cancelled - don't retry
-                            Log.d(TAG, "Subscription cancelled by user")
-                            false
+                    // Retry every error except cancellation (user-initiated
+                    // stop). Backoff is exponential and capped at
+                    // MAX_RETRY_DELAY_MS — connection aborts caused by
+                    // Android freezing the app on background then recover
+                    // automatically when the app resumes.
+                    if (cause is CancellationException) {
+                        Log.d(TAG, "Subscription cancelled by user")
+                        false
+                    } else {
+                        val delayMs = calculateRetryDelay(attempt)
+                        if (cause is ReorgDetectedException) {
+                            Log.i(
+                                TAG,
+                                "Restarting subscription in ${delayMs}ms after reorg recovery " +
+                                    "(attempt ${attempt + 1})"
+                            )
+                        } else {
+                            Log.w(
+                                TAG,
+                                "Subscription error (${cause.javaClass.simpleName}), " +
+                                    "retrying in ${delayMs}ms (attempt ${attempt + 1})",
+                                cause
+                            )
                         }
-                        attempt < MAX_RETRY_ATTEMPTS -> {
-                            val delayMs = calculateRetryDelay(attempt)
-                            if (cause is ReorgDetectedException) {
-                                // Intended restart after local state was wiped.
-                                // Single concise line, no stacktrace.
-                                Log.i(
-                                    TAG,
-                                    "Restarting subscription in ${delayMs}ms after reorg recovery " +
-                                        "(attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)"
-                                )
-                            } else {
-                                // Real network / connection / WebSocket failure —
-                                // keep the full diagnostic.
-                                Log.w(
-                                    TAG,
-                                    "Subscription error (${cause.javaClass.simpleName}), " +
-                                        "retrying in ${delayMs}ms (attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS)",
-                                    cause
-                                )
-                            }
-                            delay(delayMs)
-                            true
-                        }
-                        else -> {
-                            // Max retries reached - stop retrying
-                            Log.e(TAG, "Subscription failed after $attempt attempts: ${cause.message}", cause)
-                            false
-                        }
+                        delay(delayMs)
+                        true
                     }
                 }
                 .catch { error ->

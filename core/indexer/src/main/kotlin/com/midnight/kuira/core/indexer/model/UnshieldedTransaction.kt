@@ -24,7 +24,13 @@ data class UnshieldedTransaction(
     val type: TransactionType,
     val protocolVersion: Int,
     val identifiers: List<String>? = null,
-    val block: BlockInfo,
+    // Nullable because SystemTransaction variants from the indexer omit `block`
+    // (regression observed against PREPROD: SubscriptionManager kept retrying
+    // with MissingFieldException). Same shape rationale as `fees` /
+    // `transactionResult` — those are also Regular-only. No consumer currently
+    // reads `block`; if one ever needs it, decide then whether to default to
+    // the surrounding subscription tip or restrict reads to Regular variants.
+    val block: BlockInfo? = null,
     val fees: FeeInfo? = null,
     val transactionResult: TransactionResult? = null
 ) {

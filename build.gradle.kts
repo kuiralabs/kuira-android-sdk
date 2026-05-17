@@ -93,6 +93,47 @@ gradle.projectsEvaluated {
     }
 }
 
+// ── Maven publish for downstream consumers ──
+//
+// Every Android library module gets a `debug` AAR publication under
+// `com.midnight.kuira:<module-name>:<version>` so downstream apps with their
+// own Gradle root (e.g. examples/midnight-kicks, third-party dApps) can
+// consume them from `mavenLocal()` without copying AARs and re-declaring
+// transitive deps. Coordinates intentionally match the module's last path
+// segment so `:examples:common` publishes as `common`, `:core:crypto` as
+// `crypto`, etc.
+//
+// `singleVariant("debug")` matches the existing dev workflow — release-
+// signed variants come later when we publish to a real Maven repo for
+// third parties.
+val kuiraGroup = "com.midnight.kuira"
+val kuiraVersion = "0.1.0-SNAPSHOT"
+
+subprojects {
+    plugins.withId("com.android.library") {
+        apply(plugin = "maven-publish")
+
+        extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
+            publishing {
+                singleVariant("debug")
+            }
+        }
+
+        afterEvaluate {
+            extensions.configure<PublishingExtension>("publishing") {
+                publications {
+                    register<MavenPublication>("debug") {
+                        from(components["debug"])
+                        groupId = kuiraGroup
+                        artifactId = project.name
+                        version = kuiraVersion
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── IDE compatibility shim ──
 //
 // Older Android Studio Gradle integrations call `:<module>:prepareKotlinBuildScriptModel`
