@@ -240,9 +240,14 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
                 .build()
             sdk = built
             sdkConfig = config
-            // Non-zero-fee networks need wallet proving keys downloaded at
-            // runtime; UNDEPLOYED ships them via adb-push for the canary loop.
-            if (!built.provingKeyManager.hasWalletKeys() && config.network != MidnightNetwork.UNDEPLOYED) {
+            // Proving keys are network-agnostic — the same S3 bundle drives
+            // local proving on UNDEPLOYED, PREPROD, and PREVIEW. We try
+            // `installFromLocalTmp` first (canary path: ~24MB saved when
+            // keys are adb-pushed) but always fall back to the download for
+            // any network, so a fresh install on any device self-recovers
+            // without the user having to know about adb push or local proving.
+            if (!built.provingKeyManager.hasWalletKeys()) {
+                Log.i(TAG, "Proving keys missing — downloading wallet keys (~24MB)")
                 built.provingKeyManager.downloadWalletKeys { /* progress ignored — host decides UX */ }
             }
             built

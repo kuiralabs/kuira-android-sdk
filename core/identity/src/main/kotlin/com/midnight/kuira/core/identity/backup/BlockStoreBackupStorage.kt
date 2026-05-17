@@ -27,6 +27,10 @@ class BlockStoreBackupStorage(
     override suspend fun store(encryptedBlob: ByteArray) {
         val client = Blockstore.getClient(context)
 
+        // Probed for diagnostics only — Google E2EE is an *extra* on-device
+        // encryption layer Play services adds on top of whatever we store. It
+        // is unrelated to whether the blob is uploaded to the user's Google
+        // account; that's controlled by setShouldBackupToCloud below.
         val isE2ee = try {
             client.isEndToEndEncryptionAvailable.await()
         } catch (e: Exception) {
@@ -34,11 +38,20 @@ class BlockStoreBackupStorage(
             false
         }
 
-        Log.i(TAG, "Storing ${encryptedBlob.size} bytes, E2E available: $isE2ee, cloud backup: $isE2ee")
+        Log.i(TAG, "Storing ${encryptedBlob.size} bytes, E2E available: $isE2ee, cloud backup: true")
 
+        // setShouldBackupToCloud(true) unconditionally: the recovery story
+        // (uninstall → reinstall → restore on the same or a new device) only
+        // works when the blob is uploaded to the user's Google account.
+        // Device-local-only storage gets wiped on uninstall. Safe to upload
+        // regardless of E2EE because the blob is already encrypted by
+        // BackupEncryptor with a PRF-derived AES key from the user's passkey
+        // — Google can't read it whether or not their E2EE layer is on.
+        // If no Google account is signed in, Play services silently degrades
+        // to local-only storage; that's a device-config limitation, not ours.
         val storeRequest = StoreBytesData.Builder()
             .setBytes(encryptedBlob)
-            .setShouldBackupToCloud(isE2ee)
+            .setShouldBackupToCloud(true)
             .build()
 
         try {

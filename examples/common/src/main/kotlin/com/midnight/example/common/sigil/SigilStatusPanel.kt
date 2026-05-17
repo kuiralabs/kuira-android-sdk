@@ -377,7 +377,8 @@ private fun SigilSheetContent(
         is SigilStatus.Error -> ErrorBody(
             message = status.message,
             colors = colors,
-            onRetry = onForgeSigil,
+            onForgeSigil = onForgeSigil,
+            onRestore = onRestore,
         )
     }
 }
@@ -432,11 +433,25 @@ private fun ForgedBody(
     SheetButton(text = "test prf", enabled = true, colors = colors, onClick = onTestPrf, dimmed = true)
 }
 
+/**
+ * Error UI: show the failure reason as a banner, then both entry points back
+ * — `forge sigil` and `restore from cloud` — so the user can recover. Pre-fix
+ * this was a single "retry" button hardcoded to forge, which stranded users
+ * who hit a restore error (e.g. "No backup found") into creating a new sigil
+ * rather than letting them re-attempt the restore.
+ */
 @Composable
-private fun ErrorBody(message: String, colors: SigilPanelColors, onRetry: () -> Unit) {
+private fun ErrorBody(
+    message: String,
+    colors: SigilPanelColors,
+    onForgeSigil: () -> Unit,
+    onRestore: () -> Unit,
+) {
     Text(message, color = colors.error, fontSize = SigilType.Body)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    SheetButton(text = "retry", enabled = true, colors = colors, onClick = onRetry)
+    SheetButton(text = "forge sigil", enabled = true, colors = colors, onClick = onForgeSigil)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
 }
 
 @Composable

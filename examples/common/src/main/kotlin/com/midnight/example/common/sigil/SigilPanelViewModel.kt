@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.midnight.example.common.BuildConfig
 import com.midnight.kuira.core.auth.BiometricGate
+import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.identity.backup.BackupException
@@ -112,7 +113,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                 val result = passkeyManager.createPasskey(
                     activity = activity,
                     userId = userId,
-                    userName = DEFAULT_USER_NAME,
+                    userName = hostAppLabel(),
                 )
                 val did = DidKeyGenerator.fromCompressedP256(result.publicKey.compressed)
                 val publicKeyHex = result.publicKey.compressedHex()
@@ -272,12 +273,29 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                         Log.i(TAG, "  Credential ID: $credentialId")
                         Log.i(TAG, "  Public key: $publicKeyHex")
                         persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
+                        // Overwrite the fresh seed (or write into an empty
+                        // vault) so the wallet panel rebootstraps with the
+                        // recovered wallet on next launch. Without this the
+                        // sigil DID is restored but the wallet stays on the
+                        // freshly-generated address with 0 balance.
+                        restoreSeedIntoVault(activity, restored.entropy, restored.bip39Seed)
                         _status.value = SigilStatus.Forged(
                             did = did,
                             credentialId = credentialId,
                             publicKeyHex = publicKeyHex,
                         )
-                        Log.i(TAG, "  Sigil identity restored into prefs + status")
+                        Log.i(TAG, "  Sigil identity + wallet seed restored — killing process to force a clean reload")
+                        // CRITICAL: kill the process before any other code (or
+                        // the user) can interact with the wallet panel. The
+                        // wallet panel's in-memory SDK is still built on the
+                        // pre-restore seed; SeedVault now holds the recovered
+                        // seed. If the user funds and then backs up in this
+                        // desynced window, the backup captures the WRONG seed
+                        // and the funded wallet becomes unrecoverable. Killing
+                        // the process guarantees the next launch bootstraps
+                        // from SeedVault and the panel + storage agree.
+                        activity.finishAffinity()
+                        android.os.Process.killProcess(android.os.Process.myPid())
                     } else {
                         Log.w(TAG, "Restore returned a seed but no sigil triple — leaving status unchanged")
                     }
@@ -319,6 +337,50 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
             .apply()
     }
 
+    /**
+     * Label the passkey prompt shows for the credential — derived from the host
+     * app's manifest `android:label` so every dApp embedding this panel sees
+     * its own name (Kicks → "Midnight Kicks", BBoard → "BBoard", etc.) without
+     * any per-host wiring.
+     */
+    private fun hostAppLabel(): String =
+        app.packageManager.getApplicationLabel(app.applicationInfo).toString()
+
+    /**
+     * Persist the recovered seed into [SeedVault] so the wallet panel
+     * bootstraps from it on next launch. If a fresh seed was generated
+     * earlier this session (the "No seed → generate fresh" path), wipe it
+     * first — `storeSeed` refuses to overwrite. The biometric prompt fires
+     * again here because storeSeed is biometric-gated; the user just
+     * authenticated for the Block Store retrieve, so this is a second tap.
+     *
+     * Note: this only persists the seed. The currently-active SDK instance
+     * inside `WalletPanelViewModel` was already built on the fresh seed and
+     * will keep using it for this process lifetime. The user has to relaunch
+     * the app for the wallet panel to rebootstrap on the recovered seed.
+     */
+    private suspend fun restoreSeedIntoVault(
+        activity: FragmentActivity,
+        recoveredEntropy: ByteArray,
+        recoveredBip39Seed: ByteArray,
+    ) {
+        try {
+            if (seedVault.hasSeed()) {
+                Log.i(TAG, "  Replacing existing SeedVault entry with recovered seed")
+                seedVault.deleteSeed()
+            }
+            // Copy the recovered bytes — storeSeed's producer lambda wipes
+            // the PlaintextSeed it receives, and we must not wipe the caller's
+            // RestoredSigil here (its own `wipe()` runs in the outer finally).
+            seedVault.storeSeed(activity) {
+                PlaintextSeed(recoveredEntropy.copyOf(), recoveredBip39Seed.copyOf())
+            }
+            Log.i(TAG, "  Recovered seed persisted to SeedVault")
+        } catch (e: Exception) {
+            Log.e(TAG, "  Failed to persist recovered seed into SeedVault: ${e.message}", e)
+        }
+    }
+
     companion object {
         private const val TAG = "SigilPanel"
 
@@ -329,9 +391,6 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
          * or the parent Kuira app's setup for the production value.
          */
         private const val DEFAULT_RP_ID = "nel349.github.io"
-
-        /** Default display name shown in the passkey-create prompt. */
-        private const val DEFAULT_USER_NAME = "BBoard Test User"
 
         /** Length of the random user id bound to the new credential. */
         private const val USER_ID_BYTES = 16

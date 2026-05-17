@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -251,15 +253,26 @@ fun WalletStatusPanel(
     // (and above the now-dismissed sheet). Only available when the wallet is
     // Ready since we need addresses to display; in other states the sheet's
     // "receive" button is disabled so this branch shouldn't fire.
+    //
+    // Wrapped in a Popup so the screen escapes whatever Row/Box cell the
+    // host stuck the panel pill in. Without this, fillMaxSize() in
+    // WalletReceiveScreen resolves to the pill's narrow column and the
+    // header text wraps one character per line.
     val readyStatus = status as? WalletStatus.Ready
     if (receiveOpen && readyStatus != null) {
-        WalletReceiveScreen(
-            unshieldedAddress = readyStatus.address,
-            shieldedAddress = readyStatus.shieldedAddress,
-            network = network,
-            colors = colors,
-            onBack = { receiveOpen = false },
-        )
+        Popup(
+            alignment = Alignment.TopStart,
+            onDismissRequest = { receiveOpen = false },
+            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
+        ) {
+            WalletReceiveScreen(
+                unshieldedAddress = readyStatus.address,
+                shieldedAddress = readyStatus.shieldedAddress,
+                network = network,
+                colors = colors,
+                onBack = { receiveOpen = false },
+            )
+        }
     }
 }
 
