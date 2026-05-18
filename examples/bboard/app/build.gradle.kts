@@ -34,7 +34,7 @@ dependencies {
     // parent project (`./gradlew publishToMavenLocal`). POMs include transitive
     // deps (zxing, bitcoinj, ktor, room, credentials, etc.) so BBoard doesn't
     // redeclare them by hand. Add a new Kuira module = one `implementation` line.
-    implementation("com.midnight.kuira:common:0.1.0-SNAPSHOT")
+    implementation("com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT")
     implementation("com.midnight.kuira:midnight-sdk:0.1.0-SNAPSHOT")
     // SDK uses `implementation(project(":core:*"))` so those types aren't exposed
     // to consumers transitively. BBoard references compact + auth + network types

@@ -1,4 +1,4 @@
-package com.midnight.example.common
+package com.midnight.kuira.dapp
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -15,9 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.midnight.example.common.sigil.SigilStatus
-import com.midnight.example.common.sigil.SigilStatusPanel
-import com.midnight.example.common.wallet.WalletStatusPanel
+import com.midnight.kuira.dapp.sigil.SigilStatus
+import com.midnight.kuira.dapp.sigil.SigilStatusPanel
+import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.core.network.MidnightNetwork
 
 /**

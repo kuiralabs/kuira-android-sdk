@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.midnight.example.common"
+    namespace = "com.midnight.kuira.dapp"
     compileSdk = 36
 
     defaultConfig {

@@ -1,4 +1,4 @@
-package com.midnight.example.common.sigil
+package com.midnight.kuira.dapp.sigil
 
 import android.app.Activity
 import android.app.Application
@@ -10,7 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.midnight.example.common.BuildConfig
+import com.midnight.kuira.dapp.BuildConfig
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault

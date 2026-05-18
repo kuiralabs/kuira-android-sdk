@@ -50,9 +50,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import com.midnight.example.common.PanelBar
-import com.midnight.example.common.sigil.SigilStatus
-import com.midnight.example.common.wallet.WalletStatusPanel
+import com.midnight.kuira.dapp.PanelBar
+import com.midnight.kuira.dapp.sigil.SigilStatus
+import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
 

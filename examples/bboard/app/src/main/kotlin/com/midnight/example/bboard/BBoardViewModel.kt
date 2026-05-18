@@ -18,7 +18,7 @@ import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
 import com.midnight.kuira.core.crypto.bip39.BIP39
-import com.midnight.example.common.sigil.SigilStatus
+import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.core.identity.auth.AuthorizationScope
 import com.midnight.kuira.core.identity.auth.KeyAuthorization
 import com.midnight.kuira.core.identity.passkey.PasskeyConfig

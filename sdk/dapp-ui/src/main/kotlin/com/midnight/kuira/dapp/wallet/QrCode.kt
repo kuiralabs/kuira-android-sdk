@@ -1,4 +1,4 @@
-package com.midnight.example.common.wallet
+package com.midnight.kuira.dapp.wallet
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image

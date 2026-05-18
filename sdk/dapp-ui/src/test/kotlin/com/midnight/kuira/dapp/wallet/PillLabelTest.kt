@@ -1,4 +1,4 @@
-package com.midnight.example.common.wallet
+package com.midnight.kuira.dapp.wallet
 
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork

@@ -1,4 +1,4 @@
-package com.midnight.example.common.sigil
+package com.midnight.kuira.dapp.sigil
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,8 +50,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
  * Drop-in sigil identity pill for example apps. Mirrors
- * [com.midnight.example.common.wallet.WalletStatusPanel]'s shape and lives
- * next to it in [com.midnight.example.common.PanelBar]:
+ * [com.midnight.kuira.dapp.wallet.WalletStatusPanel]'s shape and lives
+ * next to it in [com.midnight.kuira.dapp.PanelBar]:
  *
  *  - Pill anchored top-left in the panel bar; the wallet pill takes top-right.
  *  - Tap opens a TOP sheet — visual mirror of the wallet panel's bottom
@@ -591,8 +591,8 @@ private object SigilType {
 
 /**
  * Visual tokens for [SigilStatusPanel]. Matches the geometry of
- * [com.midnight.example.common.wallet.WalletPanelColors] so the two pills
- * in [com.midnight.example.common.PanelBar] read as a pair.
+ * [com.midnight.kuira.dapp.wallet.WalletPanelColors] so the two pills
+ * in [com.midnight.kuira.dapp.PanelBar] read as a pair.
  *
  * **API contract:** part of the dapp-ui public surface — consumers may
  * supply a custom palette to theme the sigil panel. `@Immutable` so

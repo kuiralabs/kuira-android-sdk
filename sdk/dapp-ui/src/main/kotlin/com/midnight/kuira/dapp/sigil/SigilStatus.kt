@@ -1,9 +1,9 @@
-package com.midnight.example.common.sigil
+package com.midnight.kuira.dapp.sigil
 
 /**
  * UI state for [SigilStatusPanel] / [SigilPanelViewModel].
  *
- * Mirrors the wallet panel's [com.midnight.example.common.wallet.WalletStatus]
+ * Mirrors the wallet panel's [com.midnight.kuira.dapp.wallet.WalletStatus]
  * shape. A pure identity state — no SDK / network / address coupling. Hosts
  * that want to bridge sigil identity with their wallet SDK (e.g. signing an
  * access-key authorization) wire that themselves; this state machine only
