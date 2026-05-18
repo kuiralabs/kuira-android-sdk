@@ -457,6 +457,21 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
         recoveredBip39Seed: ByteArray,
     ) {
         try {
+            // SeedVault.storeSeed encrypts under the Keystore master key,
+            // which WalletKeyManager creates lazily — but only on the
+            // WalletPanel's auto-bootstrap path. With the Problem A gate
+            // (9465ea4), the wallet panel stays gated during
+            // BackupAvailable, so a *first-ever* install hits this restore
+            // path without anyone having generated the master key yet.
+            // Without this, cipherForEncrypt throws "Master key not found"
+            // and the recovered seed silently fails to persist — the
+            // catch below logs but the relaunch then auto-creates a fresh
+            // wallet over the restored DID, wiping the user's funds out
+            // of view.
+            if (!walletKeyManager.hasKey()) {
+                val strongBox = walletKeyManager.generateKey()
+                Log.i(TAG, "  Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"}) for restored seed")
+            }
             if (seedVault.hasSeed()) {
                 Log.i(TAG, "  Replacing existing SeedVault entry with recovered seed")
                 seedVault.deleteSeed()
@@ -470,6 +485,10 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
             Log.i(TAG, "  Recovered seed persisted to SeedVault")
         } catch (e: Exception) {
             Log.e(TAG, "  Failed to persist recovered seed into SeedVault: ${e.message}", e)
+            // Re-throw so callers (restoreSeed) move to SigilStatus.Error
+            // instead of silently SIGKILLing into a fresh-wallet state.
+            // The silent fall-through was what hid this bug from view.
+            throw e
         }
     }
 
