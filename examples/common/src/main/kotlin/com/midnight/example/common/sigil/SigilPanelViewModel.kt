@@ -348,11 +348,19 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
     }
 
     private fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
+        // commit() not apply(): the restore flow SIGKILLs the process within
+        // a few ms of this call (post-2026-05-18 once SeedVault.storeSeed
+        // became silent inside the auth-validity window — see
+        // docs/security/SECURITY_NOTES.md). apply()'s async write never
+        // fsyncs the prefs file before the kill, so the next launch reads
+        // an empty file and the sigil pill shows "no sigil" despite a
+        // successful restore. commit() blocks until durable. Cost is
+        // negligible — this runs once per forge/restore, not on a hot path.
         prefs.edit()
             .putString(KEY_DID, did)
             .putString(KEY_CREDENTIAL_ID, credentialId)
             .putString(KEY_PUBLIC_KEY_HEX, publicKeyHex)
-            .apply()
+            .commit()
     }
 
     /**
