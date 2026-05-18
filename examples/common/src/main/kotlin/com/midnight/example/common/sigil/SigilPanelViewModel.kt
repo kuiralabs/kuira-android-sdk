@@ -284,7 +284,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                             credentialId = credentialId,
                             publicKeyHex = publicKeyHex,
                         )
-                        Log.i(TAG, "  Sigil identity + wallet seed restored — killing process to force a clean reload")
+                        Log.i(TAG, "  Sigil identity + wallet seed restored — restarting app for clean reload")
                         // CRITICAL: kill the process before any other code (or
                         // the user) can interact with the wallet panel. The
                         // wallet panel's in-memory SDK is still built on the
@@ -294,6 +294,24 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
                         // and the funded wallet becomes unrecoverable. Killing
                         // the process guarantees the next launch bootstraps
                         // from SeedVault and the panel + storage agree.
+                        //
+                        // UX: queue a launcher intent BEFORE killing so Android
+                        // auto-relaunches a fresh process. Without this the
+                        // app just vanishes and the user has to find the icon
+                        // again — that looks indistinguishable from a crash.
+                        // startActivity dispatches the intent to system_server
+                        // synchronously; when we SIGKILL ourselves a moment
+                        // later, system_server already has the intent on its
+                        // queue and starts a new process to fulfill it.
+                        val relaunch = activity.packageManager
+                            .getLaunchIntentForPackage(activity.packageName)
+                            ?.apply {
+                                addFlags(
+                                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                                )
+                            }
+                        if (relaunch != null) activity.startActivity(relaunch)
                         activity.finishAffinity()
                         android.os.Process.killProcess(android.os.Process.myPid())
                     } else {
