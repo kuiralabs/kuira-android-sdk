@@ -21,9 +21,10 @@ import org.junit.runner.RunWith
  *
  * These tests run on a real device/emulator and exercise the Android Keystore.
  *
- * **Note:** Tests that require biometric authentication (cipherForEncrypt/Decrypt
- * after key generation with per-use auth) cannot be automated — they require
- * a real biometric prompt. Those are tested manually or with duration > 0 keys.
+ * **Note:** Tests that exercise a Cipher *after* key generation can't be
+ * fully automated — they need a real BiometricPrompt or device-credential
+ * auth to satisfy the [AuthPolicy.VALIDITY_DURATION_SECONDS] window
+ * before the Cipher will run doFinal. Those are tested manually.
  *
  * These tests use the actual Keystore but with a test-specific alias
  * to avoid interfering with production keys.
@@ -116,7 +117,8 @@ class WalletKeyManagerInstrumentedTest {
     }
 
     // NOTE: cipherForEncrypt() and cipherForDecrypt() with valid IV will
-    // succeed at Cipher.init() but the cipher won't be usable until
-    // BiometricPrompt authenticates (per-use auth, duration=0).
-    // Full encrypt/decrypt round-trip requires manual biometric testing.
+    // succeed at Cipher.init() but the cipher won't be usable until the
+    // user has authenticated within the last [AuthPolicy.VALIDITY_DURATION_SECONDS]
+    // — either via BiometricPrompt or device-credential. Full encrypt /
+    // decrypt round-trip requires manual biometric testing.
 }

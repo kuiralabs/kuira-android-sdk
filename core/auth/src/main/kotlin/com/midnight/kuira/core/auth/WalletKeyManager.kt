@@ -131,10 +131,11 @@ class WalletKeyManager {
             setBlockModes(BLOCK_MODE)
             setEncryptionPaddings(PADDING)
             setKeySize(KEY_SIZE)
-            // Per-use auth: every operation requires fresh biometric or PIN
+            // Auth-validity window for biometric/PIN unlock. See
+            // [AuthPolicy] for the value and the trade-off rationale.
             setUserAuthenticationParameters(
-                0, // duration=0 → per-use
-                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+                AuthPolicy.VALIDITY_DURATION_SECONDS,
+                AuthPolicy.ALLOWED_AUTHENTICATORS,
             )
             // Don't invalidate key when user adds new fingerprint
             setInvalidatedByBiometricEnrollment(false)
