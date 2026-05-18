@@ -96,6 +96,77 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         return authenticate(activity, cipher, title, subtitle)
     }
 
+    /**
+     * Attempts to decrypt [ciphertext] with the master key WITHOUT showing
+     * a BiometricPrompt. Succeeds silently when the Keystore auth-validity
+     * window (set via [AuthPolicy.VALIDITY_DURATION_SECONDS]) is currently
+     * open for the key. The caller MUST wipe the returned bytes once it's
+     * done with the plaintext.
+     *
+     * Returns null when the window is expired
+     * ([android.security.keystore.UserNotAuthenticatedException] from the
+     * Cipher) or any other exception is hit. The caller should fall back
+     * to the full [authenticateForDecrypt] path in that case.
+     *
+     * Why this is safe: `UserNotAuthenticatedException` is enforced in
+     * secure hardware by Keystore — we cannot bypass the auth requirement
+     * from app code. If the user authenticated recently enough for the
+     * window to count, the decrypt is exactly equivalent to the next
+     * decrypt after a fresh BiometricPrompt; if not, the cipher refuses
+     * to operate and we get null.
+     */
+    fun tryDecryptWithinAuthWindow(
+        iv: ByteArray,
+        ciphertext: ByteArray,
+    ): ByteArray? {
+        val cipher = try {
+            keyManager.cipherForDecrypt(iv)
+        } catch (e: Exception) {
+            return null
+        }
+        return try {
+            cipher.doFinal(ciphertext)
+        } catch (e: android.security.keystore.UserNotAuthenticatedException) {
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Attempts to obtain a Cipher initialized for encryption with the
+     * master key WITHOUT showing a BiometricPrompt. Returns a fresh,
+     * unused Cipher when the auth-validity window is open; null when
+     * expired or anything else goes wrong, in which case the caller
+     * should fall back to [authenticateForEncrypt].
+     *
+     * Implementation: probes the window with a throwaway cipher (a
+     * 1-byte `doFinal` that forces Keystore's auth check), then on
+     * success returns a *separate* cipher for the caller's actual
+     * encrypt. The throwaway is necessary because GCM ciphers commit
+     * to a fixed IV at `init()` time — reusing the probe cipher would
+     * be a nonce-reuse vulnerability.
+     */
+    fun tryEncryptWithinAuthWindow(): Cipher? {
+        val probeCipher = try {
+            keyManager.cipherForEncrypt()
+        } catch (e: Exception) {
+            return null
+        }
+        try {
+            probeCipher.doFinal(byteArrayOf(0x00))
+        } catch (e: android.security.keystore.UserNotAuthenticatedException) {
+            return null
+        } catch (e: Exception) {
+            return null
+        }
+        return try {
+            keyManager.cipherForEncrypt()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private suspend fun authenticate(
         activity: FragmentActivity,
         cipher: Cipher,

@@ -121,6 +121,38 @@ val encryptedPrefs = EncryptedSharedPreferences.create(
 - **BiometricPrompt** for user authentication
 - **Hardware-backed keys** when available
 
+### Auth-required Keystore keys
+
+When generating a Keystore key that requires user authentication
+(biometric / PIN), do **not** inline the validity duration or the
+accepted-authenticator bits. Both live in `core.auth.AuthPolicy`:
+
+```kotlin
+// ✅ GOOD: read both from AuthPolicy — single source of truth.
+KeyGenParameterSpec.Builder(alias, purposes).apply {
+    // …
+    setUserAuthenticationParameters(
+        AuthPolicy.VALIDITY_DURATION_SECONDS,
+        AuthPolicy.ALLOWED_AUTHENTICATORS,
+    )
+    setUnlockedDeviceRequired(true)         // required
+    setInvalidatedByBiometricEnrollment(false)  // see AuthPolicy doc
+}
+```
+
+Why centralized: the validity window (currently 30s) is a calibrated
+UX vs. snatched-unlocked-device trade-off (see
+`docs/security/SECURITY_NOTES.md` 2026-05-18 entry). Diverging from
+`AuthPolicy` requires an explicit security review note in the
+SECURITY_NOTES log explaining the threat model the divergence
+addresses — same bar as adding a new VULN entry.
+
+For *high-value operations* (sending funds, claiming a payout, etc.),
+layer a fresh `BiometricPrompt` call **on top of** the auth-validity
+window. The window is for the warm "user just authenticated" intent;
+high-value ops should require a deliberate re-auth regardless of
+window state.
+
 ---
 
 ## Midnight-Specific Security Patterns

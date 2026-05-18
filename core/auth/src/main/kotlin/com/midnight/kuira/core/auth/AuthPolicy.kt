@@ -19,6 +19,41 @@ import android.security.keystore.KeyProperties
  * into the restore one without weakening the model meaningfully — a
  * snatched-unlocked-phone attacker still needs to act inside that 30s
  * window with the device unlocked.
+ *
+ * ## Threat model for this knob
+ *
+ * **The window mitigates:** post-restore prompt fatigue; per-action UX
+ * friction during the natural "I just authenticated to use the wallet"
+ * intent window. No security guarantee was traded away on this axis —
+ * the window is *additive convenience over a successful auth*.
+ *
+ * **The window does NOT mitigate:**
+ *   - **Snatched unlocked device during the window** — attacker with
+ *     physical control of the unlocked phone within 30s of a real user
+ *     auth can trigger Keystore decrypts without re-prompting. Mitigate
+ *     downstream with app-level "fresh auth for high-value ops"
+ *     (independent `BiometricPrompt` regardless of this window).
+ *   - **Compromised OS (rooted, EMM-tampered)** — Keystore software-bound
+ *     keys are extractable on a sufficiently compromised device. StrongBox
+ *     raises the bar; out of scope for this constant.
+ *   - **Malware running as our process** — already has memory access to
+ *     anything we decrypt. Defense lives in supply-chain controls + memory
+ *     hygiene (see `SeedVault.loadSeed` wipe discipline).
+ *   - **Biometric spoofing / shoulder-surfed PIN entry** — orthogonal.
+ *     Same threat model with or without the window; the window only
+ *     amplifies what the attacker can do *after* successful auth.
+ *
+ * **Defense layers preserved alongside this change:**
+ *   - `setUnlockedDeviceRequired(true)` — key unusable when the device
+ *     is locked, regardless of remaining window.
+ *   - Per-app Keystore isolation.
+ *   - GCM-256 authenticated encryption of the seed file.
+ *   - `setInvalidatedByBiometricEnrollment(false)` (unchanged trade-off:
+ *     adding a fingerprint does not destroy existing wallets).
+ *   - StrongBox where the device supports it.
+ *
+ * See `docs/security/SECURITY_NOTES.md` (2026-05-18 entry) for the full
+ * audit + follow-up items.
  */
 object AuthPolicy {
     /**

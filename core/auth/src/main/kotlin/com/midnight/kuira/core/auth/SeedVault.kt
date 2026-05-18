@@ -5,6 +5,8 @@
 package com.midnight.kuira.core.auth
 
 import android.content.Context
+import android.security.keystore.UserNotAuthenticatedException
+import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -138,13 +140,26 @@ class SeedVault(
     ) {
         check(!hasSeed()) { "Seed already exists. Delete it first." }
 
-        val authenticated = biometricGate.authenticateForEncrypt(
-            activity = activity,
-            title = "Secure your wallet",
-            subtitle = "Authenticate to encrypt your wallet keys"
-        )
+        // Fast path — if the user authenticated within
+        // AuthPolicy.VALIDITY_DURATION_SECONDS (e.g. the PRF passkey
+        // biometric that just decrypted a cloud-restored seed),
+        // Keystore lets us encrypt without showing a BiometricPrompt.
+        // The cipher is obtained BEFORE the seed plaintext is produced,
+        // so we preserve the existing "minimize exposure" property:
+        // plaintext only lives in memory between seedProducer() and
+        // doFinal, regardless of which path got us the cipher.
+        val cipher = biometricGate.tryEncryptWithinAuthWindow()?.also {
+            Log.i(TAG, "storeSeed: silent (auth-validity window OPEN)")
+        } ?: run {
+            Log.i(TAG, "storeSeed: prompting (auth-validity window EXPIRED or unavailable)")
+            biometricGate.authenticateForEncrypt(
+                activity = activity,
+                title = "Secure your wallet",
+                subtitle = "Authenticate to encrypt your wallet keys"
+            ).cipher
+        }
 
-        // Produce the plaintext ONLY AFTER auth succeeds, minimizing exposure window.
+        // Produce the plaintext ONLY AFTER the cipher is ready, minimizing exposure window.
         val seed = seedProducer()
 
         val plaintext = ByteArray(PlaintextSeed.PLAINTEXT_SIZE)
@@ -152,8 +167,8 @@ class SeedVault(
             System.arraycopy(seed.mnemonicEntropy, 0, plaintext, 0, PlaintextSeed.ENTROPY_SIZE)
             System.arraycopy(seed.bip39Seed, 0, plaintext, PlaintextSeed.ENTROPY_SIZE, PlaintextSeed.SEED_SIZE)
 
-            val ciphertext = authenticated.cipher.doFinal(plaintext)
-            val iv = authenticated.cipher.iv
+            val ciphertext = cipher.doFinal(plaintext)
+            val iv = cipher.iv
             check(iv.size == WalletKeyManager.GCM_IV_LENGTH) {
                 "Unexpected IV length: ${iv.size}"
             }
@@ -204,17 +219,29 @@ class SeedVault(
         val iv = stored.copyOfRange(0, WalletKeyManager.GCM_IV_LENGTH)
         val ciphertext = stored.copyOfRange(WalletKeyManager.GCM_IV_LENGTH, stored.size)
 
-        val authenticated = biometricGate.authenticateForDecrypt(
-            activity = activity,
-            iv = iv,
-            title = "Unlock wallet",
-            subtitle = "Authenticate to access your wallet keys"
-        )
-
-        val plaintext = try {
-            authenticated.cipher.doFinal(ciphertext)
-        } catch (e: javax.crypto.AEADBadTagException) {
-            throw CorruptedSeedException("Seed decryption failed: invalid auth tag")
+        // Fast path — if the user authenticated within
+        // AuthPolicy.VALIDITY_DURATION_SECONDS, Keystore lets us decrypt
+        // without showing a BiometricPrompt. UserNotAuthenticatedException
+        // is enforced in secure hardware, so this can't bypass auth: if
+        // the window's expired the call returns null and we fall through
+        // to the full prompt path below.
+        val silentPlaintext = biometricGate.tryDecryptWithinAuthWindow(iv, ciphertext)
+        val plaintext = if (silentPlaintext != null) {
+            Log.i(TAG, "loadSeed: silent (auth-validity window OPEN)")
+            silentPlaintext
+        } else {
+            Log.i(TAG, "loadSeed: prompting (auth-validity window EXPIRED or unavailable)")
+            val authenticated = biometricGate.authenticateForDecrypt(
+                activity = activity,
+                iv = iv,
+                title = "Unlock wallet",
+                subtitle = "Authenticate to access your wallet keys"
+            )
+            try {
+                authenticated.cipher.doFinal(ciphertext)
+            } catch (e: javax.crypto.AEADBadTagException) {
+                throw CorruptedSeedException("Seed decryption failed: invalid auth tag")
+            }
         }
 
         try {
@@ -256,5 +283,7 @@ class SeedVault(
 
         // AES-GCM auth tag size in bytes (derived from WalletKeyManager.GCM_TAG_LENGTH bits)
         private const val GCM_TAG_BYTES = WalletKeyManager.GCM_TAG_LENGTH / 8
+
+        private const val TAG = "SeedVault"
     }
 }
