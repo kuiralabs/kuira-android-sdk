@@ -66,7 +66,7 @@ import com.midnight.kuira.core.network.MidnightNetwork
  * @param onBack User-initiated dismissal (back arrow / system back gesture).
  */
 @Composable
-fun WalletReceiveScreen(
+internal fun WalletReceiveScreen(
     unshieldedAddress: String,
     shieldedAddress: String,
     network: MidnightNetwork,

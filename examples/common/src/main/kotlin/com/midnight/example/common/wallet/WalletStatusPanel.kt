@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -746,10 +747,14 @@ private fun PanelButton(
 // ── Color palette ──
 
 /**
- * Color tokens for [WalletStatusPanel]. Host apps can pass [Custom] with their
- * own values to match a different theme; [Default] matches the dark-themed
+ * Color tokens for [WalletStatusPanel]. Host apps can pass a custom
+ * palette to theme the wallet panel; [Default] matches the dark-themed
  * example apps already in this repo.
+ *
+ * **API contract:** part of the dapp-ui public surface. `@Immutable` so
+ * Compose treats the type as stable across recompositions.
  */
+@Immutable
 data class WalletPanelColors(
     val pillBackground: Color,
     val pillBorder: Color,

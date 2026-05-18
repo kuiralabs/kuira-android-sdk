@@ -17,6 +17,11 @@ import androidx.core.graphics.set
 /**
  * Renders a QR code for [text] as a square bitmap.
  *
+ * **API contract:** part of the dapp-ui public surface. Consumers (e.g.
+ * Kicks's `CreateMatchScreen`) call this directly to render arbitrary QR
+ * payloads (match-share links, addresses, etc.) without needing the full
+ * receive screen. Signature stable from 1.0.0-alpha onward.
+ *
  * Implementation notes:
  *  - Uses ZXing core's pure-Java [QRCodeWriter] (no Android-specific deps),
  *    then we hand-roll the BitMatrix → ARGB_8888 conversion to keep the

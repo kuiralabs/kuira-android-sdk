@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -592,7 +593,12 @@ private object SigilType {
  * Visual tokens for [SigilStatusPanel]. Matches the geometry of
  * [com.midnight.example.common.wallet.WalletPanelColors] so the two pills
  * in [com.midnight.example.common.PanelBar] read as a pair.
+ *
+ * **API contract:** part of the dapp-ui public surface — consumers may
+ * supply a custom palette to theme the sigil panel. `@Immutable` so
+ * Compose treats the type as stable across recompositions.
  */
+@Immutable
 data class SigilPanelColors(
     val pillBackground: Color,
     val pillBorder: Color,
