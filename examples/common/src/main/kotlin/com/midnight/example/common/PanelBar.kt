@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -69,6 +73,21 @@ fun PanelBar(
     modifier: Modifier = Modifier,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    // PanelBar observes sigil status itself so it can gate the wallet
+    // panel's auto-bootstrap on Forged — implements "Problem A": don't
+    // create a fresh wallet uninvited while a Block Store backup is
+    // sitting unclaimed. Hosts still see the public onSigilStatusChange
+    // callback for whatever they need; the internal gate is additive.
+    //
+    // Initial state mirrors the SigilPanelViewModel default
+    // (Initializing) so that on first composition — before the panel's
+    // LaunchedEffect has had a chance to fire onStatusChange — the
+    // wallet stays gated. Otherwise the wallet's LaunchedEffect can
+    // dispatch refreshBalance and even show a biometric prompt during
+    // the few-hundred-ms window before the probe settles.
+    var currentSigilStatus by remember { mutableStateOf<SigilStatus>(SigilStatus.Initializing) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -80,10 +99,37 @@ fun PanelBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SigilStatusPanel(onStatusChange = onSigilStatusChange)
+        SigilStatusPanel(
+            onStatusChange = {
+                currentSigilStatus = it
+                onSigilStatusChange(it)
+            },
+        )
         WalletStatusPanel(
             initialNetwork = network,
             onNetworkChange = onNetworkChange,
+            // Sealed-when so adding a new SigilStatus variant later
+            // forces an explicit yes/no decision at compile time
+            // rather than silently defaulting to gated. Wallet
+            // bootstraps in exactly two states:
+            //  - None    → probe done, no backup to wait on → safe to
+            //              auto-create a fresh wallet (today's default
+            //              for users who never used the app).
+            //  - Forged  → sigil resolved (either loaded from prefs or
+            //              just forged) → wallet can bootstrap;
+            //              SeedVault.loadSeed runs silently within the
+            //              30s auth window, or creates a fresh seed if
+            //              empty.
+            // Initializing / BackupAvailable / Creating / Error keep
+            // the wallet gated until the sigil situation stabilises.
+            enabled = when (currentSigilStatus) {
+                is SigilStatus.None,
+                is SigilStatus.Forged -> true
+                is SigilStatus.Initializing,
+                is SigilStatus.BackupAvailable,
+                is SigilStatus.Creating,
+                is SigilStatus.Error -> false
+            },
         )
     }
 }

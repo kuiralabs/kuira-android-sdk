@@ -158,6 +158,20 @@ fun WalletStatusPanel(
     colors: WalletPanelColors = WalletPanelColors.Default,
     viewModel: WalletPanelViewModel = viewModel(factory = WalletPanelViewModel.Factory),
     onNetworkChange: (MidnightNetwork) -> Unit = {},
+    /**
+     * Whether the panel is allowed to auto-bootstrap on mount. Default
+     * `true` keeps existing call sites working unchanged. Hosts that
+     * want the "Problem A" gate — don't auto-create a fresh wallet
+     * before the user has chosen Restore vs Start Fresh on the sigil
+     * panel — set this to `(sigilStatus is SigilStatus.Forged)`.
+     * [PanelBar] wires that automatically for hosts that consume it.
+     *
+     * Explicit user actions (tapping the `balance` button in the sheet)
+     * still trigger a bootstrap regardless of this flag, on the
+     * assumption that explicit action means the user has reconciled
+     * any pending sigil state.
+     */
+    enabled: Boolean = true,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -202,8 +216,8 @@ fun WalletStatusPanel(
     //
     // Not keyed on status so that a failed bootstrap (Error) doesn't loop —
     // the user retries via the explicit `balance` button.
-    LaunchedEffect(activity, config) {
-        if (activity != null) {
+    LaunchedEffect(activity, config, enabled) {
+        if (activity != null && enabled) {
             viewModel.refreshBalance(config, activity)
         }
     }

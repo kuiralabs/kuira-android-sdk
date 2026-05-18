@@ -4,6 +4,7 @@
 
 package com.midnight.kuira.core.auth
 
+import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -122,13 +123,15 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         val cipher = try {
             keyManager.cipherForDecrypt(iv)
         } catch (e: Exception) {
+            Log.w(TAG, "tryDecryptWithinAuthWindow: cipherForDecrypt failed; falling back to prompt", e)
             return null
         }
         return try {
             cipher.doFinal(ciphertext)
         } catch (e: android.security.keystore.UserNotAuthenticatedException) {
-            null
+            null  // expected when the auth-validity window has expired
         } catch (e: Exception) {
+            Log.w(TAG, "tryDecryptWithinAuthWindow: doFinal failed unexpectedly; falling back to prompt", e)
             null
         }
     }
@@ -151,18 +154,21 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         val probeCipher = try {
             keyManager.cipherForEncrypt()
         } catch (e: Exception) {
+            Log.w(TAG, "tryEncryptWithinAuthWindow: cipherForEncrypt (probe) failed; falling back to prompt", e)
             return null
         }
         try {
             probeCipher.doFinal(byteArrayOf(0x00))
         } catch (e: android.security.keystore.UserNotAuthenticatedException) {
-            return null
+            return null  // expected when the auth-validity window has expired
         } catch (e: Exception) {
+            Log.w(TAG, "tryEncryptWithinAuthWindow: probe doFinal failed unexpectedly; falling back to prompt", e)
             return null
         }
         return try {
             keyManager.cipherForEncrypt()
         } catch (e: Exception) {
+            Log.w(TAG, "tryEncryptWithinAuthWindow: cipherForEncrypt (real) failed after successful probe; falling back to prompt", e)
             null
         }
     }
@@ -240,6 +246,10 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         cont.invokeOnCancellation {
             biometricPrompt.cancelAuthentication()
         }
+    }
+
+    private companion object {
+        const val TAG = "BiometricGate"
     }
 }
 

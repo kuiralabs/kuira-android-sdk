@@ -106,6 +106,10 @@ fun SigilStatusPanel(
                 onBackup = { activity?.let { viewModel.backupSeed(it) } },
                 onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                 onTestPrf = { activity?.let { viewModel.testPrf(it) } },
+                onStartFresh = {
+                    viewModel.dismissBackup()
+                    sheetOpen = false
+                },
             )
         }
     }
@@ -176,7 +180,7 @@ private fun SigilPill(
  */
 @Composable
 private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
-    if (status is SigilStatus.Creating) {
+    if (status is SigilStatus.Creating || status is SigilStatus.Initializing) {
         CircularProgressIndicator(
             modifier = Modifier.size(SigilDimens.PillAvatarSize),
             strokeWidth = SigilDimens.PillSpinnerStroke,
@@ -186,13 +190,17 @@ private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
     }
     val (bg, fg, glyph) = when (status) {
         is SigilStatus.None -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, null)
+        // Same neutral avatar as None, plus a "?" glyph hinting that an
+        // action is pending. The sheet body explains the choice.
+        is SigilStatus.BackupAvailable -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, "?")
         is SigilStatus.Forged -> Triple(
             avatarColorFromDid(status.did),
             Color.White,
             avatarGlyphFromDid(status.did),
         )
         is SigilStatus.Error -> Triple(colors.error, Color.White, "!")
-        is SigilStatus.Creating -> error("unreachable — handled above")
+        is SigilStatus.Creating, is SigilStatus.Initializing ->
+            error("unreachable — handled above")
     }
     Box(
         modifier = Modifier
@@ -256,6 +264,8 @@ private val AVATAR_PALETTE = listOf(
 
 internal fun pillLabel(status: SigilStatus): String = when (status) {
     is SigilStatus.None -> "no sigil"
+    is SigilStatus.BackupAvailable -> "backup found — tap"
+    is SigilStatus.Initializing -> "checking…"
     is SigilStatus.Creating -> "forging…"
     is SigilStatus.Forged -> truncateDid(status.did)
     is SigilStatus.Error -> "sigil error"
@@ -348,6 +358,7 @@ private fun SigilSheetContent(
     onBackup: () -> Unit,
     onRestore: () -> Unit,
     onTestPrf: () -> Unit,
+    onStartFresh: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
 
@@ -364,6 +375,15 @@ private fun SigilSheetContent(
             colors = colors,
             onForgeSigil = onForgeSigil,
             onRestore = onRestore,
+        )
+        is SigilStatus.BackupAvailable -> BackupAvailableBody(
+            colors = colors,
+            onRestore = onRestore,
+            onStartFresh = onStartFresh,
+        )
+        is SigilStatus.Initializing -> CreatingBody(
+            stage = "checking for cloud backup…",
+            colors = colors,
         )
         is SigilStatus.Creating -> CreatingBody(stage = status.stage, colors = colors)
         is SigilStatus.Forged -> ForgedBody(
@@ -398,6 +418,33 @@ private fun NoneBody(
     SheetButton(text = "forge sigil", enabled = true, colors = colors, onClick = onForgeSigil)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
+}
+
+/**
+ * Surface when a Block Store backup was detected on launch but no local
+ * sigil exists yet. Two paths:
+ *  - **restore previous** (primary): runs the PRF passkey flow,
+ *    decrypts the cloud blob, re-creates the SeedVault entry,
+ *    SIGKILL+relaunch for a clean rebootstrap.
+ *  - **start fresh** (secondary): forges a brand-new sigil and lets
+ *    the wallet panel auto-bootstrap with a freshly-generated seed.
+ *    Wipes the prior cloud association going forward.
+ */
+@Composable
+private fun BackupAvailableBody(
+    colors: SigilPanelColors,
+    onRestore: () -> Unit,
+    onStartFresh: () -> Unit,
+) {
+    Text(
+        "A previous wallet backup was found in your cloud. Restore it, or start fresh on this device.",
+        color = colors.onSheetSubtle,
+        fontSize = SigilType.Body,
+    )
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+    SheetButton(text = "restore previous", enabled = true, colors = colors, onClick = onRestore)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "start fresh", enabled = true, colors = colors, onClick = onStartFresh, dimmed = true)
 }
 
 @Composable

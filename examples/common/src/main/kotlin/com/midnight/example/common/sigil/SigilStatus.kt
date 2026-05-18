@@ -18,8 +18,29 @@ package com.midnight.example.common.sigil
  *  - [Error]: a flow failed. Pill renders the error glyph.
  */
 sealed class SigilStatus {
-    /** No passkey + DID yet. */
+    /**
+     * Brief window between activity launch and the first stable status —
+     * loadPersistedSigil() is sync but Block Store probe is async. UI
+     * renders a spinner; sibling wallet panel waits before
+     * auto-bootstrapping so a probe-detected backup doesn't get
+     * blown over by a fresh wallet creation.
+     */
+    data object Initializing : SigilStatus()
+
+    /** No passkey + DID yet, and no cloud backup detected. */
     data object None : SigilStatus()
+
+    /**
+     * No local sigil yet, but a Block Store cloud backup was found.
+     *
+     * The probe is biometric-free — it only fetches the encrypted blob's
+     * existence, not its contents. The user is presented with a choice
+     * between restoring the previous identity (PRF biometric on tap)
+     * and starting fresh (forge a new sigil on tap). Until they choose,
+     * wallet auto-bootstrap on the sibling panel is paused — fresh wallets
+     * created uninvited under a forgotten backup would be confusing UX.
+     */
+    data object BackupAvailable : SigilStatus()
 
     /** Async flow in progress (passkey create, DID derive, backup, restore). */
     data class Creating(val stage: String) : SigilStatus()

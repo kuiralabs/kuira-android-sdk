@@ -5,7 +5,6 @@
 package com.midnight.kuira.core.auth
 
 import android.content.Context
-import android.security.keystore.UserNotAuthenticatedException
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.Dispatchers

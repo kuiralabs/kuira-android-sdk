@@ -82,13 +82,79 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
         app.getSharedPreferences(SIGIL_PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    private val _status = MutableStateFlow<SigilStatus>(SigilStatus.None)
+    private val _status = MutableStateFlow<SigilStatus>(SigilStatus.Initializing)
     val status: StateFlow<SigilStatus> = _status
 
     init {
         // Restore any previously-forged sigil so the panel pill shows the DID
         // immediately on next launch instead of "no sigil".
         loadPersistedSigil()
+        // If still Initializing (no local sigil), probe Block Store async
+        // for an existing cloud backup so the panel can offer
+        // Restore-vs-Fresh before any wallet gets auto-created. Probe is
+        // biometric-free; biometric only fires when the user later picks
+        // Restore (PRF passkey).
+        if (_status.value is SigilStatus.Initializing) {
+            viewModelScope.launch { probeBlockStoreBackup() }
+        }
+    }
+
+    /**
+     * Off-thread probe — does Block Store currently hold a cloud-backup
+     * blob for this app? Only meaningful when the local sigil prefs are
+     * empty (fresh install / post-reinstall). Transitions
+     * [SigilStatus.Initializing] → [SigilStatus.BackupAvailable] when a
+     * blob is found and the user hasn't previously dismissed the prompt.
+     * Otherwise → [SigilStatus.None].
+     *
+     * No biometric. The blob is encrypted at rest under the user's
+     * passkey PRF — we never decrypt it here, just verify it exists.
+     */
+    private suspend fun probeBlockStoreBackup() {
+        if (prefs.getBoolean(KEY_BACKUP_DISMISSED, false)) {
+            Log.i(TAG, "Backup prompt previously dismissed — skipping probe")
+            _status.value = SigilStatus.None
+            return
+        }
+        try {
+            val blob = BlockStoreBackupStorage(app).retrieve()
+            if (blob != null && blob.isNotEmpty() &&
+                _status.value is SigilStatus.Initializing) {
+                Log.i(TAG, "Block Store backup detected (${blob.size} bytes) — offering Restore vs Start Fresh")
+                _status.value = SigilStatus.BackupAvailable
+            } else {
+                Log.i(TAG, "No Block Store backup — settling on None")
+                if (_status.value is SigilStatus.Initializing) {
+                    _status.value = SigilStatus.None
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Block Store probe failed (${e.javaClass.simpleName}); settling on None: ${e.message}")
+            if (_status.value is SigilStatus.Initializing) {
+                _status.value = SigilStatus.None
+            }
+        }
+    }
+
+    /**
+     * User chose "Start fresh" from the [SigilStatus.BackupAvailable]
+     * prompt: they acknowledge the cloud backup but want to proceed
+     * without restoring. Persist a flag so future launches don't keep
+     * nagging, and move to [SigilStatus.None] so the wallet panel
+     * unblocks and auto-bootstraps a fresh wallet.
+     *
+     * The cloud backup itself is **not** deleted — user can still tap
+     * "restore from cloud" later in the [SigilStatus.None] sheet if
+     * they change their mind. The flag just controls the auto-prompt.
+     */
+    fun dismissBackup() {
+        // commit() not apply() — symmetric with persistSigil. The status
+        // transition + the wallet-panel re-evaluation that follows
+        // happen on the next composition frame; we want the flag
+        // durable before any of that races with a process death.
+        prefs.edit().putBoolean(KEY_BACKUP_DISMISSED, true).commit()
+        _status.value = SigilStatus.None
+        Log.i(TAG, "Backup dismissed — sigil status → None, wallet panel unblocked")
     }
 
     /**
@@ -446,6 +512,8 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
         private const val KEY_DID = "did"
         private const val KEY_CREDENTIAL_ID = "credentialId"
         private const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
+        /** Set by [dismissBackup] so the BackupAvailable prompt stops re-appearing on every launch. */
+        private const val KEY_BACKUP_DISMISSED = "backupDismissed"
 
         /** Factory for `viewModel(factory = SigilPanelViewModel.Factory)`. */
         val Factory: ViewModelProvider.Factory = viewModelFactory {
