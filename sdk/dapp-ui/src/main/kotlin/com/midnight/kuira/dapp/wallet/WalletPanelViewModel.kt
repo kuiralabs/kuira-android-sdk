@@ -9,7 +9,6 @@ import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
-import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -40,9 +39,9 @@ import javax.inject.Inject
  * (act). Funding doesn't need a panel-side handler — the Receive screen shows
  * the airdrop command, the SDK's subscription picks up the credit on its own.
  *
- * **Not for production:** [installProvingKeys] reads from `/data/local/tmp/`,
- * which is the same adb-push convention the SDK e2e tests use. Production
- * apps download keys at runtime via `ProvingKeyManager.downloadWalletKeys`.
+ * **Proving keys:** the SDK's `ProvingKeyManager.ensureWalletKeysAvailable`
+ * runs after [MidnightSdk.Builder.build] — `/data/local/tmp/` shortcut on
+ * dev devices, ~24MB S3 download on a fresh emulator. No per-host wiring.
  *
  * **Lifecycle:** the SDK is closed in [onCleared] so the indexer WebSocket
  * doesn't outlive the host activity.
@@ -228,7 +227,6 @@ class WalletPanelViewModel @Inject constructor(
             existing.close()
             sdk = null
         }
-        installProvingKeys()
         val seed = ensureSeedReady(activity)
         return try {
             val built = MidnightSdk.Builder(context)
@@ -242,15 +240,13 @@ class WalletPanelViewModel @Inject constructor(
             sdk = built
             sdkConfig = config
             // Proving keys are network-agnostic — the same S3 bundle drives
-            // local proving on UNDEPLOYED, PREPROD, and PREVIEW. We try
-            // `installFromLocalTmp` first (canary path: ~24MB saved when
-            // keys are adb-pushed) but always fall back to the download for
-            // any network, so a fresh install on any device self-recovers
-            // without the user having to know about adb push or local proving.
-            if (!built.provingKeyManager.hasWalletKeys()) {
-                Log.i(TAG, "Proving keys missing — downloading wallet keys (~24MB)")
-                built.provingKeyManager.downloadWalletKeys { /* progress ignored — host decides UX */ }
-            }
+            // local proving on UNDEPLOYED, PREPROD, and PREVIEW. The SDK
+            // owns the recipe (local-tmp shortcut → S3 fallback) so a
+            // fresh install on any device self-recovers without the
+            // user having to know about adb push or local proving.
+            built.provingKeyManager.ensureWalletKeysAvailable(
+                logger = { Log.i(TAG, it) },
+            )
             built
         } finally {
             // The SDK builder copies the seed internally; wipe our local view.
@@ -287,14 +283,6 @@ class WalletPanelViewModel @Inject constructor(
             PlaintextSeed(entropy, bip39Seed)
         }
         return requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
-    }
-
-    private fun installProvingKeys() {
-        val pkm = ProvingKeyManager(context)
-        val ok = pkm.installFromLocalTmp()
-        if (!ok) {
-            Log.w(TAG, "installFromLocalTmp: hasWalletKeys() still false — adb-push keys to /data/local/tmp")
-        }
     }
 
     companion object {

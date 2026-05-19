@@ -56,6 +56,45 @@ class ProvingKeyManager(private val context: Context) {
     }
 
     /**
+     * One-call wallet-key provisioning. Tries the dev shortcut first
+     * ([installFromLocalTmp] — adb-pushed files in `/data/local/tmp/`),
+     * then falls back to the S3 download ([downloadWalletKeys]) when
+     * the local-tmp pass didn't populate the BLS params + zswap/dust
+     * keys. After this returns, [hasWalletKeys] is true unless the
+     * download itself failed (in which case the underlying IOException
+     * propagates).
+     *
+     * **Why this lives here:** every dApp that builds a [com.midnight.kuira.sdk.MidnightSdk]
+     * + does local proving needs the same recipe. Bolting it onto
+     * each dApp ([com.midnight.kuira.dapp.wallet.WalletPanelViewModel],
+     * Kicks's `MatchManager`, future consumers) duplicates the
+     * conditional and leaves a trap: the first dev who skips the
+     * fallback ships a "works on my pre-staged machine, blows up on
+     * fresh emulator with `BLS params file not found`" regression
+     * (the exact 2026-05-19 emulator-B incident).
+     *
+     * Idempotent + cheap on the hot path: once wallet keys are in
+     * [keysDir], subsequent calls hit the `hasWalletKeys()` check and
+     * return immediately without I/O.
+     *
+     * @param onDownloadProgress Forwarded to [downloadWalletKeys].
+     *   Only fires when the S3 fallback runs.
+     * @param logger Status sink (start / complete lines for the
+     *   fallback path). Defaults to silent.
+     */
+    suspend fun ensureWalletKeysAvailable(
+        onDownloadProgress: (Float) -> Unit = {},
+        logger: (String) -> Unit = {},
+    ) {
+        installFromLocalTmp()
+        if (!hasWalletKeys()) {
+            logger("Wallet keys missing — downloading from S3 (~24MB, one-time)")
+            downloadWalletKeys(onDownloadProgress)
+            logger("Wallet keys download complete (hasWalletKeys=${hasWalletKeys()})")
+        }
+    }
+
+    /**
      * Download all wallet proving keys from S3.
      *
      * Downloads ~24MB total. Shows progress via callback.
@@ -64,7 +103,7 @@ class ProvingKeyManager(private val context: Context) {
      * @param onProgress Callback with progress 0.0 to 1.0
      * @throws IOException if download fails
      */
-    suspend fun downloadWalletKeys(onProgress: (Float) -> Unit = {}) = withContext(Dispatchers.IO) {
+    suspend fun downloadWalletKeys(onProgress: (Float) -> Unit = {}): Unit = withContext(Dispatchers.IO) {
         Log.d(TAG, "Starting proving key download (version $CURRENT_VERSION)")
 
         // Create directory structure

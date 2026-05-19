@@ -185,6 +185,9 @@ dependencies {
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // mockk for ProvingKeyManager helper tests (ensureWalletKeysAvailable
+    // pins the local-tmp → S3 fallback contract with mocked PKM internals).
+    testImplementation(libs.mockk)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlinx.coroutines.test)
