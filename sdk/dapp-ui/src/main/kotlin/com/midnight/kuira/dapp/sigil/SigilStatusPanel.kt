@@ -46,7 +46,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * Drop-in sigil identity pill for example apps. Mirrors
@@ -70,7 +70,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun SigilStatusPanel(
     modifier: Modifier = Modifier,
     colors: SigilPanelColors = SigilPanelColors.Default,
-    viewModel: SigilPanelViewModel = viewModel(factory = SigilPanelViewModel.Factory),
+    viewModel: SigilPanelViewModel = hiltViewModel(),
     /**
      * Fires whenever the panel's internal [SigilStatus] changes. Hosts that
      * want to gate UI on "is there a sigil?" — e.g. an onboarding banner

@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -63,6 +65,18 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Hilt DI — panel ViewModels are @HiltViewModel + @Inject. Wallet-
+    // and identity-side dependencies (WalletKeyManager, BiometricGate,
+    // SeedVault, PasskeyManager, PasskeyConfig) are provided by
+    // `core:auth:AuthModule` + `core:identity:IdentityModule`; this
+    // module only adds Block Store + SigilBackup on top. Consumers
+    // override the passkey rpId by replacing `IdentityModule`.
+    // `hilt-navigation-compose` gives Composables `hiltViewModel()`
+    // for VM resolution at the call site.
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

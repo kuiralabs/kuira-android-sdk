@@ -1,14 +1,10 @@
 package com.midnight.kuira.dapp.wallet
 
-import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
@@ -18,12 +14,15 @@ import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.math.BigInteger
 import java.security.SecureRandom
+import javax.inject.Inject
 
 /**
  * Self-contained wallet bootstrap + lifecycle for example apps.
@@ -48,11 +47,13 @@ import java.security.SecureRandom
  * **Lifecycle:** the SDK is closed in [onCleared] so the indexer WebSocket
  * doesn't outlive the host activity.
  */
-class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
-
-    private val walletKeyManager = WalletKeyManager()
-    private val biometricGate = BiometricGate(walletKeyManager)
-    private val seedVault = SeedVault(app, biometricGate)
+@HiltViewModel
+class WalletPanelViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val walletKeyManager: WalletKeyManager,
+    private val biometricGate: BiometricGate,
+    private val seedVault: SeedVault,
+) : ViewModel() {
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
@@ -230,7 +231,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
         installProvingKeys()
         val seed = ensureSeedReady(activity)
         return try {
-            val built = MidnightSdk.Builder(getApplication())
+            val built = MidnightSdk.Builder(context)
                 .network(config.network)
                 .seed(seed)
                 .provingMode(config.provingMode)
@@ -289,7 +290,7 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun installProvingKeys() {
-        val pkm = ProvingKeyManager(getApplication())
+        val pkm = ProvingKeyManager(context)
         val ok = pkm.installFromLocalTmp()
         if (!ok) {
             Log.w(TAG, "installFromLocalTmp: hasWalletKeys() still false — adb-push keys to /data/local/tmp")
@@ -304,17 +305,5 @@ class WalletPanelViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
-
-        /**
-         * Factory for `viewModel(factory = WalletPanelViewModel.Factory)` — saves
-         * host apps from defining their own `AndroidViewModelFactory`.
-         */
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
-                    as Application
-                WalletPanelViewModel(app)
-            }
-        }
     }
 }

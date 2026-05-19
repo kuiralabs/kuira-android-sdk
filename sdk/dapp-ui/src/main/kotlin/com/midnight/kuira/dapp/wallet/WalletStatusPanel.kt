@@ -47,7 +47,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -145,7 +145,7 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
  * @param modifier Modifier applied to the pill — typical placement is
  *   `Modifier.align(Alignment.TopEnd).padding(...)`.
  * @param colors UI palette; defaults match dark-themed example apps.
- * @param viewModel Custom panel VM. Defaults to one created by [WalletPanelViewModel.Factory].
+ * @param viewModel Custom panel VM. Defaults to one obtained from Hilt via [hiltViewModel].
  * @param onNetworkChange Fires after the user picks a new network in the
  *   sheet's chip row. Defaults to no-op; useful for example apps whose
  *   contract operations (deploy / connect) need to target the same chain
@@ -157,7 +157,7 @@ fun WalletStatusPanel(
     initialNetwork: MidnightNetwork = MidnightNetwork.UNDEPLOYED,
     modifier: Modifier = Modifier,
     colors: WalletPanelColors = WalletPanelColors.Default,
-    viewModel: WalletPanelViewModel = viewModel(factory = WalletPanelViewModel.Factory),
+    viewModel: WalletPanelViewModel = hiltViewModel(),
     onNetworkChange: (MidnightNetwork) -> Unit = {},
     /**
      * Whether the panel is allowed to auto-bootstrap on mount. Default

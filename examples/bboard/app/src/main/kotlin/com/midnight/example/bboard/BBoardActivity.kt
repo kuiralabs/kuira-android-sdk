@@ -55,6 +55,7 @@ import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
+import dagger.hilt.android.AndroidEntryPoint
 
 // ── Design Tokens ──
 
@@ -102,6 +103,7 @@ private const val SPINNER_SIZE_DP = 24
 
 // ── Activity ──
 
+@AndroidEntryPoint
 class BBoardActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

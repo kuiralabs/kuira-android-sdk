@@ -1,15 +1,11 @@
 package com.midnight.kuira.dapp.sigil
 
 import android.app.Activity
-import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.midnight.kuira.dapp.BuildConfig
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.PlaintextSeed
@@ -19,13 +15,15 @@ import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
-import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.inject.Inject
 
 /**
  * Self-contained sigil-identity bookkeeper for [SigilStatusPanel].
@@ -46,31 +44,16 @@ import java.security.SecureRandom
  *    access key being authorized, which the sigil panel doesn't (and
  *    shouldn't) own. The host bridges sigil + wallet for that flow.
  */
-class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) {
-
-    private val passkeyManager = PasskeyManager(
-        config = PasskeyConfig(rpId = DEFAULT_RP_ID),
-    )
-
-    /**
-     * Lazy chain for SeedVault access. The sigil panel needs the wallet seed
-     * to back it up + the matching slot to restore into. Lazy because most
-     * sigil interactions (forge, view DID) don't touch the seed, and we want
-     * to defer the Keystore + biometric prompt setup until the user actually
-     * taps backup/restore.
-     *
-     * Same primitives the wallet panel uses — both panels can hold their own
-     * instances against the same underlying Keystore-protected store.
-     */
-    private val walletKeyManager by lazy { WalletKeyManager() }
-    private val biometricGate by lazy { BiometricGate(walletKeyManager) }
-    private val seedVault by lazy { SeedVault(app, biometricGate) }
-    private val sigilBackup by lazy {
-        SigilBackup(
-            passkeyManager = passkeyManager,
-            storage = BlockStoreBackupStorage(app),
-        )
-    }
+@HiltViewModel
+class SigilPanelViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val passkeyManager: PasskeyManager,
+    private val walletKeyManager: WalletKeyManager,
+    private val biometricGate: BiometricGate,
+    private val seedVault: SeedVault,
+    private val sigilBackup: SigilBackup,
+    private val blockStoreStorage: BlockStoreBackupStorage,
+) : ViewModel() {
 
     /**
      * On-disk store for the sigil triple. SharedPreferences is enough — the
@@ -79,7 +62,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
      * scoped to this app's UID.
      */
     private val prefs by lazy {
-        app.getSharedPreferences(SIGIL_PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(SIGIL_PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     private val _status = MutableStateFlow<SigilStatus>(SigilStatus.Initializing)
@@ -117,7 +100,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
             return
         }
         try {
-            val blob = BlockStoreBackupStorage(app).retrieve()
+            val blob = blockStoreStorage.retrieve()
             if (blob != null && blob.isNotEmpty() &&
                 _status.value is SigilStatus.Initializing) {
                 Log.i(TAG, "Block Store backup detected (${blob.size} bytes) — offering Restore vs Start Fresh")
@@ -436,7 +419,7 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
      * any per-host wiring.
      */
     private fun hostAppLabel(): String =
-        app.packageManager.getApplicationLabel(app.applicationInfo).toString()
+        context.packageManager.getApplicationLabel(context.applicationInfo).toString()
 
     /**
      * Persist the recovered seed into [SeedVault] so the wallet panel
@@ -495,14 +478,6 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
     companion object {
         private const val TAG = "SigilPanel"
 
-        /**
-         * Relying-Party id for passkey ceremonies. Must match the
-         * `assetlinks.json` hosted at this domain so Credential Manager
-         * accepts the create/authenticate. See `docs.midnight.network`
-         * or the parent Kuira app's setup for the production value.
-         */
-        private const val DEFAULT_RP_ID = "nel349.github.io"
-
         /** Length of the random user id bound to the new credential. */
         private const val USER_ID_BYTES = 16
 
@@ -533,15 +508,6 @@ class SigilPanelViewModel(private val app: Application) : AndroidViewModel(app) 
         private const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
         /** Set by [dismissBackup] so the BackupAvailable prompt stops re-appearing on every launch. */
         private const val KEY_BACKUP_DISMISSED = "backupDismissed"
-
-        /** Factory for `viewModel(factory = SigilPanelViewModel.Factory)`. */
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
-                    as Application
-                SigilPanelViewModel(app)
-            }
-        }
     }
 }
 
