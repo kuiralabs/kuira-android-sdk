@@ -16,6 +16,7 @@ import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Optional
 import javax.inject.Inject
 
 /**
@@ -53,6 +55,17 @@ class SigilPanelViewModel @Inject constructor(
     private val seedVault: SeedVault,
     private val sigilBackup: SigilBackup,
     private val blockStoreStorage: BlockStoreBackupStorage,
+    /**
+     * Optional host-app hook for round-tripping additional state
+     * (active matches, draft data, etc.) through sigil backup/restore.
+     * `Optional<>` per Dagger's `@BindsOptionalOf` pattern in
+     * [com.midnight.kuira.dapp.di.AppDataBackupModule] — apps that
+     * don't implement the interface get an empty Optional, in which
+     * case backups contain just the seed (BBoard behavior). Apps that
+     * do (e.g. Kicks's `MatchStore`) fill in `appMetadata` and round-
+     * trip their state across uninstall.
+     */
+    private val appDataProvider: Optional<AppDataBackupProvider>,
 ) : ViewModel() {
 
     /**
@@ -259,9 +272,10 @@ class SigilPanelViewModel @Inject constructor(
      * nothing to bind the encryption to). Errors log + leave status
      * unchanged — backup is a side operation, doesn't transition state.
      *
-     * `appMetadata` is intentionally null here: the sigil panel module
-     * doesn't own any host-specific metadata. Hosts that need to round-trip
-     * extra bytes through the backup will wire that themselves in a follow-up.
+     * `appMetadata` is sourced from the host-provided
+     * [AppDataBackupProvider] when one is bound. When no provider is
+     * bound (BBoard et al.), the field stays null and only the seed
+     * goes up.
      */
     fun backupSeed(activity: FragmentActivity) {
         viewModelScope.launch {
@@ -279,6 +293,21 @@ class SigilPanelViewModel @Inject constructor(
                 val bip39Seed = plaintext.bip39Seed.copyOf()
                 plaintext.wipe()
                 Log.i(TAG, "  Seed loaded from SeedVault: ${bip39Seed.size}B (entropy: ${entropy.size}B)")
+
+                // Capture host-app state alongside the seed. Provider
+                // is allowed to return null (nothing to round-trip)
+                // and to throw — we log and treat exceptions as "no
+                // app metadata", since a backup-without-app-data still
+                // protects the user's seed (the load-bearing material).
+                val appMetadata: ByteArray? = appDataProvider.orElse(null)?.let { provider ->
+                    runCatching { provider.snapshot() }
+                        .onFailure { Log.w(TAG, "appDataProvider.snapshot failed; backup will omit app data", it) }
+                        .getOrNull()
+                }
+                if (appMetadata != null) {
+                    Log.i(TAG, "  App metadata: ${appMetadata.size}B from host-provided AppDataBackupProvider")
+                }
+
                 sigilBackup.backup(
                     activity = activity,
                     entropy = entropy,
@@ -286,9 +315,13 @@ class SigilPanelViewModel @Inject constructor(
                     did = sigil.did,
                     credentialId = sigil.credentialId,
                     publicKeyHex = sigil.publicKeyHex,
-                    appMetadata = null,
+                    appMetadata = appMetadata,
                 )
-                Log.i(TAG, "Backup SUCCESS — seed + sigil identity stored in Block Store (no appMetadata)")
+                Log.i(
+                    TAG,
+                    "Backup SUCCESS — seed + sigil identity stored in Block Store " +
+                        "(${if (appMetadata != null) "with ${appMetadata.size}B appMetadata" else "no appMetadata"})",
+                )
             } catch (e: BackupException) {
                 Log.e(TAG, "Backup failed: ${e.message}", e)
             } catch (e: Exception) {
@@ -328,6 +361,32 @@ class SigilPanelViewModel @Inject constructor(
                         // sigil DID is restored but the wallet stays on the
                         // freshly-generated address with 0 balance.
                         restoreSeedIntoVault(activity, restored.entropy, restored.bip39Seed)
+
+                        // Hand the host-app blob (if any) to the registered
+                        // provider BEFORE the SIGKILL below. Code after
+                        // killProcess never runs, so this MUST happen here
+                        // — past sigil restores logged the blob's size in
+                        // a block placed after the kill, which never
+                        // executed and silently dropped the bytes.
+                        val meta = restored.appMetadata
+                        if (meta != null) {
+                            Log.i(TAG, "  App metadata: ${meta.size}B — handing to AppDataBackupProvider")
+                            appDataProvider.orElse(null)?.let { provider ->
+                                runCatching { provider.restore(meta) }
+                                    .onFailure {
+                                        Log.e(
+                                            TAG,
+                                            "appDataProvider.restore failed; app data not restored " +
+                                                "but seed + sigil are. Continuing to relaunch.",
+                                            it,
+                                        )
+                                    }
+                            } ?: Log.w(
+                                TAG,
+                                "appMetadata present (${meta.size}B) but no AppDataBackupProvider bound — dropping",
+                            )
+                        }
+
                         _status.value = SigilStatus.Forged(
                             did = did,
                             credentialId = credentialId,
@@ -365,13 +424,6 @@ class SigilPanelViewModel @Inject constructor(
                         android.os.Process.killProcess(android.os.Process.myPid())
                     } else {
                         Log.w(TAG, "Restore returned a seed but no sigil triple — leaving status unchanged")
-                    }
-                    // App metadata is intentionally null on the backup side
-                    // (panel doesn't manage host-specific blobs). If a future
-                    // host wires metadata through, surface its size here.
-                    val meta = restored.appMetadata
-                    if (meta != null) {
-                        Log.i(TAG, "  App metadata: ${meta.size} bytes (raw, host-specific encoding)")
                     }
                 } finally {
                     restored.wipe()

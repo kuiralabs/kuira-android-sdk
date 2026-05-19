@@ -12,6 +12,7 @@ import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.passkey.P256PublicKey
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.passkey.PasskeyRegistrationResult
+import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import io.mockk.Runs
 import io.mockk.coEvery
@@ -30,6 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.Optional
 
 /**
  * Unit tests for [SigilPanelViewModel].
@@ -252,9 +254,151 @@ class SigilPanelViewModelTest {
         coVerify(exactly = 1) { passkeyManager.createPasskey(activity, any(), any()) }
     }
 
+    // ── backupSeed wiring with AppDataBackupProvider ──
+
+    @Test
+    fun `backupSeed forwards provider snapshot bytes into SigilBackup appMetadata`() = runTest {
+        // Stand up a Forged-state VM with a bound AppDataBackupProvider
+        // that returns a small marker blob. The test asserts that the
+        // marker reaches SigilBackup.backup via the appMetadata
+        // parameter — that's the seam Kicks's MatchStore will use to
+        // round-trip match state through cloud backup.
+        val markerBytes = byteArrayOf(0x01, 0x02, 0x03, 0x04)
+        val provider = mockk<AppDataBackupProvider>().also {
+            coEvery { it.snapshot() } returns markerBytes
+        }
+        coEvery { blockStoreStorage.retrieve() } returns null
+        coEvery {
+            passkeyManager.createPasskey(activity, any(), any())
+        } returns Fixtures.passkeyRegistrationResult()
+        coEvery { seedVault.loadSeed(activity) } returns PlaintextSeed(
+            mnemonicEntropy = ByteArray(PlaintextSeed.ENTROPY_SIZE) { 0x55.toByte() },
+            bip39Seed = ByteArray(PlaintextSeed.SEED_SIZE) { 0x66.toByte() },
+        )
+        coEvery {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = any(),
+            )
+        } returns Unit
+
+        val vm = newVm(appDataProvider = Optional.of(provider))
+        vm.forgeSigil(activity)  // get to Forged state
+        vm.backupSeed(activity)
+
+        coVerify(exactly = 1) { provider.snapshot() }
+        coVerify(exactly = 1) {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = markerBytes,
+            )
+        }
+    }
+
+    @Test
+    fun `backupSeed passes null appMetadata when no provider is bound`() = runTest {
+        // BBoard's behavior — no AppDataBackupProvider, backup contains
+        // only the seed. SigilBackup.backup must see appMetadata=null,
+        // never an empty ByteArray (the SDK relies on null vs. empty to
+        // decide whether to write the appState field).
+        coEvery { blockStoreStorage.retrieve() } returns null
+        coEvery {
+            passkeyManager.createPasskey(activity, any(), any())
+        } returns Fixtures.passkeyRegistrationResult()
+        coEvery { seedVault.loadSeed(activity) } returns PlaintextSeed(
+            mnemonicEntropy = ByteArray(PlaintextSeed.ENTROPY_SIZE) { 0x55.toByte() },
+            bip39Seed = ByteArray(PlaintextSeed.SEED_SIZE) { 0x66.toByte() },
+        )
+        coEvery {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = any(),
+            )
+        } returns Unit
+
+        val vm = newVm()  // default = Optional.empty()
+        vm.forgeSigil(activity)
+        vm.backupSeed(activity)
+
+        coVerify(exactly = 1) {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = null,
+            )
+        }
+    }
+
+    @Test
+    fun `backupSeed survives provider snapshot throwing and still uploads seed`() = runTest {
+        // Provider misbehavior must NOT abort the backup — the seed is
+        // the load-bearing payload. A broken provider just means the
+        // backup ships without app metadata; the user's wallet keys
+        // are still safe.
+        val provider = mockk<AppDataBackupProvider>().also {
+            coEvery { it.snapshot() } throws RuntimeException("provider blew up")
+        }
+        coEvery { blockStoreStorage.retrieve() } returns null
+        coEvery {
+            passkeyManager.createPasskey(activity, any(), any())
+        } returns Fixtures.passkeyRegistrationResult()
+        coEvery { seedVault.loadSeed(activity) } returns PlaintextSeed(
+            mnemonicEntropy = ByteArray(PlaintextSeed.ENTROPY_SIZE) { 0x55.toByte() },
+            bip39Seed = ByteArray(PlaintextSeed.SEED_SIZE) { 0x66.toByte() },
+        )
+        coEvery {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = any(),
+            )
+        } returns Unit
+
+        val vm = newVm(appDataProvider = Optional.of(provider))
+        vm.forgeSigil(activity)
+        vm.backupSeed(activity)
+
+        coVerify(exactly = 1) {
+            sigilBackup.backup(
+                activity = any(),
+                entropy = any(),
+                bip39Seed = any(),
+                did = any(),
+                credentialId = any(),
+                publicKeyHex = any(),
+                appMetadata = null,  // provider threw → blob omitted
+            )
+        }
+    }
+
     // ── Helpers ──
 
-    private fun newVm(): SigilPanelViewModel = SigilPanelViewModel(
+    private fun newVm(
+        appDataProvider: Optional<AppDataBackupProvider> = Optional.empty(),
+    ): SigilPanelViewModel = SigilPanelViewModel(
         context = context,
         passkeyManager = passkeyManager,
         walletKeyManager = walletKeyManager,
@@ -262,6 +406,7 @@ class SigilPanelViewModelTest {
         seedVault = seedVault,
         sigilBackup = sigilBackup,
         blockStoreStorage = blockStoreStorage,
+        appDataProvider = appDataProvider,
     )
 
     private fun prefs() = context.getSharedPreferences(
