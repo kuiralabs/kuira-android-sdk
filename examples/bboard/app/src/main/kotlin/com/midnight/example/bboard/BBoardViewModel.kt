@@ -155,7 +155,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
     // Wallet bootstrap / balance / fund / register-dust methods used to
     // live here as the in-screen canary card's backing logic. All of that
-    // moved to WalletPanelViewModel in :examples:common — BBoard no longer
+    // moved to WalletPanelViewModel in :sdk:dapp-ui — BBoard no longer
     // needs its own implementation. The SDK build path (connectWithSdk +
     // deployAndConnect) remains in this file because it owns the contract
     // lifecycle, which is BBoard-specific.

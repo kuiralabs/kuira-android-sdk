@@ -342,7 +342,7 @@ private fun WalletPill(
 }
 
 // `internal` (not `private`) so PillLabelTest can lock down the formatting
-// contract — see `examples/common/src/test/.../PillLabelTest.kt`.
+// contract — see `sdk/dapp-ui/src/test/.../PillLabelTest.kt`.
 internal fun pillLabel(
     status: WalletStatus,
     network: MidnightNetwork,
