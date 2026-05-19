@@ -1,0 +1,6 @@
+[submodule "kuira-crypto-ffi"]
+	path = kuira-crypto-ffi
+	url = https://github.com/nel349/kuira-midnight-ffi.git
+[submodule "examples/midnight-kicks"]
+	path = examples/midnight-kicks
+	url = https://github.com/nel349/midnight-kicks.git

@@ -1,11 +1,26 @@
 name: dapp-ui tests
 
-# Runs the dapp-ui module's regression suite + a BBoard smoke build on
-# every PR and main-branch push. Block on red — these tests guard the
-# bug classes documented in sdk/dapp-ui/CHANGELOG.md (master-key
-# generation on restore, dismissBackup durability, atomic seed write,
-# init-probe state machine). A red build here means a regression in
-# the same neighborhood that broke users in the wallet's pre-1.0 arc.
+# Runs the dapp-ui module's regression suite on every PR and main-branch
+# push. Block on red — these tests guard the bug classes documented in
+# sdk/dapp-ui/CHANGELOG.md (master-key generation on restore,
+# dismissBackup durability, atomic seed write, init-probe state
+# machine). A red build here means a regression in the same
+# neighborhood that broke users in the wallet's pre-1.0 arc.
+#
+# **Submodule note:** `examples/midnight-kicks` and `kuira-crypto-ffi`
+# are declared in `.gitmodules` but kept PRIVATE on GitHub. The default
+# `GITHUB_TOKEN` provided to actions/checkout only has read access to
+# this repo, not to the submodule repos, so submodule recursion would
+# fail with a 401. We `submodules: false` here and run only the
+# unit-test jobs that don't need the submodule source — currently
+# `:sdk:dapp-ui:testDebugUnitTest` + `:core:auth:testDebugUnitTest`
+# which are JVM-only and don't pull in the native FFI from
+# kuira-crypto-ffi.
+#
+# To re-enable the BBoard consumer smoke build (or future Kicks tests),
+# either make the submodule repos public, or add a Personal Access
+# Token secret with `repo` scope and pass it as
+# `token: ${{ secrets.SUBMODULE_PAT }}` in actions/checkout.
 
 on:
   push:
@@ -26,10 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Submodule pinning for examples/midnight-kicks — we don't run
-          # Kicks tests in this workflow, but the submodule pointer
-          # check still wants the .git pointer resolvable.
-          submodules: recursive
+          # `submodules: false` — see submodule note in the header
+          # comment. Re-enable once submodule access is wired up.
+          submodules: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -55,34 +69,3 @@ jobs:
             sdk/dapp-ui/build/reports/tests/
             core/auth/build/reports/tests/
           retention-days: 7
-
-  bboard-smoke:
-    name: BBoard consumer smoke build
-    runs-on: ubuntu-latest
-    # Run in parallel with unit-tests — they don't share artifacts in
-    # this workflow (BBoard consumes mavenLocal, so it builds its own
-    # SDK). Faster total wall-clock.
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      # BBoard consumes Kuira via Maven coordinates, so the SDK has to
-      # be present in the local Maven repo before BBoard's Gradle
-      # invocation looks for it. Publishing from the parent project's
-      # root build does the right thing.
-      - name: Publish Kuira SDK to mavenLocal
-        run: ./gradlew publishToMavenLocal
-
-      - name: Build BBoard example
-        working-directory: examples/bboard
-        run: ./gradlew :app:assembleDebug
