@@ -434,7 +434,7 @@ class SigilPanelViewModel @Inject constructor(
      * will keep using it for this process lifetime. The user has to relaunch
      * the app for the wallet panel to rebootstrap on the recovered seed.
      */
-    private suspend fun restoreSeedIntoVault(
+    internal suspend fun restoreSeedIntoVault(
         activity: FragmentActivity,
         recoveredEntropy: ByteArray,
         recoveredBip39Seed: ByteArray,
@@ -501,13 +501,16 @@ class SigilPanelViewModel @Inject constructor(
          * legacy `SigilCard` shows up in the panel without a migration step.
          * Keys (did / credentialId / publicKeyHex) also match. Once BBoard's
          * legacy card is removed in step 4, this file becomes single-owner.
+         *
+         * `internal` so tests can reference the same constants — single
+         * source of truth for the on-disk schema.
          */
-        private const val SIGIL_PREFS_NAME = "sigil_identity"
-        private const val KEY_DID = "did"
-        private const val KEY_CREDENTIAL_ID = "credentialId"
-        private const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
+        internal const val SIGIL_PREFS_NAME = "sigil_identity"
+        internal const val KEY_DID = "did"
+        internal const val KEY_CREDENTIAL_ID = "credentialId"
+        internal const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
         /** Set by [dismissBackup] so the BackupAvailable prompt stops re-appearing on every launch. */
-        private const val KEY_BACKUP_DISMISSED = "backupDismissed"
+        internal const val KEY_BACKUP_DISMISSED = "backupDismissed"
     }
 }
 

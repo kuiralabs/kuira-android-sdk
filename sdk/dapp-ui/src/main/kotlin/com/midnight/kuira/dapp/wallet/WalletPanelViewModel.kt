@@ -258,7 +258,7 @@ class WalletPanelViewModel @Inject constructor(
         }
     }
 
-    private suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
+    internal suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
         if (seedVault.hasSeed()) {
             Log.i(TAG, "Loading existing seed from SeedVault (biometric prompt)…")
             val plaintext = seedVault.loadSeed(activity)

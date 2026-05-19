@@ -107,4 +107,8 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Shared `MainDispatcherRule` — used by ViewModel tests to swap
+    // Dispatchers.Main for a TestDispatcher so `init { viewModelScope.launch }`
+    // runs inline.
+    testImplementation(project(":core:testing"))
 }

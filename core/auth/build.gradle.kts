@@ -35,6 +35,10 @@ android {
 
     testOptions {
         unitTests {
+            // Real Android system resources for Robolectric tests
+            // (SeedVault touches Context.filesDir; Robolectric stubs it
+            // with a real per-test temp directory).
+            isIncludeAndroidResources = true
             isReturnDefaultValues = true
         }
     }
@@ -61,8 +65,17 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // Testing
+    //
+    // mockk stubs BiometricGate's cipher chain so SeedVaultTest can
+    // verify the silent / prompt branching without a real Keystore.
+    // Robolectric provides a real Context.filesDir + SharedPreferences
+    // — required for testing atomic file IO + storeSeed/loadSeed
+    // round-trips on the JVM. kotlinx-coroutines-test gives suspend
+    // tests + a controllable Main dispatcher.
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
     testImplementation(project(":core:testing"))
 
     // Android Instrumentation Testing
