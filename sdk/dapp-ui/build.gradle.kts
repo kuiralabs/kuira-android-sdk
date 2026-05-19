@@ -30,6 +30,21 @@ android {
         // See `SigilPanelViewModel.testPrf` for the canonical example.
         buildConfig = true
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric prerequisite. Without it, the test classpath has
+            // no `res/values/...` for Android system resource lookups
+            // (which Robolectric's shadow Context/Resources requires) and
+            // tests blow up at construction with "Unable to find resource".
+            // Cheap to enable; needed by every Robolectric-flagged test.
+            isIncludeAndroidResources = true
+            // Don't silently return default values for unstubbed Android
+            // API calls — Robolectric handles real-shadow behaviour for
+            // the cases that matter (SharedPreferences durability, file IO).
+            isReturnDefaultValues = false
+        }
+    }
 }
 
 dependencies {
@@ -59,5 +74,23 @@ dependencies {
     // against android.hardware.camera and bloats the APK).
     implementation(libs.zxing.core)
 
+    // ── Unit-test stack ──
+    //
+    // mockk for state-machine ordering / mocked dependencies — supports
+    // suspend funcs natively which is essential since both ViewModels
+    // expose coroutine entry points.
+    //
+    // Robolectric for the small set of tests that need real Android
+    // system behaviour (SharedPreferences durability — verifying
+    // `dismissBackup`'s commit() actually fsyncs — and SeedVault's
+    // atomic-write temp-file-rename on real Context.filesDir). Pure
+    // state-machine tests don't need Robolectric.
+    //
+    // kotlinx-coroutines-test for `runTest` + `TestScope` —
+    // viewModelScope launches need a controlled dispatcher to be
+    // assertable from synchronous test bodies.
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
