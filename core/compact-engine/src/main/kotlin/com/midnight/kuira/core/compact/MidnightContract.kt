@@ -220,7 +220,19 @@ class MidnightContract private constructor(
         /** Contract name (used for proving key management). */
         var name: String? = null
 
-        /** Contract JavaScript as an InputStream (IIFE format). */
+        /**
+         * Contract JavaScript as an InputStream. Accepts either:
+         *  - Manually-preprocessed IIFE (the older BBoard pattern —
+         *    `import * as __compactRuntime` replaced with a comment,
+         *    `export` keywords stripped), or
+         *  - Raw `compactc` output with ES module syntax intact
+         *    (the natural shape of `contract/src/managed/<name>/contract/index.js`).
+         *
+         * The builder normalizes ES module syntax to script-compatible
+         * form via [normalizeContractJs] before handing the content to
+         * the circuit executor — consuming dApps no longer need a
+         * per-project preprocessing step in their Gradle build.
+         */
         var contractJs: InputStream? = null
 
         /** Deployed contract address (64 hex chars). */
@@ -259,10 +271,14 @@ class MidnightContract private constructor(
             }
 
             val jsContent = jsStream.use { it.bufferedReader().readText() }
+            // Normalize ES module syntax (compactc emits `import * as` +
+            // `export var/class`) to plain-script form. QuickJs is a
+            // script-only engine; module declarations are SyntaxErrors.
+            val normalizedJs = normalizeContractJs(jsContent)
 
             return MidnightContract(
                 config = config,
-                contractJsContent = jsContent,
+                contractJsContent = normalizedJs,
                 contractAddress = addr ?: "",
                 witnesses = witnesses.toMap(),
                 initialPrivateStateMap = initialPrivateState,
@@ -280,5 +296,39 @@ class MidnightContract private constructor(
             val builder = ContractBuilder().apply(block)
             return builder.build(config)
         }
+
+        /**
+         * Convert `compactc`-generated ES module JavaScript into the
+         * plain-script form QuickJs can evaluate. Strips two kinds of
+         * declarations:
+         *
+         *  - Top-level `import …` lines — the IIFE-wrapped
+         *    `compact-runtime-iife.js` we load before the contract
+         *    already exposes `__compactRuntime` as a top-level `var`,
+         *    so the import is redundant.
+         *  - `export ` prefix on `var` / `let` / `const` / `class` /
+         *    `function` / `async function` declarations. The
+         *    declarations themselves stay; only the keyword is
+         *    removed.
+         *
+         * Idempotent: an already-IIFE file (no `import`/`export`
+         * lines) round-trips unchanged.
+         *
+         * Public/internal so the test suite can pin the contract.
+         */
+        internal fun normalizeContractJs(raw: String): String =
+            raw.lineSequence()
+                .mapNotNull { line ->
+                    val trimmed = line.trimStart()
+                    when {
+                        trimmed.startsWith("import ") -> null
+                        trimmed.startsWith("export ") -> {
+                            val indent = line.substring(0, line.length - trimmed.length)
+                            indent + trimmed.removePrefix("export ")
+                        }
+                        else -> line
+                    }
+                }
+                .joinToString("\n")
     }
 }
