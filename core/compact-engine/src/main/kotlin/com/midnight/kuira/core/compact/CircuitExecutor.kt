@@ -316,10 +316,27 @@ class CircuitExecutor(private val context: Context) {
                 const resultStr = __witness_$name(
                     JSON.stringify(witnessContext.privateState)
                 );
+                // Format: "privateState|KIND|csvBytes" — KIND is the
+                // WitnessKind enum name from the Kotlin side, used to
+                // pick the right JS-side type for the Compact runtime.
+                // See WitnessKind KDoc for the type ↔ Compact mapping.
                 const parts = resultStr.split('|');
                 const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
-                const values = parts[1].split(',').map(Number);
-                const result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
+                const kind = parts[1];
+                const values = parts[2].split(',').map(Number);
+                let result;
+                if (kind === 'VECTOR_OF_UINT8') {
+                    // Vector<N, Uint<8>> — Compact runtime expects a
+                    // regular Array of BigInts; a Uint8Array would
+                    // fail the runtime's type check with the
+                    // "received {0:…, 1:…}" error.
+                    result = values.map(function (v) { return BigInt(v); });
+                } else {
+                    // BYTES (default) — Bytes<N> + scalar Uint<…>.
+                    // Single-byte payloads become BigInt; multi-byte
+                    // become Uint8Array.
+                    result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
+                }
                 return [privateState, result];
             }
             """.trimIndent()
@@ -552,20 +569,71 @@ fun interface WitnessProvider {
 }
 
 /**
+ * How the witness's [WitnessResult.data] bytes should be presented to
+ * the Compact runtime when the witness function is called from JS.
+ *
+ * The Compact type system distinguishes between byte-string types
+ * (`Bytes<N>` → JS `Uint8Array(N)`) and vector-of-int types
+ * (`Vector<N, Uint<8>>` → JS `Array<bigint>` of length N). The SDK
+ * historically only emitted the byte-string form, which silently
+ * broke any contract whose witness was typed as a `Vector<N, Uint<…>>`
+ * (the Compact runtime's type validator rejected the Uint8Array as
+ * "expected Vector<…> but received {0:…, 1:…}").
+ *
+ * Callers pick the right kind per witness; the default ([BYTES])
+ * preserves the historical behavior so consumers that haven't
+ * adopted the new param continue to work.
+ */
+enum class WitnessKind {
+    /**
+     * Default — multi-byte payload becomes a JS `Uint8Array`; a
+     * single-byte payload becomes a `BigInt`. Matches Compact's
+     * `Bytes<N>` and scalar `Uint<…>` types.
+     *
+     * BBoard's `localSecretKey: Bytes<32>` is the canonical example.
+     */
+    BYTES,
+
+    /**
+     * Multi-byte payload becomes a JS `Array<bigint>` where each
+     * element is one byte from [WitnessResult.data] lifted to a
+     * `BigInt`. Matches Compact's `Vector<N, Uint<8>>` (also written
+     * as `Vector<N, Uint<0..256>>` in runtime error messages).
+     *
+     * Kicks's V3 contract uses this for `localShoots` /
+     * `localKeeps`: 5 picks per player, each in range 0..2 (L/C/R),
+     * packed into a single witness so the whole regulation commits
+     * in one transaction.
+     */
+    VECTOR_OF_UINT8,
+}
+
+/**
  * Result of a witness callback.
  *
  * @param privateState The private state to pass back (null to keep current)
- * @param data The witness byte array (e.g., secret key, signature)
+ * @param data The witness byte array (e.g., secret key, signature, packed picks)
+ * @param kind How [data] should be presented to the Compact runtime —
+ *   defaults to [WitnessKind.BYTES] which matches the existing behavior.
+ *   Set to [WitnessKind.VECTOR_OF_UINT8] for `Vector<N, Uint<8>>`
+ *   witnesses.
  */
 data class WitnessResult(
     val privateState: Any?,
     val data: ByteArray,
+    val kind: WitnessKind = WitnessKind.BYTES,
 ) {
-    /** Serialize as "privateState|byte1,byte2,..." for passing through QuickJS. */
+    /**
+     * Serialize as "privateState|KIND|byte1,byte2,…" for passing
+     * through QuickJS. Three-part pipe-delimited form so the JS
+     * wrapper can branch on KIND when reconstructing the value
+     * the Compact runtime expects.
+     */
     internal fun toJsArrayString(): String {
         val stateStr = if (privateState == null) "null" else privateState.toString()
+        val kindStr = kind.name
         val dataStr = data.joinToString(",") { (it.toInt() and 0xFF).toString() }
-        return "$stateStr|$dataStr"
+        return "$stateStr|$kindStr|$dataStr"
     }
 
     /** Securely zero the witness data after use. */
