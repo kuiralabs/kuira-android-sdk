@@ -135,22 +135,7 @@ class CircuitExecutor(private val context: Context) {
             loadRuntime(this, contractJs)
 
             val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
-            val witnessEntries = witnesses.keys.joinToString(",\n") { name ->
-                """
-                $name: function(witnessContext) {
-                    const resultStr = __witness_$name(
-                        JSON.stringify(witnessContext.privateState)
-                    );
-                    const parts = resultStr.split('|');
-                    const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
-                    const values = parts[1].split(',').map(Number);
-                    // Single byte → return as BigInt (for Uint<8> witnesses)
-                    // Multi byte → return as Uint8Array (for Bytes<N> witnesses)
-                    const result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
-                    return [privateState, result];
-                }
-                """.trimIndent()
-            }
+            val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
 
             val constructorJs = """
                 try {
@@ -310,37 +295,7 @@ class CircuitExecutor(private val context: Context) {
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
     ): String {
-        val witnessEntries = witnesses.keys.joinToString(",\n") { name ->
-            """
-            $name: function(witnessContext) {
-                const resultStr = __witness_$name(
-                    JSON.stringify(witnessContext.privateState)
-                );
-                // Format: "privateState|KIND|csvBytes" — KIND is the
-                // WitnessKind enum name from the Kotlin side, used to
-                // pick the right JS-side type for the Compact runtime.
-                // See WitnessKind KDoc for the type ↔ Compact mapping.
-                const parts = resultStr.split('|');
-                const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
-                const kind = parts[1];
-                const values = parts[2].split(',').map(Number);
-                let result;
-                if (kind === 'VECTOR_OF_UINT8') {
-                    // Vector<N, Uint<8>> — Compact runtime expects a
-                    // regular Array of BigInts; a Uint8Array would
-                    // fail the runtime's type check with the
-                    // "received {0:…, 1:…}" error.
-                    result = values.map(function (v) { return BigInt(v); });
-                } else {
-                    // BYTES (default) — Bytes<N> + scalar Uint<…>.
-                    // Single-byte payloads become BigInt; multi-byte
-                    // become Uint8Array.
-                    result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
-                }
-                return [privateState, result];
-            }
-            """.trimIndent()
-        }
+        val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
 
         val argsStr = if (circuitArgs.isNotEmpty()) ", ${circuitArgs.joinToString(", ")}" else ""
         val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
@@ -567,6 +522,57 @@ class CircuitExecutor(private val context: Context) {
 fun interface WitnessProvider {
     fun provide(privateStateJson: Any?): WitnessResult
 }
+
+/**
+ * Build the per-witness JS function bodies that bridge native
+ * `__witness_$name` calls to the shape the Compact runtime expects.
+ *
+ * **Single source of truth** for both [CircuitExecutor.executeConstructor]
+ * and [CircuitExecutor.buildCircuitJs] — duplicating the template
+ * silently broke the wire format on 2026-05-19 when [WitnessResult]
+ * was extended from 2-part to 3-part. Keep the parser logic here so
+ * future format changes can't drift between the two execution paths.
+ *
+ * Wire format: each native witness call returns
+ *   `"privateState|KIND|byte1,byte2,…"`
+ * where KIND is the [WitnessKind] enum name. The JS branches:
+ *  - `VECTOR_OF_UINT8` → `Array<bigint>` of the byte values, matching
+ *    the Compact `Vector<N, Uint<8>>` type
+ *  - `BYTES` (default) → length-1 ⇒ `BigInt`, length-N ⇒ `Uint8Array`,
+ *    matching scalar `Uint<…>` and `Bytes<N>` respectively
+ */
+private fun buildWitnessEntriesJs(witnessNames: Collection<String>): String =
+    witnessNames.joinToString(",\n") { name ->
+        """
+        $name: function(witnessContext) {
+            const resultStr = __witness_$name(
+                JSON.stringify(witnessContext.privateState)
+            );
+            // Format: "privateState|KIND|csvBytes" — KIND is the
+            // WitnessKind enum name from the Kotlin side, used to
+            // pick the right JS-side type for the Compact runtime.
+            // See WitnessKind KDoc for the type ↔ Compact mapping.
+            const parts = resultStr.split('|');
+            const privateState = parts[0] === 'null' ? witnessContext.privateState : JSON.parse(parts[0]);
+            const kind = parts[1];
+            const values = parts[2].split(',').map(Number);
+            let result;
+            if (kind === 'VECTOR_OF_UINT8') {
+                // Vector<N, Uint<8>> — Compact runtime expects a
+                // regular Array of BigInts; a Uint8Array would
+                // fail the runtime's type check with the
+                // "received {0:…, 1:…}" error.
+                result = values.map(function (v) { return BigInt(v); });
+            } else {
+                // BYTES (default) — Bytes<N> + scalar Uint<…>.
+                // Single-byte payloads become BigInt; multi-byte
+                // become Uint8Array.
+                result = values.length === 1 ? BigInt(values[0]) : new Uint8Array(values);
+            }
+            return [privateState, result];
+        }
+        """.trimIndent()
+    }
 
 /**
  * How the witness's [WitnessResult.data] bytes should be presented to
