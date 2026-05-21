@@ -27,9 +27,22 @@ class MidnightContract private constructor(
     val contractAddress: String,
     private val witnesses: Map<String, WitnessProvider>,
     private val initialPrivateStateMap: Map<String, Any?>,
-    private val coinPublicKey: ByteArray,
+    private val coinPublicKey: ByteArray?,
     private val circuitVerifierKeys: Map<String, ByteArray> = emptyMap(),
 ) {
+    /**
+     * Per-contract [LedgerEvaluator]. Lazily created on first
+     * [ledger] call so the QuickJs setup cost is amortized across a
+     * polling loop instead of being paid per tick.
+     *
+     * The evaluator itself is stateless across calls (each
+     * [LedgerEvaluator.readAll] currently spins a fresh QuickJs
+     * context — see its docs for the longer-term caching plan), but
+     * caching it here avoids re-allocating the wrapper and lets the
+     * evaluator reuse its pre-loaded asset strings.
+     */
+    private val ledgerEvaluator: LedgerEvaluator by lazy { LedgerEvaluator(config.context) }
+
     /**
      * Call a circuit and submit the transaction to the blockchain.
      *
@@ -44,6 +57,8 @@ class MidnightContract private constructor(
         vararg args: Any?,
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): TransactionReceipt {
+        requireWriteCapable()
+        requireAddress("call")
         val prepared = prepare(circuitName, *args, onProgress = onProgress)
 
         onProgress?.invoke(ContractCallStage.Balancing)
@@ -84,6 +99,8 @@ class MidnightContract private constructor(
         vararg args: Any?,
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): PreparedTransaction {
+        requireWriteCapable()
+        requireAddress("prepare")
         val jsArgs = ArgConverter.toJsExpressions(*args)
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
@@ -113,7 +130,7 @@ class MidnightContract private constructor(
                 circuitArgs = jsArgs,
                 witnesses = witnesses,
                 initialPrivateState = privateStateJs,
-                coinPublicKey = coinPublicKey,
+                coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
                 networkId = config.networkId,
                 onChainStateHex = onChainStateHex,
                 ledgerParametersHex = ledgerParamsHex,
@@ -148,6 +165,39 @@ class MidnightContract private constructor(
     }
 
     /**
+     * Read the contract's ledger state losslessly.
+     *
+     * Returns a [MidnightLedger] with every top-level ledger field
+     * decoded by the contract's own `ledger()` function via the
+     * runtime — NOT by parsing the indexer's flattened JSON cell
+     * tree. This is the only way to recover positional information
+     * for `Vector<N, Uint<8>>` (and similar variable-byte) cells
+     * when the array contains internal zero elements; the cell hex
+     * exposed by `MidnightConfig.queryState` strips zero-byte
+     * elements with no positional markers.
+     *
+     * Implementation: fetch the SCALE state hex from the indexer →
+     * the cached [ledgerEvaluator] invokes `ledger(chargedState)`
+     * via QuickJs and marshals each typed getter result back to
+     * Kotlin. The result Map is materialized eagerly so subsequent
+     * typed accessors are cheap.
+     *
+     * @throws ContractCallException.StateFetchFailed if the indexer
+     *   query fails.
+     * @throws LedgerReadException if the JS evaluation fails or the
+     *   contract JS doesn't export `ledger` (likely a contract /
+     *   client version mismatch).
+     * @throws IllegalArgumentException if this contract was built
+     *   without an address.
+     */
+    suspend fun ledger(): MidnightLedger {
+        requireAddress("ledger")
+        val stateHex = config.fetchContractState(contractAddress)
+        val fields = ledgerEvaluator.readAll(contractJsContent, stateHex)
+        return MidnightLedger(fields)
+    }
+
+    /**
      * Deploy a new contract instance to the blockchain.
      *
      * Runs the constructor in QuickJS, proves the deploy tx, balances, and submits.
@@ -159,6 +209,7 @@ class MidnightContract private constructor(
     suspend fun deploy(
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): DeployResult {
+        requireWriteCapable()
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
         // Step 1: Execute constructor
@@ -169,7 +220,7 @@ class MidnightContract private constructor(
                 contractJs = contractJsContent,
                 witnesses = witnesses,
                 initialPrivateState = privateStateJs,
-                coinPublicKey = coinPublicKey,
+                coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
                 networkId = config.networkId,
                 verifierKeys = circuitVerifierKeys.mapValues { (_, bytes) ->
                     bytes.joinToString("") { "%02x".format(it) }
@@ -260,7 +311,12 @@ class MidnightContract private constructor(
 
         internal fun build(config: MidnightConfig): MidnightContract {
             val jsStream = requireNotNull(contractJs) { "contractJs is required" }
-            val cpk = requireNotNull(coinPublicKey) { "coinPublicKey is required" }
+            // coinPublicKey is OPTIONAL — ledger reads don't use it.
+            // Circuit calls (call/prepare/deploy) DO use it; they call
+            // requireWriteCapable() which throws a clear error when cpk
+            // is null. This lets a dApp build a read-only contract
+            // handle for ledger polling without having a wallet attached.
+            val cpk: ByteArray? = coinPublicKey
 
             val addr = address
             if (addr != null) {
@@ -285,6 +341,34 @@ class MidnightContract private constructor(
                 coinPublicKey = cpk,
                 circuitVerifierKeys = circuitVerifierKeys,
             )
+        }
+    }
+
+    /**
+     * Throws if this contract was built without a [coinPublicKey] —
+     * signals that the caller is attempting a write circuit
+     * (call/prepare/deploy) on a read-only contract handle.
+     * Read-only contracts are built without cpk; writes need a real
+     * wallet-bound cpk.
+     */
+    private fun requireWriteCapable() {
+        if (coinPublicKey == null) {
+            throw IllegalStateException(
+                "this MidnightContract was built without a coinPublicKey — it can only " +
+                    "perform ledger reads via ledger(). Call/prepare/deploy require a " +
+                    "real coinPublicKey from the wallet."
+            )
+        }
+    }
+
+    /**
+     * Throws if this contract was built without an address.
+     * [opName] is the calling method name, included verbatim in the
+     * error so the developer sees which API call needs an address.
+     */
+    private fun requireAddress(opName: String) {
+        require(contractAddress.isNotEmpty()) {
+            "MidnightContract was built without an address — $opName() needs a deployed contract"
         }
     }
 
