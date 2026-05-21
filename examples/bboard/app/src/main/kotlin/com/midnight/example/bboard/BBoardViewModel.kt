@@ -356,13 +356,20 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 val addr = deployResult.contractAddress
                 Log.i(TAG, "Deployed at: $addr (${deployResult.timings})")
 
-                // Wait for indexer to catch up with the newly deployed contract
+                // Wait for indexer to catch up with the newly deployed contract.
+                // Read-only handle: no witnesses, no coinPublicKey — ledger()
+                // only needs the contract JS + the address.
                 _state.value = BBoardState.Connecting("Deployed at ${addr.take(8)}... Waiting for indexer...")
-                val tempRepo = BBoardRepository(midnightSdk.config)
+                val waitContract = MidnightContract.create(midnightSdk.config) {
+                    contractJs = getApplication<Application>().assets
+                        .open("runtime/bboard-contract-iife.js")
+                    address = addr
+                }
+                val tempRepo = BBoardRepository(waitContract)
                 var retries = 0
                 while (retries < 10) {
                     kotlinx.coroutines.delay(2000)
-                    val content = tempRepo.fetchBoardState(addr)
+                    val content = tempRepo.fetchBoardState()
                     if (content !is BoardContent.NotDeployed && content !is BoardContent.Error) break
                     retries++
                     _state.value = BBoardState.Connecting("Waiting for indexer... (${retries * 2}s)")
@@ -434,11 +441,11 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
         contract = bboard
         currentAddress = contractAddress
 
-        val repo = BBoardRepository(cfg)
+        val repo = BBoardRepository(bboard)
         repository = repo
 
         _state.value = BBoardState.Connecting("Fetching board state...")
-        val boardContent = repo.fetchBoardState(contractAddress)
+        val boardContent = repo.fetchBoardState()
         val boardState = when (boardContent) {
             is BoardContent.Vacant -> BoardState.Vacant
             is BoardContent.Occupied -> BoardState.Occupied(boardContent.message)
@@ -533,10 +540,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         val current = _state.value as? BBoardState.Connected ?: return
         val repo = repository ?: return
-        val addr = currentAddress ?: return
 
         viewModelScope.launch {
-            val content = repo.fetchBoardState(addr)
+            val content = repo.fetchBoardState()
             val boardState = when (content) {
                 is BoardContent.Vacant -> BoardState.Vacant
                 is BoardContent.Occupied -> BoardState.Occupied(content.message)

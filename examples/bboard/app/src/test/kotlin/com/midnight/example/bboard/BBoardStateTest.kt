@@ -31,26 +31,9 @@ class BBoardStateTest {
         assertTrue("Should be standalone when set", state.standalone)
     }
 
-    // ── NetworkChoice values ──
-
-    @Test
-    fun `NetworkChoice has correct network IDs`() {
-        assertEquals("undeployed", NetworkChoice.LOCALNET.networkId)
-        assertEquals("preview", NetworkChoice.PREVIEW.networkId)
-        assertEquals("preprod", NetworkChoice.PREPROD.networkId)
-    }
-
-    @Test
-    fun `NetworkChoice LOCALNET uses localhost URLs`() {
-        assertTrue(
-            "Indexer should use localhost",
-            NetworkChoice.LOCALNET.indexerUrl.contains("10.0.2.2"),
-        )
-        assertTrue(
-            "Wallet should use localhost",
-            NetworkChoice.LOCALNET.walletUrl.contains("10.0.2.2"),
-        )
-    }
+    // NetworkChoice tests removed — the type was deleted in the
+    // standalone-Gradle split refactor (8404af3) but the tests
+    // weren't updated. There's nothing to test here anymore.
 
     // ── Board state transitions ──
 
