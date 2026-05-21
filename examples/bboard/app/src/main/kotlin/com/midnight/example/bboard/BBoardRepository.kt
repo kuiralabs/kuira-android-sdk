@@ -4,6 +4,7 @@ import android.util.Log
 import com.midnight.kuira.core.compact.ContractCallException
 import com.midnight.kuira.core.compact.LedgerReadException
 import com.midnight.kuira.core.compact.MidnightContract
+import com.midnight.kuira.core.compact.MidnightLedger
 
 /**
  * Reads BBoard contract state via [MidnightContract.ledger] — the
@@ -31,7 +32,7 @@ class BBoardRepository(private val contract: MidnightContract) {
             val stateCode = ledger.getUint8("state")
             when (stateCode) {
                 STATE_VACANT -> BoardContent.Vacant
-                STATE_OCCUPIED -> BoardContent.Occupied(message = readMessage(ledger))
+                STATE_OCCUPIED -> readOccupiedMessage(ledger)
                 else -> BoardContent.Error("unknown board state code: $stateCode")
             }
         } catch (e: ContractCallException.StateFetchFailed) {
@@ -54,17 +55,25 @@ class BBoardRepository(private val contract: MidnightContract) {
 
     /**
      * Unpack the `Maybe<Opaque<String>>` envelope. The compact runtime
-     * marshals this as a struct `{is_some: Boolean, value: String}`;
-     * [com.midnight.kuira.core.compact.MidnightLedger.getRaw] returns
-     * the struct as `Map<String, Any?>`. Returns a placeholder for
-     * `is_some=false` (BoardState.Occupied implies a real message, but
-     * we don't want to throw if the chain is briefly in a mid-tx state).
+     * marshals this as a struct `{is_some: Boolean, value: String}`,
+     * which [MidnightLedger.getRaw] returns as `Map<String, Any?>`.
+     *
+     * `state == OCCUPIED` AND `is_some == false` is a contract-
+     * invariant violation — `post` sets both together and `takeDown`
+     * clears both together. Surfacing as [BoardContent.Error] makes
+     * the violation visible instead of silently falling back to a
+     * placeholder string.
      */
-    private fun readMessage(ledger: com.midnight.kuira.core.compact.MidnightLedger): String {
+    private fun readOccupiedMessage(ledger: MidnightLedger): BoardContent {
         val raw = ledger.getRaw("message") as? Map<*, *>
-            ?: return "(message)"
+            ?: return BoardContent.Error("message field has unexpected shape")
         val isSome = raw["is_some"] as? Boolean ?: false
-        return if (isSome) (raw["value"] as? String ?: "(message)") else "(message)"
+        if (!isSome) {
+            return BoardContent.Error("state=OCCUPIED but message.is_some=false")
+        }
+        val text = raw["value"] as? String
+            ?: return BoardContent.Error("message.value is not a String")
+        return BoardContent.Occupied(message = text)
     }
 
     companion object {

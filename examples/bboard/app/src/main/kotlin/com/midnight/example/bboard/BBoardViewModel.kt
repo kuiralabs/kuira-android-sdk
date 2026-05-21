@@ -73,7 +73,6 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private var sdkNetwork: MidnightNetwork? = null
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
-    private var currentAddress: String? = null
 
     /**
      * Passkey manager held for the access-key authorize flow only — the
@@ -439,7 +438,6 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
             this.coinPublicKey = coinPublicKey
         }
         contract = bboard
-        currentAddress = contractAddress
 
         val repo = BBoardRepository(bboard)
         repository = repo
