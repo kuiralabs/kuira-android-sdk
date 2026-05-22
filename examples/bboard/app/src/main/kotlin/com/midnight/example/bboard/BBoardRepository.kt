@@ -28,23 +28,15 @@ class BBoardRepository(private val contract: MidnightContract) {
      */
     suspend fun fetchBoardState(): BoardContent {
         return try {
-            val ledger = contract.ledger()
-            val stateCode = ledger.getUint8("state")
-            when (stateCode) {
-                STATE_VACANT -> BoardContent.Vacant
-                STATE_OCCUPIED -> readOccupiedMessage(ledger)
-                else -> BoardContent.Error("unknown board state code: $stateCode")
-            }
+            classify(contract.ledger())
         } catch (e: ContractCallException.StateFetchFailed) {
             // Indexer hasn't seen the contract yet — deploy tx in flight
             // or the address simply doesn't exist on chain.
             Log.d(TAG, "fetchBoardState: state fetch failed — ${e.message}")
             BoardContent.NotDeployed
         } catch (e: LedgerReadException) {
-            // The chain returned bytes but the ledger() invocation
-            // failed. Most often this is a transient indexer-lag
-            // window post-deploy; treat as NotDeployed so the wait
-            // loop can retry.
+            // Transient indexer-lag window post-deploy. Returning
+            // NotDeployed lets the wait loop retry.
             Log.d(TAG, "fetchBoardState: ledger read failed — ${e.message}")
             BoardContent.NotDeployed
         } catch (e: Exception) {
@@ -53,34 +45,33 @@ class BBoardRepository(private val contract: MidnightContract) {
         }
     }
 
-    /**
-     * Unpack the `Maybe<Opaque<String>>` envelope. The compact runtime
-     * marshals this as a struct `{is_some: Boolean, value: String}`,
-     * which [MidnightLedger.getRaw] returns as `Map<String, Any?>`.
-     *
-     * `state == OCCUPIED` AND `is_some == false` is a contract-
-     * invariant violation — `post` sets both together and `takeDown`
-     * clears both together. Surfacing as [BoardContent.Error] makes
-     * the violation visible instead of silently falling back to a
-     * placeholder string.
-     */
-    private fun readOccupiedMessage(ledger: MidnightLedger): BoardContent {
-        val raw = ledger.getRaw("message") as? Map<*, *>
-            ?: return BoardContent.Error("message field has unexpected shape")
-        val isSome = raw["is_some"] as? Boolean ?: false
-        if (!isSome) {
-            return BoardContent.Error("state=OCCUPIED but message.is_some=false")
-        }
-        val text = raw["value"] as? String
-            ?: return BoardContent.Error("message.value is not a String")
-        return BoardContent.Occupied(message = text)
-    }
-
     companion object {
         private const val TAG = "BBoard"
         private const val STATE_VACANT = 0
         private const val STATE_OCCUPIED = 1
+
+        /**
+         * Pure mapping from a [MidnightLedger] snapshot to a
+         * [BoardContent]. Extracted so unit tests can drive it
+         * directly with a canned ledger — no need to fake the full
+         * [MidnightContract] (whose constructor is private).
+         */
+        internal fun classify(ledger: MidnightLedger): BoardContent {
+            return when (val stateCode = ledger.getUint8("state")) {
+                STATE_VACANT -> BoardContent.Vacant
+                STATE_OCCUPIED -> {
+                    // `post` sets both fields together and `takeDown`
+                    // clears them together — state=OCCUPIED with no
+                    // message is a contract-invariant violation.
+                    val message = ledger.getMaybeString("message")
+                        ?: return BoardContent.Error("state=OCCUPIED but message is absent")
+                    BoardContent.Occupied(message)
+                }
+                else -> BoardContent.Error("unknown board state code: $stateCode")
+            }
+        }
     }
+
 }
 
 /** Parsed board content from on-chain state. */

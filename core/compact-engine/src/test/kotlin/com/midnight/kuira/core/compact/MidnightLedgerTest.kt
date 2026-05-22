@@ -206,6 +206,72 @@ class MidnightLedgerTest {
         assertEquals("Boolean", ex.expected)
     }
 
+    // ── String / Maybe<String> ──────────────────────────────────────────
+
+    @Test
+    fun `getString decodes an Opaque String field`() {
+        val ledger = MidnightLedger(mapOf("msg" to "hello world"))
+        assertEquals("hello world", ledger.getString("msg"))
+    }
+
+    @Test
+    fun `getString throws WrongType when the field is not a String`() {
+        val ledger = MidnightLedger(mapOf("notString" to BigInteger.ONE))
+        val ex = assertThrowsWrongType { ledger.getString("notString") }
+        assertEquals("String", ex.expected)
+    }
+
+    @Test
+    fun `getMaybeString returns null when is_some=false`() {
+        val ledger = MidnightLedger(
+            mapOf("msg" to mapOf("is_some" to false, "value" to "")),
+        )
+        assertNull(ledger.getMaybeString("msg"))
+    }
+
+    @Test
+    fun `getMaybeString returns the inner String when is_some=true`() {
+        val ledger = MidnightLedger(
+            mapOf("msg" to mapOf("is_some" to true, "value" to "hello")),
+        )
+        assertEquals("hello", ledger.getMaybeString("msg"))
+    }
+
+    @Test
+    fun `getMaybeString throws WrongType when raw is not a Map`() {
+        val ledger = MidnightLedger(mapOf("msg" to "raw string, not wrapped in Maybe"))
+        val ex = assertThrowsWrongType { ledger.getMaybeString("msg") }
+        assertTrue(ex.expected.contains("Maybe<String>"))
+    }
+
+    @Test
+    fun `getMaybeString throws when is_some entry is not a Boolean`() {
+        val ledger = MidnightLedger(
+            mapOf("msg" to mapOf("is_some" to "yes", "value" to "x")),
+        )
+        assertThrowsWrongType { ledger.getMaybeString("msg") }
+    }
+
+    @Test
+    fun `getMaybeString throws when value is not a String despite is_some=true`() {
+        val ledger = MidnightLedger(
+            mapOf("msg" to mapOf("is_some" to true, "value" to BigInteger.ONE)),
+        )
+        assertThrowsWrongType { ledger.getMaybeString("msg") }
+    }
+
+    @Test
+    fun `getMaybeStringOrNull returns null on missing field`() {
+        val ledger = MidnightLedger(emptyMap())
+        assertNull(ledger.getMaybeStringOrNull("absent"))
+    }
+
+    @Test
+    fun `getStringOrNull returns null on missing field`() {
+        val ledger = MidnightLedger(emptyMap())
+        assertNull(ledger.getStringOrNull("absent"))
+    }
+
     // ── Bytes<N> ────────────────────────────────────────────────────────
 
     @Test

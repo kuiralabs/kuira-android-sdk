@@ -145,6 +145,49 @@ class MidnightLedger internal constructor(
     fun getBooleanOrNull(name: String): Boolean? =
         if (name in fields) getBoolean(name) else null
 
+    // ── Opaque<String> / Maybe<Opaque<String>> ──────────────────────────
+
+    /**
+     * Read an `Opaque<String>` field as [String]. Compact's runtime
+     * decodes the bytes through `TextDecoder("utf-8")`, so this is
+     * already a JVM-native string — no manual decode needed.
+     */
+    fun getString(name: String): String {
+        val raw = requireField(name)
+        return raw as? String
+            ?: throwWrongType(name, "String", raw)
+    }
+
+    fun getStringOrNull(name: String): String? =
+        if (name in fields) getString(name) else null
+
+    /**
+     * Read a `Maybe<Opaque<String>>` field as nullable [String]:
+     *  - `null` when the option's `is_some == false` (i.e. the
+     *    contract holds `None`).
+     *  - the decoded UTF-8 string otherwise.
+     *
+     * The compact runtime marshals `Maybe<T>` as a struct
+     * `{is_some: Boolean, value: T}`; this accessor unwraps the
+     * shape so callers don't have to know the struct layout. Use
+     * [getMaybeStringOrNull] when the schema may have evolved and
+     * the field might be missing entirely.
+     */
+    fun getMaybeString(name: String): String? {
+        val raw = requireField(name)
+        val map = raw as? Map<*, *>
+            ?: throwWrongType(name, "Maybe<String> (struct {is_some, value})", raw)
+        val isSome = map["is_some"] as? Boolean
+            ?: throwWrongType(name, "Maybe<String>.is_some Boolean", map["is_some"])
+        if (!isSome) return null
+        val value = map["value"]
+        return value as? String
+            ?: throwWrongType(name, "Maybe<String>.value String", value)
+    }
+
+    fun getMaybeStringOrNull(name: String): String? =
+        if (name in fields) getMaybeString(name) else null
+
     // ── Bytes<N> ────────────────────────────────────────────────────────
 
     /**
