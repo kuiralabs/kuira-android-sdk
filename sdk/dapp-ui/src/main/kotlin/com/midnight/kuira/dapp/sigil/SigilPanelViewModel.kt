@@ -17,6 +17,7 @@ import com.midnight.kuira.core.identity.backup.SeedDeriver
 import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -54,6 +55,7 @@ class SigilPanelViewModel @Inject constructor(
     private val walletKeyManager: WalletKeyManager,
     private val biometricGate: BiometricGate,
     private val seedVault: SeedVault,
+    private val sigilStateStore: SigilStateStore,
     private val sigilBackup: SigilBackup,
     private val blockStoreStorage: BlockStoreBackupStorage,
     /**
@@ -68,16 +70,6 @@ class SigilPanelViewModel @Inject constructor(
      */
     private val appDataProvider: Optional<AppDataBackupProvider>,
 ) : ViewModel() {
-
-    /**
-     * On-disk store for the sigil triple. SharedPreferences is enough — the
-     * DID + credentialId + public key are public material (the private half
-     * never leaves the device's passkey secure store). MODE_PRIVATE so it's
-     * scoped to this app's UID.
-     */
-    private val prefs by lazy {
-        context.getSharedPreferences(SIGIL_PREFS_NAME, Context.MODE_PRIVATE)
-    }
 
     private val _status = MutableStateFlow<SigilStatus>(SigilStatus.Initializing)
     val status: StateFlow<SigilStatus> = _status
@@ -108,7 +100,7 @@ class SigilPanelViewModel @Inject constructor(
      * passkey PRF — we never decrypt it here, just verify it exists.
      */
     private suspend fun probeBlockStoreBackup() {
-        if (prefs.getBoolean(KEY_BACKUP_DISMISSED, false)) {
+        if (sigilStateStore.isBackupDismissed()) {
             Log.i(TAG, "Backup prompt previously dismissed — skipping probe")
             _status.value = SigilStatus.None
             return
@@ -145,11 +137,12 @@ class SigilPanelViewModel @Inject constructor(
      * they change their mind. The flag just controls the auto-prompt.
      */
     fun dismissBackup() {
-        // commit() not apply() — symmetric with persistSigil. The status
-        // transition + the wallet-panel re-evaluation that follows
-        // happen on the next composition frame; we want the flag
-        // durable before any of that races with a process death.
-        prefs.edit().putBoolean(KEY_BACKUP_DISMISSED, true).commit()
+        // SigilStateStore.markBackupDismissed uses .commit() — same
+        // durability contract as persistSigil. The status transition +
+        // wallet-panel re-evaluation that follow happen on the next
+        // composition frame; we want the flag durable before any of
+        // that races with a process death.
+        sigilStateStore.markBackupDismissed()
         _status.value = SigilStatus.None
         Log.i(TAG, "Backup dismissed — sigil status → None, wallet panel unblocked")
     }
@@ -475,27 +468,20 @@ class SigilPanelViewModel @Inject constructor(
     // ── Persistence ──
 
     private fun loadPersistedSigil() {
-        val did = prefs.getString(KEY_DID, null) ?: return
-        val credentialId = prefs.getString(KEY_CREDENTIAL_ID, null) ?: return
-        val publicKeyHex = prefs.getString(KEY_PUBLIC_KEY_HEX, null) ?: return
-        _status.value = SigilStatus.Forged(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
-        Log.i(TAG, "Loaded persisted sigil: did=${did.take(30)}…")
+        val snapshot = sigilStateStore.snapshot() ?: return
+        _status.value = SigilStatus.Forged(
+            did = snapshot.did,
+            credentialId = snapshot.credentialId,
+            publicKeyHex = snapshot.publicKeyHex,
+        )
+        Log.i(TAG, "Loaded persisted sigil: did=${snapshot.did.take(30)}…")
     }
 
     private fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
-        // commit() not apply(): the restore flow SIGKILLs the process within
-        // a few ms of this call (post-2026-05-18 once SeedVault.storeSeed
-        // became silent inside the auth-validity window — see
-        // docs/security/SECURITY_NOTES.md). apply()'s async write never
-        // fsyncs the prefs file before the kill, so the next launch reads
-        // an empty file and the sigil pill shows "no sigil" despite a
-        // successful restore. commit() blocks until durable. Cost is
-        // negligible — this runs once per forge/restore, not on a hot path.
-        prefs.edit()
-            .putString(KEY_DID, did)
-            .putString(KEY_CREDENTIAL_ID, credentialId)
-            .putString(KEY_PUBLIC_KEY_HEX, publicKeyHex)
-            .commit()
+        // SigilStateStore.persistSigil uses .commit() — durability
+        // contract documented there. Cost is negligible since this
+        // runs once per forge / restore, not on a hot path.
+        sigilStateStore.persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
     }
 
     /**
@@ -581,22 +567,10 @@ class SigilPanelViewModel @Inject constructor(
          */
         private const val PRF_BACKUP_PURPOSE = "kuira:backup:v1"
 
-        /**
-         * SharedPreferences file name. Intentionally matches the name BBoard's
-         * pre-migration `BBoardViewModel` used so any sigil forged via the
-         * legacy `SigilCard` shows up in the panel without a migration step.
-         * Keys (did / credentialId / publicKeyHex) also match. Once BBoard's
-         * legacy card is removed in step 4, this file becomes single-owner.
-         *
-         * `internal` so tests can reference the same constants — single
-         * source of truth for the on-disk schema.
-         */
-        internal const val SIGIL_PREFS_NAME = "sigil_identity"
-        internal const val KEY_DID = "did"
-        internal const val KEY_CREDENTIAL_ID = "credentialId"
-        internal const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
-        /** Set by [dismissBackup] so the BackupAvailable prompt stops re-appearing on every launch. */
-        internal const val KEY_BACKUP_DISMISSED = "backupDismissed"
+        // Pref schema (file name, key names) lives on
+        // [com.midnight.kuira.core.identity.sigil.SigilStateStore]
+        // since the same schema is consumed from non-UI modules
+        // (e.g. WalletSeedSource).
     }
 }
 

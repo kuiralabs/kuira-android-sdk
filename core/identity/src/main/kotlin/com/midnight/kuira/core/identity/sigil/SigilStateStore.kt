@@ -1,0 +1,133 @@
+package com.midnight.kuira.core.identity.sigil
+
+import android.content.Context
+import android.content.SharedPreferences
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Single source of truth for sigil identity persistence.
+ *
+ * Owns the `sigil_identity` SharedPreferences file that previously
+ * lived inside `SigilPanelViewModel`. Pulled into `core:identity` so
+ * non-UI consumers — `WalletSeedSource` (sdk:wallet-seed), future
+ * agent runtimes — can query "is a sigil forged?" without taking a
+ * dependency on `:sdk:dapp-ui`.
+ *
+ * **Schema:**
+ *  - `did` — `did:key` derived from the passkey's compressed P-256 pubkey
+ *  - `credentialId` — Credential Manager's opaque credential identifier
+ *  - `publicKeyHex` — compressed P-256 pubkey, hex
+ *  - `backupDismissed` — user chose "start fresh" over restoring a cloud
+ *    backup; suppress the prompt on subsequent launches
+ *
+ * **Durability contract:** writes use `.commit()` rather than `.apply()`.
+ * The restore flow SIGKILLs the process within a few ms of writing the
+ * sigil triple (see `docs/security/SECURITY_NOTES.md` 2026-05-18 entry).
+ * `.apply()`'s async write doesn't fsync before the kill, so the next
+ * launch reads an empty file and the sigil pill shows "no sigil"
+ * despite a successful restore. `.commit()` blocks until durable —
+ * cost is negligible since this runs once per forge / restore, not on
+ * a hot path.
+ *
+ * **Visibility:** all DID + credentialId + pubkey are PUBLIC material.
+ * The passkey's private half never leaves the device's authenticator
+ * store. SharedPreferences `MODE_PRIVATE` is sufficient.
+ */
+@Singleton
+class SigilStateStore @Inject constructor(
+    @ApplicationContext context: Context,
+) {
+
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * True when a sigil has been forged (or restored). Cheapest gate —
+     * checks the credential id field which is set last in the
+     * persistence atomic, so its presence implies a complete triple.
+     */
+    fun hasSigil(): Boolean =
+        prefs.getString(KEY_CREDENTIAL_ID, null) != null
+
+    /** `did:key` for the forged sigil, or null when no sigil. */
+    fun getDid(): String? = prefs.getString(KEY_DID, null)
+
+    /** Credential Manager identifier, or null when no sigil. */
+    fun getCredentialId(): String? = prefs.getString(KEY_CREDENTIAL_ID, null)
+
+    /** Compressed P-256 pubkey hex, or null when no sigil. */
+    fun getPublicKeyHex(): String? = prefs.getString(KEY_PUBLIC_KEY_HEX, null)
+
+    /**
+     * Snapshot of the persisted sigil triple, or null when no sigil
+     * is forged. Convenience for consumers that want to load all three
+     * fields atomically (the restore flow's hydration step).
+     */
+    fun snapshot(): SigilSnapshot? {
+        val did = getDid() ?: return null
+        val credentialId = getCredentialId() ?: return null
+        val publicKeyHex = getPublicKeyHex() ?: return null
+        return SigilSnapshot(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
+    }
+
+    /**
+     * Persist the sigil triple atomically — see the class-level
+     * "durability contract" KDoc for the `.commit()` rationale.
+     */
+    fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
+        prefs.edit()
+            .putString(KEY_DID, did)
+            .putString(KEY_CREDENTIAL_ID, credentialId)
+            .putString(KEY_PUBLIC_KEY_HEX, publicKeyHex)
+            .commit()
+    }
+
+    /**
+     * Drop the sigil triple. The cloud backup (Block Store) is NOT
+     * affected — only this local pointer to "we have a sigil." Use
+     * during wallet reset / restore-from-fresh flows.
+     */
+    fun clear() {
+        prefs.edit()
+            .remove(KEY_DID)
+            .remove(KEY_CREDENTIAL_ID)
+            .remove(KEY_PUBLIC_KEY_HEX)
+            .commit()
+    }
+
+    /** True when the user chose "start fresh" from the backup prompt. */
+    fun isBackupDismissed(): Boolean =
+        prefs.getBoolean(KEY_BACKUP_DISMISSED, false)
+
+    /**
+     * Mark the cloud-backup prompt dismissed so future launches don't
+     * keep re-asking. Cloud blob itself stays — the user can still
+     * restore later from the [SigilStatus.None] sheet.
+     */
+    fun markBackupDismissed() {
+        prefs.edit().putBoolean(KEY_BACKUP_DISMISSED, true).commit()
+    }
+
+    companion object {
+        /**
+         * SharedPreferences file name. Stays in sync with what
+         * `SigilPanelViewModel` used pre-extraction so installs that
+         * forged a sigil before this refactor read their existing state
+         * without a migration step.
+         */
+        const val PREFS_NAME = "sigil_identity"
+        const val KEY_DID = "did"
+        const val KEY_CREDENTIAL_ID = "credentialId"
+        const val KEY_PUBLIC_KEY_HEX = "publicKeyHex"
+        const val KEY_BACKUP_DISMISSED = "backupDismissed"
+    }
+}
+
+/** Immutable snapshot of a persisted sigil triple. */
+data class SigilSnapshot(
+    val did: String,
+    val credentialId: String,
+    val publicKeyHex: String,
+)

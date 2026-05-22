@@ -5,18 +5,10 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.midnight.kuira.dapp.BuildConfig
-import com.midnight.kuira.core.auth.BiometricGate
-import com.midnight.kuira.core.auth.PlaintextSeed
-import com.midnight.kuira.core.auth.SeedVault
-import com.midnight.kuira.core.auth.WalletKeyManager
-import com.midnight.kuira.core.identity.backup.SeedDeriver
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
-import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
-import com.midnight.kuira.core.network.MidnightNetwork
-import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.sdk.MidnightSdk
+import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -29,60 +21,35 @@ import javax.inject.Inject
 /**
  * Self-contained wallet bootstrap + lifecycle for example apps.
  *
- * The panel's contract with the host app:
- *  - host owns nothing wallet-related — the panel manages its own
- *    [WalletConfig] (network, proving mode, proof-server URL) and rebuilds
- *    the SDK whenever the user changes any of them
- *  - first action triggers a biometric prompt to seal a freshly-generated BIP-39
- *    seed via [SeedVault]; subsequent runs reuse it transparently
- *  - the SDK is built lazily on first action, reused while [WalletConfig]
- *    matches what the in-memory SDK was built with, rebuilt on any mismatch
+ * Owns:
+ *  - The [WalletConfig] toggles (network, proving mode, proof-server URL)
+ *    and rebuilds the SDK whenever any of them changes.
+ *  - SDK construction + lifetime — closes the SDK in [onCleared] so the
+ *    indexer WebSocket doesn't outlive the host activity.
+ *  - UI status translation — converts [SigilRequiredException] from the
+ *    seed source into [WalletStatus.SigilRequired].
  *
- * **Public surface:** [status] (observe), [refreshBalance] / [registerDust]
- * (act). Funding doesn't need a panel-side handler — the Receive screen shows
- * the airdrop command, the SDK's subscription picks up the credit on its own.
+ * Delegates to [WalletSeedSource] (sdk:wallet-seed) for the seed
+ * bootstrap — passkey PRF derivation, SeedVault caching, legacy-seed
+ * migration, dev-seed override. The same seed source is what
+ * non-panel hosts (Kicks's `MatchManager`, future agent runtimes)
+ * consume, so every Kuira ecosystem dApp lands on identical seed
+ * behavior.
+ *
+ * **Public surface:** [status] (observe), [refreshBalance] /
+ * [registerDust] (act). Funding doesn't need a panel-side handler —
+ * the Receive screen shows the airdrop command, the SDK's
+ * subscription picks up the credit on its own.
  *
  * **Proving keys:** the SDK's `ProvingKeyManager.ensureWalletKeysAvailable`
  * runs after [MidnightSdk.Builder.build] — `/data/local/tmp/` shortcut on
  * dev devices, ~24MB S3 download on a fresh emulator. No per-host wiring.
- *
- * **Lifecycle:** the SDK is closed in [onCleared] so the indexer WebSocket
- * doesn't outlive the host activity.
  */
 @HiltViewModel
 class WalletPanelViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val walletKeyManager: WalletKeyManager,
-    private val biometricGate: BiometricGate,
-    private val seedVault: SeedVault,
-    private val passkeyManager: PasskeyManager,
+    private val walletSeedSource: WalletSeedSource,
 ) : ViewModel() {
-
-    /**
-     * Read-only handle on the sigil panel's prefs file so the wallet
-     * bootstrap can detect "no passkey yet" without taking a Hilt
-     * dependency on the sigil ViewModel. The schema is owned by
-     * [SigilPanelViewModel] — this VM only checks
-     * [SigilPanelViewModel.KEY_CREDENTIAL_ID] for presence.
-     *
-     * Tight-ish coupling, but extracting a SigilStore port would add a
-     * new type just for this one read. Revisit when a third consumer
-     * needs the same query.
-     */
-    private val sigilPrefs by lazy {
-        context.getSharedPreferences(SigilPanelViewModel.SIGIL_PREFS_NAME, Context.MODE_PRIVATE)
-    }
-
-    /**
-     * Wallet-panel-owned prefs file. Currently stores one flag:
-     * [KEY_SEED_IS_PRF_DERIVED], set after a successful PRF derivation
-     * so subsequent launches trust the SeedVault cache. Absence of the
-     * flag (with a populated SeedVault) signals a legacy random seed
-     * that the next launch must wipe + re-derive.
-     */
-    private val walletPanelPrefs by lazy {
-        context.getSharedPreferences(WALLET_PANEL_PREFS_NAME, Context.MODE_PRIVATE)
-    }
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
@@ -267,7 +234,7 @@ class WalletPanelViewModel @Inject constructor(
             existing.close()
             sdk = null
         }
-        val seed = ensureSeedReady(activity)
+        val seed = walletSeedSource.ensureSeedReady(activity)
         return try {
             val built = MidnightSdk.Builder(context)
                 .network(config.network)
@@ -294,107 +261,6 @@ class WalletPanelViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Returns the wallet's BIP-39 seed, deriving it from the user's
-     * passkey via PRF if not already cached.
-     *
-     * **Contract:**
-     *  - Throws [SigilRequiredException] if no passkey has been forged.
-     *    Action handlers translate this to [WalletStatus.SigilRequired];
-     *    the throw is defense-in-depth in case a caller bypasses the
-     *    upstream UI gate.
-     *  - Cache hit (PRF flag set): biometric prompt to decrypt
-     *    SeedVault, return.
-     *  - Cache miss OR legacy random-seed cache: biometric prompt
-     *    fires the passkey PRF, derives the seed, wipes any legacy
-     *    cache, stores the PRF-derived seed, sets the flag.
-     *
-     * **Legacy migration (decision B):** if SeedVault holds a seed
-     * from before this commit (no PRF flag), it gets wiped on first
-     * launch. Any funds at that legacy address are abandoned — the
-     * user explicitly opted out of preservation.
-     */
-    internal suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
-        // Dev-seed escape hatch — opt-in via root local.properties.
-        // Skips sigil check + SeedVault entirely so multi-emulator
-        // workflows and CI tests can run without passkey-setup
-        // ceremony. R8 strips this branch from release builds because
-        // BuildConfig.DEBUG is false at the call site.
-        devSeedBytes(BuildConfig.DEBUG, BuildConfig.DEV_SEED_HEX)?.let { devSeed ->
-            Log.w(TAG, "DEV: bypassing PRF — using dev seed from local.properties (${devSeed.size} bytes)")
-            return devSeed
-        }
-
-        if (!hasSigil()) {
-            throw SigilRequiredException()
-        }
-
-        // Cache hit only when BOTH conditions hold: a vault entry exists
-        // AND we wrote the PRF flag the last time we populated it.
-        // Without the flag a vault entry is treated as legacy random
-        // seed and force-rederived (decision B).
-        if (seedVault.hasSeed() && isVaultPrfDerived()) {
-            Log.i(TAG, "Loading PRF-derived seed from SeedVault (biometric prompt)…")
-            val plaintext = seedVault.loadSeed(activity)
-            return try {
-                plaintext.bip39Seed.copyOf()
-            } finally {
-                plaintext.wipe()
-            }
-        }
-
-        // Legacy vault: wipe before storeSeed (which refuses overwrite).
-        // The flag was never set on this entry, so by contract it's a
-        // pre-PRF random seed — we have no way to migrate it cleanly
-        // and the user accepted the drop in decision B.
-        if (seedVault.hasSeed()) {
-            Log.w(TAG, "Legacy random seed detected — wiping and re-deriving from passkey PRF")
-            seedVault.deleteSeed()
-        } else {
-            Log.i(TAG, "No seed in SeedVault — deriving from passkey PRF…")
-        }
-
-        // Keystore master key for SeedVault's AES-GCM encryption.
-        // Idempotent: WalletKeyManager doesn't auto-create.
-        if (!walletKeyManager.hasKey()) {
-            val strongBox = walletKeyManager.generateKey()
-            Log.i(TAG, "Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"})")
-        }
-
-        // ONE PRF authentication serves both outputs: the 32-byte
-        // entropy (= raw PRF output, fills PlaintextSeed.mnemonicEntropy)
-        // and the 64-byte BIP-39 seed (entropy → mnemonic → PBKDF2,
-        // pure compute — no second biometric prompt).
-        val material = SeedDeriver.derivePrfMaterial(activity, passkeyManager)
-        var capturedSeed: ByteArray? = null
-        try {
-            seedVault.storeSeed(activity) {
-                // SeedVault wipes the PlaintextSeed it receives, so we
-                // hand it owned copies and stash a separate copy of
-                // bip39Seed for the SDK builder.
-                capturedSeed = material.bip39Seed.copyOf()
-                PlaintextSeed(material.entropy.copyOf(), material.bip39Seed.copyOf())
-            }
-            // Flag the vault entry as PRF-derived so the next launch
-            // hits the cache path instead of force-rederiving.
-            walletPanelPrefs.edit().putBoolean(KEY_SEED_IS_PRF_DERIVED, true).commit()
-        } finally {
-            material.wipe()
-        }
-        return requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
-    }
-
-    /**
-     * True when the sigil panel has persisted a forged passkey.
-     * Reads sigil_identity prefs directly — see [sigilPrefs] for
-     * the coupling rationale.
-     */
-    private fun hasSigil(): Boolean =
-        sigilPrefs.getString(SigilPanelViewModel.KEY_CREDENTIAL_ID, null) != null
-
-    private fun isVaultPrfDerived(): Boolean =
-        walletPanelPrefs.getBoolean(KEY_SEED_IS_PRF_DERIVED, false)
-
     companion object {
         private const val TAG = "WalletPanel"
 
@@ -403,48 +269,5 @@ class WalletPanelViewModel @Inject constructor(
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
-
-        /**
-         * Dev-only override: when [isDebug] is true and [hex] is a
-         * 128-char hex string (64 bytes), decode and return; otherwise
-         * return null and let the PRF path run.
-         *
-         * Extracted from [ensureSeedReady] so the gate is testable
-         * without standing up a BuildConfig fixture. The actual call
-         * site passes [BuildConfig.DEBUG] + [BuildConfig.DEV_SEED_HEX];
-         * tests pass whatever values they need to pin the behavior.
-         *
-         * The 64-byte length is enforced because anything else would
-         * silently break BIP-32 derivation downstream — fail loud here
-         * instead of producing a wallet at the wrong address.
-         */
-        internal fun devSeedBytes(isDebug: Boolean, hex: String): ByteArray? {
-            if (!isDebug) return null
-            if (hex.isEmpty()) return null
-            require(hex.length == DEV_SEED_HEX_LENGTH) {
-                "DEV_SEED_HEX must be $DEV_SEED_HEX_LENGTH hex chars (64 bytes); got ${hex.length}"
-            }
-            require(hex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
-                "DEV_SEED_HEX must be hex"
-            }
-            return ByteArray(hex.length / 2) { i ->
-                hex.substring(i * 2, i * 2 + 2).toInt(16).toByte()
-            }
-        }
-
-        private const val DEV_SEED_HEX_LENGTH = 128
-
-        /**
-         * Wallet-panel SharedPreferences file. Internal so tests can
-         * reach the same name without a magic-string duplication.
-         */
-        internal const val WALLET_PANEL_PREFS_NAME = "wallet_panel"
-
-        /**
-         * True when the SeedVault entry was populated via the passkey
-         * PRF path. Absence (with a populated vault) means a legacy
-         * random-seed entry that must be wiped + re-derived.
-         */
-        internal const val KEY_SEED_IS_PRF_DERIVED = "seedIsPrfDerived"
     }
 }

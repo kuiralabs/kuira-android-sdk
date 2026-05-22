@@ -46,7 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -112,7 +112,7 @@ class BBoardActivity : FragmentActivity() {
 }
 
 @Composable
-fun BBoardApp(viewModel: BBoardViewModel = viewModel()) {
+fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
     val accessKeyAuth by viewModel.accessKeyAuth.collectAsState()
     // FragmentActivity (which ComponentActivity extends) hosts SeedVault's

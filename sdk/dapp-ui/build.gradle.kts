@@ -1,40 +1,9 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.hilt)
     alias(libs.plugins.ksp)
-}
-
-/**
- * Dev-seed escape hatch (Step 3 of the PRF-derived seed work).
- *
- * Reads `kuira.dev.seed` from the root `local.properties` at configure
- * time and exposes it as `BuildConfig.DEV_SEED_HEX`. When set,
- * [WalletPanelViewModel.ensureSeedReady] bypasses the passkey PRF
- * path and returns the supplied 64-byte BIP-39 seed directly —
- * unblocks multi-emulator dev workflows + CI tests that need a
- * known-funded wallet without going through passkey-setup ceremony.
- *
- * Workflow:
- *   1. Add to root `local.properties` (gitignored):
- *        kuira.dev.seed=7dc468f6…128 hex chars…
- *   2. Build and install. The wallet panel logs a loud warning on
- *      every seed read so it's obvious the override is active.
- *   3. Remove the line (or unset) to return to the PRF path.
- *
- * Empty string when the property is absent — the override is opt-in,
- * not default-on for debug builds.
- */
-val devSeedHex: String = run {
-    val localProps = rootProject.file("local.properties")
-    if (localProps.exists()) {
-        val props = Properties()
-        localProps.reader().use { reader -> props.load(reader) }
-        props.getProperty("kuira.dev.seed", "").trim()
-    } else ""
 }
 
 android {
@@ -46,11 +15,9 @@ android {
         // + CryptoObject with DEVICE_CREDENTIAL — match its floor.
         minSdk = 30
         consumerProguardFiles("consumer-rules.pro")
-        // Dev override — see the `devSeedHex` block above. Empty in
-        // CI / clean checkouts; populated when a dev opts in via
-        // local.properties. R8 inlines the constant + DCE removes the
-        // dev-branch in release builds (BuildConfig.DEBUG is false).
-        buildConfigField("String", "DEV_SEED_HEX", "\"$devSeedHex\"")
+        // Dev-seed BuildConfig lives in :sdk:wallet-seed — the panel
+        // consumes the seed via WalletSeedSource, so the override
+        // doesn't need to be wired here.
     }
 
     compileOptions {
@@ -89,6 +56,11 @@ dependencies {
     // Bootstrap the wallet end-to-end inside the panel so host apps don't
     // re-implement seed handling, SDK construction, or dust polling.
     implementation(project(":sdk:midnight-sdk"))
+    // Single source of truth for the wallet's BIP-39 seed — owns the
+    // PRF derivation, SeedVault cache, sigil gate, and dev override.
+    // The panel's ensureSeedReady delegates here, rather than re-
+    // implementing the bootstrap as it used to.
+    implementation(project(":sdk:wallet-seed"))
     implementation(project(":core:auth"))      // SeedVault, WalletKeyManager
     implementation(project(":core:crypto"))    // BIP39 seed generation
     implementation(project(":core:identity"))  // PasskeyManager, DidKeyGenerator, SigilBackup — sigil panel

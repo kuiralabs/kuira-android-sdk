@@ -38,6 +38,10 @@ dependencies {
     // redeclare them by hand. Add a new Kuira module = one `implementation` line.
     implementation("com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT")
     implementation("com.midnight.kuira:midnight-sdk:0.1.0-SNAPSHOT")
+    // Hilt-injected wallet seed source — BBoardViewModel uses it for
+    // contract-side SDK bootstrap so it lands on the same PRF-derived
+    // seed as the wallet panel.
+    implementation("com.midnight.kuira:wallet-seed:0.1.0-SNAPSHOT")
     // SDK uses `implementation(project(":core:*"))` so those types aren't exposed
     // to consumers transitively. BBoard references compact + auth + network types
     // directly, so declare them here.

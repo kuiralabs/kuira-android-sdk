@@ -12,6 +12,7 @@ import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.passkey.P256PublicKey
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.passkey.PasskeyRegistrationResult
+import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import io.mockk.Runs
@@ -60,7 +61,7 @@ import java.util.Optional
  * inline and is observable from the test body.
  *
  * Conventions: pref keys come from [SigilPanelViewModel]'s companion
- * (single source of truth — see [SigilPanelViewModel.SIGIL_PREFS_NAME]
+ * (single source of truth — see [SigilStateStore.PREFS_NAME]
  * et al.). Test fixtures live in [Fixtures] below so a future test can
  * grab them without re-rolling magic bytes.
  */
@@ -170,7 +171,7 @@ class SigilPanelViewModelTest {
 
     @Test
     fun `init skips probe when backup previously dismissed`() = runTest {
-        prefs().edit().putBoolean(SigilPanelViewModel.KEY_BACKUP_DISMISSED, true).commit()
+        prefs().edit().putBoolean(SigilStateStore.KEY_BACKUP_DISMISSED, true).commit()
         val vm = newVm()
         // No probe = no Block Store round trip when the user already
         // chose Start Fresh. Re-prompting them every launch would be
@@ -197,7 +198,7 @@ class SigilPanelViewModelTest {
         val fresh = freshPrefs()
         assertTrue(
             "$DISMISS_FLAG must be durable immediately after dismissBackup",
-            fresh.getBoolean(SigilPanelViewModel.KEY_BACKUP_DISMISSED, false),
+            fresh.getBoolean(SigilStateStore.KEY_BACKUP_DISMISSED, false),
         )
         assertEquals(SigilStatus.None, vm.status.value)
     }
@@ -241,14 +242,14 @@ class SigilPanelViewModelTest {
         // post-forge SIGKILL doesn't lose the sigil identity. Read via
         // a fresh SharedPreferences handle to bypass any in-memory cache.
         val onDisk = freshPrefs()
-        assertEquals(forged.did, onDisk.getString(SigilPanelViewModel.KEY_DID, null))
+        assertEquals(forged.did, onDisk.getString(SigilStateStore.KEY_DID, null))
         assertEquals(
             Fixtures.CREDENTIAL_ID,
-            onDisk.getString(SigilPanelViewModel.KEY_CREDENTIAL_ID, null),
+            onDisk.getString(SigilStateStore.KEY_CREDENTIAL_ID, null),
         )
         assertEquals(
             Fixtures.PUBLIC_KEY_HEX_EXPECTED,
-            onDisk.getString(SigilPanelViewModel.KEY_PUBLIC_KEY_HEX, null),
+            onDisk.getString(SigilStateStore.KEY_PUBLIC_KEY_HEX, null),
         )
 
         coVerify(exactly = 1) { passkeyManager.createPasskey(activity, any(), any()) }
@@ -404,13 +405,14 @@ class SigilPanelViewModelTest {
         walletKeyManager = walletKeyManager,
         biometricGate = biometricGate,
         seedVault = seedVault,
+        sigilStateStore = SigilStateStore(context),
         sigilBackup = sigilBackup,
         blockStoreStorage = blockStoreStorage,
         appDataProvider = appDataProvider,
     )
 
     private fun prefs() = context.getSharedPreferences(
-        SigilPanelViewModel.SIGIL_PREFS_NAME,
+        SigilStateStore.PREFS_NAME,
         Context.MODE_PRIVATE,
     )
 
@@ -422,7 +424,7 @@ class SigilPanelViewModelTest {
      * through the same handle that buffered the pending write).
      */
     private fun freshPrefs() = context.getSharedPreferences(
-        SigilPanelViewModel.SIGIL_PREFS_NAME,
+        SigilStateStore.PREFS_NAME,
         Context.MODE_PRIVATE,
     )
 

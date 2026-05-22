@@ -41,3 +41,4 @@ include(":feature:settings")
 // (consumes Kuira via mavenLocal), like :examples:midnight-kicks. Not registered here.
 include(":sdk:midnight-sdk")
 include(":sdk:dapp-ui")
+include(":sdk:wallet-seed")

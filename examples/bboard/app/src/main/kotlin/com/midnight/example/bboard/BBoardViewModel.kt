@@ -1,15 +1,11 @@
 package com.midnight.example.bboard
 
 import android.app.Activity
-import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.midnight.kuira.core.auth.BiometricGate
-import com.midnight.kuira.core.auth.PlaintextSeed
-import com.midnight.kuira.core.auth.SeedVault
-import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.ContractCallException
 import com.midnight.kuira.core.compact.ContractCallStage
@@ -17,21 +13,22 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
-import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.core.identity.auth.AuthorizationScope
 import com.midnight.kuira.core.identity.auth.KeyAuthorization
-import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.WalletBalance
+import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.math.BigInteger
-import java.security.SecureRandom
+import javax.inject.Inject
 
 /**
  * BBoard ViewModel — demonstrates using the Midnight Contract SDK.
@@ -46,7 +43,12 @@ import java.security.SecureRandom
  * - **Remote wallet:** delegates balancing to `mn serve` via WebSocket (existing)
  * - **Standalone SDK:** embedded wallet, no external process needed (new)
  */
-class BBoardViewModel(app: Application) : AndroidViewModel(app) {
+@HiltViewModel
+class BBoardViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val walletSeedSource: WalletSeedSource,
+    private val passkeyManager: PasskeyManager,
+) : ViewModel() {
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
@@ -74,83 +76,13 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
 
-    /**
-     * Passkey manager held for the access-key authorize flow only — the
-     * forge / backup / restore / testPrf flows that also used it have
-     * moved to `SigilPanelViewModel`. RP id must match the sigil panel's
-     * (`nel349.github.io`) so both VMs talk to the same WebAuthn
-     * credential. Keeping that string in sync is fragile; the comment
-     * is the only enforcement today.
-     */
-    private val passkeyManager = PasskeyManager(
-        config = PasskeyConfig(rpId = "nel349.github.io"),
-    )
-
-    // ── Seed storage (canary for the "dApp creates its own wallet" flow) ──
-    //
-    // BBoard's prior life used a hardcoded TEST_SEED (alice). The canary
-    // replaces that with a freshly generated seed persisted via SeedVault,
-    // biometric-gated on every read. Same primitives Kicks will use for its
-    // onboarding flow next.
-    private val walletKeyManager by lazy { WalletKeyManager() }
-    private val biometricGate by lazy { BiometricGate(walletKeyManager) }
-    private val seedVault by lazy { SeedVault(getApplication(), biometricGate) }
-
-    // Wallet status (balance / fund / register / addresses) lives in the
-    // WalletStatusPanel module now. BBoard's prior `_walletStatus` flow +
-    // refreshBalance / waitForFunding / registerDust methods were removed —
-    // they duplicated work the panel does. SeedVault + WalletKeyManager
-    // stay because the SDK build path below (connectWithSdk /
-    // deployAndConnect) still needs to derive the BBoard wallet seed for
-    // contract operations.
-
-    /**
-     * Bootstraps the wallet seed:
-     *  - If [SeedVault] already has a seed: biometric-prompt and decrypt → return bip39Seed.
-     *  - Otherwise: generate a fresh BIP-39 entropy → mnemonic → bip39Seed,
-     *    persist via [SeedVault.storeSeed] (biometric-prompts to encrypt),
-     *    and return a copy of the seed for immediate SDK use.
-     *
-     * Returns a 64-byte BIP-39 seed (the form [MidnightSdk.Builder.seed] expects).
-     * Caller is responsible for wiping the returned array once the SDK has copied
-     * it internally.
-     */
-    private suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
-        if (seedVault.hasSeed()) {
-            Log.i(TAG, "Loading existing seed from SeedVault (biometric prompt)...")
-            val plaintext = seedVault.loadSeed(activity)
-            return try {
-                plaintext.bip39Seed.copyOf()
-            } finally {
-                plaintext.wipe()
-            }
-        }
-
-        Log.i(TAG, "No seed in SeedVault — generating a fresh wallet (biometric prompt)...")
-        // SeedVault.storeSeed needs a Keystore master key to encrypt against. The
-        // master key is created on-demand here (StrongBox if available, TEE fallback).
-        // Idempotent: skip if already present from a prior install/run. The
-        // `Master key not found. Create a wallet first.` ISE comes from skipping this
-        // step — WalletKeyManager doesn't auto-create.
-        if (!walletKeyManager.hasKey()) {
-            val strongBox = walletKeyManager.generateKey()
-            Log.i(TAG, "Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"})")
-        }
-        // Defer the seed material's existence until after biometric auth succeeds —
-        // SeedVault invokes [seedProducer] only after the prompt is approved,
-        // matching the existing storeSeed safety model.
-        var capturedSeed: ByteArray? = null
-        seedVault.storeSeed(activity) {
-            val entropy = ByteArray(PlaintextSeed.ENTROPY_SIZE).also { SecureRandom().nextBytes(it) }
-            val mnemonic = BIP39.entropyToMnemonic(entropy)
-            val bip39Seed = BIP39.mnemonicToSeed(mnemonic)
-            // Save a copy here, before SeedVault.storeSeed wipes the PlaintextSeed
-            // it receives. We need the seed to hand to MidnightSdk.Builder.
-            capturedSeed = bip39Seed.copyOf()
-            PlaintextSeed(entropy, bip39Seed)
-        }
-        return requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
-    }
+    // Wallet bootstrap (seed derivation + caching) is delegated to the
+    // Hilt-injected [walletSeedSource]. BBoard's local ensureSeedReady
+    // (which generated a random per-install seed) was removed: that path
+    // diverged from the wallet panel's PRF-derived seed and the same
+    // SeedVault file would have been wiped + re-derived on every panel
+    // launch. With WalletSeedSource, contract-side SDK bootstrap and the
+    // wallet panel both land on the same passkey-derived seed.
 
     // Wallet bootstrap / balance / fund / register-dust methods used to
     // live here as the in-screen canary card's backing logic. All of that
@@ -231,9 +163,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Lazily build (or rebuild) the SDK against [network]. Reuses the existing
      * SDK if one is already built for the same network; otherwise closes it,
-     * loads the seed via [ensureSeedReady] (biometric prompt), and constructs a
-     * fresh one. All call sites that need a usable SDK go through this — keeps
-     * seed loading / network switching in one place.
+     * fetches the wallet seed from [walletSeedSource] (biometric prompt), and
+     * constructs a fresh one. All call sites that need a usable SDK go through
+     * this — keeps seed loading / network switching in one place.
      */
     private suspend fun buildOrReuseSdk(network: MidnightNetwork, activity: FragmentActivity): MidnightSdk {
         sdk?.let { existing ->
@@ -243,9 +175,9 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
             sdk = null
         }
         installProvingKeys()
-        val seed = ensureSeedReady(activity)
+        val seed = walletSeedSource.ensureSeedReady(activity)
         return try {
-            val built = MidnightSdk.Builder(getApplication())
+            val built = MidnightSdk.Builder(context)
                 .network(network)
                 .seed(seed)
                 .build()
@@ -338,7 +270,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
                 val bboard = MidnightContract.create(midnightSdk.config) {
                     name = "bboard"
-                    contractJs = getApplication<Application>().assets
+                    contractJs = context.assets
                         .open("runtime/bboard-contract-iife.js")
                     witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
                     initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
@@ -360,7 +292,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
                 // only needs the contract JS + the address.
                 _state.value = BBoardState.Connecting("Deployed at ${addr.take(8)}... Waiting for indexer...")
                 val waitContract = MidnightContract.create(midnightSdk.config) {
-                    contractJs = getApplication<Application>().assets
+                    contractJs = context.assets
                         .open("runtime/bboard-contract-iife.js")
                     address = addr
                 }
@@ -430,7 +362,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.value = BBoardState.Connecting("Loading contract...")
         val bboard = MidnightContract.create(cfg) {
-            contractJs = getApplication<Application>().assets
+            contractJs = context.assets
                 .open("runtime/bboard-contract-iife.js")
             address = contractAddress
             witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
@@ -598,7 +530,7 @@ class BBoardViewModel(app: Application) : AndroidViewModel(app) {
      * `post`/`takeDown` keys (which are dApp-specific, not on the SDK side).
      */
     private fun installProvingKeys() {
-        val provingKeyManager = com.midnight.kuira.core.compact.proving.ProvingKeyManager(getApplication())
+        val provingKeyManager = com.midnight.kuira.core.compact.proving.ProvingKeyManager(context)
         val ok = provingKeyManager.installFromLocalTmp()
         if (!ok) {
             Log.w(TAG, "installFromLocalTmp: hasWalletKeys() still false — adb-push keys to /data/local/tmp")
