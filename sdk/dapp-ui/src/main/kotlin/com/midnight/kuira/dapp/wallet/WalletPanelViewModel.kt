@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.dapp.BuildConfig
 import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.auth.PlaintextSeed
 import com.midnight.kuira.core.auth.SeedVault
@@ -314,6 +315,16 @@ class WalletPanelViewModel @Inject constructor(
      * user explicitly opted out of preservation.
      */
     internal suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray {
+        // Dev-seed escape hatch — opt-in via root local.properties.
+        // Skips sigil check + SeedVault entirely so multi-emulator
+        // workflows and CI tests can run without passkey-setup
+        // ceremony. R8 strips this branch from release builds because
+        // BuildConfig.DEBUG is false at the call site.
+        devSeedBytes(BuildConfig.DEBUG, BuildConfig.DEV_SEED_HEX)?.let { devSeed ->
+            Log.w(TAG, "DEV: bypassing PRF — using dev seed from local.properties (${devSeed.size} bytes)")
+            return devSeed
+        }
+
         if (!hasSigil()) {
             throw SigilRequiredException()
         }
@@ -392,6 +403,36 @@ class WalletPanelViewModel @Inject constructor(
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
+
+        /**
+         * Dev-only override: when [isDebug] is true and [hex] is a
+         * 128-char hex string (64 bytes), decode and return; otherwise
+         * return null and let the PRF path run.
+         *
+         * Extracted from [ensureSeedReady] so the gate is testable
+         * without standing up a BuildConfig fixture. The actual call
+         * site passes [BuildConfig.DEBUG] + [BuildConfig.DEV_SEED_HEX];
+         * tests pass whatever values they need to pin the behavior.
+         *
+         * The 64-byte length is enforced because anything else would
+         * silently break BIP-32 derivation downstream — fail loud here
+         * instead of producing a wallet at the wrong address.
+         */
+        internal fun devSeedBytes(isDebug: Boolean, hex: String): ByteArray? {
+            if (!isDebug) return null
+            if (hex.isEmpty()) return null
+            require(hex.length == DEV_SEED_HEX_LENGTH) {
+                "DEV_SEED_HEX must be $DEV_SEED_HEX_LENGTH hex chars (64 bytes); got ${hex.length}"
+            }
+            require(hex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
+                "DEV_SEED_HEX must be hex"
+            }
+            return ByteArray(hex.length / 2) { i ->
+                hex.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+            }
+        }
+
+        private const val DEV_SEED_HEX_LENGTH = 128
 
         /**
          * Wallet-panel SharedPreferences file. Internal so tests can

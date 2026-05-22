@@ -99,8 +99,32 @@ supply a custom `PasskeyConfig` provider. There is no `DappUiConfig`
 | `SigilStatusPanel` | Passkey identity pill + top sheet (forge, backup, restore, test PRF). |
 | `WalletStatusPanel` | Balance pill + bottom sheet (address, airdrop command, register dust, network chips). |
 | `SigilStatus` | Sealed: `Initializing` / `BackupAvailable` / `None` / `Creating` / `Forged` / `Error`. |
-| `WalletStatus` | Sealed: `None` / `Loading` / `Ready` / `Error`. |
+| `WalletStatus` | Sealed: `None` / `Loading` / `Ready` / `Error` / `SigilRequired`. |
 | `DappUiModule` | Hilt module — provides `BlockStoreBackupStorage` + `SigilBackup` only (the rest comes from `core:auth` + `core:identity`). |
+
+## Dev-seed escape hatch
+
+The wallet bootstraps from the user's passkey via the WebAuthn PRF
+extension — same passkey + `SEED_SALT` = same seed on every device
+and every Kuira ecosystem app sharing the relying party. For
+multi-emulator dev workflows + CI tests that need a known-funded
+wallet without going through passkey-setup ceremony, an opt-in
+override reads from the root `local.properties`:
+
+```properties
+# root local.properties (gitignored)
+kuira.dev.seed=7dc468f6...128 hex chars total...
+```
+
+When set in a debug build, `WalletPanelViewModel.ensureSeedReady`
+skips the sigil check + SeedVault entirely and returns the decoded
+64-byte seed. The path is gated on `BuildConfig.DEBUG`, so release
+builds R8-strip it regardless of whether the property leaks into a
+CI runner. Unset (or delete) the line to return to the PRF path.
+
+A loud `Log.w(WalletPanel, "DEV: bypassing PRF…")` fires on every
+seed read while the override is active so it's obvious the wallet
+isn't using a real user seed.
 
 ## Tests
 

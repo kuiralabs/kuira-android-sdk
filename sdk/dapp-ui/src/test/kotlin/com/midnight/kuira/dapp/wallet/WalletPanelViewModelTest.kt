@@ -18,7 +18,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
@@ -188,6 +190,56 @@ class WalletPanelViewModelTest {
             WalletPanelViewModel.WALLET_PANEL_PREFS_NAME, Context.MODE_PRIVATE
         ).getBoolean(WalletPanelViewModel.KEY_SEED_IS_PRF_DERIVED, false)
         assertEquals(true, flagSet)
+    }
+
+    // ── Dev-seed override gate ──
+
+    @Test
+    fun `devSeedBytes returns null in release mode even with valid hex`() {
+        // The release-build safety net. Even if DEV_SEED_HEX somehow
+        // shipped non-empty to production, the isDebug=false gate must
+        // refuse to honor it. R8 inlines the constant and removes the
+        // dead branch in real release builds — this test pins the
+        // behavior pre-DCE.
+        val validHex = "00".repeat(PlaintextSeed.SEED_SIZE)
+        assertNull(WalletPanelViewModel.devSeedBytes(isDebug = false, hex = validHex))
+    }
+
+    @Test
+    fun `devSeedBytes returns null on empty hex in debug mode`() {
+        // The "no override configured" path — local.properties has no
+        // kuira.dev.seed entry, BuildConfig.DEV_SEED_HEX is "".
+        assertNull(WalletPanelViewModel.devSeedBytes(isDebug = true, hex = ""))
+    }
+
+    @Test
+    fun `devSeedBytes decodes a 128-char hex into 64 bytes`() {
+        // Alice's seed — the value Kicks has historically used as
+        // TEST_SEED. Pinning the decoder here so we know the dev
+        // workflow produces the right bytes.
+        val alice = "7dc468f62278cd0c14b6674f31531a90b64599d657d3c7ab2adb63395d647f7a" +
+            "505de6428fcf8b0d208873f4d5e2a1340c14688067477542f53c48dfea817da4"
+        val expected = ByteArray(PlaintextSeed.SEED_SIZE) { i ->
+            alice.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+        }
+        val actual = WalletPanelViewModel.devSeedBytes(isDebug = true, hex = alice)
+        assertArrayEquals("dev seed should round-trip the configured hex", expected, actual)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `devSeedBytes rejects wrong-size hex`() {
+        // 32 bytes instead of 64 — would silently produce a wallet at
+        // the wrong address downstream because BIP-32 derivation
+        // would consume different material. Fail loud here.
+        WalletPanelViewModel.devSeedBytes(isDebug = true, hex = "00".repeat(32))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `devSeedBytes rejects non-hex characters`() {
+        WalletPanelViewModel.devSeedBytes(
+            isDebug = true,
+            hex = "zz".repeat(PlaintextSeed.SEED_SIZE),
+        )
     }
 
     // ── Helpers ──
