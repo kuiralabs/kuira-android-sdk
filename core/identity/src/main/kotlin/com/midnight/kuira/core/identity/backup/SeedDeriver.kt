@@ -21,7 +21,7 @@ import java.security.SecureRandom
  * ecosystem app that shares the RP via `assetlinks.json`, so the
  * derived seed is identical too — no shared backup blob needed.
  *
- * SEED_SALT is domain-separated from SigilBackup.BACKUP_SALT; PRF
+ * SEED_SALT is domain-separated from AppStateBackup.BACKUP_SALT; PRF
  * with two different salts produces two independent secrets from
  * the same passkey credential.
  *
@@ -38,6 +38,18 @@ object SeedDeriver {
     /** Purpose-bound salt: SHA-256("kuira:seed:v1"). Deterministic, public. */
     val SEED_SALT: ByteArray = MessageDigest.getInstance("SHA-256")
         .digest("kuira:seed:v1".toByteArray(Charsets.UTF_8))
+
+    /**
+     * Purpose-bound salt: SHA-256("kuira:sigil:v1"). Deterministic,
+     * public. PRF output under this salt seeds the user's sigil
+     * identity Ed25519 keypair (see `Ed25519PrfSigilProvider`).
+     *
+     * Independent from [SEED_SALT] and `AppStateBackup.BACKUP_SALT`: three
+     * different salts ⇒ three independent secrets from the same
+     * passkey credential. Compromise of one doesn't leak the others.
+     */
+    val SIGIL_SALT: ByteArray = MessageDigest.getInstance("SHA-256")
+        .digest("kuira:sigil:v1".toByteArray(Charsets.UTF_8))
 
     /**
      * Authenticate the user's passkey with the seed-derivation salt

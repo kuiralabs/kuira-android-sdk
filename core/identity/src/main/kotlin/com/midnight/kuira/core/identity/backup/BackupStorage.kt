@@ -3,7 +3,7 @@ package com.midnight.kuira.core.identity.backup
 /**
  * Storage-agnostic interface for encrypted backup blobs.
  *
- * The encryption layer (PrfKeyDeriver + BackupEncryptor) is independent
+ * The encryption layer (PrfKeyDeriver + AppStateBackupEncryptor) is independent
  * of storage. This interface allows swapping Google Block Store for
  * Google Drive, a personal server, or even a QR code export.
  */

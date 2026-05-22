@@ -7,16 +7,12 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.dapp.BuildConfig
-import com.midnight.kuira.core.auth.BiometricGate
-import com.midnight.kuira.core.auth.PlaintextSeed
-import com.midnight.kuira.core.auth.SeedVault
-import com.midnight.kuira.core.auth.WalletKeyManager
+import com.midnight.kuira.core.identity.backup.AppStateBackup
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.backup.SeedDeriver
-import com.midnight.kuira.core.identity.backup.SigilBackup
-import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,31 +28,31 @@ import javax.inject.Inject
 /**
  * Self-contained sigil-identity bookkeeper for [SigilStatusPanel].
  *
- * Mirrors `WalletPanelViewModel`'s shape and lifecycle. This step (#2 of
- * the migration) brings over the **forge** flow: create a passkey via
- * Credential Manager, derive a `did:key` from the resulting P-256 public
- * key, persist the triple (DID + credentialId + publicKeyHex) so the
- * sigil survives app restarts.
+ * Owns three flows:
+ *  - **Forge** ([forgeSigil]): create a passkey via Credential Manager,
+ *    then derive the sigil DID via [SigilIdentityProvider]
+ *    (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
+ *    default impl). Two biometric prompts on first run.
+ *  - **Sign in** ([restoreSeed]): authenticate an existing passkey
+ *    (cross-device or cross-app), derive the SAME DID via the
+ *    `SigilIdentityProvider`, optionally restore host-app state via
+ *    [AppStateBackup]. No seed restore needed — wallet seed is
+ *    PRF-derived independently by `WalletSeedSource`.
+ *  - **Backup** ([backupSeed]): write host-app state (not the seed)
+ *    to Block Store via [AppStateBackup].
  *
- * **Subsequent steps will migrate:**
- *  - Backup to cloud (`SigilBackup` + Block Store)
- *  - Restore from cloud
- *  - Test PRF
- *
- * **Stays in BBoard's VM** (not migrated):
- *  - `authorizeAccessKey` — needs a `MidnightSdk` instance to derive the
- *    access key being authorized, which the sigil panel doesn't (and
- *    shouldn't) own. The host bridges sigil + wallet for that flow.
+ * **Held in BBoard's VM** (not migrated):
+ *  - `authorizeAccessKey` — needs a `MidnightSdk` instance to derive
+ *    the access key being authorized. The host bridges sigil + wallet
+ *    for that flow.
  */
 @HiltViewModel
 class SigilPanelViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val passkeyManager: PasskeyManager,
-    private val walletKeyManager: WalletKeyManager,
-    private val biometricGate: BiometricGate,
-    private val seedVault: SeedVault,
+    private val sigilIdentityProvider: SigilIdentityProvider,
     private val sigilStateStore: SigilStateStore,
-    private val sigilBackup: SigilBackup,
+    private val appStateBackup: AppStateBackup,
     private val blockStoreStorage: BlockStoreBackupStorage,
     /**
      * Optional host-app hook for round-tripping additional state
@@ -194,31 +190,43 @@ class SigilPanelViewModel @Inject constructor(
         viewModelScope.launch {
             _status.value = SigilStatus.Creating("Creating passkey…")
             try {
-                // Random 16-byte user id. In a production app this would come
-                // from the host's user system so the same human gets the same
-                // userId on a re-install; for the canary panel we generate per
-                // forge and the persisted state carries the resulting DID.
+                // Step 1: create the passkey credential (first biometric).
+                // The returned P-256 public key is kept for the access-key
+                // authorization flow (BBoard's `authorizeAccessKey` signs
+                // KeyAuthorization payloads with it); it's NOT used to
+                // derive the sigil DID anymore — that's the PRF path
+                // below.
                 val userId = ByteArray(USER_ID_BYTES).also { SecureRandom().nextBytes(it) }
-                val result = passkeyManager.createPasskey(
+                val createResult = passkeyManager.createPasskey(
                     activity = activity,
                     userId = userId,
                     userName = hostAppLabel(),
                 )
-                val did = DidKeyGenerator.fromCompressedP256(result.publicKey.compressed)
-                val publicKeyHex = result.publicKey.compressedHex()
+                val publicKeyHex = createResult.publicKey.compressedHex()
 
-                // Full diagnostic block: DID, credential ID, raw P-256 pubkey hex.
-                // All public material — DID and pubkey by definition, credential ID
-                // is just an authenticator-side opaque identifier (not a secret).
-                // Useful for cross-referencing with the authenticator's stored
-                // credentials or verifying the DID-from-pubkey derivation by hand.
-                Log.i(TAG, "Sigil forged — DID: $did")
-                Log.i(TAG, "  Credential ID: ${result.credentialId}")
-                Log.i(TAG, "  P-256 pubkey: $publicKeyHex")
-                persistSigil(did = did, credentialId = result.credentialId, publicKeyHex = publicKeyHex)
+                // Step 2: derive the sigil DID via PRF (second biometric).
+                // The whole point of the PRF-derived DID: same passkey on
+                // any device, any Kuira ecosystem app, lands on the same
+                // DID — without travelling through any cloud blob.
+                _status.value = SigilStatus.Creating("Binding identity…")
+                val derivation = sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
+
+                // First-run UX note: two biometric prompts (create +
+                // PRF-authenticate) is the cost of binding a brand-new
+                // passkey to its derived identity. Sign-in on a second
+                // device skips step 1 entirely (the passkey already
+                // exists, GPM-synced) and runs only the PRF step.
+                Log.i(TAG, "Sigil forged — DID: ${derivation.did}")
+                Log.i(TAG, "  Credential ID: ${derivation.credentialId}")
+                Log.i(TAG, "  P-256 pubkey (for KeyAuthorization): $publicKeyHex")
+                persistSigil(
+                    did = derivation.did,
+                    credentialId = derivation.credentialId,
+                    publicKeyHex = publicKeyHex,
+                )
                 _status.value = SigilStatus.Forged(
-                    did = did,
-                    credentialId = result.credentialId,
+                    did = derivation.did,
+                    credentialId = derivation.credentialId,
                     publicKeyHex = publicKeyHex,
                 )
             } catch (e: Exception) {
@@ -312,42 +320,29 @@ class SigilPanelViewModel @Inject constructor(
                 return@launch
             }
             try {
-                Log.i(TAG, "Starting PRF backup of the SeedVault-stored seed…")
-                Log.i(TAG, "  DID: ${sigil.did}")
-                Log.i(TAG, "  Credential ID: ${sigil.credentialId}")
-                val plaintext = seedVault.loadSeed(activity)
-                val entropy = plaintext.mnemonicEntropy.copyOf()
-                val bip39Seed = plaintext.bip39Seed.copyOf()
-                plaintext.wipe()
-                Log.i(TAG, "  Seed loaded from SeedVault: ${bip39Seed.size}B (entropy: ${entropy.size}B)")
-
-                // Capture host-app state alongside the seed. Provider
-                // is allowed to return null (nothing to round-trip)
-                // and to throw — we log and treat exceptions as "no
-                // app metadata", since a backup-without-app-data still
-                // protects the user's seed (the load-bearing material).
+                // Post-PRF the backup blob carries ONLY app-specific
+                // state — the seed and the sigil identity are both
+                // PRF-derived from the passkey and reconstructed
+                // locally on any device. So this flow is purely about
+                // round-tripping the host's appMetadata (Kicks's match
+                // state, future agent state, etc.).
+                Log.i(TAG, "Starting AppState backup for DID: ${sigil.did}")
                 val appMetadata: ByteArray? = appDataProvider.orElse(null)?.let { provider ->
                     runCatching { provider.snapshot() }
-                        .onFailure { Log.w(TAG, "appDataProvider.snapshot failed; backup will omit app data", it) }
+                        .onFailure { Log.w(TAG, "appDataProvider.snapshot failed; backup will store empty appMetadata", it) }
                         .getOrNull()
                 }
                 if (appMetadata != null) {
                     Log.i(TAG, "  App metadata: ${appMetadata.size}B from host-provided AppDataBackupProvider")
+                } else {
+                    Log.i(TAG, "  No app metadata — backup is a sigil-exists sentinel only")
                 }
 
-                sigilBackup.backup(
-                    activity = activity,
-                    entropy = entropy,
-                    bip39Seed = bip39Seed,
-                    did = sigil.did,
-                    credentialId = sigil.credentialId,
-                    publicKeyHex = sigil.publicKeyHex,
-                    appMetadata = appMetadata,
-                )
+                appStateBackup.backup(activity = activity, appMetadata = appMetadata)
                 Log.i(
                     TAG,
-                    "Backup SUCCESS — seed + sigil identity stored in Block Store " +
-                        "(${if (appMetadata != null) "with ${appMetadata.size}B appMetadata" else "no appMetadata"})",
+                    "Backup SUCCESS — appState stored in Block Store " +
+                        "(${if (appMetadata != null) "${appMetadata.size}B appMetadata" else "no appMetadata"})",
                 )
             } catch (e: BackupException) {
                 Log.e(TAG, "Backup failed: ${e.message}", e)
@@ -358,109 +353,97 @@ class SigilPanelViewModel @Inject constructor(
     }
 
     /**
-     * Restore sigil + seed from Block Store. Pipeline: pull encrypted blob →
-     * PRF-authenticate against the passkey to derive the AES key → decrypt
-     * → restore the sigil triple into our prefs + emit Forged.
+     * Sign in with an existing passkey — the post-PRF replacement for
+     * the old "restore from cloud" flow.
      *
-     * The restored seed bytes are wiped after the function returns — this
-     * VM doesn't surface them to consumers; the wallet panel's SeedVault
-     * is the only place that retains seed material across calls.
+     * **What changed.** Pre-PRF this method:
+     *   1. Pulled an encrypted blob from Block Store
+     *   2. Decrypted it to recover (seed, sigil triple, appMetadata)
+     *   3. Wrote the seed into SeedVault
+     *   4. SIGKILL'd the process so the wallet panel rebuilt cleanly
+     *
+     * Post-PRF none of (1)–(4) is necessary for the SIGIL ITSELF:
+     *   - The seed derives from `PRF(passkey, SEED_SALT)` — `WalletSeedSource`
+     *     handles that on the next wallet action, no blob needed.
+     *   - The sigil DID derives from `PRF(passkey, SIGIL_SALT)` via
+     *     [SigilIdentityProvider] — that's what step 1 below does.
+     *   - The SDK lives on a stable PRF-derived seed regardless of how
+     *     long ago the user last authenticated, so no SIGKILL needed.
+     *
+     * The Block Store blob is now narrower in scope: it carries only
+     * the host-app's metadata (Kicks's match state, etc.). Step 2
+     * below pulls it through to the registered `AppDataBackupProvider`
+     * when a blob is available; absent or v1-legacy blobs are silently
+     * tolerated.
      */
     fun restoreSeed(activity: FragmentActivity) {
         viewModelScope.launch {
             try {
-                Log.i(TAG, "Starting PRF restore…")
-                val restored = sigilBackup.restore(activity)
-                try {
-                    Log.i(TAG, "Restore SUCCESS!")
-                    Log.i(TAG, "  Restored seed size: ${restored.bip39Seed.size} bytes")
-                    val did = restored.did
-                    if (did != null) {
-                        val credentialId = restored.credentialId.orEmpty()
-                        val publicKeyHex = restored.publicKeyHex.orEmpty()
-                        Log.i(TAG, "  DID: $did")
-                        Log.i(TAG, "  Credential ID: $credentialId")
-                        Log.i(TAG, "  Public key: $publicKeyHex")
-                        persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
-                        // Overwrite the fresh seed (or write into an empty
-                        // vault) so the wallet panel rebootstraps with the
-                        // recovered wallet on next launch. Without this the
-                        // sigil DID is restored but the wallet stays on the
-                        // freshly-generated address with 0 balance.
-                        restoreSeedIntoVault(activity, restored.entropy, restored.bip39Seed)
+                // Step 1 — sigil identity (one biometric, PRF(SIGIL_SALT)).
+                // Deterministic across devices and Kuira ecosystem apps
+                // sharing the relying party. publicKeyHex is left empty
+                // because the assertion ceremony doesn't return the
+                // passkey's P-256 pubkey; the user can re-forge on this
+                // device if a flow that needs the root pubkey (e.g.
+                // BBoard's `authorizeAccessKey`) requires it.
+                Log.i(TAG, "Starting sign-in with existing passkey (PRF SIGIL_SALT)…")
+                val derivation = sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
+                Log.i(TAG, "  DID: ${derivation.did}")
+                Log.i(TAG, "  Credential ID: ${derivation.credentialId}")
+                persistSigil(
+                    did = derivation.did,
+                    credentialId = derivation.credentialId,
+                    publicKeyHex = "",
+                )
+                _status.value = SigilStatus.Forged(
+                    did = derivation.did,
+                    credentialId = derivation.credentialId,
+                    publicKeyHex = "",
+                )
 
-                        // Hand the host-app blob (if any) to the registered
-                        // provider BEFORE the SIGKILL below. Code after
-                        // killProcess never runs, so this MUST happen here
-                        // — past sigil restores logged the blob's size in
-                        // a block placed after the kill, which never
-                        // executed and silently dropped the bytes.
-                        val meta = restored.appMetadata
-                        if (meta != null) {
-                            Log.i(TAG, "  App metadata: ${meta.size}B — handing to AppDataBackupProvider")
-                            appDataProvider.orElse(null)?.let { provider ->
-                                runCatching { provider.restore(meta) }
-                                    .onFailure {
-                                        Log.e(
-                                            TAG,
-                                            "appDataProvider.restore failed; app data not restored " +
-                                                "but seed + sigil are. Continuing to relaunch.",
-                                            it,
-                                        )
-                                    }
-                            } ?: Log.w(
+                // Step 2 — app-state restore (best-effort, second
+                // biometric, PRF(BACKUP_SALT)). Skipped silently when:
+                //  - storage is empty (fresh install elsewhere)
+                //  - blob is legacy v1 (no recoverable appMetadata under v2 schema)
+                //  - no AppDataBackupProvider bound (BBoard et al.)
+                val provider = appDataProvider.orElse(null)
+                if (provider == null) {
+                    Log.i(TAG, "  No AppDataBackupProvider bound — skipping app-state restore")
+                    return@launch
+                }
+                val restored = try {
+                    appStateBackup.restore(activity)
+                } catch (e: BackupException) {
+                    // No backup / legacy v1 / decryption failure — sigil
+                    // is already restored, this is just app-state. Log
+                    // and move on; user can still operate.
+                    Log.i(TAG, "  App-state restore unavailable: ${e.message}")
+                    return@launch
+                }
+                try {
+                    if (restored.appMetadata.isEmpty()) {
+                        Log.i(TAG, "  Backup contained no appMetadata — nothing to hand off")
+                        return@launch
+                    }
+                    Log.i(TAG, "  App metadata: ${restored.appMetadata.size}B — handing to AppDataBackupProvider")
+                    runCatching { provider.restore(restored.appMetadata) }
+                        .onFailure {
+                            Log.e(
                                 TAG,
-                                "appMetadata present (${meta.size}B) but no AppDataBackupProvider bound — dropping",
+                                "appDataProvider.restore failed; app data not restored " +
+                                    "but the sigil is. Host can retry.",
+                                it,
                             )
                         }
-
-                        _status.value = SigilStatus.Forged(
-                            did = did,
-                            credentialId = credentialId,
-                            publicKeyHex = publicKeyHex,
-                        )
-                        Log.i(TAG, "  Sigil identity + wallet seed restored — restarting app for clean reload")
-                        // CRITICAL: kill the process before any other code (or
-                        // the user) can interact with the wallet panel. The
-                        // wallet panel's in-memory SDK is still built on the
-                        // pre-restore seed; SeedVault now holds the recovered
-                        // seed. If the user funds and then backs up in this
-                        // desynced window, the backup captures the WRONG seed
-                        // and the funded wallet becomes unrecoverable. Killing
-                        // the process guarantees the next launch bootstraps
-                        // from SeedVault and the panel + storage agree.
-                        //
-                        // UX: queue a launcher intent BEFORE killing so Android
-                        // auto-relaunches a fresh process. Without this the
-                        // app just vanishes and the user has to find the icon
-                        // again — that looks indistinguishable from a crash.
-                        // startActivity dispatches the intent to system_server
-                        // synchronously; when we SIGKILL ourselves a moment
-                        // later, system_server already has the intent on its
-                        // queue and starts a new process to fulfill it.
-                        val relaunch = activity.packageManager
-                            .getLaunchIntentForPackage(activity.packageName)
-                            ?.apply {
-                                addFlags(
-                                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
-                                )
-                            }
-                        if (relaunch != null) activity.startActivity(relaunch)
-                        activity.finishAffinity()
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                    } else {
-                        Log.w(TAG, "Restore returned a seed but no sigil triple — leaving status unchanged")
-                    }
                 } finally {
                     restored.wipe()
                 }
             } catch (e: BackupException) {
-                Log.e(TAG, "Restore failed: ${e.message}", e)
-                _status.value = SigilStatus.Error(e.message ?: "Restore failed")
+                Log.e(TAG, "Sign-in failed: ${e.message}", e)
+                _status.value = SigilStatus.Error(e.message ?: "Sign-in failed")
             } catch (e: Exception) {
-                Log.e(TAG, "Restore failed", e)
-                _status.value = SigilStatus.Error(e.message ?: "Restore failed")
+                Log.e(TAG, "Sign-in failed", e)
+                _status.value = SigilStatus.Error(e.message ?: "Sign-in failed")
             }
         }
     }
@@ -492,60 +475,6 @@ class SigilPanelViewModel @Inject constructor(
      */
     private fun hostAppLabel(): String =
         context.packageManager.getApplicationLabel(context.applicationInfo).toString()
-
-    /**
-     * Persist the recovered seed into [SeedVault] so the wallet panel
-     * bootstraps from it on next launch. If a fresh seed was generated
-     * earlier this session (the "No seed → generate fresh" path), wipe it
-     * first — `storeSeed` refuses to overwrite. The biometric prompt fires
-     * again here because storeSeed is biometric-gated; the user just
-     * authenticated for the Block Store retrieve, so this is a second tap.
-     *
-     * Note: this only persists the seed. The currently-active SDK instance
-     * inside `WalletPanelViewModel` was already built on the fresh seed and
-     * will keep using it for this process lifetime. The user has to relaunch
-     * the app for the wallet panel to rebootstrap on the recovered seed.
-     */
-    internal suspend fun restoreSeedIntoVault(
-        activity: FragmentActivity,
-        recoveredEntropy: ByteArray,
-        recoveredBip39Seed: ByteArray,
-    ) {
-        try {
-            // SeedVault.storeSeed encrypts under the Keystore master key,
-            // which WalletKeyManager creates lazily — but only on the
-            // WalletPanel's auto-bootstrap path. With the Problem A gate
-            // (9465ea4), the wallet panel stays gated during
-            // BackupAvailable, so a *first-ever* install hits this restore
-            // path without anyone having generated the master key yet.
-            // Without this, cipherForEncrypt throws "Master key not found"
-            // and the recovered seed silently fails to persist — the
-            // catch below logs but the relaunch then auto-creates a fresh
-            // wallet over the restored DID, wiping the user's funds out
-            // of view.
-            if (!walletKeyManager.hasKey()) {
-                val strongBox = walletKeyManager.generateKey()
-                Log.i(TAG, "  Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"}) for restored seed")
-            }
-            if (seedVault.hasSeed()) {
-                Log.i(TAG, "  Replacing existing SeedVault entry with recovered seed")
-                seedVault.deleteSeed()
-            }
-            // Copy the recovered bytes — storeSeed's producer lambda wipes
-            // the PlaintextSeed it receives, and we must not wipe the caller's
-            // RestoredSigil here (its own `wipe()` runs in the outer finally).
-            seedVault.storeSeed(activity) {
-                PlaintextSeed(recoveredEntropy.copyOf(), recoveredBip39Seed.copyOf())
-            }
-            Log.i(TAG, "  Recovered seed persisted to SeedVault")
-        } catch (e: Exception) {
-            Log.e(TAG, "  Failed to persist recovered seed into SeedVault: ${e.message}", e)
-            // Re-throw so callers (restoreSeed) move to SigilStatus.Error
-            // instead of silently SIGKILLing into a fresh-wallet state.
-            // The silent fall-through was what hid this bug from view.
-            throw e
-        }
-    }
 
     companion object {
         private const val TAG = "SigilPanel"

@@ -115,6 +115,56 @@ class SigilStateStoreTest {
     }
 
     @Test
+    fun `constructor migrates away from legacy P-256 DID and clears triple`() {
+        // Simulate a pre-migration install: legacy P-256 DID
+        // (did:key:zDn…) plus the rest of the triple already persisted.
+        // The constructor's migration must detect the legacy prefix
+        // and wipe the triple so the next forge / sign-in re-derives
+        // via the Ed25519 PRF path.
+        val prefs = context.getSharedPreferences(SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(SigilStateStore.KEY_DID, "did:key:zDnLegacyP256Example")
+            .putString(SigilStateStore.KEY_CREDENTIAL_ID, "legacy-cred-id")
+            .putString(SigilStateStore.KEY_PUBLIC_KEY_HEX, "0213abc")
+            .putBoolean(SigilStateStore.KEY_BACKUP_DISMISSED, true)
+            .commit()
+
+        // Construct AFTER seeding legacy state — migration runs here.
+        val migrated = SigilStateStore(context)
+
+        assertFalse("legacy DID must be cleared", migrated.hasSigil())
+        assertNull(migrated.getDid())
+        assertNull(migrated.getCredentialId())
+        assertNull(migrated.getPublicKeyHex())
+        // Dismissed flag is independent of sigil identity; migration
+        // must preserve it so the user's prior "stop nagging about
+        // restore" intent isn't undone.
+        assertTrue(
+            "dismissed flag must survive the migration",
+            migrated.isBackupDismissed(),
+        )
+    }
+
+    @Test
+    fun `constructor leaves Ed25519 DID untouched`() {
+        // A modern Ed25519 DID (did:key:z6Mk…) must NOT trigger
+        // migration. Guards against a regression that broadens the
+        // detector to match all DIDs.
+        val prefs = context.getSharedPreferences(SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(SigilStateStore.KEY_DID, "did:key:z6MkEd25519Example")
+            .putString(SigilStateStore.KEY_CREDENTIAL_ID, "cred-id")
+            .putString(SigilStateStore.KEY_PUBLIC_KEY_HEX, "0214abcd")
+            .commit()
+
+        val constructed = SigilStateStore(context)
+
+        assertTrue(constructed.hasSigil())
+        assertEquals("did:key:z6MkEd25519Example", constructed.getDid())
+        assertEquals("cred-id", constructed.getCredentialId())
+    }
+
+    @Test
     fun `markBackupDismissed writes durably so a fresh handle sees it`() {
         store.markBackupDismissed()
         // Open a fresh handle (bypasses the in-memory cache held by

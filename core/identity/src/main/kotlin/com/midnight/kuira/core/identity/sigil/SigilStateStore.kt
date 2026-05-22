@@ -2,6 +2,8 @@ package com.midnight.kuira.core.identity.sigil
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,6 +44,41 @@ class SigilStateStore @Inject constructor(
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    init {
+        migrateLegacyP256DidIfPresent()
+    }
+
+    /**
+     * One-time migration: if the persisted DID is the legacy P-256
+     * format (`did:key:zDn…`, derived from the passkey's pubkey
+     * before the PRF-Ed25519 switch), wipe the sigil triple so the
+     * sigil panel re-derives via [SigilIdentityProvider] on next
+     * forge / sign-in. The wallet seed (PRF-derived) is unaffected
+     * because it lives in `WalletSeedSource`, not here.
+     *
+     * Auto-replace silently per the migration decision (no real
+     * users at the time of the switch). Orphaned `AuthorizationStore`
+     * rows keyed by the old DID become unfindable; the user
+     * re-authorizes on next access-key request.
+     *
+     * Runs in the constructor so every consumer of the store sees a
+     * consistent post-migration view from the first call. Cheap
+     * (one SharedPreferences read in the no-op case).
+     */
+    private fun migrateLegacyP256DidIfPresent() {
+        val did = prefs.getString(KEY_DID, null) ?: return
+        if (!DidKeyGenerator.isLegacyP256(did)) return
+        Log.w(
+            "SigilStateStore",
+            "Legacy P-256 DID detected — clearing sigil prefs so next forge/sign-in re-derives via PRF→Ed25519",
+        )
+        prefs.edit()
+            .remove(KEY_DID)
+            .remove(KEY_CREDENTIAL_ID)
+            .remove(KEY_PUBLIC_KEY_HEX)
+            .commit()
+    }
 
     /**
      * True when a sigil has been forged (or restored). Cheapest gate —

@@ -486,8 +486,16 @@ private fun ForgedBody(
 ) {
     MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    MonoField(label = "root key (P-256)", value = forged.publicKeyHex, colors = colors, onCopy = onCopy)
-    Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+    // Empty when the sigil was bound via the sign-in flow (an
+    // existing passkey on a second device) — the assertion ceremony
+    // doesn't return the passkey's pubkey, only the DID is recoverable.
+    // Hide the row in that case rather than render a label with an
+    // empty value. BBoard's `authorizeAccessKey` needs this pubkey;
+    // when it's missing the host should prompt re-forge on this device.
+    if (forged.publicKeyHex.isNotEmpty()) {
+        MonoField(label = "root key (P-256)", value = forged.publicKeyHex, colors = colors, onCopy = onCopy)
+        Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+    }
     SheetButton(text = "backup to cloud", enabled = true, colors = colors, onClick = onBackup, dimmed = true)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)

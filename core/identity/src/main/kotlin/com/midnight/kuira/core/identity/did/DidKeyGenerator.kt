@@ -28,8 +28,17 @@ object DidKeyGenerator {
     /** Multicodec varint for P-256 public key (0x1200 varint-encoded). */
     private val P256_MULTICODEC_VARINT = byteArrayOf(0x80.toByte(), 0x24.toByte())
 
+    /**
+     * Multicodec varint for Ed25519 public key (0xed varint-encoded).
+     *
+     * 0xed fits in 7 bits + continuation, so the varint is `[0xed, 0x01]`.
+     * Spec reference: https://github.com/multiformats/multicodec/blob/master/table.csv
+     */
+    private val ED25519_MULTICODEC_VARINT = byteArrayOf(0xed.toByte(), 0x01.toByte())
+
     private const val DID_KEY_PREFIX = "did:key:z"
     private const val COMPRESSED_P256_KEY_SIZE = 33
+    private const val ED25519_PUBLIC_KEY_SIZE = 32
 
     /**
      * Generates a `did:key` from a compressed P-256 public key.
@@ -121,6 +130,45 @@ object DidKeyGenerator {
         val prefix: Byte = if (y.last().toInt() and 1 == 0) 0x02 else 0x03
         return byteArrayOf(prefix) + x
     }
+
+    /**
+     * Generates a `did:key` from a 32-byte Ed25519 public key.
+     *
+     * Format: `did:key:z<base58btc(varint(0xed) || ed25519_pubkey)>`
+     *
+     * Produced DIDs start with the well-known prefix `did:key:z6Mk` —
+     * a direct consequence of the multicodec `0xed01` + the 32-byte key
+     * length passing through base58btc. Any consumer comparing
+     * DID prefixes to detect Ed25519 (as opposed to legacy P-256
+     * `did:key:zDn…`) can rely on `z6Mk`.
+     *
+     * Reference: https://w3c-ccg.github.io/did-method-key/#ed25519-x25519
+     *
+     * @param publicKey 32-byte Ed25519 public key
+     * @return The DID string, e.g. `did:key:z6Mk...`
+     * @throws IllegalArgumentException if key is not 32 bytes
+     */
+    fun fromEd25519(publicKey: ByteArray): String {
+        require(publicKey.size == ED25519_PUBLIC_KEY_SIZE) {
+            "Ed25519 public key must be $ED25519_PUBLIC_KEY_SIZE bytes, got ${publicKey.size}"
+        }
+        val payload = ED25519_MULTICODEC_VARINT + publicKey
+        val encoded = Base58.encode(payload)
+        return "$DID_KEY_PREFIX$encoded"
+    }
+
+    /**
+     * True when [did] uses the legacy P-256 multicodec encoding.
+     *
+     * Used by [SigilStateStore] to detect installations that were
+     * forged before the PRF-derived Ed25519 migration and need their
+     * sigil state wiped + re-derived on next launch.
+     *
+     * Prefix-only check (`did:key:zDn`) — fast, doesn't decode base58.
+     * Safe because base58btc + the P-256 multicodec prefix
+     * deterministically produces a `zDn…` prefix (see DidKeyGeneratorTest).
+     */
+    fun isLegacyP256(did: String): Boolean = did.startsWith("${DID_KEY_PREFIX}Dn")
 
     private const val COORDINATE_SIZE = 32
 }

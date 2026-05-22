@@ -45,7 +45,7 @@ class BlockStoreBackupStorage(
         // works when the blob is uploaded to the user's Google account.
         // Device-local-only storage gets wiped on uninstall. Safe to upload
         // regardless of E2EE because the blob is already encrypted by
-        // BackupEncryptor with a PRF-derived AES key from the user's passkey
+        // AppStateBackupEncryptor with a PRF-derived AES key from the user's passkey
         // — Google can't read it whether or not their E2EE layer is on.
         // If no Google account is signed in, Play services silently degrades
         // to local-only storage; that's a device-config limitation, not ours.

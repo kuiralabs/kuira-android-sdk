@@ -94,7 +94,21 @@ class SeedDeriverTest {
     fun `SEED_SALT is domain-separated from BACKUP_SALT`() {
         assertFalse(
             "SEED_SALT must differ from BACKUP_SALT — two purposes, two independent secrets from one passkey",
-            SeedDeriver.SEED_SALT.contentEquals(SigilBackup.BACKUP_SALT),
+            SeedDeriver.SEED_SALT.contentEquals(AppStateBackup.BACKUP_SALT),
+        )
+    }
+
+    @Test
+    fun `SIGIL_SALT is domain-separated from SEED_SALT and BACKUP_SALT`() {
+        // Three independent secrets from one passkey credential.
+        // Compromise of any one must not leak the others.
+        assertFalse(
+            "SIGIL_SALT must differ from SEED_SALT",
+            SeedDeriver.SIGIL_SALT.contentEquals(SeedDeriver.SEED_SALT),
+        )
+        assertFalse(
+            "SIGIL_SALT must differ from BACKUP_SALT",
+            SeedDeriver.SIGIL_SALT.contentEquals(AppStateBackup.BACKUP_SALT),
         )
     }
 }

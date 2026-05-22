@@ -5,6 +5,9 @@ import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.identity.auth.AuthorizationStore
 import com.midnight.kuira.core.identity.passkey.PasskeyConfig
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.identity.sigil.Ed25519PrfSigilProvider
+import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,4 +59,30 @@ object IdentityModule {
      */
     private const val DEFAULT_RP_ID = "nel349.github.io"
     private const val DEFAULT_RP_NAME = "Kuira"
+}
+
+/**
+ * Binds the default [SigilIdentityProvider] implementation
+ * ([Ed25519PrfSigilProvider]) into the Hilt graph.
+ *
+ * Why a separate `@Module` (not just a `@Provides` next door): `@Binds`
+ * abstract members require an abstract class/interface owner, while
+ * the existing [IdentityModule] is an `object` of `@Provides`
+ * factories. Splitting into two modules at the same install scope is
+ * Hilt's idiomatic way to mix both styles without rewriting the
+ * existing surface.
+ *
+ * Apps that want a different `SigilIdentityProvider` (e.g. a future
+ * zk-passport implementation, midnightOS-Passkeys interop, a fake for
+ * tests) replace this module via Hilt's `@UninstallModules` +
+ * `@InstallIn(SingletonComponent::class)` pattern.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class SigilIdentityModule {
+    @Binds
+    @Singleton
+    abstract fun bindSigilIdentityProvider(
+        impl: Ed25519PrfSigilProvider,
+    ): SigilIdentityProvider
 }

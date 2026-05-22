@@ -2,7 +2,7 @@ package com.midnight.kuira.dapp.di
 
 import android.content.Context
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
-import com.midnight.kuira.core.identity.backup.SigilBackup
+import com.midnight.kuira.core.identity.backup.AppStateBackup
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import dagger.Module
 import dagger.Provides
@@ -31,7 +31,7 @@ import javax.inject.Singleton
  *    do, so providing it here keeps `core:identity`'s graph free of
  *    Block Store coupling until that changes.
  *
- *  - [SigilBackup] — pure composition of [PasskeyManager] +
+ *  - [AppStateBackup] — pure composition of [PasskeyManager] +
  *    [BlockStoreBackupStorage]. Same rationale: only consumed by
  *    the sigil panel today.
  *
@@ -55,11 +55,12 @@ object DappUiModule {
 
     @Provides
     @Singleton
-    fun provideSigilBackup(
+    fun provideAppStateBackup(
         passkeyManager: PasskeyManager,
         blockStoreStorage: BlockStoreBackupStorage,
-    ): SigilBackup = SigilBackup(
+    ): AppStateBackup = AppStateBackup(
         passkeyManager = passkeyManager,
         storage = blockStoreStorage,
     )
 }
+

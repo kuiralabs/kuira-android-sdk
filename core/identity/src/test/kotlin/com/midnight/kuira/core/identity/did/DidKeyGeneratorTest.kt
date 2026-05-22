@@ -150,4 +150,58 @@ class DidKeyGeneratorTest {
         // P-256 did:key values always start with "did:key:zDn" due to the multicodec prefix
         assertTrue("P-256 did:key should start with 'did:key:zDn', got: ${did.take(15)}", did.startsWith("did:key:zDn"))
     }
+
+    // ── Ed25519 ──
+
+    @Test
+    fun `fromEd25519 produces valid did-key format`() {
+        // A 32-byte Ed25519 public key (any random-looking bytes are syntactically valid;
+        // semantic validity isn't part of did:key encoding's responsibility).
+        val pubkey = ByteArray(32) { (it * 7 + 3).toByte() }
+        val did = DidKeyGenerator.fromEd25519(pubkey)
+        assertTrue("did:key prefix missing", did.startsWith("did:key:z"))
+    }
+
+    @Test
+    fun `fromEd25519 deterministic`() {
+        val pubkey = ByteArray(32) { 0x42 }
+        assertEquals(DidKeyGenerator.fromEd25519(pubkey), DidKeyGenerator.fromEd25519(pubkey))
+    }
+
+    @Test
+    fun `fromEd25519 different keys produce different dids`() {
+        val a = ByteArray(32) { 0x01 }
+        val b = ByteArray(32) { 0x02 }
+        assertTrue(
+            "distinct pubkeys must produce distinct dids",
+            DidKeyGenerator.fromEd25519(a) != DidKeyGenerator.fromEd25519(b),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `fromEd25519 rejects wrong-size key`() {
+        DidKeyGenerator.fromEd25519(ByteArray(31))
+    }
+
+    @Test
+    fun `known test vector - Ed25519 did-key starts with z6Mk prefix`() {
+        // Ed25519 did:key always starts with `did:key:z6Mk` because the
+        // multicodec varint [0xed, 0x01] + a 32-byte payload deterministically
+        // produces that base58btc prefix. Wishlist-level invariant: consumers
+        // can prefix-match `z6Mk` to detect Ed25519 vs legacy P-256 (`zDn…`)
+        // — keeping it pinned guards against accidental encoding drift.
+        val knownKey = ByteArray(32) { (it * 5 + 11).toByte() }
+        val did = DidKeyGenerator.fromEd25519(knownKey)
+        assertTrue("Ed25519 did:key should start with 'did:key:z6Mk', got: ${did.take(16)}", did.startsWith("did:key:z6Mk"))
+    }
+
+    @Test
+    fun `isLegacyP256 returns true for P-256 did and false for Ed25519 did`() {
+        val p256 = DidKeyGenerator.fromCompressedP256(
+            ByteArray(33).also { it[0] = 0x02 }
+        )
+        val ed = DidKeyGenerator.fromEd25519(ByteArray(32) { 0x11 })
+        assertTrue("P-256 DID must be flagged legacy", DidKeyGenerator.isLegacyP256(p256))
+        assertTrue("Ed25519 DID must NOT be flagged legacy", !DidKeyGenerator.isLegacyP256(ed))
+    }
 }

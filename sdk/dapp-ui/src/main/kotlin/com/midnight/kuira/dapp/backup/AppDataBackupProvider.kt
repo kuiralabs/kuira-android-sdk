@@ -12,13 +12,15 @@ package com.midnight.kuira.dapp.backup
  *  2. Bind the implementation as `@Provides @Singleton AppDataBackupProvider`
  *     in the host's Hilt graph.
  *  3. The SDK's `SigilPanelViewModel` discovers the binding via
- *     `Optional<AppDataBackupProvider>` and includes the snapshot
- *     bytes in `SigilBackup.appMetadata` on the next backup, then
- *     hands restored bytes back via [restore] on the next sigil
+ *     `Optional<AppDataBackupProvider>` and passes the snapshot bytes
+ *     as `AppStateBackup.backup(appMetadata = …)` on the next backup,
+ *     then hands restored bytes back via [restore] on the next sigil
  *     restore.
  *
  * Apps that don't bind a provider get a default empty Optional — the
- * Sigil backup contains only the seed (current BBoard behavior).
+ * backup blob then carries zero-length appMetadata (BBoard behavior).
+ * The seed and sigil identity are NOT in the blob — they derive from
+ * the passkey via PRF and are reconstructed locally, not restored.
  *
  * **Encoding:** opaque to the SDK. Producers pick a format (JSON,
  * Protobuf, custom binary) and ideally include a schema version so a
@@ -36,10 +38,10 @@ package com.midnight.kuira.dapp.backup
 interface AppDataBackupProvider {
 
     /**
-     * Produce the app-data blob to include in the next sigil backup.
+     * Produce the app-data blob to include in the next backup.
      * Return `null` when there's nothing to back up — the SDK then
-     * passes `appMetadata = null` to `SigilBackup.backup`, keeping the
-     * blob lean.
+     * passes `appMetadata = null` to `AppStateBackup.backup`, keeping
+     * the blob lean (just the length prefix + AES-GCM overhead).
      *
      * Called from the backup pipeline, inside a coroutine on
      * `Dispatchers.IO` by convention but not enforced. Implementations
