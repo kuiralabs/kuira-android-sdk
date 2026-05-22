@@ -9,7 +9,9 @@ import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.identity.passkey.PrfAssertionResult
+import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import io.mockk.coEvery
@@ -192,6 +194,40 @@ class WalletPanelViewModelTest {
         assertEquals(true, flagSet)
     }
 
+    // ── Action handler boundary (Step 2 user-visible contract) ──
+
+    @Test
+    fun `refreshBalance with no sigil emits SigilRequired status`() = runTest {
+        // The user-visible end of the gate. ensureSeedReady throws
+        // before MidnightSdk.Builder is even invoked, so this test
+        // doesn't need to mock the SDK builder — the exception is
+        // caught and translated by refreshBalance's outer catch.
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity)
+        // viewModelScope.launch + TestDispatcher: drain pending work.
+        // UnconfinedTestDispatcher runs the viewModelScope.launch eagerly,
+        // so by the time refreshBalance returns, the catch block has fired.
+
+        assertEquals(
+            "Action handler must translate the exception, not let it surface as a generic Error",
+            WalletStatus.SigilRequired,
+            vm.status.value,
+        )
+    }
+
+    @Test
+    fun `registerDust with no sigil emits SigilRequired status`() = runTest {
+        val vm = newVm()
+        vm.registerDust(devConfig(), activity)
+        // UnconfinedTestDispatcher runs the viewModelScope.launch eagerly,
+        // so by the time refreshBalance returns, the catch block has fired.
+
+        assertEquals(
+            WalletStatus.SigilRequired,
+            vm.status.value,
+        )
+    }
+
     // ── Dev-seed override gate ──
 
     @Test
@@ -275,6 +311,16 @@ class WalletPanelViewModelTest {
             prfOutput = prfOutput,
         )
     }
+
+    /**
+     * Minimal WalletConfig for tests that only care about whether the
+     * action handler emits the right status — the SDK never gets built
+     * because ensureSeedReady throws first.
+     */
+    private fun devConfig(): WalletConfig = WalletConfig(
+        network = MidnightNetwork.UNDEPLOYED,
+        provingMode = ProvingMode.DEFAULT,
+    )
 
     private fun newVm(): WalletPanelViewModel = WalletPanelViewModel(
         context = context,

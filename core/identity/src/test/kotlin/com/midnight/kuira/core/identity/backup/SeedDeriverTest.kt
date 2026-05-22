@@ -58,6 +58,39 @@ class SeedDeriverTest {
     // that coverage on the same invariant.
 
     @Test
+    fun `PrfSeedMaterial wipe zeroes both arrays`() {
+        // wipe() lives on the hot path: WalletPanelViewModel calls it
+        // in a `finally` after handing entropy + seed to SeedVault. A
+        // regression that quietly stopped wiping would leave seed
+        // material resident in the ViewModel's heap until GC — pin
+        // the invariant.
+        val material = PrfSeedMaterial(
+            entropy = ByteArray(32) { 0x42 },
+            bip39Seed = ByteArray(64) { 0xAA.toByte() },
+        )
+        material.wipe()
+        assertArrayEquals(
+            "entropy must be fully zeroed",
+            ByteArray(32),
+            material.entropy,
+        )
+        assertArrayEquals(
+            "bip39Seed must be fully zeroed",
+            ByteArray(64),
+            material.bip39Seed,
+        )
+    }
+
+    @Test
+    fun `PrfSeedMaterial wipe is idempotent`() {
+        // Defensive: callers may invoke wipe more than once (e.g. a
+        // `finally` after an early-return path). Must not throw.
+        val material = PrfSeedMaterial(ByteArray(32), ByteArray(64))
+        material.wipe()
+        material.wipe()
+    }
+
+    @Test
     fun `SEED_SALT is domain-separated from BACKUP_SALT`() {
         assertFalse(
             "SEED_SALT must differ from BACKUP_SALT — two purposes, two independent secrets from one passkey",

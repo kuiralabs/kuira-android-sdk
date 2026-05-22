@@ -82,6 +82,20 @@ class PillLabelTest {
         assertEquals("localnet · error", label)
     }
 
+    // ── SigilRequired state ──
+
+    @Test
+    fun `sigil required — network prefix plus marker`() {
+        // The pill must say "sigil required" so the user knows the wallet
+        // hasn't bootstrapped because no passkey is forged yet. Without
+        // this marker the pill would look indistinguishable from a
+        // pre-bootstrap None state, but the underlying contract is
+        // different (None can self-recover by tapping; SigilRequired
+        // needs the user to go forge a sigil first).
+        val label = pillLabel(WalletStatus.SigilRequired, MidnightNetwork.PREPROD, formatter)
+        assertEquals("preprod · sigil required", label)
+    }
+
     // ── Ready: unshielded-only ──
 
     @Test
