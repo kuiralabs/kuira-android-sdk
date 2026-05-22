@@ -38,4 +38,14 @@ sealed class WalletStatus {
 
     /** SDK couldn't build or balance couldn't be read. */
     data class Error(val message: String) : WalletStatus()
+
+    /**
+     * No sigil forged yet — wallet bootstrap can't proceed because
+     * the BIP-39 seed is derived from the passkey PRF. The host
+     * should render a "forge your sigil to continue" affordance and
+     * pump the user to [com.midnight.kuira.dapp.sigil.SigilStatusPanel];
+     * once the forge completes the next refreshBalance call will
+     * succeed.
+     */
+    data object SigilRequired : WalletStatus()
 }

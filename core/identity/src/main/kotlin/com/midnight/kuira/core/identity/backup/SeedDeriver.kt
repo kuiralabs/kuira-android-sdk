@@ -78,12 +78,30 @@ object SeedDeriver {
         activity: Activity,
         passkeyManager: PasskeyManager,
     ): ByteArray {
+        val material = derivePrfMaterial(activity, passkeyManager)
+        material.entropy.fill(0)
+        return material.bip39Seed
+    }
+
+    /**
+     * One-shot derive that returns BOTH the 32-byte BIP-39 entropy and
+     * the 64-byte BIP-39 seed from a single PRF authentication.
+     *
+     * Use this when both halves are needed (e.g. storing a
+     * `PlaintextSeed` which carries entropy + seed together) — calling
+     * [derivePrfEntropy] then [deriveBip39Seed] would trigger two
+     * biometric prompts because each call re-runs Credential Manager.
+     *
+     * **Caller MUST wipe both arrays** once the consumer has copied
+     * them — call [PrfSeedMaterial.wipe] or wipe the fields directly.
+     */
+    suspend fun derivePrfMaterial(
+        activity: Activity,
+        passkeyManager: PasskeyManager,
+    ): PrfSeedMaterial {
         val entropy = derivePrfEntropy(activity, passkeyManager)
-        return try {
-            entropyToBip39Seed(entropy)
-        } finally {
-            entropy.fill(0)
-        }
+        val seed = entropyToBip39Seed(entropy)
+        return PrfSeedMaterial(entropy, seed)
     }
 
     /**
@@ -109,4 +127,21 @@ object SeedDeriver {
 
     /** BIP-39 entropy size for a 24-word mnemonic. */
     private const val BIP39_ENTROPY_SIZE = 32
+}
+
+/**
+ * Both halves of the passkey-PRF derivation: the 32-byte BIP-39
+ * entropy (= raw PRF output) and the 64-byte BIP-39 seed. Returned
+ * together by [SeedDeriver.derivePrfMaterial] so consumers needing
+ * both don't pay two biometric prompts.
+ */
+class PrfSeedMaterial(
+    val entropy: ByteArray,
+    val bip39Seed: ByteArray,
+) {
+    /** Zeroes both byte arrays. Idempotent. */
+    fun wipe() {
+        entropy.fill(0)
+        bip39Seed.fill(0)
+    }
 }

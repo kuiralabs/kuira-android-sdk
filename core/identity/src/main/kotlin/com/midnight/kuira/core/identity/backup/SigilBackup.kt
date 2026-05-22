@@ -244,3 +244,13 @@ class BackupException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * Thrown by seed-derivation paths that require the user to have a
+ * forged passkey. The wallet panel converts this to a UI gate
+ * (`WalletStatus.SigilRequired`); other callers can surface a
+ * "forge sigil first" affordance however they choose.
+ */
+class SigilRequiredException(
+    message: String = "No sigil found — forge a passkey first",
+) : Exception(message)

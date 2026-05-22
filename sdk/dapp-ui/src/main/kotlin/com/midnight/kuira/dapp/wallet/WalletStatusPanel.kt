@@ -381,6 +381,7 @@ internal fun pillLabel(
         if (status.balance.dustRegistered) append(" · ✓")
     }
     is WalletStatus.Error -> "${network.pillName} · error"
+    is WalletStatus.SigilRequired -> "${network.pillName} · sigil required"
 }
 
 /**
@@ -443,6 +444,12 @@ private fun WalletSheetContent(
             is WalletStatus.Loading -> Text(status.stage, color = colors.onSheetDim, fontSize = PanelType.LoadingText)
             is WalletStatus.Ready -> ReadyBody(status, formatter, colors)
             is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
+            is WalletStatus.SigilRequired -> Text(
+                "Forge your sigil first — the wallet derives its seed from your passkey. " +
+                    "Open the sigil panel above, tap “forge sigil”, then come back and read balance.",
+                color = colors.onSheetSubtle,
+                fontSize = PanelType.Body,
+            )
         }
 
         Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
