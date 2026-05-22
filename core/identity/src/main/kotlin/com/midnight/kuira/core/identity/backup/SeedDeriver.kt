@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.identity.backup
 
 import android.app.Activity
+import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -46,5 +47,47 @@ object SeedDeriver {
             ?: throw BackupException("PRF not available — authenticator does not support PRF extension")
     }
 
+    /**
+     * One-shot: passkey PRF → BIP-39 entropy → mnemonic → BIP-39 seed.
+     *
+     * The returned 64-byte seed is what `MidnightSdk.Builder.seed(...)`
+     * consumes. Identical on every device + every Kuira ecosystem app
+     * that shares the RP, because PRF is deterministic in
+     * (passkey, salt) and the entropy → seed chain is purely
+     * deterministic.
+     *
+     * **Caller MUST wipe** the returned ByteArray once the SDK has
+     * copied it — same contract as [PlaintextSeed.bip39Seed].
+     */
+    suspend fun deriveBip39Seed(
+        activity: Activity,
+        passkeyManager: PasskeyManager,
+    ): ByteArray {
+        val entropy = derivePrfEntropy(activity, passkeyManager)
+        return try {
+            entropyToBip39Seed(entropy)
+        } finally {
+            entropy.fill(0)
+        }
+    }
+
+    /**
+     * Deterministic chain from BIP-39 entropy to BIP-39 seed.
+     *
+     * Extracted so unit tests can pin the (entropy → seed) mapping
+     * without standing up Credential Manager. Returns the standard
+     * BIP-39 64-byte PBKDF2 seed (see `BIP39.mnemonicToSeed`).
+     */
+    internal fun entropyToBip39Seed(entropy: ByteArray): ByteArray {
+        require(entropy.size == BIP39_ENTROPY_SIZE) {
+            "BIP-39 entropy must be $BIP39_ENTROPY_SIZE bytes, got ${entropy.size}"
+        }
+        val mnemonic = BIP39.entropyToMnemonic(entropy)
+        return BIP39.mnemonicToSeed(mnemonic)
+    }
+
     private const val CHALLENGE_SIZE = 32
+
+    /** BIP-39 entropy size for a 24-word mnemonic. */
+    private const val BIP39_ENTROPY_SIZE = 32
 }
