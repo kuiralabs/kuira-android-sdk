@@ -107,6 +107,7 @@ fun SigilStatusPanel(
                 onBackup = { activity?.let { viewModel.backupSeed(it) } },
                 onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                 onTestPrf = { activity?.let { viewModel.testPrf(it) } },
+                onProbeSeed = { activity?.let { viewModel.probePrfDeterminism(it) } },
                 onStartFresh = {
                     viewModel.dismissBackup()
                     sheetOpen = false
@@ -359,6 +360,7 @@ private fun SigilSheetContent(
     onBackup: () -> Unit,
     onRestore: () -> Unit,
     onTestPrf: () -> Unit,
+    onProbeSeed: () -> Unit,
     onStartFresh: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
@@ -376,11 +378,13 @@ private fun SigilSheetContent(
             colors = colors,
             onForgeSigil = onForgeSigil,
             onRestore = onRestore,
+            onProbeSeed = onProbeSeed,
         )
         is SigilStatus.BackupAvailable -> BackupAvailableBody(
             colors = colors,
             onRestore = onRestore,
             onStartFresh = onStartFresh,
+            onProbeSeed = onProbeSeed,
         )
         is SigilStatus.Initializing -> CreatingBody(
             stage = "checking for cloud backup…",
@@ -394,6 +398,7 @@ private fun SigilSheetContent(
             onBackup = onBackup,
             onRestore = onRestore,
             onTestPrf = onTestPrf,
+            onProbeSeed = onProbeSeed,
         )
         is SigilStatus.Error -> ErrorBody(
             message = status.message,
@@ -409,6 +414,7 @@ private fun NoneBody(
     colors: SigilPanelColors,
     onForgeSigil: () -> Unit,
     onRestore: () -> Unit,
+    onProbeSeed: () -> Unit,
 ) {
     Text(
         "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
@@ -419,6 +425,10 @@ private fun NoneBody(
     SheetButton(text = "forge sigil", enabled = true, colors = colors, onClick = onForgeSigil)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    // Available without a local sigil so cross-device PRF probes can
+    // exercise a GPM-synced passkey from another device.
+    SheetButton(text = "probe seed prf", enabled = true, colors = colors, onClick = onProbeSeed, dimmed = true)
 }
 
 /**
@@ -436,6 +446,7 @@ private fun BackupAvailableBody(
     colors: SigilPanelColors,
     onRestore: () -> Unit,
     onStartFresh: () -> Unit,
+    onProbeSeed: () -> Unit,
 ) {
     Text(
         "A previous wallet backup was found in your cloud. Restore it, or start fresh on this device.",
@@ -446,6 +457,8 @@ private fun BackupAvailableBody(
     SheetButton(text = "restore previous", enabled = true, colors = colors, onClick = onRestore)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "start fresh", enabled = true, colors = colors, onClick = onStartFresh, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    SheetButton(text = "probe seed prf", enabled = true, colors = colors, onClick = onProbeSeed, dimmed = true)
 }
 
 @Composable
@@ -469,6 +482,7 @@ private fun ForgedBody(
     onBackup: () -> Unit,
     onRestore: () -> Unit,
     onTestPrf: () -> Unit,
+    onProbeSeed: () -> Unit,
 ) {
     MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
@@ -479,6 +493,11 @@ private fun ForgedBody(
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "test prf", enabled = true, colors = colors, onClick = onTestPrf, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    // Cross-app / cross-device PRF determinism probe — single auth with
+    // SEED_SALT, logs output to `PrfProbe` tag. Compare hex across
+    // ecosystem apps + devices to validate PRF-derived seed viability.
+    SheetButton(text = "probe seed prf", enabled = true, colors = colors, onClick = onProbeSeed, dimmed = true)
 }
 
 /**

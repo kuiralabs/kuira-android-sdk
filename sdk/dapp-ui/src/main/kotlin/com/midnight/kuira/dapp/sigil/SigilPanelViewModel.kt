@@ -13,6 +13,7 @@ import com.midnight.kuira.core.auth.SeedVault
 import com.midnight.kuira.core.auth.WalletKeyManager
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
+import com.midnight.kuira.core.identity.backup.SeedDeriver
 import com.midnight.kuira.core.identity.backup.SigilBackup
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
@@ -151,6 +152,39 @@ class SigilPanelViewModel @Inject constructor(
         prefs.edit().putBoolean(KEY_BACKUP_DISMISSED, true).commit()
         _status.value = SigilStatus.None
         Log.i(TAG, "Backup dismissed — sigil status → None, wallet panel unblocked")
+    }
+
+    /**
+     * Diagnostic — derive the SeedDeriver PRF output for the user's
+     * passkey and emit the 32-byte hex to logcat (tag `PrfProbe`).
+     * Used to verify that PRF is deterministic across Kuira ecosystem
+     * apps that share an RP via `assetlinks.json`, before relying on
+     * it as the wallet seed.
+     *
+     * Run on two installs of any Kuira app (Kicks + BBoard, two
+     * emulators sharing one Google account, etc.); identical outputs
+     * mean PRF-derived seed is viable.
+     *
+     * No-op outside debug builds. The action is gated by
+     * `BuildConfig.DEBUG` so production builds don't ship a passkey
+     * prompt that leaks 32 bytes of derived material to logcat.
+     */
+    fun probePrfDeterminism(activity: Activity) {
+        if (!BuildConfig.DEBUG) {
+            Log.w(TAG, "probePrfDeterminism: refusing to run outside debug builds")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val entropy = SeedDeriver.derivePrfEntropy(activity, passkeyManager)
+                val hex = entropy.joinToString("") { "%02x".format(it) }
+                Log.i("PrfProbe", "SEED_SALT PRF output (32 bytes): $hex")
+                Log.i("PrfProbe", "Compare this across devices/apps; identical = deterministic.")
+                entropy.fill(0)
+            } catch (e: Exception) {
+                Log.e("PrfProbe", "probe failed: ${e.message}", e)
+            }
+        }
     }
 
     /**
