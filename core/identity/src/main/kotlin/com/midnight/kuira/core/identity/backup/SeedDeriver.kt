@@ -7,16 +7,31 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Derives a deterministic 32-byte seed (BIP-39 entropy) from the
- * user's passkey via the WebAuthn PRF extension.
+ * Derives wallet seed material from the user's passkey via the
+ * WebAuthn PRF extension.
  *
- * The same passkey + same salt produces the same 32 bytes on every
- * device + every Kuira ecosystem app that shares the RP via
- * `assetlinks.json` — no shared backup blob needed.
+ * Two outputs sit at different levels of the chain:
+ *  - [derivePrfEntropy] — raw 32-byte PRF output. Suitable as
+ *    BIP-39 entropy, an HKDF source, a symmetric key, etc.
+ *  - [deriveBip39Seed] — full chain: PRF → 32-byte entropy →
+ *    24-word mnemonic → 64-byte BIP-39 PBKDF2 seed. This is what
+ *    `MidnightSdk.Builder.seed(...)` consumes.
+ *
+ * The PRF output is identical on every device + every Kuira
+ * ecosystem app that shares the RP via `assetlinks.json`, so the
+ * derived seed is identical too — no shared backup blob needed.
  *
  * SEED_SALT is domain-separated from SigilBackup.BACKUP_SALT; PRF
  * with two different salts produces two independent secrets from
  * the same passkey credential.
+ *
+ * **Known limitation:** the entropy → seed chain temporarily
+ * materializes the 24-word mnemonic as a `String`. JVM strings are
+ * immutable and may be copied/interned by the allocator before GC
+ * can reclaim them — same trap as the existing
+ * `WalletPanelViewModel.ensureSeedReady` random-seed path. A direct
+ * `entropyToSeed` path would close this gap; deferred until both
+ * consumers can migrate in one pass.
  */
 object SeedDeriver {
 
@@ -77,6 +92,10 @@ object SeedDeriver {
      * Extracted so unit tests can pin the (entropy → seed) mapping
      * without standing up Credential Manager. Returns the standard
      * BIP-39 64-byte PBKDF2 seed (see `BIP39.mnemonicToSeed`).
+     *
+     * **Caller MUST wipe** the returned ByteArray once the consumer
+     * has copied it — same contract as [deriveBip39Seed] and
+     * [PlaintextSeed.bip39Seed].
      */
     internal fun entropyToBip39Seed(entropy: ByteArray): ByteArray {
         require(entropy.size == BIP39_ENTROPY_SIZE) {

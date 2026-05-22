@@ -50,6 +50,13 @@ class SeedDeriverTest {
         SeedDeriver.entropyToBip39Seed(ByteArray(16))
     }
 
+    // Value-pin against the BIP-39 spec lives downstream in
+    // HDWalletShieldedIntegrationTest, which pins
+    // (mnemonic → bip39Seed → HD-derived key → shielded coinPublicKey)
+    // against Midnight SDK reference values. A silent PBKDF2 drift
+    // would break that test. Adding a value-pin here would duplicate
+    // that coverage on the same invariant.
+
     @Test
     fun `SEED_SALT is domain-separated from BACKUP_SALT`() {
         assertFalse(
