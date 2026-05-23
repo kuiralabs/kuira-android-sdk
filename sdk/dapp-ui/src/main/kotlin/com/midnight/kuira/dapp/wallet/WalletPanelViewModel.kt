@@ -61,18 +61,25 @@ class WalletPanelViewModel @Inject constructor(
 
     /**
      * One-shot events asking the host to re-trigger
-     * [refreshBalance] with the cached [WalletConfig]. Emitted when
-     * the sigil becomes available while the wallet is stuck on
-     * [WalletStatus.SigilRequired] — closes the loop so the user
-     * doesn't have to re-tap "balance" after signing in.
+     * [refreshBalance]. Emitted when the sigil becomes available
+     * while the wallet is stuck on [WalletStatus.SigilRequired] —
+     * closes the loop so the user doesn't have to re-tap "balance"
+     * after signing in.
      *
-     * `SharedFlow<Unit>` (not `StateFlow`) because each emission is
-     * an action signal, not state to render. The host's
+     * **Carries the [WalletConfig] inside the event** so the host
+     * uses the VM's last-known-good config rather than whatever
+     * Compose captured at LaunchedEffect launch time. Without this,
+     * a user who toggles network between hitting SigilRequired and
+     * signing in would trigger an auto-retry against the stale
+     * pre-toggle config — wrong network, wrong balance.
+     *
+     * `SharedFlow` (not `StateFlow`) because each emission is an
+     * action signal, not state to render. The host's
      * [WalletStatusPanel] subscribes via `LaunchedEffect` and
      * dispatches a refresh — only one collector is expected.
      */
-    private val _retryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val retryRequests: SharedFlow<Unit> = _retryRequests.asSharedFlow()
+    private val _retryRequests = MutableSharedFlow<WalletConfig>(extraBufferCapacity = 1)
+    val retryRequests: SharedFlow<WalletConfig> = _retryRequests.asSharedFlow()
 
     private var sdk: MidnightSdk? = null
     /**
@@ -128,8 +135,13 @@ class WalletPanelViewModel @Inject constructor(
                     if (snapshot != null && _status.value is WalletStatus.SigilRequired) {
                         Log.i(TAG, "Sigil became available — clearing SigilRequired and requesting retry")
                         _status.value = WalletStatus.None
-                        if (lastRequestedConfig != null) {
-                            _retryRequests.emit(Unit)
+                        // Capture the snapshot value into a local so the
+                        // smart cast survives the emit (lastRequestedConfig
+                        // is a mutable property — Kotlin can't prove
+                        // non-null past the suspend point otherwise).
+                        val retryConfig = lastRequestedConfig
+                        if (retryConfig != null) {
+                            _retryRequests.emit(retryConfig)
                         }
                     }
                 }

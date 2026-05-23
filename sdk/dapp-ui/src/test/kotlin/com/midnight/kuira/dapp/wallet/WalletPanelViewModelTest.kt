@@ -122,16 +122,18 @@ class WalletPanelViewModelTest {
     }
 
     @Test
-    fun `sigil arrival fires retryRequests when a config was previously requested`() = runTest {
+    fun `sigil arrival fires retryRequests carrying the last requested config`() = runTest {
         // The auto-clear is half the fix — the other half is firing
         // a retry event so the host re-runs refreshBalance with the
-        // user's last config. Without this the wallet stays at None
-        // until the user manually re-taps balance.
+        // user's last config. The event MUST carry the config so the
+        // Compose collector doesn't re-fire with a stale captured
+        // value (regression class: user toggles network between
+        // hitting SigilRequired and signing in → wrong-network retry).
         coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
 
         val store = SigilStateStore(context)
         val vm = newVmWithStore(store)
-        val collectedEvents = mutableListOf<Unit>()
+        val collectedConfigs = mutableListOf<WalletConfig>()
         // Collect on Dispatchers.Main (the rule's UnconfinedTestDispatcher
         // = eager) so the subscription is established BEFORE the emit
         // fires. Default runTest dispatcher is StandardTestDispatcher
@@ -139,10 +141,11 @@ class WalletPanelViewModelTest {
         // collector subscribed, and SharedFlow(replay=0) doesn't
         // replay to late subscribers.
         val collectJob = launch(kotlinx.coroutines.Dispatchers.Main) {
-            vm.retryRequests.collect { collectedEvents.add(it) }
+            vm.retryRequests.collect { collectedConfigs.add(it) }
         }
 
-        vm.refreshBalance(devConfig(), activity)
+        val initialConfig = devConfig()
+        vm.refreshBalance(initialConfig, activity)
         // SigilRequired now; the user's config is captured.
         store.persistSigil("did:key:z6MkTest", "cred-test", "")
         // Let the VM's snapshotFlow observer + the collector run.
@@ -151,7 +154,56 @@ class WalletPanelViewModelTest {
         assertEquals(
             "Exactly one retry event must fire after sigil arrival",
             1,
-            collectedEvents.size,
+            collectedConfigs.size,
+        )
+        assertEquals(
+            "Retry must carry the LAST refreshBalance config — not the original-only or some other version",
+            initialConfig,
+            collectedConfigs.first(),
+        )
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `network toggle before sign-in makes the retry carry the NEW config`() = runTest {
+        // Regression test for the config-capture bug. Sequence:
+        //  1. User taps balance → refreshBalance(UNDEPLOYED) → SigilRequired
+        //  2. User toggles network → Compose re-fires refreshBalance(PREPROD)
+        //     (auto-bootstrap LaunchedEffect re-keys on config change)
+        //  3. Still SigilRequired (sigil not forged); lastRequestedConfig
+        //     is now PREPROD (latest value the user actually asked for)
+        //  4. User signs in → retry should fire with PREPROD, not the
+        //     stale UNDEPLOYED captured by Compose at LaunchedEffect launch
+        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+
+        val store = SigilStateStore(context)
+        val vm = newVmWithStore(store)
+        val collectedConfigs = mutableListOf<WalletConfig>()
+        val collectJob = launch(kotlinx.coroutines.Dispatchers.Main) {
+            vm.retryRequests.collect { collectedConfigs.add(it) }
+        }
+
+        val initialConfig = WalletConfig(
+            network = MidnightNetwork.UNDEPLOYED,
+            provingMode = ProvingMode.DEFAULT,
+        )
+        val toggledConfig = WalletConfig(
+            network = MidnightNetwork.PREPROD,
+            provingMode = ProvingMode.DEFAULT,
+        )
+
+        vm.refreshBalance(initialConfig, activity)
+        // User toggles network — auto-bootstrap LaunchedEffect re-fires.
+        vm.refreshBalance(toggledConfig, activity)
+
+        store.persistSigil("did:key:z6MkTest", "cred-test", "")
+        kotlinx.coroutines.yield()
+
+        assertEquals(1, collectedConfigs.size)
+        assertEquals(
+            "Retry must carry the latest config the user asked for (PREPROD), not the initial (UNDEPLOYED)",
+            toggledConfig,
+            collectedConfigs.first(),
         )
         collectJob.cancel()
     }
@@ -165,15 +217,9 @@ class WalletPanelViewModelTest {
         // didn't ask for one.
         val store = SigilStateStore(context)
         val vm = newVmWithStore(store)
-        val collectedEvents = mutableListOf<Unit>()
-        // Collect on Dispatchers.Main (the rule's UnconfinedTestDispatcher
-        // = eager) so the subscription is established BEFORE the emit
-        // fires. Default runTest dispatcher is StandardTestDispatcher
-        // which queues the launch — the emit would land before the
-        // collector subscribed, and SharedFlow(replay=0) doesn't
-        // replay to late subscribers.
+        val collectedConfigs = mutableListOf<WalletConfig>()
         val collectJob = launch(kotlinx.coroutines.Dispatchers.Main) {
-            vm.retryRequests.collect { collectedEvents.add(it) }
+            vm.retryRequests.collect { collectedConfigs.add(it) }
         }
 
         store.persistSigil("did:key:z6MkTest", "cred-test", "")
@@ -182,7 +228,7 @@ class WalletPanelViewModelTest {
         assertEquals(
             "No retry event when the user didn't previously try a wallet action",
             0,
-            collectedEvents.size,
+            collectedConfigs.size,
         )
         // Status was never SigilRequired in the first place.
         assertEquals(WalletStatus.None, vm.status.value)

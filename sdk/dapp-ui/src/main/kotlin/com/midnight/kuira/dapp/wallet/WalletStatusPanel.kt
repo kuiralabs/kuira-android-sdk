@@ -226,13 +226,17 @@ fun WalletStatusPanel(
     // Auto-recover from SigilRequired: when the user signs in via the
     // sigil panel, [WalletPanelViewModel] observes [SigilStateStore]
     // and emits a `retryRequests` event. We collect those here and
-    // re-fire `refreshBalance` with the config the user originally
-    // asked for. Without this, the wallet sheet stays stuck on
-    // "sigil required" until the user manually re-taps "balance".
+    // re-fire `refreshBalance` with the config the VM emitted in the
+    // event — NOT the `config` captured at LaunchedEffect launch
+    // time. Compose captures `config` lazily, but if the user toggled
+    // the network between landing on SigilRequired and signing in,
+    // the captured `config` would be stale. The VM's
+    // `lastRequestedConfig` is updated on every refreshBalance call,
+    // so it always reflects the user's current intent.
     LaunchedEffect(activity) {
         if (activity == null) return@LaunchedEffect
-        viewModel.retryRequests.collect {
-            viewModel.refreshBalance(config, activity)
+        viewModel.retryRequests.collect { retryConfig ->
+            viewModel.refreshBalance(retryConfig, activity)
         }
     }
 

@@ -94,9 +94,15 @@ class SigilSession @Inject constructor(
             ?: throw BackupException("PRF not available — authenticator does not support PRF extension")
 
         // Step 2: derive the sigil DID locally (pure compute).
-        val did = sigilIdentityProvider.deriveFromPrfOutput(sigilPrf)
-        // Wipe the sigil PRF output now that we have the DID.
-        sigilPrf.fill(0)
+        // try/finally so the PRF output is wiped even if
+        // deriveFromPrfOutput throws (defensive — its `require(size==32)`
+        // shouldn't fire in normal operation, but key material must not
+        // outlive a thrown exception under any code path).
+        val did = try {
+            sigilIdentityProvider.deriveFromPrfOutput(sigilPrf)
+        } finally {
+            sigilPrf.fill(0)
+        }
 
         // Step 3: resolve the seed PRF output. Multi-salt hit → use
         // the secondary output. Multi-salt miss → fall back to a
