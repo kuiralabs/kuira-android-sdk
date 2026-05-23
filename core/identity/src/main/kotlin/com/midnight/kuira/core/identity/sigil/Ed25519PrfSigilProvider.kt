@@ -38,6 +38,30 @@ import javax.inject.Singleton
 @Singleton
 class Ed25519PrfSigilProvider @Inject constructor() : SigilIdentityProvider {
 
+    override val prfSalt: ByteArray
+        get() = SeedDeriver.SIGIL_SALT
+
+    /**
+     * Pure derivation — 32-byte PRF output is consumed as the Ed25519
+     * seed, the corresponding public key is encoded as `did:key:z6Mk…`.
+     *
+     * The seed is consumed in this method only; the **caller owns
+     * wiping the input**. Used by both [deriveSigilDid] (with its own
+     * ceremony) and `SigilSession` (with the shared multi-salt
+     * ceremony).
+     */
+    override fun deriveFromPrfOutput(prfOutput: ByteArray): String {
+        require(prfOutput.size == ED25519_SEED_SIZE) {
+            "Ed25519 seed must be $ED25519_SEED_SIZE bytes, got ${prfOutput.size}"
+        }
+        // Bouncy Castle: 32-byte seed → keypair deterministically.
+        // We never expose the private half; it falls out of scope
+        // immediately after we extract the public key.
+        val sk = Ed25519PrivateKeyParameters(prfOutput, 0)
+        val pubkey = sk.generatePublicKey().encoded
+        return DidKeyGenerator.fromEd25519(pubkey)
+    }
+
     override suspend fun deriveSigilDid(
         activity: Activity,
         passkeyManager: PasskeyManager,
@@ -48,44 +72,27 @@ class Ed25519PrfSigilProvider @Inject constructor() : SigilIdentityProvider {
         val result = passkeyManager.authenticateWithPrf(
             activity = activity,
             challenge = challenge,
-            prfSalt = SeedDeriver.SIGIL_SALT,
+            prfSalt = prfSalt,
         )
         val prfOutput = result.prfOutput
             ?: throw BackupException("PRF not available — authenticator does not support PRF extension")
 
         return try {
             SigilDerivation(
-                did = ed25519DidFromSeed(prfOutput),
+                did = deriveFromPrfOutput(prfOutput),
                 credentialId = result.credentialId,
             )
         } finally {
-            // PRF output is the Ed25519 seed; wipe it now that we have
-            // the DID. Caller never sees the seed.
             prfOutput.fill(0)
         }
     }
 
     /**
-     * Pure helper: 32-byte seed → Ed25519 pubkey → did:key:z6Mk.
-     *
-     * Extracted as `internal` so the unit test can pin the
-     * (seed → DID) mapping without standing up Credential Manager.
-     * The seed is consumed in this method only; the caller owns the
-     * wipe.
+     * Test-only seam — kept for the existing
+     * `Ed25519PrfSigilProviderTest` cases that pin the seed → DID
+     * mapping. Same behavior as [deriveFromPrfOutput].
      */
-    internal fun ed25519DidFromSeed(seed: ByteArray): String {
-        require(seed.size == ED25519_SEED_SIZE) {
-            "Ed25519 seed must be $ED25519_SEED_SIZE bytes, got ${seed.size}"
-        }
-        // Bouncy Castle: from a 32-byte seed we derive the keypair
-        // deterministically. Pubkey is fixed-32-bytes; private key
-        // material (the seed itself, plus a derived clamped scalar
-        // internal to BC) is wiped when the parameters object falls
-        // out of scope. We don't expose the private half today.
-        val sk = Ed25519PrivateKeyParameters(seed, 0)
-        val pubkey = sk.generatePublicKey().encoded
-        return DidKeyGenerator.fromEd25519(pubkey)
-    }
+    internal fun ed25519DidFromSeed(seed: ByteArray): String = deriveFromPrfOutput(seed)
 
     private companion object {
         const val CHALLENGE_SIZE = 32

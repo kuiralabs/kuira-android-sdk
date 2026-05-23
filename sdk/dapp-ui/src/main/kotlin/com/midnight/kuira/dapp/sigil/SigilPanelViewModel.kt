@@ -15,6 +15,7 @@ import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
+import com.midnight.kuira.sdk.walletseed.SigilSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,11 +34,14 @@ import javax.inject.Inject
  *    then derive the sigil DID via [SigilIdentityProvider]
  *    (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
  *    default impl). Two biometric prompts on first run.
- *  - **Sign in** ([restoreSeed]): authenticate an existing passkey
- *    (cross-device or cross-app), derive the SAME DID via the
- *    `SigilIdentityProvider`, optionally restore host-app state via
- *    [AppStateBackup]. No seed restore needed — wallet seed is
- *    PRF-derived independently by `WalletSeedSource`.
+ *  - **Sign in** ([restoreSeed]): one biometric covers BOTH the
+ *    sigil DID derivation AND the wallet seed pre-warm via the
+ *    multi-salt PRF ceremony in `SigilSession.signIn`. The wallet
+ *    panel's first refresh after sign-in hits SeedVault cache
+ *    instead of running its own PRF ceremony — no second prompt.
+ *    Falls back to two biometrics on authenticators that don't
+ *    support multi-salt PRF. Optionally restores host-app state
+ *    via [AppStateBackup] after the sigil is forged.
  *  - **Backup** ([backupSeed]): write host-app state (not the seed)
  *    to Block Store via [AppStateBackup].
  *
@@ -51,6 +55,7 @@ class SigilPanelViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val passkeyManager: PasskeyManager,
     private val sigilIdentityProvider: SigilIdentityProvider,
+    private val sigilSession: SigilSession,
     private val sigilStateStore: SigilStateStore,
     private val appStateBackup: AppStateBackup,
     private val blockStoreStorage: BlockStoreBackupStorage,
@@ -379,33 +384,27 @@ class SigilPanelViewModel @Inject constructor(
     fun restoreSeed(activity: FragmentActivity) {
         viewModelScope.launch {
             try {
-                // Step 1 — sigil identity (one biometric, PRF(SIGIL_SALT)).
-                // Deterministic across devices and Kuira ecosystem apps
-                // sharing the relying party. publicKeyHex is left empty
-                // because the assertion ceremony doesn't return the
-                // passkey's P-256 pubkey; the user can re-forge on this
-                // device if a flow that needs the root pubkey (e.g.
-                // BBoard's `authorizeAccessKey`) requires it.
-                Log.i(TAG, "Starting sign-in with existing passkey (PRF SIGIL_SALT)…")
-                val derivation = sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
+                // Step 1 — sigil DID + wallet seed in ONE biometric
+                // ceremony (multi-salt PRF: SIGIL_SALT first, SEED_SALT
+                // second). SigilSession persists the sigil triple and
+                // pre-warms SeedVault internally, so the wallet panel's
+                // next refresh hits cache.
+                //
+                // Fallback when the authenticator doesn't support
+                // multi-salt PRF: SigilSession transparently runs a
+                // second ceremony (two biometrics, same correctness).
+                Log.i(TAG, "Starting sign-in via SigilSession (one ceremony, two salts)…")
+                val derivation = sigilSession.signIn(activity)
                 Log.i(TAG, "  DID: ${derivation.did}")
                 Log.i(TAG, "  Credential ID: ${derivation.credentialId}")
-                persistSigil(
-                    did = derivation.did,
-                    credentialId = derivation.credentialId,
-                    publicKeyHex = "",
-                )
                 _status.value = SigilStatus.Forged(
                     did = derivation.did,
                     credentialId = derivation.credentialId,
-                    publicKeyHex = "",
+                    publicKeyHex = "",  // assertion doesn't return pubkey
                 )
 
-                // Step 2 — app-state restore (best-effort, second
-                // biometric, PRF(BACKUP_SALT)). Skipped silently when:
-                //  - storage is empty (fresh install elsewhere)
-                //  - blob is legacy v1 (no recoverable appMetadata under v2 schema)
-                //  - no AppDataBackupProvider bound (BBoard et al.)
+                // Step 2 — app-state restore (best-effort). Skipped
+                // when no provider bound or no recoverable blob.
                 val provider = appDataProvider.orElse(null)
                 if (provider == null) {
                     Log.i(TAG, "  No AppDataBackupProvider bound — skipping app-state restore")
@@ -414,9 +413,6 @@ class SigilPanelViewModel @Inject constructor(
                 val restored = try {
                     appStateBackup.restore(activity)
                 } catch (e: BackupException) {
-                    // No backup / legacy v1 / decryption failure — sigil
-                    // is already restored, this is just app-state. Log
-                    // and move on; user can still operate.
                     Log.i(TAG, "  App-state restore unavailable: ${e.message}")
                     return@launch
                 }

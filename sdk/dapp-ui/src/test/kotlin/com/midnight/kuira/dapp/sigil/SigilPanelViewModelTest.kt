@@ -15,6 +15,7 @@ import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
+import com.midnight.kuira.sdk.walletseed.SigilSession
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -58,6 +59,7 @@ class SigilPanelViewModelTest {
 
     private val passkeyManager: PasskeyManager = mockk(relaxed = true)
     private val sigilIdentityProvider: SigilIdentityProvider = mockk(relaxed = true)
+    private val sigilSession: SigilSession = mockk(relaxed = true)
     private val appStateBackup: AppStateBackup = mockk(relaxed = true)
     private val blockStoreStorage: BlockStoreBackupStorage = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
@@ -172,19 +174,16 @@ class SigilPanelViewModelTest {
     // ── restoreSeed (sign-in flow) ──
 
     @Test
-    fun `restoreSeed derives sigil DID locally and persists without Block Store`() = runTest {
-        // Setup: probe finds a blob (so we land on BackupAvailable),
-        // but the sign-in flow doesn't depend on it — sigil identity is
-        // derived locally via PRF.
+    fun `restoreSeed delegates to SigilSession and emits Forged on success`() = runTest {
+        // Post-SigilSession refactor: the VM is a thin wrapper. The
+        // session owns the multi-salt PRF ceremony, the SeedVault
+        // pre-warm, and the SigilStateStore write. The VM's job is
+        // just to surface the result as a status.
         coEvery { blockStoreStorage.retrieve() } returns Fixtures.backupBlob()
-        coEvery {
-            sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-        } returns SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
-        // Default appStateBackup returns RestoredAppState with no metadata
-        // — no provider bound, so this branch is dead anyway.
-        coEvery { appStateBackup.restore(activity) } returns RestoredAppState(appMetadata = ByteArray(0))
+        coEvery { sigilSession.signIn(activity) } returns
+            SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
 
-        val vm = newVm()  // no AppDataBackupProvider
+        val vm = newVm()
         assertEquals(SigilStatus.BackupAvailable, vm.status.value)
         vm.restoreSeed(activity)
 
@@ -193,16 +192,15 @@ class SigilPanelViewModelTest {
         forged!!
         assertEquals(Fixtures.PRF_DID, forged.did)
         assertEquals(Fixtures.CREDENTIAL_ID, forged.credentialId)
-        // No createPasskey on sign-in — pubkey isn't recovered.
+        // Assertion ceremony doesn't return pubkey on sign-in.
         assertEquals("", forged.publicKeyHex)
 
-        // No provider → no appStateBackup.restore call (skipped early).
+        // Session is the single entry point — no manual provider/store
+        // calls from the VM anymore.
+        coVerify(exactly = 1) { sigilSession.signIn(activity) }
+        coVerify(exactly = 0) { sigilIdentityProvider.deriveSigilDid(any(), any()) }
+        // No provider bound → no appState restore attempt.
         coVerify(exactly = 0) { appStateBackup.restore(any()) }
-
-        // Triple persisted with empty publicKeyHex.
-        val onDisk = freshPrefs()
-        assertEquals(Fixtures.PRF_DID, onDisk.getString(SigilStateStore.KEY_DID, null))
-        assertEquals("", onDisk.getString(SigilStateStore.KEY_PUBLIC_KEY_HEX, null))
     }
 
     @Test
@@ -210,14 +208,15 @@ class SigilPanelViewModelTest {
         val markerBytes = byteArrayOf(0x77, 0x44, 0x33, 0x22)
         val provider = mockk<AppDataBackupProvider>(relaxed = true)
         coEvery { blockStoreStorage.retrieve() } returns Fixtures.backupBlob()
-        coEvery {
-            sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-        } returns SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
-        coEvery { appStateBackup.restore(activity) } returns RestoredAppState(appMetadata = markerBytes.copyOf())
+        coEvery { sigilSession.signIn(activity) } returns
+            SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
+        coEvery { appStateBackup.restore(activity) } returns
+            RestoredAppState(appMetadata = markerBytes.copyOf())
 
         val vm = newVm(appDataProvider = Optional.of(provider))
         vm.restoreSeed(activity)
 
+        coVerify(exactly = 1) { sigilSession.signIn(activity) }
         coVerify(exactly = 1) { appStateBackup.restore(activity) }
         coVerify(exactly = 1) { provider.restore(any()) }
     }
@@ -226,12 +225,11 @@ class SigilPanelViewModelTest {
     fun `restoreSeed tolerates app-state restore failure and keeps sigil forged`() = runTest {
         val provider = mockk<AppDataBackupProvider>(relaxed = true)
         coEvery { blockStoreStorage.retrieve() } returns Fixtures.backupBlob()
-        coEvery {
-            sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-        } returns SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
-        // Backup retrieve fails (e.g. legacy v1 blob, or empty storage,
-        // or wrong key). Sigil must still land on Forged — app-state is
-        // best-effort.
+        coEvery { sigilSession.signIn(activity) } returns
+            SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
+        // App-state restore fails (legacy v1, empty storage, wrong key);
+        // sigil must still land on Forged because the session already
+        // succeeded.
         coEvery { appStateBackup.restore(activity) } throws BackupException("No backup found in storage")
 
         val vm = newVm(appDataProvider = Optional.of(provider))
@@ -306,6 +304,7 @@ class SigilPanelViewModelTest {
         context = context,
         passkeyManager = passkeyManager,
         sigilIdentityProvider = sigilIdentityProvider,
+        sigilSession = sigilSession,
         sigilStateStore = SigilStateStore(context),
         appStateBackup = appStateBackup,
         blockStoreStorage = blockStoreStorage,

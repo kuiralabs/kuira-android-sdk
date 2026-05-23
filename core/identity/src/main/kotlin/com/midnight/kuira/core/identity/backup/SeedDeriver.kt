@@ -119,15 +119,22 @@ object SeedDeriver {
     /**
      * Deterministic chain from BIP-39 entropy to BIP-39 seed.
      *
-     * Extracted so unit tests can pin the (entropy → seed) mapping
-     * without standing up Credential Manager. Returns the standard
-     * BIP-39 64-byte PBKDF2 seed (see `BIP39.mnemonicToSeed`).
+     * Public so cross-module orchestrators (e.g. `SigilSession` in
+     * `:sdk:wallet-seed` that holds a freshly-derived PRF output and
+     * needs the corresponding wallet seed without running another
+     * PRF ceremony) can call it directly. The function is pure and
+     * deterministic — input bytes alone determine the output; no
+     * security-sensitive state is exposed beyond what the caller
+     * already holds.
+     *
+     * Returns the standard BIP-39 64-byte PBKDF2 seed
+     * (see `BIP39.mnemonicToSeed`).
      *
      * **Caller MUST wipe** the returned ByteArray once the consumer
      * has copied it — same contract as [deriveBip39Seed] and
      * [PlaintextSeed.bip39Seed].
      */
-    internal fun entropyToBip39Seed(entropy: ByteArray): ByteArray {
+    fun entropyToBip39Seed(entropy: ByteArray): ByteArray {
         require(entropy.size == BIP39_ENTROPY_SIZE) {
             "BIP-39 entropy must be $BIP39_ENTROPY_SIZE bytes, got ${entropy.size}"
         }

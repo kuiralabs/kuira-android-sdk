@@ -210,12 +210,18 @@ class PasskeyManager(
         activity: Activity,
         challenge: ByteArray,
         prfSalt: ByteArray,
+        prfSaltSecond: ByteArray? = null,
     ): PrfAssertionResult {
         val challengeB64 = encodeBase64Url(challenge)
         val saltB64 = encodeBase64Url(prfSalt)
+        val saltSecondB64 = prfSaltSecond?.let { encodeBase64Url(it) }
 
         val credentialManager = CredentialManager.create(activity)
-        val requestJson = buildAuthenticationRequestJson(challengeB64, prfSaltB64 = saltB64)
+        val requestJson = buildAuthenticationRequestJson(
+            challengeB64 = challengeB64,
+            prfSaltB64 = saltB64,
+            prfSaltSecondB64 = saltSecondB64,
+        )
         val option = GetPublicKeyCredentialOption(requestJson)
         val request = GetCredentialRequest(listOf(option))
 
@@ -236,15 +242,21 @@ class PasskeyManager(
         val json = JSONObject(assertionResponseJson)
         val responseObj = json.getJSONObject("response")
 
-        // Extract PRF output from clientExtensionResults
-        val prfOutput = try {
+        // Extract PRF outputs (both salts when present) from
+        // clientExtensionResults.prf.results.{first,second}. The
+        // `second` field is only populated when the caller requested
+        // a second salt AND the authenticator supports multi-salt
+        // PRF evaluation (CTAP2 hmac-secret with two-salt input).
+        val (prfFirst, prfSecond) = try {
             val extensionResults = json.optJSONObject("clientExtensionResults")
-            val prf = extensionResults?.optJSONObject("prf")
-            val results = prf?.optJSONObject("results")
+            val results = extensionResults?.optJSONObject("prf")?.optJSONObject("results")
             val firstB64 = results?.optString("first", "")
-            if (firstB64.isNullOrEmpty()) null else decodeBase64Url(firstB64)
+            val secondB64 = results?.optString("second", "")
+            val first = if (firstB64.isNullOrEmpty()) null else decodeBase64Url(firstB64)
+            val second = if (secondB64.isNullOrEmpty()) null else decodeBase64Url(secondB64)
+            first to second
         } catch (e: Exception) {
-            null
+            null to null
         }
 
         return PrfAssertionResult(
@@ -253,13 +265,15 @@ class PasskeyManager(
             clientDataJson = decodeBase64Url(responseObj.getString("clientDataJSON")),
             signature = decodeBase64Url(responseObj.getString("signature")),
             assertionResponseJson = assertionResponseJson,
-            prfOutput = prfOutput,
+            prfOutput = prfFirst,
+            prfOutputSecond = prfSecond,
         )
     }
 
     private fun buildAuthenticationRequestJson(
         challengeB64: String,
         prfSaltB64: String? = null,
+        prfSaltSecondB64: String? = null,
     ): String {
         return JSONObject().apply {
             put("challenge", challengeB64)
@@ -271,6 +285,9 @@ class PasskeyManager(
                     put("prf", JSONObject().apply {
                         put("eval", JSONObject().apply {
                             put("first", prfSaltB64)
+                            if (prfSaltSecondB64 != null) {
+                                put("second", prfSaltSecondB64)
+                            }
                         })
                     })
                 })
@@ -353,9 +370,25 @@ class PrfAssertionResult(
      * Null if the authenticator doesn't support PRF or the extension wasn't evaluated.
      */
     val prfOutput: ByteArray?,
+    /**
+     * 32-byte PRF output for the **second** salt when the caller passed
+     * one to `authenticateWithPrf`. Null when the caller didn't request
+     * a second salt OR when the authenticator only evaluated the first.
+     *
+     * WebAuthn's PRF extension supports `eval.first` and `eval.second`
+     * in a single assertion — modern authenticators (Google Password
+     * Manager since Chrome 132, hardware tokens) collapse "derive two
+     * domain-separated secrets" to one biometric prompt. Callers that
+     * need two outputs should always pass both salts and check this
+     * field; null means fall back to a second ceremony.
+     */
+    val prfOutputSecond: ByteArray? = null,
 ) {
-    /** Whether PRF produced a result. */
+    /** Whether PRF produced a result for the primary salt. */
     val hasPrf: Boolean get() = prfOutput != null && prfOutput.size == 32
+
+    /** Whether PRF produced a result for the secondary salt (multi-salt ceremony). */
+    val hasPrfSecond: Boolean get() = prfOutputSecond != null && prfOutputSecond.size == 32
 }
 
 class PasskeyException(

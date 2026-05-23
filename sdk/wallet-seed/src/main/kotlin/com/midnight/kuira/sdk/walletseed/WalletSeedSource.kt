@@ -137,6 +137,67 @@ class WalletSeedSource @Inject constructor(
         requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
     }
 
+    /**
+     * Pre-warm SeedVault with a PRF output the caller already
+     * derived in a multi-purpose ceremony — used by `SigilSession`
+     * to collapse "sign in + first wallet refresh" to one biometric.
+     *
+     * Flow:
+     *  1. If SeedVault already holds a PRF-flagged entry, biometric-
+     *     decrypt and return its seed (no new write — the cached
+     *     entry is authoritative). This is the cache-hit branch.
+     *  2. Legacy unflagged vault → wipe, then go to step 3.
+     *  3. Run `entropyToBip39Seed(prfEntropy)` locally (pure compute,
+     *     no biometric), store into SeedVault, set the PRF flag.
+     *
+     * **Caller wipes** the input `prfEntropy` after the call returns —
+     * `WalletSeedSource` only reads from it, never retains it.
+     *
+     * The serialization point with [ensureSeedReady] is the shared
+     * [bootstrapMutex] — concurrent calls are safe.
+     */
+    suspend fun acceptPreDerivedSeed(
+        activity: FragmentActivity,
+        prfEntropy: ByteArray,
+    ): ByteArray = bootstrapMutex.withLock {
+        require(prfEntropy.size == 32) { "PRF entropy must be 32 bytes, got ${prfEntropy.size}" }
+
+        if (seedVault.hasSeed() && isVaultPrfDerived()) {
+            Log.i(TAG, "acceptPreDerivedSeed: vault already PRF-populated; returning cache")
+            val plaintext = seedVault.loadSeed(activity)
+            return@withLock try {
+                plaintext.bip39Seed.copyOf()
+            } finally {
+                plaintext.wipe()
+            }
+        }
+
+        if (seedVault.hasSeed()) {
+            Log.w(TAG, "acceptPreDerivedSeed: legacy random seed detected — wiping for PRF replacement")
+            seedVault.deleteSeed()
+        } else {
+            Log.i(TAG, "acceptPreDerivedSeed: populating empty vault with pre-derived PRF entropy")
+        }
+
+        if (!walletKeyManager.hasKey()) {
+            val strongBox = walletKeyManager.generateKey()
+            Log.i(TAG, "Generated Keystore master key (${if (strongBox) "StrongBox" else "TEE"})")
+        }
+
+        val bip39Seed = SeedDeriver.entropyToBip39Seed(prfEntropy)
+        var capturedSeed: ByteArray? = null
+        try {
+            seedVault.storeSeed(activity) {
+                capturedSeed = bip39Seed.copyOf()
+                PlaintextSeed(prfEntropy.copyOf(), bip39Seed.copyOf())
+            }
+            prefs.edit().putBoolean(KEY_SEED_IS_PRF_DERIVED, true).commit()
+        } finally {
+            bip39Seed.fill(0)
+        }
+        requireNotNull(capturedSeed) { "Seed lambda ran but didn't capture (cancelled mid-auth?)" }
+    }
+
     private fun isVaultPrfDerived(): Boolean =
         prefs.getBoolean(KEY_SEED_IS_PRF_DERIVED, false)
 

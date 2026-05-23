@@ -35,20 +35,37 @@ import com.midnight.kuira.core.identity.passkey.PasskeyManager
 interface SigilIdentityProvider {
 
     /**
-     * Authenticate the user's passkey and return the derived sigil
-     * identity.
+     * The 32-byte PRF salt this provider uses for its ceremony.
      *
-     * Triggers exactly one biometric prompt via Credential Manager.
-     * Throws whatever [PasskeyManager.authenticateWithPrf] throws when
-     * the ceremony fails (cancellation, RP-id mismatch, missing PRF
-     * support, etc.); callers are responsible for translating.
+     * Exposed so multi-purpose orchestrators (e.g. `SigilSession`
+     * collapsing sigil + wallet bootstrap into one biometric) can
+     * request a multi-salt PRF assertion that produces the right
+     * output for this provider. Callers that don't orchestrate just
+     * use [deriveSigilDid] and ignore this.
+     */
+    val prfSalt: ByteArray
+
+    /**
+     * Pure derivation: 32-byte PRF output → DID string. No ceremony,
+     * no biometric, no Credential Manager.
      *
-     * The returned [SigilDerivation.did] is the load-bearing sigil
-     * identity. [SigilDerivation.credentialId] is a ceremony artifact
-     * exposed for callers (like `SigilPanelViewModel`) that want to
-     * persist it alongside the DID — both for display and for
-     * downstream flows that need to address the specific credential
-     * (e.g. `KeyAuthorization` records).
+     * Used by orchestrators that already ran a (possibly multi-salt)
+     * PRF assertion and need to convert the result into a DID without
+     * a second ceremony. Implementations are deterministic in the
+     * input; the same PRF output always yields the same DID.
+     */
+    fun deriveFromPrfOutput(prfOutput: ByteArray): String
+
+    /**
+     * Convenience one-shot: runs a PRF ceremony with [prfSalt], derives
+     * the DID, returns it plus the credential ID from the assertion.
+     *
+     * Triggers exactly one biometric prompt. Throws whatever
+     * [PasskeyManager.authenticateWithPrf] throws when the ceremony
+     * fails (cancellation, RP-id mismatch, missing PRF support, etc.).
+     *
+     * Use [prfSalt] + [deriveFromPrfOutput] when you're already running
+     * a multi-salt ceremony for other reasons (e.g. `SigilSession`).
      */
     suspend fun deriveSigilDid(
         activity: Activity,
