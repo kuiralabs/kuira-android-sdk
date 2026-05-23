@@ -223,6 +223,19 @@ fun WalletStatusPanel(
         }
     }
 
+    // Auto-recover from SigilRequired: when the user signs in via the
+    // sigil panel, [WalletPanelViewModel] observes [SigilStateStore]
+    // and emits a `retryRequests` event. We collect those here and
+    // re-fire `refreshBalance` with the config the user originally
+    // asked for. Without this, the wallet sheet stays stuck on
+    // "sigil required" until the user manually re-taps "balance".
+    LaunchedEffect(activity) {
+        if (activity == null) return@LaunchedEffect
+        viewModel.retryRequests.collect {
+            viewModel.refreshBalance(config, activity)
+        }
+    }
+
     if (sheetOpen) {
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },

@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -162,6 +163,84 @@ class SigilStateStoreTest {
         assertTrue(constructed.hasSigil())
         assertEquals("did:key:z6MkEd25519Example", constructed.getDid())
         assertEquals("cred-id", constructed.getCredentialId())
+    }
+
+    // ── snapshotFlow reactive observability ──
+
+    @Test
+    fun `snapshotFlow exposes initial null on a fresh install`() {
+        // Fresh install — no triple persisted, no migration to fire.
+        // The flow must start at null so subscribers don't see a stale
+        // sigil that doesn't exist on disk.
+        assertNull(store.snapshotFlow.value)
+    }
+
+    @Test
+    fun `snapshotFlow seeds with existing prefs on construction`() {
+        // A pre-existing sigil in prefs (e.g. carried over from a
+        // previous app session) must be reflected in the flow on the
+        // FIRST subscription, without any explicit write through this
+        // class.
+        val prefs = context.getSharedPreferences(SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(SigilStateStore.KEY_DID, "did:key:z6MkExisting")
+            .putString(SigilStateStore.KEY_CREDENTIAL_ID, "existing-cred")
+            .putString(SigilStateStore.KEY_PUBLIC_KEY_HEX, "0212abcd")
+            .commit()
+
+        val fresh = SigilStateStore(context)
+
+        assertEquals("did:key:z6MkExisting", fresh.snapshotFlow.value?.did)
+        assertEquals("existing-cred", fresh.snapshotFlow.value?.credentialId)
+    }
+
+    @Test
+    fun `snapshotFlow emits on persistSigil`() {
+        // Write through persistSigil must update the flow's current
+        // value. This is the seam WalletPanelViewModel.observeSigilForAutoRetry
+        // relies on to clear SigilRequired when the user signs in.
+        store.persistSigil("did:key:z6MkA", "cred-a", "")
+        assertEquals("did:key:z6MkA", store.snapshotFlow.value?.did)
+
+        store.persistSigil("did:key:z6MkB", "cred-b", "0214")
+        assertEquals(
+            "Subsequent writes must update the flow, not stay pinned on the first",
+            "did:key:z6MkB",
+            store.snapshotFlow.value?.did,
+        )
+        assertEquals("0214", store.snapshotFlow.value?.publicKeyHex)
+    }
+
+    @Test
+    fun `snapshotFlow emits null on clear`() {
+        store.persistSigil("did:key:z6MkA", "cred-a", "")
+        assertNotNull(store.snapshotFlow.value)
+
+        store.clear()
+        assertNull(
+            "Clear must drop the flow back to null so observers see the wipe",
+            store.snapshotFlow.value,
+        )
+    }
+
+    @Test
+    fun `snapshotFlow is null after legacy P-256 migration clears a stale triple`() {
+        // Legacy install: P-256 DID present on disk; constructor runs
+        // the migration which wipes it; flow should be null even
+        // though the BEFORE-construction state had something stored.
+        val prefs = context.getSharedPreferences(SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(SigilStateStore.KEY_DID, "did:key:zDnLegacy")
+            .putString(SigilStateStore.KEY_CREDENTIAL_ID, "legacy-cred")
+            .putString(SigilStateStore.KEY_PUBLIC_KEY_HEX, "0212abcd")
+            .commit()
+
+        val migrated = SigilStateStore(context)
+
+        assertNull(
+            "Migration ran during init; flow must reflect post-migration null state",
+            migrated.snapshotFlow.value,
+        )
     }
 
     @Test

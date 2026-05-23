@@ -6,14 +6,18 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
+import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.math.BigInteger
 import javax.inject.Inject
@@ -49,10 +53,26 @@ import javax.inject.Inject
 class WalletPanelViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val walletSeedSource: WalletSeedSource,
+    private val sigilStateStore: SigilStateStore,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
+
+    /**
+     * One-shot events asking the host to re-trigger
+     * [refreshBalance] with the cached [WalletConfig]. Emitted when
+     * the sigil becomes available while the wallet is stuck on
+     * [WalletStatus.SigilRequired] — closes the loop so the user
+     * doesn't have to re-tap "balance" after signing in.
+     *
+     * `SharedFlow<Unit>` (not `StateFlow`) because each emission is
+     * an action signal, not state to render. The host's
+     * [WalletStatusPanel] subscribes via `LaunchedEffect` and
+     * dispatches a refresh — only one collector is expected.
+     */
+    private val _retryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val retryRequests: SharedFlow<Unit> = _retryRequests.asSharedFlow()
 
     private var sdk: MidnightSdk? = null
     /**
@@ -60,8 +80,61 @@ class WalletPanelViewModel @Inject constructor(
      * A `null` here OR a `sdkConfig != requestedConfig` triggers a full
      * rebuild in [buildOrReuseSdk] — same handler covers initial bootstrap
      * AND any subsequent user toggle (network, proving mode, proof URL).
+     *
+     * Doubles as the "last known config" the auto-retry uses when the
+     * sigil arrives: if the user previously tried `refreshBalance` and
+     * got gated to SigilRequired, the [WalletConfig] they used is
+     * captured here. The auto-retry signals via [retryRequests] and
+     * the host calls back with the same config.
      */
     private var sdkConfig: WalletConfig? = null
+
+    /**
+     * Last [WalletConfig] passed into [refreshBalance] / [registerDust].
+     * Kept independently of [sdkConfig] because [sdkConfig] only updates
+     * after a successful SDK build — when bootstrap failed with
+     * SigilRequired, [sdkConfig] is null but we still know what config
+     * the user asked for. The retry needs that.
+     */
+    private var lastRequestedConfig: WalletConfig? = null
+
+    init {
+        observeSigilForAutoRetry()
+    }
+
+    /**
+     * Reactively unblock the wallet when the user signs in / forges
+     * AFTER the wallet panel landed on [WalletStatus.SigilRequired].
+     *
+     * Flow: [SigilStateStore.snapshotFlow] emits the persisted sigil
+     * triple (initially null on a fresh install, non-null after
+     * `SigilSession.signIn` lands). When it transitions to non-null
+     * AND our status is currently `SigilRequired`, we:
+     *  1. Clear status to None so the "sigil required" body
+     *     disappears from the sheet.
+     *  2. Emit a one-shot `retryRequests` event so the host fires
+     *     `refreshBalance` with the last config the user actually
+     *     asked for.
+     *
+     * No-op when the user hasn't yet tried a wallet action — we don't
+     * auto-trigger biometric prompts for users who only signed in to
+     * the sigil panel. Action stays user-initiated; we just don't
+     * leave a stale "sigil required" status hanging around.
+     */
+    private fun observeSigilForAutoRetry() {
+        viewModelScope.launch {
+            sigilStateStore.snapshotFlow
+                .collect { snapshot ->
+                    if (snapshot != null && _status.value is WalletStatus.SigilRequired) {
+                        Log.i(TAG, "Sigil became available — clearing SigilRequired and requesting retry")
+                        _status.value = WalletStatus.None
+                        if (lastRequestedConfig != null) {
+                            _retryRequests.emit(Unit)
+                        }
+                    }
+                }
+        }
+    }
 
     /**
      * Bootstrap (if needed) and refresh balances. Progressive: emits Ready as
@@ -87,6 +160,7 @@ class WalletPanelViewModel @Inject constructor(
      * what the SDK was built with.
      */
     fun refreshBalance(config: WalletConfig, activity: FragmentActivity) {
+        lastRequestedConfig = config
         viewModelScope.launch {
             // Don't overwrite the Ready state on a refresh — that would flash
             // the sheet through Loading and lose the in-screen address. Only
@@ -148,6 +222,7 @@ class WalletPanelViewModel @Inject constructor(
      * release spendable dust and contract calls (fee-paying) fail.
      */
     fun registerDust(config: WalletConfig, activity: FragmentActivity) {
+        lastRequestedConfig = config
         viewModelScope.launch {
             try {
                 val built = buildOrReuseSdk(config, activity)

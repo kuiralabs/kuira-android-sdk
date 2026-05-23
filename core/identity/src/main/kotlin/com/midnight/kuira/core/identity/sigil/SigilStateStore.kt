@@ -5,6 +5,9 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.midnight.kuira.core.identity.did.DidKeyGenerator
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,8 +48,33 @@ class SigilStateStore @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    private val _snapshotFlow: MutableStateFlow<SigilSnapshot?> = MutableStateFlow(null)
+
+    /**
+     * Observable view of the persisted sigil triple — emits the current
+     * value on subscribe + a new value after every [persistSigil] or
+     * [clear] call.
+     *
+     * Cross-VM consumers ([WalletPanelViewModel] in particular) collect
+     * this to react to sigil identity changes. Specifically, the wallet
+     * panel transitions out of [WalletStatus.SigilRequired] when this
+     * flow emits a non-null snapshot — without it, the wallet stays
+     * stuck on "sigil required" until the user manually re-taps a
+     * wallet action.
+     *
+     * Backed by an internal [MutableStateFlow] that's updated on every
+     * write through this class. We don't rely on
+     * [SharedPreferences.OnSharedPreferenceChangeListener] because it
+     * fires on the main thread with no delivery guarantees under
+     * pressure — this is more direct and predictable.
+     */
+    val snapshotFlow: StateFlow<SigilSnapshot?> = _snapshotFlow.asStateFlow()
+
     init {
         migrateLegacyP256DidIfPresent()
+        // Seed the flow with whatever's on disk after migration. Every
+        // subscriber gets this initial value immediately on collect.
+        _snapshotFlow.value = readSnapshotFromPrefs()
     }
 
     /**
@@ -73,6 +101,10 @@ class SigilStateStore @Inject constructor(
             "SigilStateStore",
             "Legacy P-256 DID detected — clearing sigil prefs so next forge/sign-in re-derives via PRF→Ed25519",
         )
+        // Direct prefs.edit (not clear()) because this runs BEFORE
+        // _snapshotFlow is seeded — the post-init `_snapshotFlow.value
+        // = readSnapshotFromPrefs()` line reads the now-empty file and
+        // initializes the flow to null correctly.
         prefs.edit()
             .remove(KEY_DID)
             .remove(KEY_CREDENTIAL_ID)
@@ -101,17 +133,19 @@ class SigilStateStore @Inject constructor(
      * Snapshot of the persisted sigil triple, or null when no sigil
      * is forged. Convenience for consumers that want to load all three
      * fields atomically (the restore flow's hydration step).
+     *
+     * For reactive subscribers, prefer [snapshotFlow] — its current
+     * value mirrors what this returns, and it emits on every update.
      */
-    fun snapshot(): SigilSnapshot? {
-        val did = getDid() ?: return null
-        val credentialId = getCredentialId() ?: return null
-        val publicKeyHex = getPublicKeyHex() ?: return null
-        return SigilSnapshot(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
-    }
+    fun snapshot(): SigilSnapshot? = _snapshotFlow.value
 
     /**
      * Persist the sigil triple atomically — see the class-level
      * "durability contract" KDoc for the `.commit()` rationale.
+     *
+     * Updates [snapshotFlow] after the on-disk commit so every
+     * observer (e.g. [WalletPanelViewModel] auto-retry) sees the new
+     * identity as soon as the next coroutine continuation runs.
      */
     fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
         prefs.edit()
@@ -119,6 +153,7 @@ class SigilStateStore @Inject constructor(
             .putString(KEY_CREDENTIAL_ID, credentialId)
             .putString(KEY_PUBLIC_KEY_HEX, publicKeyHex)
             .commit()
+        _snapshotFlow.value = SigilSnapshot(did, credentialId, publicKeyHex)
     }
 
     /**
@@ -132,6 +167,7 @@ class SigilStateStore @Inject constructor(
             .remove(KEY_CREDENTIAL_ID)
             .remove(KEY_PUBLIC_KEY_HEX)
             .commit()
+        _snapshotFlow.value = null
     }
 
     /** True when the user chose "start fresh" from the backup prompt. */
@@ -145,6 +181,14 @@ class SigilStateStore @Inject constructor(
      */
     fun markBackupDismissed() {
         prefs.edit().putBoolean(KEY_BACKUP_DISMISSED, true).commit()
+    }
+
+    /** Read the sigil triple straight from prefs — used to seed the flow on init. */
+    private fun readSnapshotFromPrefs(): SigilSnapshot? {
+        val did = prefs.getString(KEY_DID, null) ?: return null
+        val credentialId = prefs.getString(KEY_CREDENTIAL_ID, null) ?: return null
+        val publicKeyHex = prefs.getString(KEY_PUBLIC_KEY_HEX, null) ?: return null
+        return SigilSnapshot(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
     }
 
     companion object {
