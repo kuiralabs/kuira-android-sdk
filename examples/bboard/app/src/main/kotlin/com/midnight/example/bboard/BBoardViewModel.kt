@@ -1,6 +1,5 @@
 package com.midnight.example.bboard
 
-import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
@@ -13,10 +12,6 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
-import com.midnight.kuira.dapp.sigil.SigilStatus
-import com.midnight.kuira.core.identity.auth.AuthorizationScope
-import com.midnight.kuira.core.identity.auth.KeyAuthorization
-import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
@@ -47,27 +42,10 @@ import javax.inject.Inject
 class BBoardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val walletSeedSource: WalletSeedSource,
-    private val passkeyManager: PasskeyManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
-
-    /**
-     * BBoard-specific access-key authorization state. Tracks whether the
-     * user's sigil has signed an authorization for the wallet SDK's access
-     * key — that's the BBoard-side concern that couldn't move to the
-     * panel (it needs both a sigil AND an SDK instance, and the wallet
-     * panel intentionally doesn't expose its SDK to the sigil panel).
-     *
-     * The sigil itself (forge / backup / restore / testPrf / persisted
-     * identity) is fully owned by `SigilPanelViewModel` now —
-     * `BBoardViewModel` consumes the panel's [SigilStatus.Forged] when
-     * the user taps authorize and stores the resulting authorization
-     * verdict here.
-     */
-    private val _accessKeyAuth = MutableStateFlow<AccessKeyAuthState>(AccessKeyAuthState.None)
-    val accessKeyAuth: StateFlow<AccessKeyAuthState> = _accessKeyAuth
 
     private var config: MidnightConfig? = null
     private var sdk: MidnightSdk? = null
@@ -91,68 +69,13 @@ class BBoardViewModel @Inject constructor(
     // deployAndConnect) remains in this file because it owns the contract
     // lifecycle, which is BBoard-specific.
 
-    /**
-     * Build a keyAuthorization payload and sign it with the passkey.
-     * This authorizes the SDK's access key to sign Midnight transactions.
-     *
-     * @param sigil The user's forged sigil — passed in from the panel
-     *   (`SigilPanelViewModel`) via the BBoardActivity callback rather than
-     *   read from BBoardViewModel's own state. BBoardViewModel no longer
-     *   owns the sigil identity (step 4 of the panel migration); it only
-     *   owns this authorization verdict.
-     * @param activity Required for the passkey assertion prompt.
-     */
-    fun authorizeAccessKey(sigil: SigilStatus.Forged, activity: Activity) {
-        val midnightSdk = sdk
-        if (midnightSdk == null) {
-            Log.w(TAG, "Authorize skipped — SDK not initialized (connect with standalone SDK first)")
-            _accessKeyAuth.value = AccessKeyAuthState.Error(
-                "SDK not initialized — connect or deploy a contract first.",
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            _accessKeyAuth.value = AccessKeyAuthState.Authorizing(sigil, "Building authorization...")
-            try {
-                // Build the payload: root P-256 key authorizes SDK's secp256k1 access key
-                val rootPublicKey = sigil.publicKeyHex.hexToBytes()
-                val accessPublicKey = midnightSdk.accessKeyPublicKey
-
-                val payload = KeyAuthorization.buildPayload(
-                    rootPublicKey = rootPublicKey,
-                    accessPublicKey = accessPublicKey,
-                    scope = AuthorizationScope.FULL_ACCESS,
-                    timestampMs = System.currentTimeMillis(),
-                )
-
-                // Hash the payload — this becomes the WebAuthn challenge
-                val challengeHash = KeyAuthorization.hashPayload(payload)
-
-                _accessKeyAuth.value = AccessKeyAuthState.Authorizing(sigil, "Sign with passkey...")
-
-                // Passkey signs the challenge (user sees biometric prompt)
-                val assertion = passkeyManager.authenticate(
-                    activity = activity,
-                    challenge = challengeHash,
-                )
-
-                Log.i(TAG, "Access key authorized!")
-                Log.i(TAG, "  Access key: ${midnightSdk.accessKeyPublicKey.toHex()}")
-                Log.i(TAG, "  Path: ${midnightSdk.accessKeyPath}")
-                Log.i(TAG, "  Signature: ${assertion.signature.size} bytes")
-
-                _accessKeyAuth.value = AccessKeyAuthState.Authorized(
-                    sigil = sigil,
-                    accessKeyHex = midnightSdk.accessKeyPublicKey.toHex(),
-                    accessKeyPath = midnightSdk.accessKeyPath,
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Authorization failed", e)
-                _accessKeyAuth.value = AccessKeyAuthState.Error(e.message ?: "Authorization failed")
-            }
-        }
-    }
+    // The "authorize access key" demonstrator was removed in the
+    // post-A2 cleanup. Under PRF-derived sigil + wallet, both keys
+    // are siblings of the same passkey — there's nothing additional
+    // for the sigil to attest to about the wallet's access key.
+    // The KeyAuthorization type stays in `core:identity` for future
+    // delegated-access-key use cases (third-party/remote signing,
+    // scoped + time-bounded permissions) — see Kicks wishlist #27.
 
     // Remote Wallet (`mn serve` over WebSocket) was the legacy connection
     // path — removed since the standalone SDK is the only supported route
@@ -613,45 +536,6 @@ sealed class BoardState {
     data class Occupied(val message: String) : BoardState()
     data class CallError(val message: String) : BoardState()
 }
-
-/**
- * Authorization verdict for the wallet SDK's access key.
- *
- * BBoard-specific concern: bridges the sigil (which the
- * `SigilStatusPanel` owns) with the wallet SDK's access key (which the
- * `WalletStatusPanel` owns). Neither panel can own this state in
- * isolation, so it lives in `BBoardViewModel` and gets the sigil
- * triple passed in from the host's panel-status mirror at
- * authorize-time.
- */
-sealed class AccessKeyAuthState {
-    /** No authorization attempted. Authorize button is shown when both a sigil + SDK exist. */
-    data object None : AccessKeyAuthState()
-
-    /** Authorize flow in flight. [stage] feeds the UI's status line. */
-    data class Authorizing(val sigil: SigilStatus.Forged, val stage: String) : AccessKeyAuthState()
-
-    /**
-     * Sigil successfully signed a [KeyAuthorization] payload over the
-     * wallet SDK's access key. The signed authorization isn't stored
-     * here — for now we just remember the success + key info; future
-     * iterations will persist the assertion for proof verification.
-     */
-    data class Authorized(
-        val sigil: SigilStatus.Forged,
-        val accessKeyHex: String,
-        val accessKeyPath: String,
-    ) : AccessKeyAuthState()
-
-    /** Authorization failed (user cancelled the passkey prompt, SDK absent, etc.). */
-    data class Error(val message: String) : AccessKeyAuthState()
-}
-
-private fun String.hexToBytes(): ByteArray =
-    ByteArray(length / 2) { substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-
-private fun ByteArray.toHex(): String =
-    joinToString("") { "%02x".format(it) }
 
 // NetworkChoice + the Remote Wallet preset table were removed along with
 // the `connect(addr, NetworkChoice)` Remote Wallet path. Contract code

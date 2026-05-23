@@ -114,10 +114,8 @@ class BBoardActivity : FragmentActivity() {
 @Composable
 fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
-    val accessKeyAuth by viewModel.accessKeyAuth.collectAsState()
     // FragmentActivity (which ComponentActivity extends) hosts SeedVault's
-    // biometric prompts. Same instance also satisfies Activity for the
-    // legacy sigil-side callbacks.
+    // biometric prompts.
     val activity = LocalContext.current as? FragmentActivity
 
     // Mirror of the network the WalletStatusPanel is on — the panel owns
@@ -180,18 +178,6 @@ fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
                     is BBoardState.Connected -> ConnectedScreen(
                         state = s,
-                        accessKeyAuth = accessKeyAuth,
-                        // authorize takes the sigil from the panel's status mirror —
-                        // BBoardViewModel doesn't track sigil identity anymore.
-                        // Disabled if there isn't a Forged sigil yet (the onboarding
-                        // banner in SetupScreen already nudges the user to forge).
-                        onAuthorize = {
-                            val forged = sigilStatus as? SigilStatus.Forged
-                            val act = activity
-                            if (forged != null && act != null) {
-                                viewModel.authorizeAccessKey(forged, act)
-                            }
-                        },
                         onPost = viewModel::post,
                         onTakeDown = viewModel::takeDown,
                         onRefresh = viewModel::refresh,
@@ -292,8 +278,6 @@ private fun SetupScreen(
 @Composable
 private fun ConnectedScreen(
     state: BBoardState.Connected,
-    accessKeyAuth: AccessKeyAuthState,
-    onAuthorize: () -> Unit,
     onPost: (String) -> Unit,
     onTakeDown: () -> Unit,
     onRefresh: () -> Unit,
@@ -303,22 +287,11 @@ private fun ConnectedScreen(
     val isProcessing = state.dustSyncStatus is DustSyncStatus.Processing
     val isReady = state.dustSyncStatus is DustSyncStatus.Ready
 
-    // Access-key authorization card. Identity (DID, backup/restore, prf)
-    // lives in the sigil panel chip at the top — this card only handles
-    // the BBoard-specific question of "has the user signed an
-    // authorization for the wallet SDK's access key?"
-    when (accessKeyAuth) {
-        is AccessKeyAuthState.None,
-        is AccessKeyAuthState.Authorizing,
-        is AccessKeyAuthState.Error -> {
-            SigilAuthCard(authState = accessKeyAuth, onAuthorize = onAuthorize)
-            Spacer(modifier = Modifier.height(Spacing.SectionGap))
-        }
-        is AccessKeyAuthState.Authorized -> {
-            SigilAuthorizedCard(authState = accessKeyAuth)
-            Spacer(modifier = Modifier.height(Spacing.SectionGap))
-        }
-    }
+    // Authorize panel removed in the post-A2 cleanup. Under PRF-derived
+    // sigil + wallet, both keys are siblings of the same passkey — the
+    // act of signing in via the sigil chip IS authorization. See the
+    // commit log + Kicks wishlist #27 for the future delegated-access-
+    // keys consumer that will revive a similar UI in a scoped context.
 
     DarkCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -452,83 +425,6 @@ private fun CallErrorView(message: String, onRetry: () -> Unit) {
     ActionButton("retry", enabled = true, dimmed = true, onClick = onRetry)
 }
 
-
-@Composable
-private fun SigilInfo(did: String, publicKeyHex: String, accessKeyHex: String? = null) {
-    MonoField(label = "did", value = did)
-    Spacer(modifier = Modifier.height(Spacing.SmallGap))
-    MonoField(label = "root key (P-256)", value = publicKeyHex)
-    if (accessKeyHex != null) {
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        MonoField(label = "access key (secp256k1)", value = accessKeyHex)
-    }
-}
-
-@Composable
-private fun SigilAuthCard(authState: AccessKeyAuthState, onAuthorize: () -> Unit) {
-    DarkCard {
-        Text("authorize access key", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(Spacing.ItemGap))
-        Text(
-            "Sign with your passkey to authorize the SDK's secp256k1 key for Midnight transactions.",
-            color = Colors.OnSurfaceSubtle,
-            fontSize = Type.Caption,
-        )
-        Spacer(modifier = Modifier.height(Spacing.ItemGap))
-
-        when (authState) {
-            is AccessKeyAuthState.Authorizing -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = Colors.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(Spacing.SmallGap))
-                    Text(authState.stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
-                }
-            }
-            is AccessKeyAuthState.Error -> {
-                Text(authState.message, color = Colors.Error, fontSize = Type.Label)
-                Spacer(modifier = Modifier.height(Spacing.SmallGap))
-                ActionButton("retry authorize", enabled = true, dimmed = true, onClick = onAuthorize)
-            }
-            // None — show the primary CTA. Authorized is rendered by a different card so it's unreachable here.
-            else -> ActionButton("authorize", enabled = true, onClick = onAuthorize)
-        }
-    }
-}
-
-@Composable
-private fun SigilAuthorizedCard(authState: AccessKeyAuthState.Authorized) {
-    DarkCard {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("access key", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-            Text("authorized", color = Colors.Success, fontSize = Type.Caption)
-        }
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        MonoField(label = "access key (secp256k1)", value = authState.accessKeyHex)
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        Text(
-            "path: ${authState.accessKeyPath}",
-            color = Colors.OnSurfaceSubtle,
-            fontSize = Type.Mono,
-            fontFamily = FontFamily.Monospace,
-        )
-        // DID / root-key / backup-restore live in the sigil panel chip now —
-        // no need to re-render them here. Keeps this card focused on the
-        // authorization verdict + the access-key identity.
-    }
-}
-
-@Composable
-private fun MonoField(label: String, value: String) {
-    Text(label, color = Colors.OnSurfaceDim, fontSize = Type.Caption)
-    Text(
-        value,
-        color = Colors.Accent,
-        fontSize = Type.Mono,
-        fontFamily = FontFamily.Monospace,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
 
 // ── Shared Components ──
 
