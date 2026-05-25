@@ -56,6 +56,11 @@ dependencies {
     // Bootstrap the wallet end-to-end inside the panel so host apps don't
     // re-implement seed handling, SDK construction, or dust polling.
     implementation(project(":sdk:midnight-sdk"))
+    // Owns the single live MidnightSdk instance + canonical WalletConfig.
+    // The panel is the config authority (it has the network/proving toggles);
+    // it drives the provider's ensureSdk and reads the shared SDK back. No
+    // more per-VM SDK construction — see MidnightSdkProvider.
+    implementation(project(":sdk:wallet-runtime"))
     // Single source of truth for the wallet's BIP-39 seed — owns the
     // PRF derivation, SeedVault cache, sigil gate, and dev override.
     // The panel's ensureSeedReady delegates here, rather than re-

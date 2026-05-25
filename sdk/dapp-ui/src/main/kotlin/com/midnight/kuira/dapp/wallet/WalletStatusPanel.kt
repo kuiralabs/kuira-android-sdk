@@ -51,6 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import kotlinx.coroutines.launch
 
 // ── Design tokens ──

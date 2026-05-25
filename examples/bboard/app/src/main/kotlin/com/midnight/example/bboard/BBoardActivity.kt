@@ -34,7 +34,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,13 +47,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import com.midnight.kuira.dapp.PanelBar
 import com.midnight.kuira.dapp.sigil.SigilStatus
-import com.midnight.kuira.dapp.wallet.WalletStatusPanel
-import com.midnight.kuira.core.ledger.ui.BalanceFormatter
-import com.midnight.kuira.core.network.MidnightNetwork
 import dagger.hilt.android.AndroidEntryPoint
 
 // ── Design Tokens ──
@@ -114,17 +109,16 @@ class BBoardActivity : FragmentActivity() {
 @Composable
 fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
-    // FragmentActivity (which ComponentActivity extends) hosts SeedVault's
-    // biometric prompts.
-    val activity = LocalContext.current as? FragmentActivity
 
-    // Mirror of the network the WalletStatusPanel is on — the panel owns
-    // the selection (chip lives in its sheet), but BBoard's deploy/connect
-    // operations need to target the same chain. The panel's
-    // `onNetworkChange` callback keeps this in sync; we seed it with
-    // UNDEPLOYED so the first deploy goes to localnet if the user hasn't
-    // touched the panel chip yet.
-    var midnightNetwork by rememberSaveable { mutableStateOf(MidnightNetwork.UNDEPLOYED) }
+    // The wallet panel (in PanelBar) hosts the biometric prompt now — BBoard's
+    // connect/deploy are followers that wait on the shared SDK, so this screen
+    // no longer needs a FragmentActivity handle.
+
+    // Network selection lives entirely in the wallet panel now: the chip in
+    // its sheet drives MidnightSdkProvider's config, and BBoard's contract ops
+    // read the active network straight off the shared SDK's config. No
+    // host-side `midnightNetwork` mirror — that was a second source of truth
+    // that could drift from the panel.
 
     // Mirror of the sigil panel's status so BBoard can gate the onboarding
     // banner. Panel emits None on first composition until it loads any
@@ -145,8 +139,6 @@ fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
             // the BBoard title below it — title no longer fights chip widths
             // for the same row on narrow phones.
             PanelBar(
-                network = midnightNetwork,
-                onNetworkChange = { midnightNetwork = it },
                 onSigilStatusChange = { sigilStatus = it },
             )
             Column(
@@ -167,12 +159,8 @@ fun BBoardApp(viewModel: BBoardViewModel = hiltViewModel()) {
                 when (val s = state) {
                 is BBoardState.Setup -> SetupScreen(
                     sigilStatus = sigilStatus,
-                    onConnectSdk = { addr ->
-                        activity?.let { viewModel.connectWithSdk(addr, midnightNetwork, it) }
-                    },
-                    onDeploySdk = {
-                        activity?.let { viewModel.deployAndConnect(midnightNetwork, it) }
-                    },
+                    onConnectSdk = { addr -> viewModel.connectWithSdk(addr) },
+                    onDeploySdk = { viewModel.deployAndConnect() },
                 )
                 is BBoardState.Connecting -> ConnectingView(s.stage)
                 is BBoardState.Error -> ErrorView(s.message) { viewModel.disconnect() }
@@ -294,15 +282,15 @@ private fun ConnectedScreen(
     // keys consumer that will revive a similar UI in a scoped context.
 
     DarkCard {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(state.networkId, color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
-            val modeLabel = if (state.standalone) "standalone" else "remote"
-            Text(
-                "\u2022 $modeLabel",
-                color = if (state.standalone) Colors.Accent else Colors.Success,
-                fontSize = Type.Caption,
-            )
-        }
+        // Network label removed \u2014 it duplicated the wallet pill, which is the
+        // single source of truth for which chain the wallet (and contract) is
+        // on. Only the connection mode stays here.
+        val modeLabel = if (state.standalone) "standalone" else "remote"
+        Text(
+            "\u2022 $modeLabel",
+            color = if (state.standalone) Colors.Accent else Colors.Success,
+            fontSize = Type.Caption,
+        )
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
         val clipboardManager = LocalClipboardManager.current
         var copied by remember { mutableStateOf(false) }

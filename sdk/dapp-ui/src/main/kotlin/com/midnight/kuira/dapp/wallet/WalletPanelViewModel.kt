@@ -1,6 +1,5 @@
 package com.midnight.kuira.dapp.wallet
 
-import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
@@ -8,10 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
-import com.midnight.kuira.sdk.MidnightSdk
-import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,36 +21,29 @@ import java.math.BigInteger
 import javax.inject.Inject
 
 /**
- * Self-contained wallet bootstrap + lifecycle for example apps.
+ * Wallet panel presenter: drives the canonical [WalletConfig] and translates
+ * SDK / seed state into [WalletStatus] for the panel UI.
  *
- * Owns:
- *  - The [WalletConfig] toggles (network, proving mode, proof-server URL)
- *    and rebuilds the SDK whenever any of them changes.
- *  - SDK construction + lifetime — closes the SDK in [onCleared] so the
- *    indexer WebSocket doesn't outlive the host activity.
- *  - UI status translation — converts [SigilRequiredException] from the
- *    seed source into [WalletStatus.SigilRequired].
+ * **The config authority.** The panel is the only surface with the network /
+ * proving-mode / proof-server toggles, so it's where config changes enter the
+ * system. It passes the current [WalletConfig] to [MidnightSdkProvider.ensureSdk],
+ * which builds (or rebuilds) the one shared SDK. Other consumers (BBoard, Kicks)
+ * *follow* that SDK via the provider — they never build their own. That's what
+ * makes the app sync once instead of once per consumer.
  *
- * Delegates to [WalletSeedSource] (sdk:wallet-seed) for the seed
- * bootstrap — passkey PRF derivation, SeedVault caching, legacy-seed
- * migration, dev-seed override. The same seed source is what
- * non-panel hosts (Kicks's `MatchManager`, future agent runtimes)
- * consume, so every Kuira ecosystem dApp lands on identical seed
- * behavior.
+ * **Does NOT own the SDK lifecycle.** [MidnightSdkProvider] is a process
+ * singleton that survives activity recreation, so there's no SDK to close in
+ * [onCleared]. The provider also owns seed bootstrap (it delegates to
+ * `WalletSeedSource`) and wallet proving-key readiness; this VM just requests
+ * the SDK and reads balances off it.
  *
- * **Public surface:** [status] (observe), [refreshBalance] /
- * [registerDust] (act). Funding doesn't need a panel-side handler —
- * the Receive screen shows the airdrop command, the SDK's
- * subscription picks up the credit on its own.
- *
- * **Proving keys:** the SDK's `ProvingKeyManager.ensureWalletKeysAvailable`
- * runs after [MidnightSdk.Builder.build] — `/data/local/tmp/` shortcut on
- * dev devices, ~24MB S3 download on a fresh emulator. No per-host wiring.
+ * **Public surface:** [status] (observe), [refreshBalance] / [registerDust]
+ * (act). Funding needs no handler — the Receive screen shows the airdrop
+ * command and the SDK's subscription picks up the credit on its own.
  */
 @HiltViewModel
 class WalletPanelViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val walletSeedSource: WalletSeedSource,
+    private val sdkProvider: MidnightSdkProvider,
     private val sigilStateStore: SigilStateStore,
 ) : ViewModel() {
 
@@ -81,27 +72,16 @@ class WalletPanelViewModel @Inject constructor(
     private val _retryRequests = MutableSharedFlow<WalletConfig>(extraBufferCapacity = 1)
     val retryRequests: SharedFlow<WalletConfig> = _retryRequests.asSharedFlow()
 
-    private var sdk: MidnightSdk? = null
     /**
-     * Config the current [sdk] was built with. Null when no SDK exists yet.
-     * A `null` here OR a `sdkConfig != requestedConfig` triggers a full
-     * rebuild in [buildOrReuseSdk] — same handler covers initial bootstrap
-     * AND any subsequent user toggle (network, proving mode, proof URL).
+     * Last [WalletConfig] passed into [refreshBalance] / [registerDust] —
+     * the config the user actually asked for. Drives the sigil auto-retry:
+     * if a wallet action got gated to [WalletStatus.SigilRequired], this is
+     * the config the retry re-fires with once the sigil arrives.
      *
-     * Doubles as the "last known config" the auto-retry uses when the
-     * sigil arrives: if the user previously tried `refreshBalance` and
-     * got gated to SigilRequired, the [WalletConfig] they used is
-     * captured here. The auto-retry signals via [retryRequests] and
-     * the host calls back with the same config.
-     */
-    private var sdkConfig: WalletConfig? = null
-
-    /**
-     * Last [WalletConfig] passed into [refreshBalance] / [registerDust].
-     * Kept independently of [sdkConfig] because [sdkConfig] only updates
-     * after a successful SDK build — when bootstrap failed with
-     * SigilRequired, [sdkConfig] is null but we still know what config
-     * the user asked for. The retry needs that.
+     * Tracked here rather than read back from [MidnightSdkProvider.activeConfig]
+     * because a bootstrap that failed on SigilRequired never reached the
+     * provider's build — `activeConfig` would still be null, but we know what
+     * the user wanted.
      */
     private var lastRequestedConfig: WalletConfig? = null
 
@@ -181,7 +161,7 @@ class WalletPanelViewModel @Inject constructor(
                 _status.value = WalletStatus.Loading("Bootstrapping wallet…")
             }
             try {
-                val built = buildOrReuseSdk(config, activity)
+                val built = sdkProvider.ensureSdk(activity, config)
                 // Phase 1 — addresses up immediately. balance() is a cheap
                 // read against already-populated state; whatever it returns
                 // (often zero on a fresh wallet, or stale on a long-idle
@@ -237,7 +217,7 @@ class WalletPanelViewModel @Inject constructor(
         lastRequestedConfig = config
         viewModelScope.launch {
             try {
-                val built = buildOrReuseSdk(config, activity)
+                val built = sdkProvider.ensureSdk(activity, config)
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
                     shieldedAddress = built.shieldedWalletAddress,
@@ -301,50 +281,6 @@ class WalletPanelViewModel @Inject constructor(
                 Log.e(TAG, "registerDust failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Dust registration failed")
             }
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        sdk?.close()
-        sdk = null
-    }
-
-    // ── Internal: SDK + seed plumbing ──
-
-    private suspend fun buildOrReuseSdk(config: WalletConfig, activity: FragmentActivity): MidnightSdk {
-        sdk?.let { existing ->
-            // Full-config match → reuse. Any toggle (network / proving mode /
-            // proof URL) forces a rebuild because each changes how the SDK
-            // routes transactions or which chain it talks to.
-            if (sdkConfig == config) return existing
-            existing.close()
-            sdk = null
-        }
-        val seed = walletSeedSource.ensureSeedReady(activity)
-        return try {
-            val built = MidnightSdk.Builder(context)
-                .network(config.network)
-                .seed(seed)
-                .provingMode(config.provingMode)
-                .also { builder ->
-                    config.proofServerUrl?.let { builder.proofServerUrl(it) }
-                }
-                .build()
-            sdk = built
-            sdkConfig = config
-            // Proving keys are network-agnostic — the same S3 bundle drives
-            // local proving on UNDEPLOYED, PREPROD, and PREVIEW. The SDK
-            // owns the recipe (local-tmp shortcut → S3 fallback) so a
-            // fresh install on any device self-recovers without the
-            // user having to know about adb push or local proving.
-            built.provingKeyManager.ensureWalletKeysAvailable(
-                logger = { Log.i(TAG, it) },
-            )
-            built
-        } finally {
-            // The SDK builder copies the seed internally; wipe our local view.
-            seed.fill(0)
         }
     }
 

@@ -38,9 +38,13 @@ dependencies {
     // redeclare them by hand. Add a new Kuira module = one `implementation` line.
     implementation("com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT")
     implementation("com.midnight.kuira:midnight-sdk:0.1.0-SNAPSHOT")
-    // Hilt-injected wallet seed source — BBoardViewModel uses it for
-    // contract-side SDK bootstrap so it lands on the same PRF-derived
-    // seed as the wallet panel.
+    // Owns the one shared MidnightSdk + canonical WalletConfig. BBoardViewModel
+    // injects MidnightSdkProvider and consumes the SDK the wallet panel built
+    // (awaitSdk) — no second SDK, no second chain sync.
+    implementation("com.midnight.kuira:wallet-runtime:0.1.0-SNAPSHOT")
+    // Declared directly (not just transitively) so Hilt can resolve
+    // MidnightSdkProvider's WalletSeedSource constructor param at BBoard's
+    // compile time — AAR `implementation` deps are runtime-scoped for consumers.
     implementation("com.midnight.kuira:wallet-seed:0.1.0-SNAPSHOT")
     // SDK uses `implementation(project(":core:*"))` so those types aren't exposed
     // to consumers transitively. BBoard references compact + auth + network types

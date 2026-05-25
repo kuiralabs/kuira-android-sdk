@@ -8,7 +8,8 @@ import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.testing.MainDispatcherRule
-import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.launch
@@ -23,17 +24,16 @@ import org.robolectric.RobolectricTestRunner
 /**
  * Tests for [WalletPanelViewModel]'s UI-translation contract.
  *
- * After the WalletSeedSource extraction the VM is intentionally thin:
- *  - delegate seed bootstrap to [WalletSeedSource]
- *  - translate [SigilRequiredException] thrown by the seed source into
- *    [WalletStatus.SigilRequired]
+ * After the SDK-ownership extraction the VM is intentionally thin:
+ *  - drive [MidnightSdkProvider.ensureSdk] with the panel's config
+ *  - translate [SigilRequiredException] (propagated from the provider's
+ *    seed bootstrap) into [WalletStatus.SigilRequired]
  *
- * The seed-source state machine itself (cache hit / cache miss /
- * legacy vault / dev override / sigil gate) lives in
- * `sdk:wallet-seed` and is tested there directly. What stays here
- * is the panel-level translation — that the action handlers convert
- * the typed exception into the right user-visible status, not a
- * generic Error.
+ * The SDK lifecycle + seed state machine (build-once / rebuild / cache /
+ * sigil gate) lives in `sdk:wallet-runtime` + `sdk:wallet-seed` and is
+ * tested there directly. What stays here is the panel-level translation —
+ * that the action handlers convert the typed exception into the right
+ * user-visible status, not a generic Error.
  */
 @RunWith(RobolectricTestRunner::class)
 class WalletPanelViewModelTest {
@@ -41,7 +41,7 @@ class WalletPanelViewModelTest {
     @get:Rule
     val mainDispatcher = MainDispatcherRule()
 
-    private val walletSeedSource: WalletSeedSource = mockk(relaxed = true)
+    private val sdkProvider: MidnightSdkProvider = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
 
     private lateinit var context: Context
@@ -63,7 +63,7 @@ class WalletPanelViewModelTest {
         // no passkey has been forged. The panel must translate that to
         // SigilRequired, NOT a generic Error — otherwise the host can't
         // render the "forge sigil first" affordance.
-        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws SigilRequiredException()
 
         val vm = newVm()
         vm.refreshBalance(devConfig(), activity)
@@ -80,7 +80,7 @@ class WalletPanelViewModelTest {
 
     @Test
     fun `registerDust with no sigil emits SigilRequired status`() = runTest {
-        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws SigilRequiredException()
 
         val vm = newVm()
         vm.registerDust(devConfig(), activity)
@@ -99,7 +99,7 @@ class WalletPanelViewModelTest {
         // sigil panel AFTER the wallet landed on SigilRequired. The
         // wallet should not stay stuck on that status — observing
         // SigilStateStore.snapshotFlow is the seam that closes it.
-        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws SigilRequiredException()
 
         val store = SigilStateStore(context)
         val vm = newVmWithStore(store)
@@ -129,7 +129,7 @@ class WalletPanelViewModelTest {
         // Compose collector doesn't re-fire with a stale captured
         // value (regression class: user toggles network between
         // hitting SigilRequired and signing in → wrong-network retry).
-        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws SigilRequiredException()
 
         val store = SigilStateStore(context)
         val vm = newVmWithStore(store)
@@ -174,7 +174,7 @@ class WalletPanelViewModelTest {
         //     is now PREPROD (latest value the user actually asked for)
         //  4. User signs in → retry should fire with PREPROD, not the
         //     stale UNDEPLOYED captured by Compose at LaunchedEffect launch
-        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws SigilRequiredException()
 
         val store = SigilStateStore(context)
         val vm = newVmWithStore(store)
@@ -251,8 +251,7 @@ class WalletPanelViewModelTest {
      * instance to the test and to the constructor.
      */
     private fun newVmWithStore(store: SigilStateStore): WalletPanelViewModel = WalletPanelViewModel(
-        context = context,
-        walletSeedSource = walletSeedSource,
+        sdkProvider = sdkProvider,
         sigilStateStore = store,
     )
 }

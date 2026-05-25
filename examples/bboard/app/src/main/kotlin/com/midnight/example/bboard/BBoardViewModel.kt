@@ -2,7 +2,6 @@ package com.midnight.example.bboard
 
 import android.content.Context
 import android.util.Log
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.compact.BalanceProgress
@@ -12,16 +11,16 @@ import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
+import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
-import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
-import com.midnight.kuira.sdk.WalletBalance
-import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.math.BigInteger
 import javax.inject.Inject
 
@@ -41,26 +40,24 @@ import javax.inject.Inject
 @HiltViewModel
 class BBoardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val walletSeedSource: WalletSeedSource,
+    private val sdkProvider: MidnightSdkProvider,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
     val state: StateFlow<BBoardState> = _state
 
-    private var config: MidnightConfig? = null
-    private var sdk: MidnightSdk? = null
-    /** Network the current [sdk] was built against — used to detect changes in [buildOrReuseSdk]. */
-    private var sdkNetwork: MidnightNetwork? = null
+    // Contract handle + its repository — BBoard's own state, reset on
+    // [disconnect]. The SDK and its MidnightConfig are owned by
+    // [MidnightSdkProvider] (shared with the wallet panel), so BBoard holds
+    // neither; each contract op pulls the config fresh off the shared SDK.
     private var contract: MidnightContract? = null
     private var repository: BBoardRepository? = null
 
-    // Wallet bootstrap (seed derivation + caching) is delegated to the
-    // Hilt-injected [walletSeedSource]. BBoard's local ensureSeedReady
-    // (which generated a random per-install seed) was removed: that path
-    // diverged from the wallet panel's PRF-derived seed and the same
-    // SeedVault file would have been wiped + re-derived on every panel
-    // launch. With WalletSeedSource, contract-side SDK bootstrap and the
-    // wallet panel both land on the same passkey-derived seed.
+    // SDK construction + wallet seed bootstrap are owned by
+    // [MidnightSdkProvider] (sdk:wallet-runtime). BBoard used to build its own
+    // SDK via the now-deleted buildOrReuseSdk — that's exactly the duplicate
+    // indexer subscription + double zswap replay we removed. BBoard now
+    // consumes the one shared SDK via awaitSdk().
 
     // Wallet bootstrap / balance / fund / register-dust methods used to
     // live here as the in-screen canary card's backing logic. All of that
@@ -84,72 +81,28 @@ class BBoardViewModel @Inject constructor(
     // contract operations take `MidnightNetwork` directly.
 
     /**
-     * Lazily build (or rebuild) the SDK against [network]. Reuses the existing
-     * SDK if one is already built for the same network; otherwise closes it,
-     * fetches the wallet seed from [walletSeedSource] (biometric prompt), and
-     * constructs a fresh one. All call sites that need a usable SDK go through
-     * this — keeps seed loading / network switching in one place.
-     */
-    private suspend fun buildOrReuseSdk(network: MidnightNetwork, activity: FragmentActivity): MidnightSdk {
-        sdk?.let { existing ->
-            if (sdkNetwork == network) return existing
-            // Network changed — tear down the old subscription/db before rebuilding.
-            existing.close()
-            sdk = null
-        }
-        installProvingKeys()
-        val seed = walletSeedSource.ensureSeedReady(activity)
-        return try {
-            val built = MidnightSdk.Builder(context)
-                .network(network)
-                .seed(seed)
-                .build()
-            sdk = built
-            sdkNetwork = network
-            // Download wallet proving keys on non-zero-fee networks (same logic
-            // the old connect path used).
-            if (!built.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
-                built.provingKeyManager.downloadWalletKeys { /* progress ignored — caller decides UX */ }
-            }
-            built
-        } finally {
-            // The SDK builder copies the seed internally; wipe our local view.
-            seed.fill(0)
-        }
-    }
-
-    /**
-     * Connect using the standalone SDK (no mn serve needed).
+     * Connect to an already-deployed BBoard contract using the shared SDK.
      *
-     * @param contractAddress Deployed contract address (64 hex chars)
-     * @param network Midnight network to use
-     * @param activity Hosts the biometric prompt for SeedVault.loadSeed/storeSeed.
+     * BBoard is a *follower*: it waits for [MidnightSdkProvider] to publish the
+     * SDK (the wallet panel builds it, which is where the one biometric prompt
+     * happens) and reads the active network from the provider. No biometric, no
+     * SDK construction, no network parameter here — those are the panel's job.
+     *
+     * @param contractAddress Deployed contract address (64 hex chars).
      */
-    fun connectWithSdk(
-        contractAddress: String,
-        network: MidnightNetwork,
-        activity: FragmentActivity,
-    ) {
+    fun connectWithSdk(contractAddress: String) {
         viewModelScope.launch {
-            _state.value = BBoardState.Connecting("Initializing SDK...")
             try {
-                _state.value = BBoardState.Connecting("Building SDK (deriving keys)...")
-                val midnightSdk = buildOrReuseSdk(network, activity)
+                installContractKeys()
+                _state.value = BBoardState.Connecting("Waiting for wallet…")
+                val midnightSdk = sdkProvider.awaitSdk()
 
-                if (!midnightSdk.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
-                    _state.value = BBoardState.Connecting("Downloading proving keys...")
-                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                        _state.value = BBoardState.Connecting(
-                            "Downloading keys: ${(progress * 100).toInt()}%"
-                        )
-                    }
-                }
-
-                // Connect to contract immediately — show state to user fast
+                // Connect to contract immediately — show state to user fast.
+                // The network is baked into midnightSdk.config; no separate
+                // copy needed (the wallet pill is the network's UI).
                 setupContract(
                     cfg = midnightSdk.config,
                     contractAddress = contractAddress,
-                    networkId = network.rustNetworkId,
                     coinPublicKey = midnightSdk.coinPublicKey,
                 )
 
@@ -166,29 +119,20 @@ class BBoardViewModel @Inject constructor(
      * Deploy a fresh BBoard contract, then connect to it.
      * Tests the full deploy pipeline: constructor → prove → balance → submit.
      */
-    fun deployAndConnect(network: MidnightNetwork, activity: FragmentActivity) {
+    fun deployAndConnect() {
         viewModelScope.launch {
-            _state.value = BBoardState.Connecting("Initializing SDK...")
             try {
-                _state.value = BBoardState.Connecting("Building SDK...")
-                val midnightSdk = buildOrReuseSdk(network, activity)
-
-                if (!midnightSdk.provingKeyManager.hasWalletKeys() && network != MidnightNetwork.UNDEPLOYED) {
-                    _state.value = BBoardState.Connecting("Downloading proving keys...")
-                    midnightSdk.provingKeyManager.downloadWalletKeys { progress ->
-                        _state.value = BBoardState.Connecting(
-                            "Downloading keys: ${(progress * 100).toInt()}%"
-                        )
-                    }
-                }
+                installContractKeys()
+                _state.value = BBoardState.Connecting("Waiting for wallet…")
+                val midnightSdk = sdkProvider.awaitSdk()
 
                 _state.value = BBoardState.Connecting("Deploying BBoard contract...")
 
                 // Load verifier keys for each circuit from the proving keys directory
                 val keysDir = midnightSdk.provingKeyManager.keysDir
                 val verifierKeys = mapOf(
-                    "post" to java.io.File(keysDir, "post.verifier").readBytes(),
-                    "takeDown" to java.io.File(keysDir, "takeDown.verifier").readBytes(),
+                    "post" to File(keysDir, "post.verifier").readBytes(),
+                    "takeDown" to File(keysDir, "takeDown.verifier").readBytes(),
                 )
 
                 val bboard = MidnightContract.create(midnightSdk.config) {
@@ -232,7 +176,6 @@ class BBoardViewModel @Inject constructor(
                 setupContract(
                     cfg = midnightSdk.config,
                     contractAddress = addr,
-                    networkId = network.rustNetworkId,
                     coinPublicKey = midnightSdk.coinPublicKey,
                 )
 
@@ -278,11 +221,8 @@ class BBoardViewModel @Inject constructor(
     private suspend fun setupContract(
         cfg: MidnightConfig,
         contractAddress: String,
-        networkId: String,
-        coinPublicKey: ByteArray = ByteArray(32), // Default for remote wallet mode
+        coinPublicKey: ByteArray,
     ) {
-        config = cfg
-
         _state.value = BBoardState.Connecting("Loading contract...")
         val bboard = MidnightContract.create(cfg) {
             contractJs = context.assets
@@ -313,10 +253,11 @@ class BBoardViewModel @Inject constructor(
         }
 
         _state.value = BBoardState.Connected(
-            networkId = networkId,
             contractAddress = contractAddress,
             boardState = boardState,
-            standalone = sdk != null,
+            // Standalone embedded SDK is the only mode now (remote `mn serve`
+            // path was removed). Always true.
+            standalone = true,
         )
     }
 
@@ -405,21 +346,18 @@ class BBoardViewModel @Inject constructor(
         }
     }
 
-    /** Disconnect and return to setup. */
+    /**
+     * Drop BBoard's contract handle and return to setup.
+     *
+     * Does NOT close the SDK or its `MidnightConfig` — those are owned by
+     * [MidnightSdkProvider] and shared with the wallet panel. Closing them
+     * here would disconnect the connector out from under the panel. BBoard
+     * only abandons its own contract/repository references.
+     */
     fun disconnect() {
-        sdk?.close()
-        sdk = null
-        config?.close()
-        config = null
         contract = null
         repository = null
         _state.value = BBoardState.Setup
-    }
-
-    override fun onCleared() {
-        sdk?.close()
-        config?.close()
-        super.onCleared()
     }
 
     private fun stageLabel(stage: ContractCallStage): String = when (stage) {
@@ -442,32 +380,25 @@ class BBoardViewModel @Inject constructor(
     }
 
     /**
-     * Copy proving keys + BLS params from /data/local/tmp/bboard_keys/
-     * (pushed via `./scripts/install-bboard-keys.sh`) to the app's proving_keys dir.
+     * Install BBoard's contract-specific circuit keys (`post`, `takeDown`)
+     * from the adb-pushed staging dir `/data/local/tmp/bboard_keys`.
+     *
+     * Wallet proving keys are NOT installed here — [MidnightSdkProvider] owns
+     * those (`ensureWalletKeysAvailable`: local-tmp shortcut → S3 fallback).
+     * This is purely the dApp's own circuit keys, which the SDK can't know
+     * about.
      */
-    /**
-     * Install proving keys from `/data/local/tmp/` (adb-pushed staging dir).
-     * Delegates to [com.midnight.kuira.core.compact.proving.ProvingKeyManager.installFromLocalTmp]
-     * — single source of truth for the dev/test install flow shared with the
-     * SDK e2e test and Kicks's match manager. Plus, BBoard's contract-side
-     * `post`/`takeDown` keys (which are dApp-specific, not on the SDK side).
-     */
-    private fun installProvingKeys() {
-        val provingKeyManager = com.midnight.kuira.core.compact.proving.ProvingKeyManager(context)
-        val ok = provingKeyManager.installFromLocalTmp()
-        if (!ok) {
-            Log.w(TAG, "installFromLocalTmp: hasWalletKeys() still false — adb-push keys to /data/local/tmp")
+    private fun installContractKeys() {
+        val bboardSrc = File("/data/local/tmp/bboard_keys")
+        if (!bboardSrc.exists()) {
+            Log.w(TAG, "bboard_keys not found at /data/local/tmp — adb-push contract proving keys")
+            return
         }
-        // Contract-specific keys (post, takeDown) live in bboard_keys/ but aren't
-        // part of the wallet-key set; copy them flat into keysDir for the prover.
-        val bboardSrc = java.io.File("/data/local/tmp/bboard_keys")
-        if (bboardSrc.exists()) {
-            provingKeyManager.installCircuitKeysForProving(
-                circuitNames = listOf("post", "takeDown"),
-                keysSourceDir = bboardSrc,
-                zkirSourceDir = bboardSrc,
-            )
-        }
+        ProvingKeyManager(context).installCircuitKeysForProving(
+            circuitNames = listOf("post", "takeDown"),
+            keysSourceDir = bboardSrc,
+            zkirSourceDir = bboardSrc,
+        )
     }
 
     companion object {
@@ -513,7 +444,6 @@ sealed class BBoardState {
     data object Setup : BBoardState()
     data class Connecting(val stage: String) : BBoardState()
     data class Connected(
-        val networkId: String,
         val contractAddress: String,
         val boardState: BoardState,
         val lastTimingMs: Long? = null,
