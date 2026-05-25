@@ -246,7 +246,10 @@ private fun SetupScreen(
 
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
-        ActionButton("connect", enabled = address.length == 64) {
+        // Gated on a forged sigil: without one, the wallet panel never builds
+        // the shared SDK, so connect would wait forever (awaitSdk). The
+        // "identity required" banner above explains why it's disabled.
+        ActionButton("connect", enabled = address.length == 64 && sigilStatus is SigilStatus.Forged) {
             onConnectSdk(address)
         }
 
@@ -259,7 +262,7 @@ private fun SetupScreen(
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        ActionButton("create a new board", enabled = true) {
+        ActionButton("create a new board", enabled = sigilStatus is SigilStatus.Forged) {
             onDeploySdk()
         }
         Spacer(modifier = Modifier.height(Spacing.TinyGap))

@@ -12,6 +12,7 @@ import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.compact.WitnessResult
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
+import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
@@ -41,6 +42,7 @@ import javax.inject.Inject
 class BBoardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sdkProvider: MidnightSdkProvider,
+    private val sigilStateStore: SigilStateStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<BBoardState>(BBoardState.Setup)
@@ -90,8 +92,24 @@ class BBoardViewModel @Inject constructor(
      *
      * @param contractAddress Deployed contract address (64 hex chars).
      */
+    /**
+     * Bail with a clear message instead of hanging when no sigil is forged.
+     * BBoard follows the shared SDK via awaitSdk, but the wallet panel only
+     * builds it once a sigil exists — so without one awaitSdk would wait
+     * forever. The Setup buttons are gated on this too; this is the
+     * belt-and-suspenders for any path that reaches an action anyway.
+     */
+    private fun requireSigilOrFail(): Boolean {
+        if (sigilStateStore.snapshot() == null) {
+            _state.value = BBoardState.Error("Forge your sigil first — tap the sigil chip up top.")
+            return false
+        }
+        return true
+    }
+
     fun connectWithSdk(contractAddress: String) {
         viewModelScope.launch {
+            if (!requireSigilOrFail()) return@launch
             try {
                 installContractKeys()
                 _state.value = BBoardState.Connecting("Waiting for wallet…")
@@ -121,6 +139,7 @@ class BBoardViewModel @Inject constructor(
      */
     fun deployAndConnect() {
         viewModelScope.launch {
+            if (!requireSigilOrFail()) return@launch
             try {
                 installContractKeys()
                 _state.value = BBoardState.Connecting("Waiting for wallet…")
