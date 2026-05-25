@@ -219,24 +219,29 @@ private fun SetupScreen(
 
     // ── Contract Connection Card ──
     DarkCard {
-        Text("connect to contract", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Text("join a board", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
+        Text(
+            "Paste the contract address someone shared to connect to their bulletin board.",
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
+        )
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
 
         OutlinedTextField(
             value = address,
             onValueChange = { address = it.trim() },
             label = { Text("contract address", color = Colors.OnSurfaceDim) },
-            placeholder = { Text("64 hex chars", color = Colors.OnSurfaceSubtle) },
+            placeholder = { Text("paste a board's contract address", color = Colors.OnSurfaceSubtle) },
             modifier = Modifier.fillMaxWidth(),
             colors = textFieldColors(),
             singleLine = true,
         )
-
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
         Text(
-            "Uses the standalone SDK (no mn serve needed). Network follows the wallet panel.",
-            color = Colors.Accent.copy(alpha = 0.6f),
+            "A contract address is 64 characters. The network comes from the wallet pill above.",
+            color = Colors.OnSurfaceSubtle,
             fontSize = Type.Caption,
-            modifier = Modifier.padding(top = Spacing.TinyGap),
         )
 
         Spacer(modifier = Modifier.height(Spacing.SectionGap))
@@ -247,16 +252,24 @@ private fun SetupScreen(
 
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
         Text(
-            "— or deploy a fresh instance —",
+            "— or start a new board —",
             color = Colors.OnSurfaceSubtle,
             fontSize = Type.Caption,
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(Spacing.SmallGap))
-        ActionButton("deploy new contract", enabled = true) {
+        ActionButton("create a new board", enabled = true) {
             onDeploySdk()
         }
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
+        Text(
+            "Deploys a fresh board on-chain and connects you to it — you'll get an address to share.",
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -271,8 +284,6 @@ private fun ConnectedScreen(
     onRefresh: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
-    val isSyncing = state.dustSyncStatus is DustSyncStatus.Syncing
-    val isProcessing = state.dustSyncStatus is DustSyncStatus.Processing
     val isReady = state.dustSyncStatus is DustSyncStatus.Ready
 
     // Authorize panel removed in the post-A2 cleanup. Under PRF-derived
@@ -282,16 +293,16 @@ private fun ConnectedScreen(
     // keys consumer that will revive a similar UI in a scoped context.
 
     DarkCard {
-        // Network label removed \u2014 it duplicated the wallet pill, which is the
-        // single source of truth for which chain the wallet (and contract) is
-        // on. Only the connection mode stays here.
-        val modeLabel = if (state.standalone) "standalone" else "remote"
-        Text(
-            "\u2022 $modeLabel",
-            color = if (state.standalone) Colors.Accent else Colors.Success,
-            fontSize = Type.Caption,
-        )
-        Spacer(modifier = Modifier.height(Spacing.SmallGap))
+        // Contract address \u2014 labeled + tap-to-copy.
+        //
+        // Beginners land here right after connecting. Previously this was a
+        // bare monospace hash next to "tap to copy" with no label \u2014 no way to
+        // tell what it was. Now: a clear label, the hash as the card's primary
+        // (brighter) content, an obvious copy affordance, and one line on what
+        // it's for.
+        Text("contract address", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
+
         val clipboardManager = LocalClipboardManager.current
         var copied by remember { mutableStateOf(false) }
         Row(
@@ -303,7 +314,7 @@ private fun ConnectedScreen(
         ) {
             Text(
                 state.contractAddress,
-                color = Colors.OnSurfaceSubtle,
+                color = Colors.OnSurface,
                 fontSize = Type.Mono,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
@@ -311,26 +322,31 @@ private fun ConnectedScreen(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                if (copied) "copied" else "tap to copy",
-                color = if (copied) Colors.Success else Colors.OnSurfaceSubtle,
+                if (copied) "\u2713 copied" else "copy",
+                color = if (copied) Colors.Success else Colors.Accent,
                 fontSize = Type.Caption,
                 modifier = Modifier.padding(start = Spacing.SmallGap),
             )
         }
+        Spacer(modifier = Modifier.height(Spacing.TinyGap))
+        Text(
+            "The on-chain board you're connected to. Share this address so others can join the same board.",
+            color = Colors.OnSurfaceSubtle,
+            fontSize = Type.Caption,
+        )
 
-        // Dust sync progress — inline, non-blocking
-        when {
-            isSyncing && state.dustSyncStatus is DustSyncStatus.Syncing -> {
-                val sync = state.dustSyncStatus
+        // Dust sync progress — inline, non-blocking. Exhaustive when over the
+        // sealed status (smart-casts each branch; no redundant flag checks).
+        when (val dust = state.dustSyncStatus) {
+            is DustSyncStatus.Syncing -> {
                 Spacer(modifier = Modifier.height(Spacing.ItemGap))
-                SyncProgressBar(progress = sync.percent / 100f, label = "syncing dust: ${sync.percent}% — ${sync.detail}")
+                SyncProgressBar(progress = dust.percent / 100f, label = "syncing dust: ${dust.percent}% — ${dust.detail}")
             }
-            isProcessing && state.dustSyncStatus is DustSyncStatus.Processing -> {
-                val proc = state.dustSyncStatus
+            is DustSyncStatus.Processing -> {
                 Spacer(modifier = Modifier.height(Spacing.ItemGap))
-                SyncProgressBar(progress = null, label = proc.detail)
+                SyncProgressBar(progress = null, label = dust.detail)
             }
-            else -> {
+            is DustSyncStatus.Ready -> {
                 state.lastTimingMs?.let {
                     Spacer(modifier = Modifier.height(Spacing.TinyGap))
                     Text("last tx: ${it}ms", color = Colors.Success.copy(alpha = 0.7f), fontSize = Type.Caption)
@@ -364,6 +380,12 @@ private fun ConnectedScreen(
 private fun VacantBoard(onPost: (String) -> Unit, isEnabled: Boolean = true) {
     var message by remember { mutableStateOf("") }
     Text("board is vacant", color = Colors.OnSurfaceDim, fontSize = Type.Caption, letterSpacing = 2.sp)
+    Spacer(modifier = Modifier.height(Spacing.TinyGap))
+    Text(
+        "No message posted yet. Write one below — it's stored on-chain for anyone on this board to see.",
+        color = Colors.OnSurfaceSubtle,
+        fontSize = Type.Caption,
+    )
     Spacer(modifier = Modifier.height(Spacing.SectionGap))
     OutlinedTextField(
         value = message,

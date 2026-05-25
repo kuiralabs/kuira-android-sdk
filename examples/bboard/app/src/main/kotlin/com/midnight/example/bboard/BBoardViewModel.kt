@@ -255,9 +255,6 @@ class BBoardViewModel @Inject constructor(
         _state.value = BBoardState.Connected(
             contractAddress = contractAddress,
             boardState = boardState,
-            // Standalone embedded SDK is the only mode now (remote `mn serve`
-            // path was removed). Always true.
-            standalone = true,
         )
     }
 
@@ -447,7 +444,6 @@ sealed class BBoardState {
         val contractAddress: String,
         val boardState: BoardState,
         val lastTimingMs: Long? = null,
-        val standalone: Boolean = false,
         val dustSyncStatus: DustSyncStatus = DustSyncStatus.Ready,
     ) : BBoardState()
     data class Error(val message: String) : BBoardState()
