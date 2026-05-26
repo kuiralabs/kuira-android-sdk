@@ -4,13 +4,16 @@ import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.identity.backup.SeedDeriver
+import com.midnight.kuira.core.identity.passkey.P256PublicKey
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
+import com.midnight.kuira.core.identity.passkey.PasskeyRegistrationResult
 import com.midnight.kuira.core.identity.passkey.PrfAssertionResult
 import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
@@ -199,6 +202,85 @@ class SigilSessionTest {
         org.junit.Assert.assertEquals(null, sigilStateStore.getDid())
     }
 
+    @Test
+    fun `forge with PRF-on-create derives the sigil without a follow-up GET`() = runTest {
+        // The #23 win: the create ceremony returned BOTH PRF outputs, so forge
+        // must NOT run a second GET (the ceremony that raced the fresh
+        // credential → "cannot find credential in local KeyStore").
+        val sigilPrf = ByteArray(32) { 0x11 }
+        val seedPrf = ByteArray(32) { 0x22 }
+        coEvery {
+            passkeyManager.createPasskey(
+                activity = activity,
+                userId = any(),
+                userName = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns createResult(prfOutput = sigilPrf, prfOutputSecond = seedPrf)
+
+        val capturedSeeds = mutableListOf<ByteArray>()
+        coEvery { walletSeedSource.acceptPreDerivedSeed(any(), any()) } coAnswers {
+            capturedSeeds.add(secondArg<ByteArray>().copyOf())
+            ByteArray(64)
+        }
+
+        val session = newSession()
+        val result = session.forge(activity, userName = "Test App")
+
+        assertEquals(FIXED_DID, result.did)
+        assertEquals(FIXED_CREDENTIAL_ID, result.credentialId)
+        assertEquals(FIXED_PUBKEY_HEX, result.publicKeyHex)
+
+        // No GET ceremony at all — PRF came back on create.
+        coVerify(exactly = 0) { passkeyManager.authenticateWithPrf(any(), any(), any(), any()) }
+
+        // Seed pre-warmed from the SECOND salt's output.
+        assertEquals(1, capturedSeeds.size)
+        assertArrayEquals(ByteArray(32) { 0x22 }, capturedSeeds.first())
+
+        // forge returns the triple for the caller (VM) to persist — unlike
+        // signIn, it does NOT write SigilStateStore itself.
+    }
+
+    @Test
+    fun `forge falls back to a GET ceremony when PRF-on-create is unsupported`() = runTest {
+        // Authenticator didn't evaluate PRF on create (prfOutput == null) →
+        // forge must derive via a GET (the pre-#23 path, retained as fallback).
+        coEvery {
+            passkeyManager.createPasskey(
+                activity = activity,
+                userId = any(),
+                userName = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns createResult(prfOutput = null, prfOutputSecond = null)
+        coEvery {
+            passkeyManager.authenticateWithPrf(
+                activity = activity,
+                challenge = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns prfResult(prfOutput = ByteArray(32) { 0x33 }, prfOutputSecond = ByteArray(32) { 0x44 })
+
+        val session = newSession()
+        val result = session.forge(activity, userName = "Test App")
+
+        assertEquals(FIXED_DID, result.did)
+        // Exactly one fallback GET fired.
+        coVerify(exactly = 1) {
+            passkeyManager.authenticateWithPrf(
+                activity = activity,
+                challenge = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        }
+        coVerify(exactly = 1) { walletSeedSource.acceptPreDerivedSeed(activity, any()) }
+    }
+
     // ── Helpers ──
 
     private fun newSession() = SigilSession(
@@ -207,6 +289,21 @@ class SigilSessionTest {
         sigilStateStore = sigilStateStore,
         walletSeedSource = walletSeedSource,
     )
+
+    private fun createResult(
+        prfOutput: ByteArray?,
+        prfOutputSecond: ByteArray?,
+    ): PasskeyRegistrationResult {
+        val pubKey = mockk<P256PublicKey>()
+        every { pubKey.compressedHex() } returns FIXED_PUBKEY_HEX
+        return PasskeyRegistrationResult(
+            publicKey = pubKey,
+            credentialId = FIXED_CREDENTIAL_ID,
+            registrationResponseJson = "{}",
+            prfOutput = prfOutput,
+            prfOutputSecond = prfOutputSecond,
+        )
+    }
 
     private fun prfResult(
         prfOutput: ByteArray?,
@@ -224,5 +321,6 @@ class SigilSessionTest {
     private companion object {
         const val FIXED_DID = "did:key:z6MkTestSession"
         const val FIXED_CREDENTIAL_ID = "cred-test"
+        const val FIXED_PUBKEY_HEX = "02deadbeef"
     }
 }

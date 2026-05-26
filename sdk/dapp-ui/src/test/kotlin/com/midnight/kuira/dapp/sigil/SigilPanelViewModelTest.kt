@@ -15,6 +15,7 @@ import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
+import com.midnight.kuira.sdk.walletseed.ForgeResult
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -135,14 +136,16 @@ class SigilPanelViewModelTest {
     // ── forgeSigil ──
 
     @Test
-    fun `forgeSigil chains createPasskey + sigilIdentityProvider and persists triple`() = runTest {
+    fun `forgeSigil delegates to SigilSession and persists the triple`() = runTest {
+        // Post-#23: forge is one PRF-on-create ceremony owned by SigilSession.
+        // The VM is a thin wrapper — it surfaces the result + persists the
+        // triple (the create returns the P-256 pubkey, kept for KeyAuthorization).
         coEvery { blockStoreStorage.retrieve() } returns null
-        coEvery {
-            passkeyManager.createPasskey(activity, any(), any())
-        } returns Fixtures.passkeyRegistrationResult()
-        coEvery {
-            sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-        } returns SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
+        coEvery { sigilSession.forge(activity, any()) } returns ForgeResult(
+            did = Fixtures.PRF_DID,
+            credentialId = Fixtures.CREDENTIAL_ID,
+            publicKeyHex = Fixtures.PUBLIC_KEY_HEX_EXPECTED,
+        )
 
         val vm = newVm()
         assertEquals(SigilStatus.None, vm.status.value)
@@ -153,13 +156,11 @@ class SigilPanelViewModelTest {
         forged!!
         assertEquals(Fixtures.PRF_DID, forged.did)
         assertEquals(Fixtures.CREDENTIAL_ID, forged.credentialId)
-        // publicKeyHex comes from the createPasskey response — kept for
-        // BBoard's KeyAuthorization flow, NOT used for the DID.
         assertEquals(Fixtures.PUBLIC_KEY_HEX_EXPECTED, forged.publicKeyHex)
 
-        // Both ceremonies fired exactly once.
-        coVerify(exactly = 1) { passkeyManager.createPasskey(activity, any(), any()) }
-        coVerify(exactly = 1) { sigilIdentityProvider.deriveSigilDid(activity, passkeyManager) }
+        // Single delegated ceremony — no direct create/derive from the VM.
+        coVerify(exactly = 1) { sigilSession.forge(activity, any()) }
+        coVerify(exactly = 0) { sigilIdentityProvider.deriveSigilDid(any(), any()) }
 
         // Triple is durably persisted (commit() inside SigilStateStore).
         val onDisk = freshPrefs()
@@ -290,12 +291,11 @@ class SigilPanelViewModelTest {
     /** Shared "user has forged a sigil" stubbing. */
     private fun forgedSetup() {
         coEvery { blockStoreStorage.retrieve() } returns null
-        coEvery {
-            passkeyManager.createPasskey(activity, any(), any())
-        } returns Fixtures.passkeyRegistrationResult()
-        coEvery {
-            sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-        } returns SigilDerivation(did = Fixtures.PRF_DID, credentialId = Fixtures.CREDENTIAL_ID)
+        coEvery { sigilSession.forge(activity, any()) } returns ForgeResult(
+            did = Fixtures.PRF_DID,
+            credentialId = Fixtures.CREDENTIAL_ID,
+            publicKeyHex = Fixtures.PUBLIC_KEY_HEX_EXPECTED,
+        )
     }
 
     private fun newVm(

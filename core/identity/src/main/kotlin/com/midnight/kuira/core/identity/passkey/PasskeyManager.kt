@@ -47,12 +47,16 @@ class PasskeyManager(
         activity: Activity,
         userId: ByteArray,
         userName: String,
+        prfSalt: ByteArray? = null,
+        prfSaltSecond: ByteArray? = null,
     ): PasskeyRegistrationResult {
         val challenge = generateChallenge()
         val requestJson = buildRegistrationRequestJson(
             challenge = challenge,
             userId = userId,
             userName = userName,
+            prfSaltB64 = prfSalt?.let { encodeBase64Url(it) },
+            prfSaltSecondB64 = prfSaltSecond?.let { encodeBase64Url(it) },
         )
 
         val credentialManager = CredentialManager.create(activity)
@@ -85,10 +89,22 @@ class PasskeyManager(
             throw PasskeyException("Missing 'id' in registration response: ${e.message}", e)
         }
 
+        // PRF-on-create: when the authenticator evaluates the requested PRF
+        // salt(s) during registration (WebAuthn L3 `prf` extension — Google
+        // Password Manager since Chrome 132, hardware tokens), the outputs come
+        // back in THIS response. That lets the caller derive the sigil + seed
+        // from the create alone, with no follow-up GET — which is what raced
+        // the just-created credential ("cannot find credential in local
+        // KeyStore"). Null when the authenticator doesn't support it → caller
+        // falls back to a GET ceremony.
+        val (prfFirst, prfSecond) = parsePrfResults(registrationResponseJson)
+
         return PasskeyRegistrationResult(
             publicKey = publicKey,
             credentialId = credentialId,
             registrationResponseJson = registrationResponseJson,
+            prfOutput = prfFirst,
+            prfOutputSecond = prfSecond,
         )
     }
 
@@ -156,6 +172,8 @@ class PasskeyManager(
         challenge: ByteArray,
         userId: ByteArray,
         userName: String,
+        prfSaltB64: String? = null,
+        prfSaltSecondB64: String? = null,
     ): String {
         val challengeB64 = Base64.encodeToString(
             challenge,
@@ -191,6 +209,21 @@ class PasskeyManager(
                 put("residentKey", "required")
                 put("userVerification", "required")
             })
+            // PRF-on-create extension (WebAuthn L3). Requesting eval here means
+            // a supporting authenticator returns the PRF output(s) in the
+            // registration response — single ceremony, no follow-up GET.
+            if (prfSaltB64 != null) {
+                put("extensions", JSONObject().apply {
+                    put("prf", JSONObject().apply {
+                        put("eval", JSONObject().apply {
+                            put("first", prfSaltB64)
+                            if (prfSaltSecondB64 != null) {
+                                put("second", prfSaltSecondB64)
+                            }
+                        })
+                    })
+                })
+            }
         }.toString()
     }
 
@@ -242,22 +275,7 @@ class PasskeyManager(
         val json = JSONObject(assertionResponseJson)
         val responseObj = json.getJSONObject("response")
 
-        // Extract PRF outputs (both salts when present) from
-        // clientExtensionResults.prf.results.{first,second}. The
-        // `second` field is only populated when the caller requested
-        // a second salt AND the authenticator supports multi-salt
-        // PRF evaluation (CTAP2 hmac-secret with two-salt input).
-        val (prfFirst, prfSecond) = try {
-            val extensionResults = json.optJSONObject("clientExtensionResults")
-            val results = extensionResults?.optJSONObject("prf")?.optJSONObject("results")
-            val firstB64 = results?.optString("first", "")
-            val secondB64 = results?.optString("second", "")
-            val first = if (firstB64.isNullOrEmpty()) null else decodeBase64Url(firstB64)
-            val second = if (secondB64.isNullOrEmpty()) null else decodeBase64Url(secondB64)
-            first to second
-        } catch (e: Exception) {
-            null to null
-        }
+        val (prfFirst, prfSecond) = parsePrfResults(assertionResponseJson)
 
         return PrfAssertionResult(
             credentialId = json.getString("id"),
@@ -293,6 +311,30 @@ class PasskeyManager(
                 })
             }
         }.toString()
+    }
+
+    /**
+     * Extract PRF outputs (both salts when present) from a credential
+     * response's `clientExtensionResults.prf.results.{first,second}`. Shared by
+     * the GET (assertion) and CREATE (registration) paths — both carry PRF
+     * results in the same shape. `second` is populated only when a second salt
+     * was requested AND the authenticator supports multi-salt evaluation
+     * (CTAP2 hmac-secret). Returns `(null, null)` when PRF is absent.
+     */
+    private fun parsePrfResults(responseJson: String): Pair<ByteArray?, ByteArray?> {
+        return try {
+            val json = JSONObject(responseJson)
+            val results = json.optJSONObject("clientExtensionResults")
+                ?.optJSONObject("prf")
+                ?.optJSONObject("results")
+            val firstB64 = results?.optString("first", "")
+            val secondB64 = results?.optString("second", "")
+            val first = if (firstB64.isNullOrEmpty()) null else decodeBase64Url(firstB64)
+            val second = if (secondB64.isNullOrEmpty()) null else decodeBase64Url(secondB64)
+            first to second
+        } catch (e: Exception) {
+            null to null
+        }
     }
 
     private fun encodeBase64Url(data: ByteArray): String {
@@ -332,6 +374,14 @@ class PasskeyRegistrationResult(
     val credentialId: String,
     /** Full registration response JSON (for audit/debugging). */
     val registrationResponseJson: String,
+    /**
+     * PRF output for the first requested salt, when the authenticator
+     * evaluated PRF during registration (PRF-on-create). Null when not
+     * requested or unsupported — caller then derives via a GET ceremony.
+     */
+    val prfOutput: ByteArray? = null,
+    /** PRF output for the second salt (multi-salt PRF-on-create), else null. */
+    val prfOutputSecond: ByteArray? = null,
 )
 
 /**

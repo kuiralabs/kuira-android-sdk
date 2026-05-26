@@ -191,48 +191,30 @@ class SigilPanelViewModel @Inject constructor(
      * Successful forges are persisted via [prefs] so the next session
      * resumes in Forged state without re-running this flow.
      */
-    fun forgeSigil(activity: Activity) {
+    fun forgeSigil(activity: FragmentActivity) {
         viewModelScope.launch {
             _status.value = SigilStatus.Creating("Creating passkey…")
             try {
-                // Step 1: create the passkey credential (first biometric).
-                // The returned P-256 public key is kept for the access-key
-                // authorization flow (BBoard's `authorizeAccessKey` signs
-                // KeyAuthorization payloads with it); it's NOT used to
-                // derive the sigil DID anymore — that's the PRF path
-                // below.
-                val userId = ByteArray(USER_ID_BYTES).also { SecureRandom().nextBytes(it) }
-                val createResult = passkeyManager.createPasskey(
-                    activity = activity,
-                    userId = userId,
-                    userName = hostAppLabel(),
-                )
-                val publicKeyHex = createResult.publicKey.compressedHex()
+                // One ceremony: create the passkey AND derive the sigil DID +
+                // pre-warm the wallet seed via PRF-on-create (SigilSession.forge).
+                // Replaces the old create-then-separate-PRF-GET, which raced the
+                // just-created credential ("cannot find credential in local
+                // KeyStore") until a sync pass, and showed two biometric prompts.
+                // The P-256 pubkey is kept for KeyAuthorization (BBoard's
+                // authorize flow) and surfaced in the Forged pill.
+                val result = sigilSession.forge(activity, userName = hostAppLabel())
 
-                // Step 2: derive the sigil DID via PRF (second biometric).
-                // The whole point of the PRF-derived DID: same passkey on
-                // any device, any Kuira ecosystem app, lands on the same
-                // DID — without travelling through any cloud blob.
-                _status.value = SigilStatus.Creating("Binding identity…")
-                val derivation = sigilIdentityProvider.deriveSigilDid(activity, passkeyManager)
-
-                // First-run UX note: two biometric prompts (create +
-                // PRF-authenticate) is the cost of binding a brand-new
-                // passkey to its derived identity. Sign-in on a second
-                // device skips step 1 entirely (the passkey already
-                // exists, GPM-synced) and runs only the PRF step.
-                Log.i(TAG, "Sigil forged — DID: ${derivation.did}")
-                Log.i(TAG, "  Credential ID: ${derivation.credentialId}")
-                Log.i(TAG, "  P-256 pubkey (for KeyAuthorization): $publicKeyHex")
+                Log.i(TAG, "Sigil forged — DID: ${result.did}")
+                Log.i(TAG, "  Credential ID: ${result.credentialId}")
                 persistSigil(
-                    did = derivation.did,
-                    credentialId = derivation.credentialId,
-                    publicKeyHex = publicKeyHex,
+                    did = result.did,
+                    credentialId = result.credentialId,
+                    publicKeyHex = result.publicKeyHex,
                 )
                 _status.value = SigilStatus.Forged(
-                    did = derivation.did,
-                    credentialId = derivation.credentialId,
-                    publicKeyHex = publicKeyHex,
+                    did = result.did,
+                    credentialId = result.credentialId,
+                    publicKeyHex = result.publicKeyHex,
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "forgeSigil failed", e)
@@ -474,9 +456,6 @@ class SigilPanelViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "SigilPanel"
-
-        /** Length of the random user id bound to the new credential. */
-        private const val USER_ID_BYTES = 16
 
         /** Random challenge size used by [testPrf]. 32 bytes — the spec recommendation. */
         private const val PRF_CHALLENGE_BYTES = 32

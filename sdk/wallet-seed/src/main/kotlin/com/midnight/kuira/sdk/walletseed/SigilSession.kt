@@ -5,10 +5,12 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.SeedDeriver
+import com.midnight.kuira.core.identity.passkey.PasskeyException
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.sigil.SigilDerivation
 import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
+import kotlinx.coroutines.delay
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -143,8 +145,112 @@ class SigilSession @Inject constructor(
         return SigilDerivation(did = did, credentialId = result.credentialId)
     }
 
+    /**
+     * Forge a NEW sigil — create a fresh passkey AND derive its identity (+
+     * pre-warm the wallet seed) in a **single biometric ceremony** via
+     * PRF-on-create.
+     *
+     * **Why this exists.** The old forge ran `createPasskey` then a SEPARATE
+     * PRF GET to derive the DID. That GET could fail on the *just-created*
+     * credential — `Cannot find credential in local KeyStore or database` —
+     * until a backup/sync pass (`bmgr run`) propagated it, and it was a second
+     * biometric prompt besides. Requesting the PRF salts during the create
+     * ceremony returns the outputs in the same response → no follow-up GET, no
+     * race, one prompt.
+     *
+     * **Fallback.** Authenticators that don't evaluate PRF on create return no
+     * PRF output; we then derive via a GET ceremony (after a short delay to let
+     * the new credential become discoverable). Two prompts, same correctness.
+     *
+     * Mirrors [signIn], but for a brand-new credential. Unlike sign-in, the
+     * caller persists the sigil triple — the create returns the passkey's P-256
+     * pubkey (for `KeyAuthorization`), which the caller surfaces + stores.
+     *
+     * @param userName Display name for the passkey (host app label).
+     * @throws BackupException if PRF is unavailable on either path.
+     * @throws PasskeyException if the create ceremony fails (cancellation, etc.).
+     */
+    suspend fun forge(activity: FragmentActivity, userName: String): ForgeResult {
+        // Step 1: create the passkey, evaluating BOTH salts in the same
+        // ceremony (SIGIL_SALT → DID, SEED_SALT → wallet seed). One biometric.
+        val userId = ByteArray(USER_ID_BYTES).also { SecureRandom().nextBytes(it) }
+        val create = passkeyManager.createPasskey(
+            activity = activity,
+            userId = userId,
+            userName = userName,
+            prfSalt = sigilIdentityProvider.prfSalt,
+            prfSaltSecond = SeedDeriver.SEED_SALT,
+        )
+        val publicKeyHex = create.publicKey.compressedHex()
+        val prfOnCreate = create.prfOutput != null
+
+        // Step 2: resolve the sigil + seed PRF outputs. Prefer the create
+        // response (no GET → no race); fall back to a GET ceremony otherwise.
+        var sigilPrf = create.prfOutput
+        var seedPrf = create.prfOutputSecond
+        if (sigilPrf == null) {
+            Log.w(TAG, "PRF-on-create unsupported — deriving via GET (second prompt)")
+            // The just-created credential can be momentarily undiscoverable; a
+            // brief settle before the GET dodges "cannot find credential".
+            delay(POST_CREATE_SETTLE_MS)
+            val asserted = try {
+                passkeyManager.authenticateWithPrf(
+                    activity = activity,
+                    challenge = ByteArray(CHALLENGE_SIZE).also { SecureRandom().nextBytes(it) },
+                    prfSalt = sigilIdentityProvider.prfSalt,
+                    prfSaltSecond = SeedDeriver.SEED_SALT,
+                )
+            } catch (e: PasskeyException) {
+                throw BackupException("Forge PRF derivation failed: ${e.message}")
+            }
+            sigilPrf = asserted.prfOutput
+                ?: throw BackupException("PRF not available — authenticator does not support the PRF extension")
+            seedPrf = asserted.prfOutputSecond
+        }
+
+        // Step 3: derive the sigil DID (pure compute). try/finally wipes the
+        // PRF output even if derivation throws.
+        val did = try {
+            sigilIdentityProvider.deriveFromPrfOutput(sigilPrf)
+        } finally {
+            sigilPrf.fill(0)
+        }
+
+        // Step 4: pre-warm SeedVault when we have the seed PRF (multi-salt hit).
+        // When null (single-salt authenticator), the wallet derives the seed on
+        // its first op — no worse than the pre-#23 forge, which never pre-warmed.
+        seedPrf?.let { seed ->
+            try {
+                walletSeedSource.acceptPreDerivedSeed(activity, seed).fill(0)
+            } finally {
+                seed.fill(0)
+            }
+        }
+
+        Log.i(TAG, "Forge complete — DID: $did (prfOnCreate=$prfOnCreate)")
+        return ForgeResult(
+            did = did,
+            credentialId = create.credentialId,
+            publicKeyHex = publicKeyHex,
+        )
+    }
+
     private companion object {
         const val TAG = "SigilSession"
         const val CHALLENGE_SIZE = 32
+        const val USER_ID_BYTES = 16
+        /** Settle delay before the fallback GET, so a fresh credential is discoverable. */
+        const val POST_CREATE_SETTLE_MS = 1_500L
     }
 }
+
+/**
+ * Result of [SigilSession.forge]: the new sigil's DID + credential ID, plus the
+ * passkey's P-256 public key hex (kept for `KeyAuthorization`). The caller
+ * persists the triple via [SigilStateStore].
+ */
+data class ForgeResult(
+    val did: String,
+    val credentialId: String,
+    val publicKeyHex: String,
+)
