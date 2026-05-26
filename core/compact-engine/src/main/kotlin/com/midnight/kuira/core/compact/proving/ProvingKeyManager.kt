@@ -37,7 +37,7 @@ class ProvingKeyManager(private val context: Context) {
         if (cachedVersion != CURRENT_VERSION.toString()) return false
 
         return WALLET_KEY_FILES.all { relativePath ->
-            File(keysDir, relativePath).exists()
+            File(keysDir, relativePath).isPopulated()
         }
     }
 
@@ -116,7 +116,7 @@ class ProvingKeyManager(private val context: Context) {
         for ((s3Path, localPath) in WALLET_DOWNLOADS) {
             val localFile = File(keysDir, localPath)
 
-            if (localFile.exists()) {
+            if (localFile.isPopulated()) {
                 Log.d(TAG, "  Skipping $localPath (already cached)")
                 completed++
                 onProgress(completed.toFloat() / totalFiles)
@@ -138,6 +138,35 @@ class ProvingKeyManager(private val context: Context) {
 
         val totalSize = cachedSizeBytes()
         Log.d(TAG, "Proving key download complete: ${totalSize / 1024 / 1024}MB cached")
+    }
+
+    /**
+     * A key file counts as present only if it's non-empty. A 0-byte (or
+     * absent) file means a broken/interrupted provisioning — the prover would
+     * load an empty key and fail with a cryptic header-tag error. Treating it
+     * as missing lets the provisioning paths (local-tmp copy / S3 download)
+     * re-fetch it. Mirrors the same fix in `SeedVault.hasSeed`.
+     *
+     * Note: this catches empty files, not partially-written ones — that's why
+     * both write paths ([copyAtomically], [downloadFile]) write to a temp file
+     * and rename, so a `dst` is only ever absent or complete.
+     */
+    private fun File.isPopulated(): Boolean = exists() && length() > 0L
+
+    /**
+     * Copy [src] → [dst] via a temp file + rename, so an interrupted copy can't
+     * leave a truncated/0-byte [dst] (the failure that stranded wallet keys on
+     * device). Same dir → rename is atomic on the filesystem.
+     */
+    private fun copyAtomically(src: File, dst: File) {
+        val tmp = File(dst.parentFile, "${dst.name}.tmp")
+        src.copyTo(tmp, overwrite = true)
+        if (!tmp.renameTo(dst)) {
+            // Cross-filesystem fallback (shouldn't happen — same filesDir).
+            tmp.copyTo(dst, overwrite = true)
+            tmp.delete()
+        }
+        Log.d(TAG, "Installed ${dst.name} (${dst.length()} bytes)")
     }
 
     private fun downloadFile(urlString: String, destination: File) {
@@ -197,7 +226,7 @@ class ProvingKeyManager(private val context: Context) {
         if (!dir.exists()) return false
         return circuitNames.all { circuit ->
             CIRCUIT_KEY_EXTENSIONS.all { ext ->
-                File(dir, "$circuit.$ext").exists()
+                File(dir, "$circuit.$ext").isPopulated()
             }
         }
     }
@@ -230,7 +259,7 @@ class ProvingKeyManager(private val context: Context) {
                 val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
                 val source = File(sourceDir, "$circuit.$ext")
                 val dest = File(destDir, "$circuit.$ext")
-                if (source.exists() && (overwrite || !dest.exists())) {
+                if (source.isPopulated() && (overwrite || !dest.isPopulated())) {
                     source.copyTo(dest, overwrite = true)
                     Log.d(TAG, "Installed $contractName/$circuit.$ext (${dest.length()} bytes)")
                 }
@@ -277,7 +306,7 @@ class ProvingKeyManager(private val context: Context) {
         for (circuit in circuitNames) {
             for (ext in CIRCUIT_KEY_EXTENSIONS) {
                 val dest = File(destDir, "$circuit.$ext")
-                if (!dest.exists()) {
+                if (!dest.isPopulated()) {
                     val url = "$baseUrl/$circuit.$ext"
                     Log.d(TAG, "Downloading $contractName/$circuit.$ext")
                     downloadFile(url, dest)
@@ -297,7 +326,7 @@ class ProvingKeyManager(private val context: Context) {
      * Downloaded as part of [downloadWalletKeys].
      */
     fun hasBLSParams(): Boolean {
-        return BLS_PARAM_FILES.all { File(keysDir, it).exists() }
+        return BLS_PARAM_FILES.all { File(keysDir, it).isPopulated() }
     }
 
     /**
@@ -310,7 +339,7 @@ class ProvingKeyManager(private val context: Context) {
         circuitNames.forEach { validatePathSegment(it, "circuitName") }
         return circuitNames.all { circuit ->
             CIRCUIT_KEY_EXTENSIONS.all { ext ->
-                File(keysDir, "$circuit.$ext").exists()
+                File(keysDir, "$circuit.$ext").isPopulated()
             }
         } && hasBLSParams()
     }
@@ -340,7 +369,7 @@ class ProvingKeyManager(private val context: Context) {
                 val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
                 val source = File(sourceDir, "$circuit.$ext")
                 val dest = File(keysDir, "$circuit.$ext")
-                if (source.exists() && (overwrite || !dest.exists())) {
+                if (source.isPopulated() && (overwrite || !dest.isPopulated())) {
                     source.copyTo(dest, overwrite = true)
                     Log.d(TAG, "Installed $circuit.$ext to keysDir (${dest.length()} bytes)")
                 }
@@ -384,7 +413,7 @@ class ProvingKeyManager(private val context: Context) {
             for (name in BLS_PARAM_FILES) {
                 val src = File(blsSrc, name)
                 val dst = File(keysDir, name)
-                if (src.exists() && !dst.exists()) src.copyTo(dst)
+                if (src.isPopulated() && !dst.isPopulated()) copyAtomically(src, dst)
             }
         }
 
@@ -396,9 +425,9 @@ class ProvingKeyManager(private val context: Context) {
                 if (relative.startsWith("bls_")) continue
                 val src = File(walletSrc, relative)
                 val dst = File(keysDir, relative)
-                if (src.exists() && !dst.exists()) {
+                if (src.isPopulated() && !dst.isPopulated()) {
                     dst.parentFile?.mkdirs()
-                    src.copyTo(dst)
+                    copyAtomically(src, dst)
                 }
             }
         }
