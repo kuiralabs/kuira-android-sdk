@@ -166,6 +166,37 @@ class SeedVaultTest {
         )
     }
 
+    @Test
+    fun `hasSeed is false when no file exists`() = runTest {
+        assertFalse("no file → no seed", vault.hasSeed())
+    }
+
+    @Test
+    fun `hasSeed is false for a zero-byte file — the field-bricking case`() = runTest {
+        // Reproduces the on-device failure: interrupted write / recovery churn
+        // left a 0-byte kuira_seed.bin. exists() is true but the file is empty.
+        // hasSeed() must report false so WalletSeedSource re-derives from PRF
+        // instead of trapping on CorruptedSeedException on every sign-in.
+        seedFile.writeBytes(ByteArray(0))
+        assertTrue("file exists on disk", seedFile.exists())
+        assertFalse("empty file is not a valid seed", vault.hasSeed())
+    }
+
+    @Test
+    fun `hasSeed is false for a truncated file`() = runTest {
+        seedFile.writeBytes(ByteArray(50) { it.toByte() }) // < the 124-byte valid size
+        assertTrue(seedFile.exists())
+        assertFalse("wrong-size file is not a valid seed", vault.hasSeed())
+    }
+
+    @Test
+    fun `hasSeed is true after a successful storeSeed`() = runTest {
+        every { biometricGate.tryEncryptWithinAuthWindow() } returns fakeEncryptCipher()
+        vault.storeSeed(activity) { producePlaintextSeed() }
+
+        assertTrue("a valid ${EXPECTED_FILE_SIZE}-byte seed reads as present", vault.hasSeed())
+    }
+
     // ── Helpers ──
 
     private fun producePlaintextSeed(): PlaintextSeed = PlaintextSeed(

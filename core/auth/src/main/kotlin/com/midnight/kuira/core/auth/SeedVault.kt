@@ -101,12 +101,21 @@ class SeedVault(
         get() = File(context.filesDir, TEMP_FILE_NAME)
 
     /**
-     * Whether an encrypted seed has been persisted.
+     * Whether a **valid** encrypted seed has been persisted.
+     *
+     * Checks size, not just existence: a 0-byte or truncated `kuira_seed.bin`
+     * (seen in the field after interrupted writes / recovery churn) must read
+     * as "no seed", otherwise it traps the caller forever — `loadSeed` would
+     * throw [CorruptedSeedException] and `WalletSeedSource.acceptPreDerivedSeed`
+     * would take its "already populated" branch and never re-derive from the
+     * PRF entropy it holds. Treating a malformed file as absent lets the
+     * bootstrap self-heal (it re-stores, and the atomic write overwrites the
+     * junk file).
      *
      * Performs file I/O — must be called from a coroutine.
      */
     suspend fun hasSeed(): Boolean = withContext(Dispatchers.IO) {
-        seedFile.exists()
+        seedFile.exists() && seedFile.length() == EXPECTED_SEED_FILE_SIZE.toLong()
     }
 
     /**
@@ -202,15 +211,22 @@ class SeedVault(
      * @throws AuthenticationFailedException if biometric authentication failed
      */
     suspend fun loadSeed(activity: FragmentActivity): PlaintextSeed {
-        check(hasSeed()) { "No seed stored. Create a wallet first." }
+        // Gate on raw existence, not hasSeed(): hasSeed() now also rejects a
+        // wrong-size file, but here we want to keep the absent-vs-corrupt
+        // distinction — no file → "create a wallet" (IllegalStateException);
+        // file present but malformed → CorruptedSeedException below (the
+        // caller's signal to trigger a restore). The two need different
+        // recovery UX, so don't collapse them.
+        val stored = withContext(Dispatchers.IO) {
+            check(seedFile.exists()) { "No seed stored. Create a wallet first." }
+            seedFile.readBytes()
+        }
 
-        val stored = withContext(Dispatchers.IO) { seedFile.readBytes() }
-
-        // Minimum size: IV + at least the GCM auth tag (16 bytes) + plaintext (96 bytes)
-        val minSize = WalletKeyManager.GCM_IV_LENGTH + PlaintextSeed.PLAINTEXT_SIZE + GCM_TAG_BYTES
-        if (stored.size != minSize) {
+        // IV ‖ ciphertext ‖ GCM tag. A wrong size means a truncated/garbage
+        // file (e.g. an interrupted write) — surface it as corruption.
+        if (stored.size != EXPECTED_SEED_FILE_SIZE) {
             throw CorruptedSeedException(
-                "Stored seed has wrong size: expected $minSize bytes, got ${stored.size}"
+                "Stored seed has wrong size: expected $EXPECTED_SEED_FILE_SIZE bytes, got ${stored.size}"
             )
         }
 
@@ -282,6 +298,15 @@ class SeedVault(
 
         // AES-GCM auth tag size in bytes (derived from WalletKeyManager.GCM_TAG_LENGTH bits)
         private const val GCM_TAG_BYTES = WalletKeyManager.GCM_TAG_LENGTH / 8
+
+        /**
+         * Exact on-disk size of a valid encrypted seed: IV ‖ ciphertext ‖ GCM
+         * tag. The ciphertext is the plaintext length (GCM is not size-
+         * expanding beyond the tag). Used by both [hasSeed] (to reject a
+         * truncated/empty file) and [loadSeed]'s integrity check.
+         */
+        internal const val EXPECTED_SEED_FILE_SIZE =
+            WalletKeyManager.GCM_IV_LENGTH + PlaintextSeed.PLAINTEXT_SIZE + GCM_TAG_BYTES
 
         private const val TAG = "SeedVault"
     }
