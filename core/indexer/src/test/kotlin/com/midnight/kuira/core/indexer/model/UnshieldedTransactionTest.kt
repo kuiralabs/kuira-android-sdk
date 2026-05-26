@@ -31,7 +31,7 @@ class UnshieldedTransactionTest {
         assertEquals(TransactionType.RegularTransaction, tx.type)
         assertEquals(1, tx.protocolVersion)
         assertEquals(listOf("id1", "id2"), tx.identifiers)
-        assertEquals(1704067200000L, tx.block.timestamp)
+        assertEquals(1704067200000L, tx.block!!.timestamp)
         assertNotNull(tx.fees)
         assertNotNull(tx.transactionResult)
     }
