@@ -10,6 +10,7 @@ import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +50,15 @@ class WalletPanelViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
+
+    /**
+     * Live balance observer (collects [com.midnight.kuira.sdk.MidnightWallet.balanceFlow]).
+     * Re-armed (cancel + relaunch) on each [refreshBalance] so only one runs;
+     * [viewModelScope] cancels it when the VM is cleared. This is what makes the
+     * panel update automatically when funds land (airdrop / incoming tx) instead
+     * of only on a manual refresh.
+     */
+    private var observeBalanceJob: Job? = null
 
     /**
      * One-shot events asking the host to re-trigger
@@ -193,6 +203,22 @@ class WalletPanelViewModel @Inject constructor(
                         "shieldedNight=${fresh.shieldedNight} " +
                         "dust=${fresh.dust} registered=${fresh.dustRegistered}",
                 )
+
+                // Keep the panel live. The indexer subscription updates the
+                // wallet's balance as funds land (airdrop, incoming tx); observe
+                // it and push every change into Ready, preserving the addresses.
+                // Without this the new balance was synced + logged but the panel
+                // never re-rendered. Launched on viewModelScope (not as a child
+                // of this coroutine) so it outlives refreshBalance; re-armed each
+                // call, so only one observer runs.
+                observeBalanceJob?.cancel()
+                observeBalanceJob = viewModelScope.launch {
+                    built.wallet.balanceFlow().collect { live ->
+                        (_status.value as? WalletStatus.Ready)?.let { ready ->
+                            _status.value = ready.copy(balance = live)
+                        }
+                    }
+                }
             } catch (e: SigilRequiredException) {
                 // Bootstrap blocked because no passkey is forged. Host UI
                 // observes SigilRequired and renders a "forge sigil first"

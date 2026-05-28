@@ -11,7 +11,9 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
@@ -81,6 +83,35 @@ class MidnightWallet internal constructor(
             dustRegistered = dust > BigInteger.ZERO,
         )
     }
+
+    /**
+     * Observable balance — emits a fresh [WalletBalance] whenever the wallet's
+     * unshielded state changes. The background indexer subscription drives the
+     * underlying flow, so **externally-received funds (an airdrop, an incoming
+     * transfer) surface automatically** without a manual refresh. Each emission
+     * re-reads shielded + dust alongside the unshielded NIGHT.
+     *
+     * Use this for a live UI (the wallet panel collects it); [balance] stays the
+     * one-shot snapshot for callers that just need the current value.
+     *
+     * Note: emissions are driven by the *unshielded* subscription. A dust-only
+     * change (e.g. right after [MidnightSdk.registerForDustGeneration]) won't
+     * re-emit on its own — that path forces its own refresh.
+     */
+    fun balanceFlow(): Flow<WalletBalance> =
+        balanceRepository.observeBalances(walletAddress).map { tokenBalances ->
+            val unshielded = tokenBalances
+                .firstOrNull { it.tokenType == TokenTypeMapper.NIGHT_SYMBOL }
+                ?.balance
+                ?: BigInteger.ZERO
+            val dust = dustRepository.getCurrentBalance(walletAddress)
+            WalletBalance(
+                unshieldedNight = unshielded,
+                shieldedNight = shieldedTracker.currentNight(),
+                dust = dust,
+                dustRegistered = dust > BigInteger.ZERO,
+            )
+        }
 
     /**
      * Suspend until the wallet's NIGHT balance reaches [minNight] or [timeoutMs] elapses.
