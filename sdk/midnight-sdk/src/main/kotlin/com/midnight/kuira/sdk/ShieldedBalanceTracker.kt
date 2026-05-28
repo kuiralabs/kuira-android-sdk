@@ -8,6 +8,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -54,13 +57,20 @@ internal class ShieldedBalanceTracker(
 ) {
     private val mutex = Mutex()
 
-    @Volatile
-    private var cachedNight: BigInteger = BigInteger.ZERO
+    private val _night = MutableStateFlow(BigInteger.ZERO)
+
+    /**
+     * Observable shielded NIGHT — emits on every [resync]. The wallet's
+     * `balanceFlow` combines this so a shielded credit reflects in a live UI
+     * without a manual refresh (the unshielded subscription alone wouldn't tick
+     * for a shielded-only change).
+     */
+    val nightFlow: StateFlow<BigInteger> = _night.asStateFlow()
 
     private var subscriptionJob: Job? = null
 
     /** Latest cached shielded NIGHT. Zero until the first [resync] completes. */
-    fun currentNight(): BigInteger = cachedNight
+    fun currentNight(): BigInteger = _night.value
 
     /**
      * Full re-sync from chain. Replays all zswap events, recomputes NIGHT.
@@ -71,13 +81,14 @@ internal class ShieldedBalanceTracker(
      */
     suspend fun resync() = mutex.withLock {
         val hasCoins = shieldedRepository.syncFromBlockchain(walletAddress, zswapSeed)
-        cachedNight = if (hasCoins) {
+        val night = if (hasCoins) {
             val balances = shieldedRepository.getBalances(walletAddress)
             balances[UtxoSpend.NATIVE_TOKEN_TYPE] ?: BigInteger.ZERO
         } else {
             BigInteger.ZERO
         }
-        Log.d(TAG, "Shielded NIGHT resync: $cachedNight")
+        _night.value = night
+        Log.d(TAG, "Shielded NIGHT resync: $night")
     }
 
     /**
