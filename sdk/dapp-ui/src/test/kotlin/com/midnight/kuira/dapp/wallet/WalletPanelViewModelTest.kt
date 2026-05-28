@@ -8,12 +8,18 @@ import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.testing.MainDispatcherRule
+import com.midnight.kuira.sdk.MidnightSdk
+import com.midnight.kuira.sdk.MidnightWallet
+import com.midnight.kuira.sdk.WalletBalance
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import java.math.BigInteger
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -233,6 +239,57 @@ class WalletPanelViewModelTest {
         // Status was never SigilRequired in the first place.
         assertEquals(WalletStatus.None, vm.status.value)
         collectJob.cancel()
+    }
+
+    @Test
+    fun `panel auto-updates when balanceFlow emits — no manual refresh needed`() = runTest {
+        // The reactive end of the auto-update fix: the SDK's background
+        // subscription emits a new balance on balanceFlow → the VM's collector
+        // pushes it into Ready, preserving the addresses. Without this the
+        // logged balance updated but the panel didn't.
+        val initial = WalletBalance(
+            unshieldedNight = BigInteger.ZERO,
+            shieldedNight = BigInteger.ZERO,
+            dust = BigInteger.ZERO,
+            dustRegistered = false,
+        )
+        val credited = WalletBalance(
+            unshieldedNight = BigInteger.valueOf(500), // airdrop landed
+            shieldedNight = BigInteger.ZERO,
+            dust = BigInteger.ZERO,
+            dustRegistered = false,
+        )
+        val live = MutableStateFlow(initial)
+
+        val wallet = mockk<MidnightWallet>(relaxed = true)
+        coEvery { wallet.balance() } returns initial
+        coEvery { wallet.refresh() } returns Unit
+        every { wallet.balanceFlow() } returns live
+
+        val builtSdk = mockk<MidnightSdk>(relaxed = true)
+        every { builtSdk.wallet } returns wallet
+        every { builtSdk.walletAddress } returns "addr"
+        every { builtSdk.shieldedWalletAddress } returns "shielded_addr"
+
+        coEvery { sdkProvider.ensureSdk(activity, any()) } returns builtSdk
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity)
+
+        // Initial bootstrap reflects the snapshot.
+        val ready0 = vm.status.value as WalletStatus.Ready
+        assertEquals(initial, ready0.balance)
+
+        // The subscription emits a credit — no manual refresh.
+        live.value = credited
+
+        val ready1 = vm.status.value as WalletStatus.Ready
+        assertEquals(
+            "panel must reflect balanceFlow emissions automatically",
+            credited,
+            ready1.balance,
+        )
+        assertEquals("address preserved across the live update", "addr", ready1.address)
     }
 
     // ── Helpers ──
