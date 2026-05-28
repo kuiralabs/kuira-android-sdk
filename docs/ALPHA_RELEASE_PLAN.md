@@ -129,8 +129,8 @@ unit tests then `./gradlew publishToMavenCentral` against Central Portal
 staging. Secrets to configure on GitHub once: `MAVEN_CENTRAL_USERNAME`,
 `MAVEN_CENTRAL_PASSWORD`, `SIGNING_IN_MEMORY_KEY`, `SIGNING_IN_MEMORY_KEY_PASSWORD`.
 Release-to-public is a manual step on the Portal (intentional for the alpha).
-Release checklist: bump version → tag → CI publishes to staging → review on
-Portal → release.
+Release checklist (full per-release ritual + one-time Portal/GPG/secrets
+setup): [`../RELEASE.md`](../RELEASE.md).
 
 ### F. Validation — ✅ DONE
 The publish workflow runs an in-CI acceptance step before pushing to Central:
