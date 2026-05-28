@@ -55,23 +55,23 @@ android {
 dependencies {
     // Bootstrap the wallet end-to-end inside the panel so host apps don't
     // re-implement seed handling, SDK construction, or dust polling.
-    implementation(project(":sdk:midnight-sdk"))
+    api(project(":sdk:midnight-sdk"))
     // Owns the single live MidnightSdk instance + canonical WalletConfig.
     // The panel is the config authority (it has the network/proving toggles);
     // it drives the provider's ensureSdk and reads the shared SDK back. No
     // more per-VM SDK construction — see MidnightSdkProvider.
-    implementation(project(":sdk:wallet-runtime"))
+    api(project(":sdk:wallet-runtime"))
     // Single source of truth for the wallet's BIP-39 seed — owns the
     // PRF derivation, SeedVault cache, sigil gate, and dev override.
     // The panel's ensureSeedReady delegates here, rather than re-
     // implementing the bootstrap as it used to.
-    implementation(project(":sdk:wallet-seed"))
-    implementation(project(":core:auth"))      // SeedVault, WalletKeyManager
-    implementation(project(":core:crypto"))    // BIP39 seed generation
-    implementation(project(":core:identity"))  // PasskeyManager, DidKeyGenerator, SigilBackup — sigil panel
-    implementation(project(":core:ledger"))    // BalanceFormatter + SubmissionResult
-    implementation(project(":core:network"))   // MidnightNetwork
-    implementation(project(":core:compact-engine"))  // ProvingKeyManager.installFromLocalTmp
+    api(project(":sdk:wallet-seed"))
+    api(project(":core:auth"))      // SeedVault, WalletKeyManager
+    api(project(":core:crypto"))    // BIP39 seed generation
+    api(project(":core:identity"))  // PasskeyManager, DidKeyGenerator, SigilBackup — sigil panel
+    api(project(":core:ledger"))    // BalanceFormatter + SubmissionResult
+    api(project(":core:network"))   // MidnightNetwork
+    api(project(":core:compact-engine"))  // ProvingKeyManager.installFromLocalTmp
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.fragment.ktx)  // FragmentActivity hosts SeedVault biometric prompts

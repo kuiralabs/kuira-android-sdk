@@ -29,12 +29,12 @@ android {
 
 dependencies {
     // Core modules
-    implementation(project(":core:compact-engine"))
-    implementation(project(":core:crypto"))
-    implementation(project(":core:identity"))
-    implementation(project(":core:ledger"))
-    implementation(project(":core:indexer"))
-    implementation(project(":core:network"))
+    api(project(":core:compact-engine"))
+    api(project(":core:crypto"))
+    api(project(":core:identity"))
+    api(project(":core:ledger"))
+    api(project(":core:indexer"))
+    api(project(":core:network"))
 
     // DataStore for SDK dust state persistence
     implementation("androidx.datastore:datastore-preferences:1.1.1")

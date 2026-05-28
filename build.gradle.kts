@@ -112,6 +112,12 @@ val kuiraVersion = "0.1.0-alpha01"
 
 subprojects {
     plugins.withId("com.android.library") {
+        // Only the SDK surface (core:* + sdk:*) is published. feature:* modules
+        // are the wallet app's screens (balance / dust / onboarding / send /
+        // settings) — wallet-app internals, NOT consumer SDK — so they don't
+        // belong under io.github.kuiralabs.
+        if (path.startsWith(":feature:")) return@withId
+
         apply(plugin = "com.vanniktech.maven.publish")
 
         configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
