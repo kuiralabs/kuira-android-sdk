@@ -48,6 +48,12 @@ jobs:
       - name: Set up Gradle (with build cache)
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Build Rust FFI for all Android targets
+        # Produces target/<abi>/release/libkuira_crypto_ffi.a for each ABI;
+        # core:crypto's CMake step links these into libkuira_crypto_ffi.so.
+        # Must run BEFORE any Gradle task that builds the native code.
+        run: ./kuira-crypto-ffi/build-android.sh release
+
       - name: Run unit tests (fail-fast before publishing)
         run: ./gradlew test --console=plain
 
