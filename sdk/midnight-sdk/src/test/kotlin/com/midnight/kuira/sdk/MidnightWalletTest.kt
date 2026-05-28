@@ -4,14 +4,20 @@ import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.BlockInfo
+import com.midnight.kuira.core.indexer.model.TokenBalance
+import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
 import org.mockito.kotlin.*
+import java.math.BigInteger
 
 /**
  * Unit tests for [MidnightWallet].
@@ -96,6 +102,56 @@ class MidnightWalletTest {
         wallet.close()
         verify(nodeRpc).close()
         verify(syncManager).close()
+    }
+
+    // ── balanceFlow reactivity (the auto-update-on-credit fix) ──
+
+    @Test
+    fun `balanceFlow re-emits when unshielded OR shielded NIGHT changes`() = runTest {
+        val addr = "test_address"
+        // Both balance sources are observable; the wallet combines them.
+        val unshielded = MutableStateFlow(
+            listOf(TokenBalance(TokenTypeMapper.NIGHT_SYMBOL, BigInteger.valueOf(100), utxoCount = 1)),
+        )
+        val shielded = MutableStateFlow(BigInteger.ZERO)
+        val balanceRepo = mock<BalanceRepository> {
+            on { observeBalances(addr) } doReturn unshielded
+        }
+        val tracker = mock<ShieldedBalanceTracker> {
+            on { nightFlow } doReturn shielded
+        }
+        val dustRepo = mock<DustRepository> {
+            onBlocking { getCurrentBalance(addr) } doReturn BigInteger.ZERO
+        }
+        val wallet = createWallet(
+            balanceRepository = balanceRepo,
+            shieldedTracker = tracker,
+            dustRepository = dustRepo,
+            walletAddress = addr,
+        )
+
+        val seen = mutableListOf<WalletBalance>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            wallet.balanceFlow().collect { seen += it }
+        }
+
+        // Initial combine of both sources.
+        assertEquals(BigInteger.valueOf(100), seen.last().unshieldedNight)
+        assertEquals(BigInteger.ZERO, seen.last().shieldedNight)
+
+        // A shielded-only credit MUST re-emit — this was the bug: a shielded
+        // change was synced but never reached the panel.
+        shielded.value = BigInteger.valueOf(50)
+        assertEquals(BigInteger.valueOf(50), seen.last().shieldedNight)
+        assertEquals(BigInteger.valueOf(100), seen.last().unshieldedNight)
+
+        // An unshielded credit (airdrop) re-emits too.
+        unshielded.value =
+            listOf(TokenBalance(TokenTypeMapper.NIGHT_SYMBOL, BigInteger.valueOf(200), utxoCount = 1))
+        assertEquals(BigInteger.valueOf(200), seen.last().unshieldedNight)
+        assertEquals(BigInteger.valueOf(50), seen.last().shieldedNight)
+
+        job.cancel()
     }
 
     // ── Helpers ──
