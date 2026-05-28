@@ -54,7 +54,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // DataStore for sync state persistence
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    api("androidx.datastore:datastore-preferences:1.1.1")
 
     // Ktor for HTTP client (GraphQL over HTTP)
     implementation(libs.ktor.client.core)

@@ -48,7 +48,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // DataStore for network selection persistence
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    api("androidx.datastore:datastore-preferences:1.1.1")
 
     // Hilt for dependency injection
     implementation(libs.hilt.android)

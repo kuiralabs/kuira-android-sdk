@@ -37,7 +37,7 @@ dependencies {
     api(project(":core:network"))
 
     // DataStore for SDK dust state persistence
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    api("androidx.datastore:datastore-preferences:1.1.1")
 
     // Room for SDK database
     implementation("androidx.room:room-runtime:2.6.1")
