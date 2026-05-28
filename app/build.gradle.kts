@@ -99,6 +99,7 @@ dependencies {
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:settings"))
     implementation(project(":core:auth")) // Direct dep: SeedVault + WalletAddressCache injected into MainActivity
+    implementation(project(":core:identity")) // Direct dep: app declares its own PasskeyConfig (SDK provides no default — wishlist #22)
     implementation(project(":core:connector"))
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":core:designsystem"))

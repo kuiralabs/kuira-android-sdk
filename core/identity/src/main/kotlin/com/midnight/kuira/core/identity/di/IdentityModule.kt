@@ -26,15 +26,24 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object IdentityModule {
 
-    @Provides
-    @Singleton
-    fun providePasskeyConfig(): PasskeyConfig {
-        return PasskeyConfig(
-            rpId = DEFAULT_RP_ID,
-            rpName = DEFAULT_RP_NAME,
-        )
-    }
-
+    // NOTE: there is intentionally NO default `PasskeyConfig` provider here.
+    //
+    // `rpId` is the passkey relying-party domain — it MUST match the
+    // `assetlinks.json` the consuming app hosts on its OWN domain. A hardcoded
+    // SDK default would silently route every consumer through the maintainer's
+    // domain and break PRF unless the maintainer added them to a maintainer-
+    // hosted assetlinks.json — i.e. the SDK would be effectively permissioned
+    // (wishlist #22). So each consuming app MUST bind its own:
+    //
+    //   @Module @InstallIn(SingletonComponent::class)
+    //   object MyAppIdentityModule {
+    //       @Provides @Singleton
+    //       fun providePasskeyConfig() =
+    //           PasskeyConfig(rpId = "myapp.example.com", rpName = "My App")
+    //   }
+    //
+    // Omitting it is a fail-fast Dagger missing-binding error at build time —
+    // the intended "declare your domain" signal.
     @Provides
     @Singleton
     fun providePasskeyManager(
@@ -51,14 +60,6 @@ object IdentityModule {
     ): AuthorizationStore {
         return AuthorizationStore(context, keyManager)
     }
-
-    /**
-     * Default RP ID — must match Digital Asset Links configuration.
-     * Production: kuira.midnight.network (once DAL is configured there)
-     * Development: nel349.github.io (DAL hosted on GitHub Pages)
-     */
-    private const val DEFAULT_RP_ID = "nel349.github.io"
-    private const val DEFAULT_RP_NAME = "Kuira"
 }
 
 /**
