@@ -36,25 +36,25 @@ dependencies {
     // parent project (`./gradlew publishToMavenLocal`). POMs include transitive
     // deps (zxing, bitcoinj, ktor, room, credentials, etc.) so BBoard doesn't
     // redeclare them by hand. Add a new Kuira module = one `implementation` line.
-    implementation("com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:midnight-sdk:0.1.0-SNAPSHOT")
+    implementation("io.github.kuiralabs:dapp-ui:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:midnight-sdk:0.1.0-alpha01")
     // Owns the one shared MidnightSdk + canonical WalletConfig. BBoardViewModel
     // injects MidnightSdkProvider and consumes the SDK the wallet panel built
     // (awaitSdk) — no second SDK, no second chain sync.
-    implementation("com.midnight.kuira:wallet-runtime:0.1.0-SNAPSHOT")
+    implementation("io.github.kuiralabs:wallet-runtime:0.1.0-alpha01")
     // Declared directly (not just transitively) so Hilt can resolve
     // MidnightSdkProvider's WalletSeedSource constructor param at BBoard's
     // compile time — AAR `implementation` deps are runtime-scoped for consumers.
-    implementation("com.midnight.kuira:wallet-seed:0.1.0-SNAPSHOT")
+    implementation("io.github.kuiralabs:wallet-seed:0.1.0-alpha01")
     // SDK uses `implementation(project(":core:*"))` so those types aren't exposed
     // to consumers transitively. BBoard references compact + auth + network types
     // directly, so declare them here.
-    implementation("com.midnight.kuira:compact-engine:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:identity:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:auth:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:network:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:crypto:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:ledger:0.1.0-SNAPSHOT")
+    implementation("io.github.kuiralabs:compact-engine:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:identity:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:auth:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:network:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:crypto:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:ledger:0.1.0-alpha01")
 
     // AndroidX directly used by BBoard (FragmentActivity host, Compose). Things
     // Kuira pulls in transitively (biometric, credentials, room, etc.) come
