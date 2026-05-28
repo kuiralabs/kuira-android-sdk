@@ -105,9 +105,13 @@ modules + the examples' dependency lines.
   *per-contract* — each dApp hosts its own — but the **shared BLS params** must
   live at a **stable public URL** a third party can rely on (not a dev bucket).
   Document the split.
-- **`INTEGRATION.md`** at the SDK root — the recipe: pick a domain → host
-  `assetlinks.json` → add the Hilt `PasskeyConfig` module → add the maven deps.
-  Plus prerequisites: Hilt is required, min SDK, the proving-key note.
+- ✅ **`INTEGRATION.md`** at the SDK root — landed
+  [`../INTEGRATION.md`](../INTEGRATION.md). End-to-end recipe: prereqs (Hilt /
+  KSP / AGP / min SDK 30), the one-line dependency (`dapp-ui` panel entry or
+  `midnight-sdk` headless), `PasskeyConfig` Hilt module, `assetlinks.json`,
+  the debug-only localnet cleartext gotcha, a minimal "deploy + call"
+  skeleton, and a troubleshooting table covering every pitfall we hit during
+  the audit.
 - **License** — confirm `LICENSE` is OSS (Apache-2.0 / MIT) and mirror it into
   the POMs.
 
@@ -127,7 +131,7 @@ modules + the examples' dependency lines.
 
 1. **#22 — hardcoded `rpId`** (host-provided config, no fallback). Correctness.
 2. **Stable public host for shared BLS params** (off the dev S3 bucket).
-3. **`INTEGRATION.md`** — without the recipe, "open" isn't usable.
+3. ✅ **`INTEGRATION.md`** — landed [`../INTEGRATION.md`](../INTEGRATION.md).
 
 Everything else (signing, POM, BOM, CI) is mechanical once the host is chosen.
 
