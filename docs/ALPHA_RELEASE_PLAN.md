@@ -121,10 +121,16 @@ modules + the examples' dependency lines.
 - **License** — confirm `LICENSE` is OSS (Apache-2.0 / MIT) and mirror it into
   the POMs.
 
-### E. Release process + CI
-- A `publish` task wired to the chosen repo + a GitHub Actions workflow that
-  publishes **on a version tag** (reproducible alphas).
-- A short **release checklist** (bump version → tag → CI publishes → smoke test).
+### E. Release process + CI — ✅ DONE
+[`.github/workflows/publish-maven-central.yml`](../.github/workflows/publish-maven-central.yml).
+Tag-driven (`v*`) + manual `workflow_dispatch`. Sets up JDK 17, Android SDK,
+Rust with four Android targets (for the FFI `.so` libs), Gradle cache; runs
+unit tests then `./gradlew publishToMavenCentral` against Central Portal
+staging. Secrets to configure on GitHub once: `MAVEN_CENTRAL_USERNAME`,
+`MAVEN_CENTRAL_PASSWORD`, `SIGNING_IN_MEMORY_KEY`, `SIGNING_IN_MEMORY_KEY_PASSWORD`.
+Release-to-public is a manual step on the Portal (intentional for the alpha).
+Release checklist: bump version → tag → CI publishes to staging → review on
+Portal → release.
 
 ### F. Validation
 - The **acceptance-gate consumer project** (above) lives outside this tree and
