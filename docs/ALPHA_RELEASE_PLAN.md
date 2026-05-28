@@ -100,11 +100,17 @@ modules + the examples' dependency lines.
   to a maintainer-hosted `assetlinks.json` — i.e. the SDK is effectively
   *permissioned*. Make the config **host-provided with no fallback** (fail-fast
   missing-binding); each example ships its own. **This is the correctness gate.**
-- **Proving-key + BLS-params hosting.** Keys download at runtime from a **dev**
-  S3 bucket (`midnight-s3-fileshare-dev-eu-west-1`). Proving keys are
-  *per-contract* — each dApp hosts its own — but the **shared BLS params** must
-  live at a **stable public URL** a third party can rely on (not a dev bucket).
-  Document the split.
+- ✅ **Proving-infrastructure host — documented as alpha known limitation.**
+  The SDK fetches Midnight's protocol-level proving keys (BLS params +
+  wallet/zswap/dust circuits) from `midnight-s3-fileshare-dev-eu-west-1` —
+  the same Midnight-team bucket the official tooling uses, labeled "dev." For
+  the alpha we **document** the dependency in
+  [`../INTEGRATION.md`](../INTEGRATION.md) (§ Known limitations) rather than
+  self-host: the right party to publish a production URL is Midnight, not the
+  SDK maintainer. The handoff is tracked through `ProvingKeyManager.CURRENT_VERSION`
+  (currently 9); the next step, if Midnight doesn't ship a prod URL before
+  broader adoption, is a `kuira-labs`-controlled mirror with a version pin.
+  Per-contract proving keys are **unaffected** — each dApp hosts its own.
 - ✅ **`INTEGRATION.md`** at the SDK root — landed
   [`../INTEGRATION.md`](../INTEGRATION.md). End-to-end recipe: prereqs (Hilt /
   KSP / AGP / min SDK 30), the one-line dependency (`dapp-ui` panel entry or
@@ -130,7 +136,10 @@ modules + the examples' dependency lines.
 ## Blockers (must clear before alpha)
 
 1. **#22 — hardcoded `rpId`** (host-provided config, no fallback). Correctness.
-2. **Stable public host for shared BLS params** (off the dev S3 bucket).
+2. ✅ **Stable public host for shared BLS params** — documented as alpha known
+   limitation; revisit if Midnight ships a production URL or adoption demands
+   a `kuira-labs` mirror. See [`../INTEGRATION.md`](../INTEGRATION.md)
+   § Known limitations.
 3. ✅ **`INTEGRATION.md`** — landed [`../INTEGRATION.md`](../INTEGRATION.md).
 
 Everything else (signing, POM, BOM, CI) is mechanical once the host is chosen.

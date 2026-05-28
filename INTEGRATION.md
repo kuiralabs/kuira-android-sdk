@@ -259,6 +259,46 @@ throws `SigilRequiredException` until a sigil exists. Forge it through
 
 ---
 
+## Known limitations (alpha)
+
+The alpha ships with one known dependency you should be aware of. It isn't a
+blocker for building, but it shapes what "alpha" means in practice and will
+evolve as Midnight matures.
+
+### Proving infrastructure downloads from a Midnight *dev* URL
+
+On first launch the SDK fetches Midnight's **protocol-level** proving assets
+— the universal BLS parameters and the wallet's shielded-spend / dust circuit
+keys — from
+`https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com`.
+This is the same bucket Midnight's own tooling uses; it's **Midnight's
+bucket, not the SDK maintainer's**, and the URL is labeled `-dev-`. There is
+no production SLA on it.
+
+**What this means in practice:**
+
+- If Midnight retires, renames, or restricts that bucket, every alpha dApp
+  briefly can't generate proofs until the SDK is updated.
+- The right party to publish a production URL is Midnight (the asset owner),
+  not the SDK maintainer. So the alpha *documents* this dependency rather
+  than self-hosting.
+
+**Your own `.compact` contract's proving keys are NOT affected by this.** Those
+download from a URL **you** supply when you call
+`ProvingKeyManager.downloadCircuitKeys(baseUrl = …, …)` — Kicks hosts Kicks's
+keys, BBoard hosts BBoard's. You always own your contract's keys. This
+limitation is only about the *protocol-wide* keys that every Midnight dApp
+shares.
+
+**How it will evolve.** When Midnight publishes a production URL — or, if
+that's not in their immediate roadmap, when the SDK mirrors these files under
+a `kuira-labs`-controlled URL with a version pin (`ProvingKeyManager.CURRENT_VERSION`
+tracks the protocol version, currently 9) — the SDK swaps the constant and
+re-publishes. The expected migration cost for a consumer is a single SDK
+version bump; no app-side code change.
+
+---
+
 ## See also
 
 - [`docs/ALPHA_RELEASE_PLAN.md`](docs/ALPHA_RELEASE_PLAN.md) — what the alpha bundle is and what's coming next.
