@@ -132,10 +132,14 @@ Release-to-public is a manual step on the Portal (intentional for the alpha).
 Release checklist: bump version → tag → CI publishes to staging → review on
 Portal → release.
 
-### F. Validation
-- The **acceptance-gate consumer project** (above) lives outside this tree and
-  is run on a clean machine before every alpha tag. It *is* the definition of
-  "anyone can build Kicks/BBoard from the dependency."
+### F. Validation — ✅ DONE
+The publish workflow runs an in-CI acceptance step before pushing to Central:
+`publishToMavenLocal` on the runner, then build BBoard's own gradle root
+against those local artifacts. BBoard has its own settings + wrapper +
+one-line `dapp-ui` dep, so a green BBoard build means the umbrella resolves
+cleanly from a consumer-shaped project. If it fails, the workflow halts before
+the upload. Kicks would need a submodule version-bump dance to be a second
+gate; deferred.
 
 ---
 

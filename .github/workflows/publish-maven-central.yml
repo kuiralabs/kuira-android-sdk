@@ -51,6 +51,13 @@ jobs:
       - name: Run unit tests (fail-fast before publishing)
         run: ./gradlew test --console=plain
 
+      - name: Publish to mavenLocal (acceptance prereq)
+        run: ./gradlew publishToMavenLocal --console=plain
+
+      - name: Acceptance — BBoard builds against the alpha as a third-party consumer
+        working-directory: examples/bboard
+        run: ./gradlew :app:assembleDebug --console=plain
+
       - name: Publish to Maven Central staging
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
