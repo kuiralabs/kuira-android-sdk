@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.google.hilt) apply false
+    alias(libs.plugins.vanniktech.maven.publish) apply false
 }
 
 // ── adb reverse localnet (auto-wired before every installDebug) ──
@@ -93,42 +94,64 @@ gradle.projectsEvaluated {
     }
 }
 
-// ── Maven publish for downstream consumers ──
+// ── Maven publish (alpha → Maven Central via the Central Portal) ──
 //
-// Every Android library module gets a `debug` AAR publication under
-// `com.midnight.kuira:<module-name>:<version>` so downstream apps with their
-// own Gradle root (e.g. examples/midnight-kicks, third-party dApps) can
-// consume them from `mavenLocal()` without copying AARs and re-declaring
-// transitive deps. Coordinates intentionally match the module's last path
-// segment so `:examples:common` publishes as `common`, `:core:crypto` as
-// `crypto`, etc.
+// Every Android library module publishes its `release` variant under
+// `io.github.kuiralabs:<module-name>:<version>` (artifactId = the module's last
+// path segment: `:core:crypto` → `crypto`). Downstream apps with their own
+// Gradle root (examples/midnight-kicks, examples/bboard, third-party dApps)
+// consume from `mavenLocal()` today and from Maven Central once published.
 //
-// `singleVariant("debug")` matches the existing dev workflow — release-
-// signed variants come later when we publish to a real Maven repo for
-// third parties.
-val kuiraGroup = "com.midnight.kuira"
-val kuiraVersion = "0.1.0-SNAPSHOT"
+// The vanniktech plugin owns the release variant + sources/javadoc jars, the
+// POM metadata Central requires, signing, and the Central Portal upload — see
+// docs/ALPHA_RELEASE_PLAN.md. Signing/upload credentials are read from
+// ~/.gradle/gradle.properties (never committed); a keyless
+// `publishToMavenLocal` works for local dev + dry-runs.
+val kuiraGroup = "io.github.kuiralabs"
+val kuiraVersion = "0.1.0-alpha01"
 
 subprojects {
     plugins.withId("com.android.library") {
-        apply(plugin = "maven-publish")
+        apply(plugin = "com.vanniktech.maven.publish")
 
-        extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
-            publishing {
-                singleVariant("debug")
-            }
-        }
-
-        afterEvaluate {
-            extensions.configure<PublishingExtension>("publishing") {
-                publications {
-                    register<MavenPublication>("debug") {
-                        from(components["debug"])
-                        groupId = kuiraGroup
-                        artifactId = project.name
-                        version = kuiraVersion
+        configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+            coordinates(kuiraGroup, project.name, kuiraVersion)
+            configure(
+                com.vanniktech.maven.publish.AndroidSingleVariantLibrary(
+                    variant = "release",
+                    sourcesJar = true,
+                    publishJavadocJar = true,
+                ),
+            )
+            pom {
+                name.set("Kuira :${project.name}")
+                description.set("Kuira SDK — build Midnight zero-knowledge dApps on Android. Module: ${project.name}.")
+                url.set("https://github.com/nel349/kuira-android-wallet")
+                licenses {
+                    license {
+                        name.set("The Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
                     }
                 }
+                developers {
+                    developer {
+                        id.set("nel349")
+                        name.set("Norman Lopez")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/nel349/kuira-android-wallet")
+                    connection.set("scm:git:git://github.com/nel349/kuira-android-wallet.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/nel349/kuira-android-wallet.git")
+                }
+            }
+            publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
+            // Sign only when a key is configured, so a keyless publishToMavenLocal
+            // dry-run still works; Central uploads sign.
+            if (providers.gradleProperty("signingInMemoryKey").isPresent ||
+                providers.gradleProperty("signing.keyId").isPresent
+            ) {
+                signAllPublications()
             }
         }
     }
