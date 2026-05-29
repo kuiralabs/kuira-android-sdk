@@ -9,7 +9,10 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.google.hilt) apply false
     alias(libs.plugins.vanniktech.maven.publish) apply false
-    alias(libs.plugins.dokka) apply false
+    // Dokka applied at the root so the multi-module aggregate task
+    // (`dokkaHtmlMultiModule`) is registered here; subprojects opt in
+    // via the `plugins.withId("com.android.library")` block below.
+    alias(libs.plugins.dokka)
 }
 
 // ── adb reverse localnet (auto-wired before every installDebug) ──
