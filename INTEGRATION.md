@@ -301,7 +301,7 @@ version bump; no app-side code change.
 
 ## See also
 
-- [`docs/ALPHA_RELEASE_PLAN.md`](docs/ALPHA_RELEASE_PLAN.md) — what the alpha bundle is and what's coming next.
+- [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) — what's landing in the next alpha cycle.
 - [`examples/midnight-kicks/`](examples/midnight-kicks) — full PvP dApp, the deepest exercise of the SDK.
 - [`examples/bboard/`](examples/bboard) — simpler dApp, good first read.
 - [`examples/midnight-kicks/docs/PLAN.md`](examples/midnight-kicks/docs/PLAN.md#sdk-connector--wishlist-non-blockers) — SDK-connector wishlist (open items + accepted friction).

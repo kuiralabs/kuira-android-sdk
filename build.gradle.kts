@@ -104,8 +104,8 @@ gradle.projectsEvaluated {
 //
 // The vanniktech plugin owns the release variant + sources/javadoc jars, the
 // POM metadata Central requires, signing, and the Central Portal upload — see
-// docs/ALPHA_RELEASE_PLAN.md. Signing/upload credentials are read from
-// ~/.gradle/gradle.properties (never committed); a keyless
+// RELEASE.md for the per-release ritual. Signing/upload credentials are read
+// from ~/.gradle/gradle.properties (never committed); a keyless
 // `publishToMavenLocal` works for local dev + dry-runs.
 val kuiraGroup = "io.github.kuiralabs"
 val kuiraVersion = "0.1.0-alpha01"

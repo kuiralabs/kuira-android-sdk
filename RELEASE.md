@@ -127,6 +127,6 @@ broken artifact and have it stuck on Central forever."
 ## See also
 
 - [`INTEGRATION.md`](INTEGRATION.md) — what a consumer does on the other side.
-- [`docs/ALPHA_RELEASE_PLAN.md`](docs/ALPHA_RELEASE_PLAN.md) — the audit that
-  led to this pipeline.
+- [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) — what's landing in the
+  next alpha cycle (devX, docs site, API stability annotations).
 - [`.github/workflows/publish-maven-central.yml`](.github/workflows/publish-maven-central.yml) — the workflow itself.
