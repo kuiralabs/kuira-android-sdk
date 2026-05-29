@@ -1,0 +1,16 @@
+public abstract class com/midnight/kuira/contract/KuiraContractExtension {
+	public fun <init> ()V
+	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
+	public abstract fun getSource ()Lorg/gradle/api/provider/Property;
+}
+
+public final class com/midnight/kuira/contract/KuiraContractPlugin : org/gradle/api/Plugin {
+	public static final field Companion Lcom/midnight/kuira/contract/KuiraContractPlugin$Companion;
+	public fun <init> ()V
+	public synthetic fun apply (Ljava/lang/Object;)V
+	public fun apply (Lorg/gradle/api/Project;)V
+}
+
+public final class com/midnight/kuira/contract/KuiraContractPlugin$Companion {
+}
+
