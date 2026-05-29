@@ -86,7 +86,7 @@ configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
         developers {
             developer {
                 id.set("nel349")
-                name.set("Norman Lopez")
+                name.set("nel349")
             }
         }
         scm {

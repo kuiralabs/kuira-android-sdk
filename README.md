@@ -117,6 +117,6 @@ POM block in the root `build.gradle.kts`.
 
 ## Contact
 
-Maintainer: [Norman Lopez](https://github.com/nel349) ·
+Maintainer: [nel349](https://github.com/nel349) ·
 `kuiralabs@gmail.com` ·
 [security policy](SECURITY.md) for vulnerability reports.

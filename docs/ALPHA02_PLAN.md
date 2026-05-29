@@ -64,11 +64,12 @@ below.
       no personal-site mixing;
   (c) GitHub Pages on this monorepo's `gh-pages` branch — possible
       with a paid plan that supports Pages on private repos.
-- [ ] **Repo-root `README.md` in THIS monorepo.** Orients maintainers:
-  "this is the SDK + wallet monorepo; SDK source lives in
-  `sdk/*` and `core/*`; consumer-facing docs live at <public site>."
-  Internal-facing, since the monorepo is private — different audience
-  from the public README that ships in the docs host repo.
+- [x] **Repo-root `README.md` in THIS monorepo.** Replaces the stale
+  Phase-1-crypto scaffolding doc with a maintainer-oriented orientation:
+  public-surface pointers (Maven Central, docs site, public docs repo),
+  conceptual tree layout (no file tree — concepts age better),
+  build/test/publish quick reference, and a 'where to find what' index
+  to the existing in-repo docs.
 - [ ] **Migrate `INTEGRATION.md` to the public docs host** once chosen.
   Single source of truth; this monorepo links out to it.
 - [ ] **Wire Dokka into the publish flow.** Turns the empty

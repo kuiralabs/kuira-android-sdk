@@ -176,7 +176,7 @@ subprojects {
                 developers {
                     developer {
                         id.set("nel349")
-                        name.set("Norman Lopez")
+                        name.set("nel349")
                     }
                 }
                 // SCM points at the public docs repository — the one repo
