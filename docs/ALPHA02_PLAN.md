@@ -144,6 +144,68 @@ below.
   accepted; will open for community contribution in alphaXX" is a fine
   answer for now.
 
+### G. Agent-mode developer experience
+
+**Vision:** the docs site is also the **agent surface**. A developer
+landing on the cookbook picks a recipe, hits a "copy prompt for your
+agent" button, and pastes into Claude Code / Cursor / Codex / whichever
+LLM-assisted tool they use. The agent fetches a stable raw-markdown
+context bundle from the same site and has everything it needs to execute
+the integration in the dev's own project. A site-root `llms.txt`
+makes the whole cookbook auto-discoverable by any LLM agent that
+supports the emerging standard.
+
+The structure is deliberately minimal-frontend. One markdown file per
+recipe is the source of truth — humans render it as a cookbook page,
+agents fetch it raw. No vendor-locked tooling; no maintenance-heavy
+custom UI.
+
+- [ ] **mkdocs-material site at `kuiralabs.github.io/kuira-sdk/`** —
+  replaces the bare README rendering. Tag-based recipe discovery,
+  built-in search, dark mode, default theme, no custom CSS.
+- [ ] **`/api/` subdirectory** hosting the aggregated multi-module
+  Dokka HTML. One navigable API reference across all 14 published
+  modules, deployed on every release.
+- [ ] **Three initial recipes** as `.md` files with frontmatter:
+  `add-kuira-to-an-android-project`, `set-up-sigil-identity`,
+  `deploy-and-call-a-compact-contract`. Hand-authored; structured as
+  step-by-step runbooks (verify-after-each-step format).
+- [ ] **"Copy prompt for your agent" buttons** on each recipe page.
+  Clipboard JS, no per-agent variants — one prompt template wrapping
+  the recipe's raw-markdown URL.
+- [ ] **`llms.txt` at site root** following <https://llmstxt.org>.
+  Hand-authored for `alpha02`; auto-generated from recipe frontmatter
+  in `alpha03+`.
+- [ ] **Deploy via GitHub Actions** on every push to `main` in
+  `kuiralabs/kuira-sdk` (`mkdocs gh-deploy --force` → `gh-pages`
+  branch). Dokka HTML deploys from the monorepo's publish workflow on
+  every tag, into the same site under `/api/`.
+
+**Deferred to `alpha03+` (cookbook framework full vision):**
+
+These come from the original `cookbook-plan.md`. They're real and
+worth tracking; they layer cleanly on top of the recipes-as-markdown
+foundation we lay in `alpha02`.
+
+- Option-form-generated recipes (platform × network × IDE × wallet
+  matrix produces a tailored runbook).
+- **Session state** as JSON file the agent maintains across
+  invocations. Survives interruptions; enables resume; doubles as a
+  bug report on failure.
+- **Live-step gates** — confirmation primitives for irreversible
+  actions (deploy, install, spend).
+- **CLI integration** — a `kuira` CLI for diagnostics, scaffolding,
+  and structured per-step verifiers callable from recipes. Same
+  pattern as `mn doctor` in `midnight-wallet-cli`.
+- **Per-version frozen API snapshots** (`/api/0.1.0-alpha03/`,
+  `/api/latest/`) for stable references across SDK versions.
+- **MCP server** (`kuiralabs/kuira-mcp`) — agents connect over Model
+  Context Protocol, query SDK as live resources, call SDK tools. The
+  recipes and context bundles laid down in `alpha02` become the MCP
+  server's resources/tools in `alpha03+`.
+- **Recipe content auto-extracted** from monorepo KDoc + INTEGRATION
+  sections. Eliminates drift between source and recipes.
+
 ---
 
 ## Deferred past `alpha02`
@@ -166,23 +228,28 @@ connector wishlist in `examples/midnight-kicks/docs/PLAN.md`.
 
 ---
 
-## Recommended focus — the six items that compound most
+## Recommended focus — the seven items that compound most
 
 If everything above is too broad, the high-leverage subset is:
 
-1. **Pick the public docs host repo** (A) — unblocks every other
-   Workstream A item.
-2. **Public README on the docs host** (A) — first-impression doc the
-   consumer actually reaches.
-3. **Dokka + Pages deploy from the publish workflow** (A) — fixes the
-   empty `javadoc.jar` and gives the SDK a public docs URL.
-4. **POM URL fix** (A) — kills the 404 a consumer sees today.
-5. **Contract Gradle plugin (#11)** (B) — biggest concrete DX win.
-6. **`binary-compatibility-validator` + `@ExperimentalKuiraApi`** (C) —
+1. ✅ **Pick the public docs host repo** (A) — `kuiralabs/kuira-sdk` selected,
+   bootstrapped with README/INTEGRATION/SECURITY/LICENSE, GitHub Pages live.
+2. ✅ **Dokka wired into the publish flow** (A) — per-module `javadoc.jar`
+   now contains real KDoc HTML (was empty placeholder).
+3. ✅ **POM URL fix** (A) — landed; `url` + `scm.*` point at
+   `kuiralabs/kuira-sdk`. Effective alpha02 (alpha01's POM is immutable).
+4. **mkdocs-material site + recipes + `llms.txt`** (G) — replaces the bare
+   README rendering; first three recipes; agent-prompt buttons; auto-deploy.
+   The cookbook foundation.
+5. **Aggregated Dokka multi-module HTML** deployed to `/api/` of the docs
+   site on every tag (A + G).
+6. **Contract Gradle plugin (#11)** (B) — biggest concrete DX win for
+   consumers writing dApps against the SDK.
+7. **`binary-compatibility-validator` + `@ExperimentalKuiraApi`** (C) —
    needed for the semver path toward `1.0`.
 
-Land those six and `alpha02` is honestly the "now it looks like a real
-SDK" release.
+Land those seven and `alpha02` is honestly the "now it looks like a real,
+agent-ready SDK" release.
 
 ---
 
