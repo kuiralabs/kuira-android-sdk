@@ -30,10 +30,9 @@ plugins {
 // Note: the root `build.gradle.kts` only auto-applies vanniktech to
 // modules with `com.android.library`. This module is a Gradle plugin
 // (kotlin-jvm), so we apply + configure vanniktech here directly.
+// `group` + `version` are inherited from gradle.properties (one source
+// of truth shared with the rest of the SDK) — do not override.
 apply(plugin = "com.vanniktech.maven.publish")
-
-group = "io.github.kuiralabs"
-version = "0.1.0-alpha01"  // bumped to match `kuiraVersion` in root build at release time
 
 kotlin {
     jvmToolchain(17)
@@ -61,7 +60,7 @@ gradlePlugin {
 }
 
 configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
-    coordinates(group.toString(), project.name, version.toString())
+    coordinates(project.group.toString(), project.name, project.version.toString())
     // GradlePlugin() configures vanniktech to publish both the main jar
     // AND the plugin marker artifact required for `plugins { id(...) }`
     // resolution. Includes sources + javadoc jars by default.

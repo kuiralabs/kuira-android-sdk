@@ -113,6 +113,32 @@ class KuiraContractPluginTest {
     }
 
     @Test
+    fun `failure when source is unset surfaces a helpful message`() {
+        // No `source.set(...)` call in the build script.
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("com.midnight.kuira.contract")
+            }
+            tasks.register("preBuild")
+            // kuiraContract block omitted on purpose.
+            """.trimIndent(),
+        )
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+
+        val result = runExpectingFailure("syncContractAssets")
+
+        val output = result.output
+        assertTrue(
+            "error should name the missing setting: $output",
+            output.contains("kuiraContract.source must be set"),
+        )
+    }
+
+    @Test
     fun `syncContractAssets is wired into the preBuild lifecycle`() {
         writeCanonicalContractTree("penalty")
         writeBuildScript(source = "contract/src/managed/penalty")

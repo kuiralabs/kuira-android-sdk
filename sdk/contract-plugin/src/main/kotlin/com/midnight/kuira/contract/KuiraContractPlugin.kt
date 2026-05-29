@@ -66,6 +66,11 @@ class KuiraContractPlugin : Plugin<Project> {
             // up-to-date is "consumer ships a broken APK."
             task.outputs.upToDateWhen { false }
             task.doLast {
+                // `source` presence is checked at configuration time in
+                // afterEvaluate below — by the time task actions run,
+                // Gradle has already resolved providers, so a missing
+                // `source` would have surfaced earlier. Here we only
+                // catch the "configured but not compiled" case.
                 val sourceDir = sourceProvider.get().asFile
                 if (!sourceDir.exists()) {
                     throw GradleException(
@@ -97,10 +102,18 @@ class KuiraContractPlugin : Plugin<Project> {
             task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
         }
 
-        // Wire into preBuild so any forgotten copy is caught at build
-        // time, not runtime. Done in afterEvaluate because the Android
-        // plugin's `preBuild` task is registered during configuration.
+        // Validate consumer config + wire into preBuild. afterEvaluate runs
+        // at the end of project configuration, BEFORE Gradle resolves the
+        // task graph — so missing-config errors fire here instead of as
+        // an inscrutable MissingValueException at task scheduling time.
         project.afterEvaluate {
+            if (!extension.source.isPresent) {
+                throw GradleException(
+                    "kuiraContract.source must be set — declare " +
+                        "`kuiraContract { source.set(\"contract/src/managed/<name>\") }` " +
+                        "in your build script. The path is relative to the project directory.",
+                )
+            }
             val preBuild = project.tasks.findByName(ANDROID_PREBUILD_TASK)
                 ?: throw GradleException(
                     "com.midnight.kuira.contract requires an Android plugin " +

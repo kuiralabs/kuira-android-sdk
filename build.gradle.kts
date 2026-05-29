@@ -129,8 +129,11 @@ gradle.projectsEvaluated {
 // RELEASE.md for the per-release ritual. Signing/upload credentials are read
 // from ~/.gradle/gradle.properties (never committed); a keyless
 // `publishToMavenLocal` works for local dev + dry-runs.
-val kuiraGroup = "io.github.kuiralabs"
-val kuiraVersion = "0.1.0-alpha01"
+//
+// `group` + `version` come from gradle.properties — single source of truth
+// shared with sub-modules like sdk:contract-plugin that apply vanniktech
+// themselves (so bumping the version in gradle.properties at release time
+// propagates to every published artifact, no per-module edits required).
 
 subprojects {
     plugins.withId("com.android.library") {
@@ -149,7 +152,7 @@ subprojects {
         apply(plugin = "org.jetbrains.dokka")
 
         configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
-            coordinates(kuiraGroup, project.name, kuiraVersion)
+            coordinates(project.group.toString(), project.name, project.version.toString())
             configure(
                 com.vanniktech.maven.publish.AndroidSingleVariantLibrary(
                     variant = "release",
