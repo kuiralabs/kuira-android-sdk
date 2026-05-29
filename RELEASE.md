@@ -108,6 +108,31 @@ io.github.kuiralabs:dapp-ui:0.1.0-alphaXX available via mavenCentral()
 If the acceptance gate fails, the workflow halts **before** uploading — the
 tag still exists but nothing is staged. Investigate, fix, re-tag.
 
+### 3. Refresh the public API reference
+
+After the artifacts are live on Central, regenerate the multi-module
+Dokka HTML and push it to the public docs repo so
+`kuiralabs.github.io/kuira-sdk/api/` matches what's on Central:
+
+```bash
+# In the monorepo:
+./gradlew dokkaHtmlMultiModule
+
+# Copy into the public docs repo (path may differ on your machine):
+rsync -a --delete build/dokka/htmlMultiModule/ ../../kuira-sdk/docs/api/
+
+# Commit + push (triggers the docs.yml workflow → gh-pages):
+cd ../../kuira-sdk
+git add docs/api/
+git commit -m "feat(api): refresh Dokka API ref for v0.1.0-alphaXX"
+git push
+```
+
+This is manual for `alpha02`. An `alpha03` workstream item will wire it
+into the publish workflow via a deploy token + `repository_dispatch`
+so the refresh happens automatically on every successful Central
+upload.
+
 ---
 
 ## How this differs from npm
