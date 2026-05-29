@@ -132,7 +132,10 @@ subprojects {
             pom {
                 name.set("Kuira :${project.name}")
                 description.set("Kuira SDK — build Midnight zero-knowledge dApps on Android. Module: ${project.name}.")
-                url.set("https://github.com/nel349/kuira-android-wallet")
+                // Project landing page — the public docs site. The source
+                // repo is private; consumers clicking through from Central
+                // should land on something useful, not a GitHub 404.
+                url.set("https://kuiralabs.github.io/kuira-sdk")
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -145,10 +148,13 @@ subprojects {
                         name.set("Norman Lopez")
                     }
                 }
+                // SCM points at the public docs repository — the one repo
+                // a consumer can actually clone. The source monorepo is
+                // private; pointing scm.* at it returns 404 for everyone.
                 scm {
-                    url.set("https://github.com/nel349/kuira-android-wallet")
-                    connection.set("scm:git:git://github.com/nel349/kuira-android-wallet.git")
-                    developerConnection.set("scm:git:ssh://git@github.com/nel349/kuira-android-wallet.git")
+                    url.set("https://github.com/kuiralabs/kuira-sdk")
+                    connection.set("scm:git:git://github.com/kuiralabs/kuira-sdk.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/kuiralabs/kuira-sdk.git")
                 }
             }
             publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
