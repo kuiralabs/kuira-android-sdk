@@ -83,9 +83,13 @@ below.
 
 ### B. Developer Experience
 
-- [ ] **Contract Gradle plugin (#11).** Replaces the hand-rolled
-  `syncContractAssets` Copy task each dApp re-implements. Declarative
-  `kuiraContract { source = "..." }`.
+- [x] **Contract Gradle plugin (#11).** Landed as `sdk:contract-plugin`,
+  published as `io.github.kuiralabs:contract-plugin` + the plugin marker
+  `com.midnight.kuira.contract`. Consumers replace ~30 lines of
+  `syncContractAssets` Copy-task boilerplate with `kuiraContract { source.set("...") }`.
+  6 TestKit functional tests cover the rename, asset layout, default
+  alias, override alias, missing-source failure, and `preBuild`
+  wiring. Public surface locked at `api/contract-plugin.api`.
 - [ ] **Test-seed path (#8).** Deterministic seed entry-point so
   consumers can write JVM unit tests without going through passkey or
   sigil. Single opt-in.
