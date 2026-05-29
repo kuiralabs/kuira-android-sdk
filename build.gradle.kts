@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.google.hilt) apply false
     alias(libs.plugins.vanniktech.maven.publish) apply false
+    alias(libs.plugins.dokka) apply false
 }
 
 // ── adb reverse localnet (auto-wired before every installDebug) ──
@@ -119,6 +120,12 @@ subprojects {
         if (path.startsWith(":feature:")) return@withId
 
         apply(plugin = "com.vanniktech.maven.publish")
+        // Dokka renders KDoc into HTML for the javadoc.jar. With this
+        // plugin applied, vanniktech auto-detects Dokka and replaces its
+        // empty placeholder javadoc.jar with the real one. Aggregated
+        // multi-module HTML for the docs site is produced by the root
+        // :dokkaGenerate task (Dokka v2).
+        apply(plugin = "org.jetbrains.dokka")
 
         configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
             coordinates(kuiraGroup, project.name, kuiraVersion)
