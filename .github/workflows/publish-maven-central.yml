@@ -57,6 +57,13 @@ jobs:
       - name: Run unit tests (fail-fast before publishing)
         run: ./gradlew test --console=plain
 
+      - name: Verify public API surface hasn't drifted unexpectedly
+        # Fails the workflow if any module's bytecode signatures diverge
+        # from the checked-in api/*.api baseline. Forces breaking changes
+        # to be visible in the PR that introduces them (`./gradlew apiDump`
+        # regenerates the baseline; the diff lands in review).
+        run: ./gradlew apiCheck --console=plain
+
       - name: Publish to mavenLocal (acceptance prereq)
         run: ./gradlew publishToMavenLocal --console=plain
 

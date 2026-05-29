@@ -1,0 +1,703 @@
+public final class com/midnight/kuira/core/ledger/api/FfiTransactionSerializer : com/midnight/kuira/core/ledger/api/TransactionSerializer {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getSigningMessageForInput (Ljava/util/List;Ljava/util/List;IJ)Ljava/lang/String;
+	public final fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
+	public fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
+	public fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
+	public final fun serializeWithDust (Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;[BLjava/lang/String;J)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeHttpException : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public fun <init> (ILjava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getStatusCode ()I
+	public final fun isClientError ()Z
+	public final fun isServerError ()Z
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeInvalidResponseException : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeNetworkException : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/api/NodeRpcClient {
+	public abstract fun close ()V
+	public abstract fun getFinalizedHead (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun submitAndWaitForFinalization (Ljava/lang/String;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun submitAndWaitForFinalization$default (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public abstract fun submitTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeRpcClient$DefaultImpls {
+	public static synthetic fun submitAndWaitForFinalization$default (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage : java/lang/Enum {
+	public static final field BROADCAST Lcom/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage;
+	public static final field IN_BLOCK Lcom/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage;
+	public static final field SUBMITTED Lcom/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage;
+	public static fun values ()[Lcom/midnight/kuira/core/ledger/api/NodeRpcClient$SubmissionStage;
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeRpcClientImpl : com/midnight/kuira/core/ledger/api/NodeRpcClient {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/api/NodeRpcClientImpl$Companion;
+	public fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public fun getFinalizedHead (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun submitAndWaitForFinalization (Ljava/lang/String;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun submitTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeRpcClientImpl$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeRpcError : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public fun <init> (ILjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCode ()I
+	public final fun getData ()Ljava/lang/String;
+	public final fun isInternalError ()Z
+	public final fun isInvalidParams ()Z
+	public final fun isInvalidRequest ()Z
+	public final fun isInvalidTransaction ()Z
+	public final fun isMethodNotFound ()Z
+	public final fun isParseError ()Z
+	public final fun isRetryable ()Z
+}
+
+public abstract class com/midnight/kuira/core/ledger/api/NodeRpcException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/NodeTimeoutException : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofComputationException : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/api/ProofServerClient {
+	public abstract fun close ()V
+	public abstract fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun proveTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerClientImpl : com/midnight/kuira/core/ledger/api/ProofServerClient {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/api/ProofServerClientImpl$Companion;
+	public fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun proveTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerClientImpl$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerError : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getResponseBody ()Ljava/lang/String;
+	public final fun getStatusCode ()I
+}
+
+public abstract class com/midnight/kuira/core/ledger/api/ProofServerException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerHttpException : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (ILjava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getStatusCode ()I
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerInvalidResponseException : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerNetworkException : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/ProofServerTimeoutException : com/midnight/kuira/core/ledger/api/ProofServerException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/ledger/api/StubTransactionSerializer : com/midnight/kuira/core/ledger/api/TransactionSerializer {
+	public fun <init> ()V
+	public fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
+	public fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHash ()Ljava/lang/String;
+	public final fun getBlockHeight ()Ljava/lang/Long;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHash ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReplacedBy ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionRejected : com/midnight/kuira/core/ledger/api/NodeRpcException {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/api/TransactionRejected$Companion;
+	public static final field ERROR_EFFECTS_CHECK_FAILURE I
+	public static final field ERROR_INPUT_NOT_IN_UTXOS I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCustomErrorCode ()Ljava/lang/Integer;
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public final fun isStaleUtxo ()Z
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionRejected$Companion {
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/api/TransactionSerializer {
+	public abstract fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
+	public abstract fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$Companion;
+	public static final field DEFAULT_TIMEOUT_MS J
+	public fun <init> (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/proving/ProvingMode;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$NetworkClientProvider;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/proving/ProvingMode;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$NetworkClientProvider;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getLastProvingMode ()Lcom/midnight/kuira/core/compact/proving/ProvingMode;
+	public final fun getProvingMode ()Lcom/midnight/kuira/core/compact/proving/ProvingMode;
+	public final fun setProvingMode (Lcom/midnight/kuira/core/compact/proving/ProvingMode;)V
+	public final fun submitAndWait (Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun submitAndWait$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun submitOnly (Lcom/midnight/kuira/core/ledger/model/Intent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun submitPrebuiltTransaction (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun submitPrebuiltTransaction$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Ljava/lang/String;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun submitWithFees (Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun submitWithFees$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;Ljava/lang/String;[BJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$Companion {
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/api/TransactionSubmitter$NetworkClientProvider {
+	public abstract fun provide ()Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$ResolvedClients;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$ResolvedClients {
+	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;
+	public final fun component3 ()Lcom/midnight/kuira/core/ledger/api/ProofServerClient;
+	public final fun component4 ()Lcom/midnight/kuira/core/indexer/api/IndexerClient;
+	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$ResolvedClients;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$ResolvedClients;Ljava/lang/String;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$ResolvedClients;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIndexer ()Lcom/midnight/kuira/core/indexer/api/IndexerClient;
+	public final fun getNetworkId ()Ljava/lang/String;
+	public final fun getNode ()Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;
+	public final fun getProofServer ()Lcom/midnight/kuira/core/ledger/api/ProofServerClient;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Pending : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Pending;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Pending;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Pending;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$StaleUtxo : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$StaleUtxo;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$StaleUtxo;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$StaleUtxo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFailedUtxoIds ()Ljava/util/List;
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
+	public fun <init> (Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun copy (Ljava/lang/String;J)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;Ljava/lang/String;JILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()J
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$Companion;
+	public static final field DEFAULT_TTL_MINUTES I
+	public fun <init> (Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;)V
+	public final fun buildTransfer (Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult {
+}
+
+public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$InsufficientFunds : com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult {
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$InsufficientFunds;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$InsufficientFunds;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$InsufficientFunds;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAvailable ()Ljava/math/BigInteger;
+	public final fun getRequired ()Ljava/math/BigInteger;
+	public final fun getShortfall ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$Success : com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult {
+	public fun <init> (Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/util/List;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/ledger/model/Intent;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/util/List;)Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$Success;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$Success;Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult$Success;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIntent ()Lcom/midnight/kuira/core/ledger/model/Intent;
+	public final fun getLockedUtxos ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/di/LedgerModule;
+	public final fun provideDustSpendCreator ()Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;
+	public final fun provideFeeCalculator ()Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;
+	public final fun provideNodeRpcClient (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;
+	public final fun provideProofServerClient (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/ProofServerClient;
+	public final fun provideProvingKeyManager (Landroid/content/Context;)Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
+	public final fun provideTransactionSerializer (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;
+	public final fun provideTransactionSubmitter (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/network/NetworkRepository;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideDustSpendCreatorFactory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideDustSpendCreatorFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideDustSpendCreator ()Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideFeeCalculatorFactory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideFeeCalculatorFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideFeeCalculator ()Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideNodeRpcClientFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideNodeRpcClientFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideNodeRpcClient (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideProofServerClientFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideProofServerClientFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/api/ProofServerClient;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideProofServerClient (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/ProofServerClient;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideProvingKeyManagerFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideProvingKeyManagerFactory;
+	public fun get ()Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideProvingKeyManager (Landroid/content/Context;)Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideTransactionSerializerFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideTransactionSerializerFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideTransactionSerializer (Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;
+}
+
+public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideTransactionSubmitterFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/di/LedgerModule_ProvideTransactionSubmitterFactory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideTransactionSubmitter (Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Lcom/midnight/kuira/core/ledger/api/ProofServerClient;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/ledger/api/TransactionSerializer;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/network/NetworkRepository;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;
+}
+
+public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder;
+	public final fun build ([BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;J)Ljava/lang/String;
+	public static synthetic fun build$default (Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder;[BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;JILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;)V
+	public final fun buildDustActions (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildDustActions$default (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun confirmDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun rollbackDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun validateDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;)Z
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions {
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Ljava/math/BigInteger;
+	public final fun component5 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/util/List;)Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;Ljava/util/List;Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChange ()Ljava/math/BigInteger;
+	public final fun getNullifiers ()Ljava/util/List;
+	public final fun getSelectedCoins ()Ljava/util/List;
+	public final fun getSpends ()Ljava/util/List;
+	public final fun getTotalFee ()Ljava/math/BigInteger;
+	public final fun getUtxoIndices ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun isSuccess ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder_Factory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;)Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustCoinSelector {
+	public fun <init> ()V
+	public final fun selectCoins (Ljava/util/List;Ljava/math/BigInteger;J)Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;
+	public static synthetic fun selectCoins$default (Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector;Ljava/util/List;Ljava/math/BigInteger;JILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;
+	public final fun validateSelection (Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;Ljava/math/BigInteger;)Z
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult {
+	public fun <init> (Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;Ljava/util/List;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector$CoinSelectionResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChange ()Ljava/math/BigInteger;
+	public final fun getSelectedCoins ()Ljava/util/List;
+	public final fun getTotalValue ()Ljava/math/BigInteger;
+	public final fun hasChange ()Z
+	public fun hashCode ()I
+	public final fun isSuccess ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustCoinSelector_Factory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector_Factory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance ()Lcom/midnight/kuira/core/ledger/fee/DustCoinSelector;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustSpendCreator {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;
+	public final fun createDustSpend (J[BILjava/math/BigInteger;J)Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;
+	public static synthetic fun createDustSpend$default (Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;J[BILjava/math/BigInteger;JILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend$Companion;
+	public fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getNewCommitment ()Ljava/lang/String;
+	public final fun getOldNullifier ()Ljava/lang/String;
+	public final fun getProof ()Ljava/lang/String;
+	public final fun getVFee ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public final fun toJson ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend$Companion {
+	public final fun fromJson (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator$DustSpend;
+}
+
+public final class com/midnight/kuira/core/ledger/fee/FeeCalculator {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;
+	public final fun calculateFee (Ljava/lang/String;Ljava/lang/String;I)Ljava/math/BigInteger;
+	public static synthetic fun calculateFee$default (Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Ljava/math/BigInteger;
+}
+
+public final class com/midnight/kuira/core/ledger/model/Intent {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/model/Intent$Companion;
+	public static final field DEFAULT_TTL_MILLIS J
+	public fun <init> (Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;J)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public final fun component2 ()Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public final fun component3 ()Ljava/util/List;
+	public final fun component4 ()J
+	public final fun copy (Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;J)Lcom/midnight/kuira/core/ledger/model/Intent;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/model/Intent;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;JILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/model/Intent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDustActions ()Ljava/util/List;
+	public final fun getFallibleUnshieldedOffer ()Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public final fun getGuaranteedUnshieldedOffer ()Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public final fun getTtl ()J
+	public fun hashCode ()I
+	public final fun isBalanced ()Z
+	public final fun isExpired (J)Z
+	public static synthetic fun isExpired$default (Lcom/midnight/kuira/core/ledger/model/Intent;JILjava/lang/Object;)Z
+	public final fun isSigned ()Z
+	public final fun remainingTime (J)J
+	public static synthetic fun remainingTime$default (Lcom/midnight/kuira/core/ledger/model/Intent;JILjava/lang/Object;)J
+	public fun toString ()Ljava/lang/String;
+	public final fun totalInputCount ()I
+	public final fun totalOutputCount ()I
+}
+
+public final class com/midnight/kuira/core/ledger/model/Intent$Companion {
+	public final fun withDefaultTtl (Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;)Lcom/midnight/kuira/core/ledger/model/Intent;
+	public static synthetic fun withDefaultTtl$default (Lcom/midnight/kuira/core/ledger/model/Intent$Companion;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/model/Intent;
+}
+
+public final class com/midnight/kuira/core/ledger/model/UnshieldedOffer {
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;Ljava/util/List;Ljava/util/List;)Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;Ljava/util/List;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/model/UnshieldedOffer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getInputs ()Ljava/util/List;
+	public final fun getOutputs ()Ljava/util/List;
+	public final fun getSignatures ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun isBalanced ()Z
+	public final fun isSigned ()Z
+	public fun toString ()Ljava/lang/String;
+	public final fun totalInput (Ljava/lang/String;)Ljava/math/BigInteger;
+	public final fun totalOutput (Ljava/lang/String;)Ljava/math/BigInteger;
+}
+
+public final class com/midnight/kuira/core/ledger/model/UtxoOutput {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/model/UtxoOutput$Companion;
+	public static final field NATIVE_TOKEN_TYPE Ljava/lang/String;
+	public fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/model/UtxoOutput;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/model/UtxoOutput;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/model/UtxoOutput;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getTokenType ()Ljava/lang/String;
+	public final fun getValue ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/model/UtxoOutput$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/model/UtxoSpend {
+	public static final field Companion Lcom/midnight/kuira/core/ledger/model/UtxoSpend$Companion;
+	public static final field NATIVE_TOKEN_TYPE Ljava/lang/String;
+	public static final field TEST_PUBLIC_KEY Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;ILjava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;ILjava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/model/UtxoSpend;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/model/UtxoSpend;Ljava/lang/String;ILjava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/model/UtxoSpend;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIntentHash ()Ljava/lang/String;
+	public final fun getOutputNo ()I
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getOwnerPublicKey ()Ljava/lang/String;
+	public final fun getTokenType ()Ljava/lang/String;
+	public final fun getValue ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public final fun identifier ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/model/UtxoSpend$Companion {
+}
+
+public final class com/midnight/kuira/core/ledger/signer/TransactionSigner {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/signer/TransactionSigner;
+	public final fun getPublicKey ([B)[B
+	public final fun signData ([B[B)[B
+	public final fun verifySignature ([B[B[B)Z
+}
+
+public final class com/midnight/kuira/core/ledger/ui/BalanceFormatter {
+	public static final field DEFAULT_TOKEN_DECIMALS I
+	public static final field DUST_TOKEN_DECIMALS I
+	public static final field NIGHT_TOKEN_DECIMALS I
+	public fun <init> ()V
+	public final fun format (Ljava/math/BigInteger;Ljava/lang/String;Z)Ljava/lang/String;
+	public static synthetic fun format$default (Lcom/midnight/kuira/core/ledger/ui/BalanceFormatter;Ljava/math/BigInteger;Ljava/lang/String;ZILjava/lang/Object;)Ljava/lang/String;
+	public final fun formatAbbreviated (Ljava/math/BigInteger;Ljava/lang/String;)Ljava/lang/String;
+	public final fun formatAmount (Ljava/math/BigInteger;Ljava/lang/String;)Ljava/lang/String;
+	public final fun formatCompact (Ljava/math/BigInteger;Ljava/lang/String;Z)Ljava/lang/String;
+	public static synthetic fun formatCompact$default (Lcom/midnight/kuira/core/ledger/ui/BalanceFormatter;Ljava/math/BigInteger;Ljava/lang/String;ZILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/ui/BalanceFormatter_Factory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/ledger/ui/BalanceFormatter_Factory;
+	public fun get ()Lcom/midnight/kuira/core/ledger/ui/BalanceFormatter;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance ()Lcom/midnight/kuira/core/ledger/ui/BalanceFormatter;
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_ledger_di_LedgerModule {
+	public fun <init> ()V
+}
+

@@ -1,0 +1,399 @@
+public final class com/midnight/kuira/dapp/BuildConfig {
+	public static final field BUILD_TYPE Ljava/lang/String;
+	public static final field DEBUG Z
+	public static final field LIBRARY_PACKAGE_NAME Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public final class com/midnight/kuira/dapp/PanelBarKt {
+	public static final fun PanelBar (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+}
+
+public abstract interface class com/midnight/kuira/dapp/backup/AppDataBackupProvider {
+	public abstract fun restore ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun snapshot (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract class com/midnight/kuira/dapp/di/AppDataBackupModule {
+	public static final field $stable I
+	public fun <init> ()V
+	public abstract fun maybeAppDataBackupProvider ()Lcom/midnight/kuira/dapp/backup/AppDataBackupProvider;
+}
+
+public final class com/midnight/kuira/dapp/di/DappUiModule {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/di/DappUiModule;
+	public final fun provideAppStateBackup (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;)Lcom/midnight/kuira/core/identity/backup/AppStateBackup;
+	public final fun provideBlockStoreBackupStorage (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;
+}
+
+public final class com/midnight/kuira/dapp/di/DappUiModule_ProvideAppStateBackupFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/di/DappUiModule_ProvideAppStateBackupFactory;
+	public fun get ()Lcom/midnight/kuira/core/identity/backup/AppStateBackup;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideAppStateBackup (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;)Lcom/midnight/kuira/core/identity/backup/AppStateBackup;
+}
+
+public final class com/midnight/kuira/dapp/di/DappUiModule_ProvideBlockStoreBackupStorageFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/di/DappUiModule_ProvideBlockStoreBackupStorageFactory;
+	public fun get ()Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideBlockStoreBackupStorage (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelColors {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/sigil/SigilPanelColors$Companion;
+	public synthetic fun <init> (JJJJJJJJJJJJJJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-0d7_KjU ()J
+	public final fun component10-0d7_KjU ()J
+	public final fun component11-0d7_KjU ()J
+	public final fun component12-0d7_KjU ()J
+	public final fun component13-0d7_KjU ()J
+	public final fun component14-0d7_KjU ()J
+	public final fun component2-0d7_KjU ()J
+	public final fun component3-0d7_KjU ()J
+	public final fun component4-0d7_KjU ()J
+	public final fun component5-0d7_KjU ()J
+	public final fun component6-0d7_KjU ()J
+	public final fun component7-0d7_KjU ()J
+	public final fun component8-0d7_KjU ()J
+	public final fun component9-0d7_KjU ()J
+	public final fun copy-dVHXu7A (JJJJJJJJJJJJJJ)Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;
+	public static synthetic fun copy-dVHXu7A$default (Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;JJJJJJJJJJJJJJILjava/lang/Object;)Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAccent-0d7_KjU ()J
+	public final fun getAvatarPlaceholderBg-0d7_KjU ()J
+	public final fun getButton-0d7_KjU ()J
+	public final fun getError-0d7_KjU ()J
+	public final fun getOnButton-0d7_KjU ()J
+	public final fun getOnPill-0d7_KjU ()J
+	public final fun getOnPillDim-0d7_KjU ()J
+	public final fun getOnSheet-0d7_KjU ()J
+	public final fun getOnSheetDim-0d7_KjU ()J
+	public final fun getOnSheetSubtle-0d7_KjU ()J
+	public final fun getPillBackground-0d7_KjU ()J
+	public final fun getPillBorder-0d7_KjU ()J
+	public final fun getScrim-0d7_KjU ()J
+	public final fun getSheetBackground-0d7_KjU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelColors$Companion {
+	public final fun getDefault ()Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel : androidx/lifecycle/ViewModel {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel$Companion;
+	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/sdk/walletseed/SigilSession;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/AppStateBackup;Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;Ljava/util/Optional;)V
+	public final fun backupSeed (Landroidx/fragment/app/FragmentActivity;)V
+	public final fun dismissBackup ()V
+	public final fun forgeSigil (Landroidx/fragment/app/FragmentActivity;)V
+	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun probePrfDeterminism (Landroid/app/Activity;)V
+	public final fun restoreSeed (Landroidx/fragment/app/FragmentActivity;)V
+	public final fun testPrf (Landroid/app/Activity;)V
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel$Companion {
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel_Factory;
+	public fun get ()Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/sdk/walletseed/SigilSession;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/AppStateBackup;Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;Ljava/util/Optional;)Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules {
+}
+
+public abstract class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules$BindsModule {
+	public abstract fun binds (Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;)Landroidx/lifecycle/ViewModel;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules$KeyModule {
+	public static fun provide ()Z
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules_BindsModule_Binds_LazyMapKey {
+	public static field lazyClassKeyName Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules_KeyModule_ProvideFactory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules_KeyModule_ProvideFactory;
+	public fun get ()Ljava/lang/Boolean;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provide ()Z
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilPanelViewModel_HiltModules_KeyModule_Provide_LazyMapKey {
+	public static field lazyClassKeyName Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public abstract class com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$BackupAvailable : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/sigil/SigilStatus$BackupAvailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$Creating : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Creating;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/sigil/SigilStatus$Creating;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Creating;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$Error : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Error;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/sigil/SigilStatus$Error;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Error;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$Forged : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Forged;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/sigil/SigilStatus$Forged;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/sigil/SigilStatus$Forged;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getPublicKeyHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$Initializing : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/sigil/SigilStatus$Initializing;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatus$None : com/midnight/kuira/dapp/sigil/SigilStatus {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/sigil/SigilStatus$None;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/sigil/SigilStatusPanelKt {
+	public static final fun SigilStatusPanel (Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class com/midnight/kuira/dapp/wallet/QrCodeKt {
+	public static final fun QrCode-uFdPcIQ (Ljava/lang/String;FLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelColors {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/wallet/WalletPanelColors$Companion;
+	public synthetic fun <init> (JJJJJJJJJJJJJJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-0d7_KjU ()J
+	public final fun component10-0d7_KjU ()J
+	public final fun component11-0d7_KjU ()J
+	public final fun component12-0d7_KjU ()J
+	public final fun component13-0d7_KjU ()J
+	public final fun component14-0d7_KjU ()J
+	public final fun component2-0d7_KjU ()J
+	public final fun component3-0d7_KjU ()J
+	public final fun component4-0d7_KjU ()J
+	public final fun component5-0d7_KjU ()J
+	public final fun component6-0d7_KjU ()J
+	public final fun component7-0d7_KjU ()J
+	public final fun component8-0d7_KjU ()J
+	public final fun component9-0d7_KjU ()J
+	public final fun copy-dVHXu7A (JJJJJJJJJJJJJJ)Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;
+	public static synthetic fun copy-dVHXu7A$default (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;JJJJJJJJJJJJJJILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAccent-0d7_KjU ()J
+	public final fun getButton-0d7_KjU ()J
+	public final fun getButtonDisabled-0d7_KjU ()J
+	public final fun getError-0d7_KjU ()J
+	public final fun getOnButton-0d7_KjU ()J
+	public final fun getOnButtonDisabled-0d7_KjU ()J
+	public final fun getOnPill-0d7_KjU ()J
+	public final fun getOnPillDim-0d7_KjU ()J
+	public final fun getOnSheet-0d7_KjU ()J
+	public final fun getOnSheetDim-0d7_KjU ()J
+	public final fun getOnSheetSubtle-0d7_KjU ()J
+	public final fun getPillBackground-0d7_KjU ()J
+	public final fun getPillBorder-0d7_KjU ()J
+	public final fun getSheetBackground-0d7_KjU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelColors$Companion {
+	public final fun getDefault ()Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : androidx/lifecycle/ViewModel {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel$Companion;
+	public fun <init> (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)V
+	public final fun getRetryRequests ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun refreshBalance (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
+	public final fun registerDust (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel$Companion {
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel_Factory;
+	public fun get ()Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules {
+}
+
+public abstract class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules$BindsModule {
+	public abstract fun binds (Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;)Landroidx/lifecycle/ViewModel;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules$KeyModule {
+	public static fun provide ()Z
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules_BindsModule_Binds_LazyMapKey {
+	public static field lazyClassKeyName Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules_KeyModule_ProvideFactory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules_KeyModule_ProvideFactory;
+	public fun get ()Ljava/lang/Boolean;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provide ()Z
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules_KeyModule_Provide_LazyMapKey {
+	public static field lazyClassKeyName Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public abstract class com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatus$Error : com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Error;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/WalletStatus$Error;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Error;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatus$Loading : com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Loading;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/WalletStatus$Loading;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Loading;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatus$None : com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/WalletStatus$None;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatus$Ready : com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/sdk/WalletBalance;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/sdk/WalletBalance;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/midnight/kuira/sdk/WalletBalance;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/sdk/WalletBalance;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Ready;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/WalletStatus$Ready;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/sdk/WalletBalance;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletStatus$Ready;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAddress ()Ljava/lang/String;
+	public final fun getBalance ()Lcom/midnight/kuira/sdk/WalletBalance;
+	public final fun getBusy ()Ljava/lang/String;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getShieldedAddress ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : com/midnight/kuira/dapp/wallet/WalletStatus {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZLandroidx/compose/runtime/Composer;II)V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_di_AppDataBackupModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_di_DappUiModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_sigil_SigilPanelViewModel_HiltModules_BindsModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_sigil_SigilPanelViewModel_HiltModules_KeyModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_wallet_WalletPanelViewModel_HiltModules_BindsModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_dapp_wallet_WalletPanelViewModel_HiltModules_KeyModule {
+	public fun <init> ()V
+}
+

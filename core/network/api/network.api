@@ -1,0 +1,102 @@
+public final class com/midnight/kuira/core/network/DeviceType {
+	public static final field INSTANCE Lcom/midnight/kuira/core/network/DeviceType;
+	public final fun getLocalhostHost ()Ljava/lang/String;
+	public final fun isEmulator ()Z
+}
+
+public final class com/midnight/kuira/core/network/MidnightNetwork : java/lang/Enum {
+	public static final field Companion Lcom/midnight/kuira/core/network/MidnightNetwork$Companion;
+	public static final field PREPROD Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public static final field PREVIEW Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public static final field UNDEPLOYED Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun getAddressPrefix ()Ljava/lang/String;
+	public final fun getDisplayName ()Ljava/lang/String;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getRustNetworkId ()Ljava/lang/String;
+	public final fun getShieldedAddressPrefix ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public static fun values ()[Lcom/midnight/kuira/core/network/MidnightNetwork;
+}
+
+public final class com/midnight/kuira/core/network/MidnightNetwork$Companion {
+	public final fun fromName (Ljava/lang/String;)Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun getDEFAULT ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+}
+
+public final class com/midnight/kuira/core/network/NetworkClientFactory {
+	public fun <init> ()V
+	public final fun configFor (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/core/network/NetworkConfig;
+}
+
+public final class com/midnight/kuira/core/network/NetworkClientFactory_Factory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/network/NetworkClientFactory_Factory;
+	public fun get ()Lcom/midnight/kuira/core/network/NetworkClientFactory;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance ()Lcom/midnight/kuira/core/network/NetworkClientFactory;
+}
+
+public final class com/midnight/kuira/core/network/NetworkConfig {
+	public static final field Companion Lcom/midnight/kuira/core/network/NetworkConfig$Companion;
+	public static final field INDEXER_API_PATH Ljava/lang/String;
+	public static final field LOCALNET_INDEXER_PORT I
+	public static final field LOCALNET_NODE_RPC_PORT I
+	public static final field LOCALNET_PROOF_SERVER_PORT I
+	public fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public final fun component1 ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Z
+	public final fun copy (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDevelopmentMode ()Z
+	public final fun getIndexerBaseUrl ()Ljava/lang/String;
+	public final fun getNetwork ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun getNodeRpcUrl ()Ljava/lang/String;
+	public final fun getProofServerUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/network/NetworkConfig$Companion {
+	public final fun forNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/core/network/NetworkConfig;
+}
+
+public final class com/midnight/kuira/core/network/NetworkRepository {
+	public static final field Companion Lcom/midnight/kuira/core/network/NetworkRepository$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun getNetworkConfigBlocking ()Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun getSelectedNetworkBlocking ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun getSelectedNetworkFlow ()Lkotlinx/coroutines/flow/Flow;
+	public final fun setSelectedNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/network/NetworkRepository$Companion {
+}
+
+public final class com/midnight/kuira/core/network/di/NetworkModule {
+	public static final field INSTANCE Lcom/midnight/kuira/core/network/di/NetworkModule;
+	public final fun provideNetworkConfig (Lcom/midnight/kuira/core/network/NetworkRepository;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun provideNetworkRepository (Landroid/content/Context;)Lcom/midnight/kuira/core/network/NetworkRepository;
+}
+
+public final class com/midnight/kuira/core/network/di/NetworkModule_ProvideNetworkConfigFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/network/di/NetworkModule_ProvideNetworkConfigFactory;
+	public fun get ()Lcom/midnight/kuira/core/network/NetworkConfig;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideNetworkConfig (Lcom/midnight/kuira/core/network/NetworkRepository;)Lcom/midnight/kuira/core/network/NetworkConfig;
+}
+
+public final class com/midnight/kuira/core/network/di/NetworkModule_ProvideNetworkRepositoryFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/network/di/NetworkModule_ProvideNetworkRepositoryFactory;
+	public fun get ()Lcom/midnight/kuira/core/network/NetworkRepository;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideNetworkRepository (Landroid/content/Context;)Lcom/midnight/kuira/core/network/NetworkRepository;
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_network_di_NetworkModule {
+	public fun <init> ()V
+}
+

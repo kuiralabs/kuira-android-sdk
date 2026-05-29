@@ -13,6 +13,23 @@ plugins {
     // (`dokkaHtmlMultiModule`) is registered here; subprojects opt in
     // via the `plugins.withId("com.android.library")` block below.
     alias(libs.plugins.dokka)
+    // Locks the public API surface to checked-in `api/<module>.api`
+    // files. Breaking changes surface as PR diffs instead of consumer
+    // crash logs. Configured below to only validate published modules
+    // (the `feature:*` modules + `app:` are wallet-app internals).
+    alias(libs.plugins.kotlinx.binary.compatibility.validator)
+}
+
+apiValidation {
+    // Don't validate non-published modules — the wallet app itself,
+    // its feature screens, and the example dApps are NOT part of the
+    // consumer SDK surface.
+    ignoredProjects.addAll(
+        listOf(
+            "app",
+            "balance", "dust", "onboarding", "send", "settings", // feature:*
+        ),
+    )
 }
 
 // ── adb reverse localnet (auto-wired before every installDebug) ──

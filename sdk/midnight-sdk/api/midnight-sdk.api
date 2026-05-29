@@ -1,0 +1,78 @@
+public final class com/midnight/kuira/sdk/DustSyncManager {
+	public fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;[B)V
+	public final fun close ()V
+	public final fun ensureSynced (Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun ensureSynced$default (Lcom/midnight/kuira/sdk/DustSyncManager;Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun forceResync (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun invalidateMemo (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface annotation class com/midnight/kuira/sdk/ExperimentalKuiraApi : java/lang/annotation/Annotation {
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk {
+	public static final field Companion Lcom/midnight/kuira/sdk/MidnightSdk$Companion;
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lkotlinx/coroutines/Job;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun close ()V
+	public final fun getAccessKeyPath ()Ljava/lang/String;
+	public final fun getAccessKeyPublicKey ()[B
+	public final fun getCoinPublicKey ()[B
+	public final fun getConfig ()Lcom/midnight/kuira/core/compact/MidnightConfig;
+	public final fun getProvingKeyManager ()Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
+	public final fun getShieldedWalletAddress ()Ljava/lang/String;
+	public final fun getWallet ()Lcom/midnight/kuira/sdk/MidnightWallet;
+	public final fun getWalletAddress ()Ljava/lang/String;
+	public final fun registerForDustGeneration (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$Builder {
+	public fun <init> (Landroid/content/Context;)V
+	public final fun accountIndex (I)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun build ()Lcom/midnight/kuira/sdk/MidnightSdk;
+	public final fun network (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun proofServerUrl (Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun provingMode (Lcom/midnight/kuira/core/compact/proving/ProvingMode;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun seed ([B)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$Companion {
+}
+
+public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/core/compact/TransactionBalancer {
+	public static final field Companion Lcom/midnight/kuira/sdk/MidnightWallet$Companion;
+	public final fun balance (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun balanceAndSubmit (Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun balanceFlow ()Lkotlinx/coroutines/flow/Flow;
+	public fun balanceTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun close ()V
+	public final fun getAddress ()Ljava/lang/String;
+	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun submitTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun syncDust (Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun syncDust$default (Lcom/midnight/kuira/sdk/MidnightWallet;Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun waitForFunding (Ljava/math/BigInteger;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun waitForFunding$default (Lcom/midnight/kuira/sdk/MidnightWallet;Ljava/math/BigInteger;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/MidnightWallet$Companion {
+}
+
+public final class com/midnight/kuira/sdk/WalletBalance {
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Z)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Z)Lcom/midnight/kuira/sdk/WalletBalance;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/WalletBalance;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;ZILjava/lang/Object;)Lcom/midnight/kuira/sdk/WalletBalance;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDust ()Ljava/math/BigInteger;
+	public final fun getDustRegistered ()Z
+	public final fun getHasShielded ()Z
+	public final fun getShieldedNight ()Ljava/math/BigInteger;
+	public final fun getTotalNight ()Ljava/math/BigInteger;
+	public final fun getUnshieldedNight ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

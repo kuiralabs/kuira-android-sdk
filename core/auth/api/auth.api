@@ -1,0 +1,184 @@
+public final class com/midnight/kuira/core/auth/AuthPolicy {
+	public static final field INSTANCE Lcom/midnight/kuira/core/auth/AuthPolicy;
+	public static final field VALIDITY_DURATION_SECONDS I
+	public final fun getALLOWED_AUTHENTICATORS ()I
+}
+
+public final class com/midnight/kuira/core/auth/AuthenticatedCipher {
+	public fun <init> (Ljavax/crypto/Cipher;)V
+	public final fun component1 ()Ljavax/crypto/Cipher;
+	public final fun copy (Ljavax/crypto/Cipher;)Lcom/midnight/kuira/core/auth/AuthenticatedCipher;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/auth/AuthenticatedCipher;Ljavax/crypto/Cipher;ILjava/lang/Object;)Lcom/midnight/kuira/core/auth/AuthenticatedCipher;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCipher ()Ljavax/crypto/Cipher;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/auth/AuthenticationCancelledException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/auth/AuthenticationFailedException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/auth/AuthenticationLockedOutException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/auth/AuthenticationPermanentlyLockedOutException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/auth/BiometricGate {
+	public static final field TAG Ljava/lang/String;
+	public fun <init> (Lcom/midnight/kuira/core/auth/WalletKeyManager;)V
+	public final fun authenticateForDecrypt (Landroidx/fragment/app/FragmentActivity;[BLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun authenticateForDecrypt$default (Lcom/midnight/kuira/core/auth/BiometricGate;Landroidx/fragment/app/FragmentActivity;[BLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun authenticateForEncrypt (Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun authenticateForEncrypt$default (Lcom/midnight/kuira/core/auth/BiometricGate;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun tryDecryptWithinAuthWindow ([B[B)[B
+	public final fun tryEncryptWithinAuthWindow ()Ljavax/crypto/Cipher;
+}
+
+public final class com/midnight/kuira/core/auth/CorruptedSeedException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/auth/KeySecurityLevel : java/lang/Enum {
+	public static final field SOFTWARE Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+	public static final field STRONGBOX Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+	public static final field TEE Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+	public static fun values ()[Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+}
+
+public final class com/midnight/kuira/core/auth/PlaintextSeed {
+	public static final field Companion Lcom/midnight/kuira/core/auth/PlaintextSeed$Companion;
+	public static final field ENTROPY_SIZE I
+	public static final field PLAINTEXT_SIZE I
+	public static final field SEED_SIZE I
+	public fun <init> ([B[B)V
+	public final fun getBip39Seed ()[B
+	public final fun getMnemonicEntropy ()[B
+	public final fun wipe ()V
+}
+
+public final class com/midnight/kuira/core/auth/PlaintextSeed$Companion {
+}
+
+public final class com/midnight/kuira/core/auth/SecurityCapabilities {
+	public fun <init> (Landroid/content/Context;)V
+	public final fun getBiometricNotEnrolled ()Z
+	public final fun getHasAnyAuthenticator ()Z
+	public final fun getHasStrongBiometric ()Z
+	public final fun getHasStrongBox ()Z
+	public final fun getKeySecurityLevel (Ljava/lang/String;)Lcom/midnight/kuira/core/auth/KeySecurityLevel;
+	public final fun getNoBiometricHardware ()Z
+	public final fun isAuthEnforcedByHardware (Ljava/lang/String;)Ljava/lang/Boolean;
+}
+
+public final class com/midnight/kuira/core/auth/SeedVault {
+	public static final field Companion Lcom/midnight/kuira/core/auth/SeedVault$Companion;
+	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/auth/BiometricGate;)V
+	public final fun deleteSeed ()V
+	public final fun hasSeed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun loadSeed (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun storeSeed (Landroidx/fragment/app/FragmentActivity;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/auth/SeedVault$Companion {
+}
+
+public final class com/midnight/kuira/core/auth/WalletAddressCache {
+	public static final field Companion Lcom/midnight/kuira/core/auth/WalletAddressCache$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun hasAny (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun load (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun save (Lcom/midnight/kuira/core/network/MidnightNetwork;Lcom/midnight/kuira/core/auth/WalletAddresses;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/auth/WalletAddressCache$Companion {
+}
+
+public final class com/midnight/kuira/core/auth/WalletAddresses {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/auth/WalletAddresses;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/auth/WalletAddresses;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/auth/WalletAddresses;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getShieldedAddress ()Ljava/lang/String;
+	public final fun getUnshieldedAddress ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/auth/WalletKeyManager {
+	public static final field Companion Lcom/midnight/kuira/core/auth/WalletKeyManager$Companion;
+	public static final field GCM_IV_LENGTH I
+	public static final field GCM_TAG_LENGTH I
+	public static final field MASTER_KEY_ALIAS Ljava/lang/String;
+	public fun <init> ()V
+	public final fun cipherForDecrypt ([B)Ljavax/crypto/Cipher;
+	public final fun cipherForEncrypt ()Ljavax/crypto/Cipher;
+	public final fun deleteKey ()V
+	public final fun generateKey ()Z
+	public final fun hasKey ()Z
+}
+
+public final class com/midnight/kuira/core/auth/WalletKeyManager$Companion {
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule {
+	public static final field INSTANCE Lcom/midnight/kuira/core/auth/di/AuthModule;
+	public final fun provideBiometricGate (Lcom/midnight/kuira/core/auth/WalletKeyManager;)Lcom/midnight/kuira/core/auth/BiometricGate;
+	public final fun provideSecurityCapabilities (Landroid/content/Context;)Lcom/midnight/kuira/core/auth/SecurityCapabilities;
+	public final fun provideSeedVault (Landroid/content/Context;Lcom/midnight/kuira/core/auth/BiometricGate;)Lcom/midnight/kuira/core/auth/SeedVault;
+	public final fun provideWalletAddressCache (Landroid/content/Context;)Lcom/midnight/kuira/core/auth/WalletAddressCache;
+	public final fun provideWalletKeyManager ()Lcom/midnight/kuira/core/auth/WalletKeyManager;
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule_ProvideBiometricGateFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/auth/di/AuthModule_ProvideBiometricGateFactory;
+	public fun get ()Lcom/midnight/kuira/core/auth/BiometricGate;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideBiometricGate (Lcom/midnight/kuira/core/auth/WalletKeyManager;)Lcom/midnight/kuira/core/auth/BiometricGate;
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule_ProvideSecurityCapabilitiesFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/auth/di/AuthModule_ProvideSecurityCapabilitiesFactory;
+	public fun get ()Lcom/midnight/kuira/core/auth/SecurityCapabilities;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideSecurityCapabilities (Landroid/content/Context;)Lcom/midnight/kuira/core/auth/SecurityCapabilities;
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule_ProvideSeedVaultFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/core/auth/di/AuthModule_ProvideSeedVaultFactory;
+	public fun get ()Lcom/midnight/kuira/core/auth/SeedVault;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideSeedVault (Landroid/content/Context;Lcom/midnight/kuira/core/auth/BiometricGate;)Lcom/midnight/kuira/core/auth/SeedVault;
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule_ProvideWalletAddressCacheFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/auth/di/AuthModule_ProvideWalletAddressCacheFactory;
+	public fun get ()Lcom/midnight/kuira/core/auth/WalletAddressCache;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideWalletAddressCache (Landroid/content/Context;)Lcom/midnight/kuira/core/auth/WalletAddressCache;
+}
+
+public final class com/midnight/kuira/core/auth/di/AuthModule_ProvideWalletKeyManagerFactory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/auth/di/AuthModule_ProvideWalletKeyManagerFactory;
+	public fun get ()Lcom/midnight/kuira/core/auth/WalletKeyManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideWalletKeyManager ()Lcom/midnight/kuira/core/auth/WalletKeyManager;
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_auth_di_AuthModule {
+	public fun <init> ()V
+}
+

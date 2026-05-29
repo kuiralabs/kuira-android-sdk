@@ -99,16 +99,22 @@ below.
 
 ### C. API stability & versioning
 
-- [ ] **`@ExperimentalKuiraApi` opt-in annotation.** Marks unstable
-  surface explicitly; consumers must opt in to use it.
-- [ ] **`binary-compatibility-validator`.** Kotlinx tool produces
-  `api/*.api` files locked into the repo. Breaking changes surface in
-  PR diffs, not in consumer crash logs.
-- [ ] **Versioning + deprecation policy.** Public commitment to semver
-  + how long deprecated APIs survive. Lives in `RELEASE.md` or a new
-  `STABILITY.md`.
-- [ ] **Public-surface audit.** Mark internals `internal` where
-  appropriate, especially across `core:*`. Anything `public` is contract.
+- [x] **`@ExperimentalKuiraApi` opt-in annotation.** Lives in
+  `sdk:midnight-sdk` as `com.midnight.kuira.sdk.ExperimentalKuiraApi`;
+  `RequiresOptIn(WARNING)` with binary retention so the contract is
+  visible to consumers at the bytecode level.
+- [x] **`binary-compatibility-validator`.** Kotlinx 0.18.1 applied at
+  the root; `api/<module>.api` baselines checked in for all 15
+  published modules. `apiCheck` gates the publish workflow before
+  Central upload.
+- [x] **Versioning + deprecation policy** — landed in
+  [`../STABILITY.md`](../STABILITY.md). Semver, WARNING→ERROR→remove
+  deprecation cycle across minor versions, explicit alpha-suspends-
+  all-guarantees rule.
+- [ ] **Public-surface audit.** The baselines reveal `core:indexer`
+  alone at 1945 lines — far too large for a low-level module.
+  Going module-by-module, mark internals `internal` where appropriate
+  (the `apiCheck` PR-diff makes each pass safe to do incrementally).
 
 ### D. Quality & confidence
 

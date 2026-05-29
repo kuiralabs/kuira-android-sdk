@@ -1,0 +1,124 @@
+public final class com/midnight/kuira/core/wallet/balance/BalanceCalculator {
+	public fun <init> ()V
+	public final fun calculate (Ljava/util/List;Ljava/lang/String;)Lcom/midnight/kuira/core/wallet/model/Balance;
+	public final fun calculateFromRaw (Ljava/util/List;Ljava/lang/String;Lcom/midnight/kuira/core/wallet/deserializer/LedgerEventDeserializer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract class com/midnight/kuira/core/wallet/balance/BalanceException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/wallet/balance/BalanceOverflowException : com/midnight/kuira/core/wallet/balance/BalanceException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/wallet/balance/BalanceUnderflowException : com/midnight/kuira/core/wallet/balance/BalanceException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/wallet/deserializer/DeserializationException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public abstract interface class com/midnight/kuira/core/wallet/deserializer/LedgerEventDeserializer {
+	public abstract fun deserialize (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/wallet/deserializer/MockDeserializer : com/midnight/kuira/core/wallet/deserializer/LedgerEventDeserializer {
+	public fun <init> ()V
+	public fun deserialize (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/wallet/model/Balance {
+	public static final field Companion Lcom/midnight/kuira/core/wallet/model/Balance$Companion;
+	public static final field DUST_PER_MIDNIGHT J
+	public fun <init> ()V
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/lang/String;)Lcom/midnight/kuira/core/wallet/model/Balance;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/wallet/model/Balance;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/wallet/model/Balance;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDust ()Ljava/math/BigInteger;
+	public final fun getShielded ()Ljava/math/BigInteger;
+	public final fun getTokenType ()Ljava/lang/String;
+	public final fun getTotal ()Ljava/math/BigInteger;
+	public final fun getUnshielded ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public final fun toMidnight ()Lcom/midnight/kuira/core/wallet/model/MidnightBalance;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/wallet/model/Balance$Companion {
+	public final fun fromMidnight (DDDLjava/lang/String;)Lcom/midnight/kuira/core/wallet/model/Balance;
+	public static synthetic fun fromMidnight$default (Lcom/midnight/kuira/core/wallet/model/Balance$Companion;DDDLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/wallet/model/Balance;
+}
+
+public final class com/midnight/kuira/core/wallet/model/BalanceKt {
+	public static final fun toMidnight (Ljava/math/BigInteger;)D
+}
+
+public final class com/midnight/kuira/core/wallet/model/EventType : java/lang/Enum {
+	public static final field COINBASE Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field CONTRACT_CALL Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field CONTRACT_DEPLOY Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field SHIELD Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field SHIELDED_TRANSFER Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field UNKNOWN Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field UNSHIELD Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static final field UNSHIELDED_TRANSFER Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/wallet/model/EventType;
+	public static fun values ()[Lcom/midnight/kuira/core/wallet/model/EventType;
+}
+
+public final class com/midnight/kuira/core/wallet/model/LedgerEvent {
+	public fun <init> (JLcom/midnight/kuira/core/wallet/model/EventType;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)V
+	public synthetic fun <init> (JLcom/midnight/kuira/core/wallet/model/EventType;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2 ()Lcom/midnight/kuira/core/wallet/model/EventType;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()J
+	public final fun component8 ()J
+	public final fun copy (JLcom/midnight/kuira/core/wallet/model/EventType;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)Lcom/midnight/kuira/core/wallet/model/LedgerEvent;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/wallet/model/LedgerEvent;JLcom/midnight/kuira/core/wallet/model/EventType;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJILjava/lang/Object;)Lcom/midnight/kuira/core/wallet/model/LedgerEvent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAmount ()Ljava/math/BigInteger;
+	public final fun getBlockHeight ()J
+	public final fun getId ()J
+	public final fun getReceiver ()Ljava/lang/String;
+	public final fun getSender ()Ljava/lang/String;
+	public final fun getTimestamp ()J
+	public final fun getTokenType ()Ljava/lang/String;
+	public final fun getType ()Lcom/midnight/kuira/core/wallet/model/EventType;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/wallet/model/MidnightBalance {
+	public fun <init> (DDDLjava/lang/String;)V
+	public synthetic fun <init> (DDDLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()D
+	public final fun component2 ()D
+	public final fun component3 ()D
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (DDDLjava/lang/String;)Lcom/midnight/kuira/core/wallet/model/MidnightBalance;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/wallet/model/MidnightBalance;DDDLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/wallet/model/MidnightBalance;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDust ()D
+	public final fun getShielded ()D
+	public final fun getTokenType ()Ljava/lang/String;
+	public final fun getTotal ()D
+	public final fun getUnshielded ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

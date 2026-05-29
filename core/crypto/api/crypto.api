@@ -1,0 +1,434 @@
+public final class com/midnight/kuira/core/crypto/address/Bech32m {
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/address/Bech32m;
+	public final fun decode (Ljava/lang/String;)Lkotlin/Pair;
+	public final fun encode (Ljava/lang/String;[B)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/DerivedKey {
+	public final fun clear ()V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChainCode ()[B
+	public final fun getIndex ()I
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getPrivateKeyBytes ()[B
+	public final fun getPublicKeyBytes ()[B
+	public fun hashCode ()I
+	public final fun isCleared ()Z
+	public final fun privateKeyHexDebugOnly ()Ljava/lang/String;
+	public final fun publicKeyHex ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/HDWallet {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/bip32/HDWallet$Companion;
+	public synthetic fun <init> (Lorg/bitcoinj/crypto/DeterministicHierarchy;Lorg/bitcoinj/crypto/DeterministicKey;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun clear ()V
+	public final fun isCleared ()Z
+	public final fun selectAccount (I)Lcom/midnight/kuira/core/crypto/bip32/HDWalletAccount;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/HDWallet$Companion {
+	public final fun fromSeed ([B)Lcom/midnight/kuira/core/crypto/bip32/HDWallet;
+	public final fun fromSeed ([BZ)Lcom/midnight/kuira/core/crypto/bip32/HDWallet;
+	public static synthetic fun fromSeed$default (Lcom/midnight/kuira/core/crypto/bip32/HDWallet$Companion;[BZILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/bip32/HDWallet;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/HDWalletAccount {
+	public final fun getAccountIndex ()I
+	public final fun selectRole (Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;)Lcom/midnight/kuira/core/crypto/bip32/HDWalletRole;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/HDWalletRole {
+	public final fun deriveKeyAt (I)Lcom/midnight/kuira/core/crypto/bip32/DerivedKey;
+	public final fun getAccountIndex ()I
+	public final fun getRole ()Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/MidnightKeyRole : java/lang/Enum {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole$Companion;
+	public static final field DUST Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static final field IDENTITY Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static final field METADATA Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static final field NIGHT_EXTERNAL Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static final field NIGHT_INTERNAL Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static final field ZSWAP Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getIndex ()I
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+	public static fun values ()[Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+}
+
+public final class com/midnight/kuira/core/crypto/bip32/MidnightKeyRole$Companion {
+	public final fun fromIndex (I)Lcom/midnight/kuira/core/crypto/bip32/MidnightKeyRole;
+}
+
+public final class com/midnight/kuira/core/crypto/bip39/BIP39 {
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/bip39/BIP39;
+	public final fun entropyToMnemonic ([B)Ljava/lang/String;
+	public final fun generateMnemonic (I)Ljava/lang/String;
+	public static synthetic fun generateMnemonic$default (Lcom/midnight/kuira/core/crypto/bip39/BIP39;IILjava/lang/Object;)Ljava/lang/String;
+	public final fun mnemonicToEntropy (Ljava/lang/String;)[B
+	public final fun mnemonicToSeed (Ljava/lang/String;Ljava/lang/String;)[B
+	public static synthetic fun mnemonicToSeed$default (Lcom/midnight/kuira/core/crypto/bip39/BIP39;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)[B
+	public final fun validateMnemonic (Ljava/lang/String;)Z
+}
+
+public final class com/midnight/kuira/core/crypto/bip39/BitcoinJMnemonicService : com/midnight/kuira/core/crypto/bip39/MnemonicService {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/bip39/BitcoinJMnemonicService$Companion;
+	public fun <init> ()V
+	public fun entropyToMnemonic ([B)Ljava/lang/String;
+	public fun generateMnemonic (I)Ljava/lang/String;
+	public fun mnemonicToEntropy (Ljava/lang/String;)[B
+	public fun mnemonicToSeed (Ljava/lang/String;Ljava/lang/String;)[B
+	public fun validateMnemonic (Ljava/lang/String;)Z
+}
+
+public final class com/midnight/kuira/core/crypto/bip39/BitcoinJMnemonicService$Companion {
+}
+
+public abstract interface class com/midnight/kuira/core/crypto/bip39/MnemonicService {
+	public abstract fun entropyToMnemonic ([B)Ljava/lang/String;
+	public abstract fun generateMnemonic (I)Ljava/lang/String;
+	public static synthetic fun generateMnemonic$default (Lcom/midnight/kuira/core/crypto/bip39/MnemonicService;IILjava/lang/Object;)Ljava/lang/String;
+	public abstract fun mnemonicToEntropy (Ljava/lang/String;)[B
+	public abstract fun mnemonicToSeed (Ljava/lang/String;Ljava/lang/String;)[B
+	public static synthetic fun mnemonicToSeed$default (Lcom/midnight/kuira/core/crypto/bip39/MnemonicService;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)[B
+	public abstract fun validateMnemonic (Ljava/lang/String;)Z
+}
+
+public final class com/midnight/kuira/core/crypto/bip39/MnemonicService$DefaultImpls {
+	public static synthetic fun generateMnemonic$default (Lcom/midnight/kuira/core/crypto/bip39/MnemonicService;IILjava/lang/Object;)Ljava/lang/String;
+	public static synthetic fun mnemonicToSeed$default (Lcom/midnight/kuira/core/crypto/bip39/MnemonicService;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)[B
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustKeyDeriver {
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/dust/DustKeyDeriver;
+	public final fun derivePublicKey ([B)Ljava/lang/String;
+	public final fun getLoadError ()Ljava/lang/String;
+	public final fun isLibraryLoaded ()Z
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustLocalState : java/io/Closeable {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/dust/DustLocalState$Companion;
+	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun getAllUtxos ()Ljava/util/List;
+	public final fun getBalance (J)Ljava/math/BigInteger;
+	public final fun getStatePointer ()J
+	public final fun getUtxoAt (I)Ljava/lang/String;
+	public final fun getUtxoCount ()I
+	public final fun isClosed ()Z
+	public final fun replayEvents ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
+	public final fun replayEventsFromFile ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
+	public final fun serialize ()[B
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustLocalState$Companion {
+	public final fun create ()Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
+	public final fun deserialize ([B)Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
+	public final fun getLoadError ()Ljava/lang/String;
+	public final fun isLibraryLoaded ()Z
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustParameters {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/dust/DustParameters$Companion;
+	public fun <init> (JI)V
+	public final fun calculateDecayRate (Ljava/math/BigInteger;)Ljava/math/BigInteger;
+	public final fun calculateGenerationRate (Ljava/math/BigInteger;)Ljava/math/BigInteger;
+	public final fun calculateMaxCapacity (Ljava/math/BigInteger;)Ljava/math/BigInteger;
+	public final fun calculateTimeToEmpty (Ljava/math/BigInteger;Ljava/math/BigInteger;)J
+	public static synthetic fun calculateTimeToEmpty$default (Lcom/midnight/kuira/core/crypto/dust/DustParameters;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)J
+	public final fun calculateTimeToFull (Ljava/math/BigInteger;Ljava/math/BigInteger;)J
+	public static synthetic fun calculateTimeToFull$default (Lcom/midnight/kuira/core/crypto/dust/DustParameters;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)J
+	public final fun component1 ()J
+	public final fun component2 ()I
+	public final fun copy (JI)Lcom/midnight/kuira/core/crypto/dust/DustParameters;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustParameters;JIILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustParameters;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getGenerationDecayRate ()I
+	public final fun getNightDustRatio ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustParameters$Companion {
+	public final fun getMAINNET_DEFAULTS ()Lcom/midnight/kuira/core/crypto/dust/DustParameters;
+	public final fun getTESTNET_DEFAULTS ()Lcom/midnight/kuira/core/crypto/dust/DustParameters;
+	public final fun isValid (Lcom/midnight/kuira/core/crypto/dust/DustParameters;)Z
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpend {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/dust/DustSpend$Companion;
+	public fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustSpend;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpend;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpend;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFeeAmount ()Ljava/math/BigInteger;
+	public final fun getNewCommitment ()Ljava/lang/String;
+	public final fun getOldNullifier ()Ljava/lang/String;
+	public final fun getProof ()Ljava/lang/String;
+	public final fun hasProof ()Z
+	public fun hashCode ()I
+	public final fun isWellFormed ()Z
+	public final fun serialize ()[B
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpend$Companion {
+	public final fun create (Lcom/midnight/kuira/core/crypto/dust/DustToken;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustSpend;
+	public final fun deserialize ([B)Lcom/midnight/kuira/core/crypto/dust/DustSpend;
+	public final fun getMINIMUM_FEE ()Ljava/math/BigInteger;
+}
+
+public abstract class com/midnight/kuira/core/crypto/dust/DustSpendError : java/lang/Exception {
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpendError$BackingNightNotFound : com/midnight/kuira/core/crypto/dust/DustSpendError {
+	public fun <init> (Lcom/midnight/kuira/core/crypto/dust/DustToken;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public final fun copy (Lcom/midnight/kuira/core/crypto/dust/DustToken;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$BackingNightNotFound;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpendError$BackingNightNotFound;Lcom/midnight/kuira/core/crypto/dust/DustToken;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$BackingNightNotFound;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDustToken ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpendError$DustTokenPending : com/midnight/kuira/core/crypto/dust/DustSpendError {
+	public fun <init> (Lcom/midnight/kuira/core/crypto/dust/DustToken;J)V
+	public final fun component1 ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public final fun component2 ()J
+	public final fun copy (Lcom/midnight/kuira/core/crypto/dust/DustToken;J)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustTokenPending;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustTokenPending;Lcom/midnight/kuira/core/crypto/dust/DustToken;JILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustTokenPending;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAvailableAt ()J
+	public final fun getDustToken ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpendError$DustUtxoNotTracked : com/midnight/kuira/core/crypto/dust/DustSpendError {
+	public fun <init> (Lcom/midnight/kuira/core/crypto/dust/DustToken;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public final fun copy (Lcom/midnight/kuira/core/crypto/dust/DustToken;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustUtxoNotTracked;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustUtxoNotTracked;Lcom/midnight/kuira/core/crypto/dust/DustToken;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$DustUtxoNotTracked;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDustToken ()Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpendError$MerkleTreeNotRehashed : com/midnight/kuira/core/crypto/dust/DustSpendError {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$MerkleTreeNotRehashed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpendError$MerkleTreeNotRehashed;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$MerkleTreeNotRehashed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getTreeName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustSpendError$NotEnoughDust : com/midnight/kuira/core/crypto/dust/DustSpendError {
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$NotEnoughDust;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustSpendError$NotEnoughDust;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustSpendError$NotEnoughDust;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAvailable ()Ljava/math/BigInteger;
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getRequired ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustToken {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/dust/DustToken$Companion;
+	public static final field SPECKS_PER_DUST J
+	public fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IJLjava/lang/String;JLjava/lang/Long;)V
+	public synthetic fun <init> (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IJLjava/lang/String;JLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun calculateCommitment ()Ljava/lang/String;
+	public final fun calculateNullifier ()Ljava/lang/String;
+	public final fun calculateValue (JLcom/midnight/kuira/core/crypto/dust/DustParameters;)Ljava/math/BigInteger;
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()I
+	public final fun component5 ()J
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()J
+	public final fun component8 ()Ljava/lang/Long;
+	public final fun copy (Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IJLjava/lang/String;JLjava/lang/Long;)Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/dust/DustToken;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IJLjava/lang/String;JLjava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/dust/DustToken;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackingNight ()Ljava/lang/String;
+	public final fun getCreationTime ()J
+	public final fun getInitialValue ()Ljava/math/BigInteger;
+	public final fun getMerkleTreeIndex ()J
+	public final fun getNonce ()Ljava/lang/String;
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getPendingUntil ()Ljava/lang/Long;
+	public final fun getSequenceNumber ()I
+	public fun hashCode ()I
+	public final fun isAvailable (J)Z
+	public final fun isPending (J)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/dust/DustToken$Companion {
+	public final fun dustToSpecks (J)Ljava/math/BigInteger;
+	public final fun specksToDust (Ljava/math/BigInteger;)J
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/MemoryUtils {
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/shielded/MemoryUtils;
+	public final fun useAndWipe ([BLkotlin/jvm/functions/Function1;)Ljava/lang/Object;
+	public final fun useAndWipeAll ([B[BLkotlin/jvm/functions/Function2;)Ljava/lang/Object;
+	public final fun wipe ([B)V
+	public final fun wipeAll ([[B)V
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/OfferResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/OfferResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/OfferResult;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/OfferResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBindingRandomnessHex ()Ljava/lang/String;
+	public final fun getOfferHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/OutputResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/OutputResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/OutputResult;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/OutputResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBindingRandomnessHex ()Ljava/lang/String;
+	public final fun getOutputHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/SelectedCoin {
+	public fun <init> (Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()J
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/SelectedCoin;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/SelectedCoin;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/SelectedCoin;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMtIndex ()J
+	public final fun getNonceHex ()Ljava/lang/String;
+	public final fun getNullifierHex ()Ljava/lang/String;
+	public final fun getTypeHex ()Ljava/lang/String;
+	public final fun getValue ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public final fun toJson ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ShieldedKeyDeriver {
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/shielded/ShieldedKeyDeriver;
+	public final fun deriveKeys ([B)Lcom/midnight/kuira/core/crypto/shielded/ShieldedKeys;
+	public final fun getLoadError ()Ljava/lang/String;
+	public final fun isLibraryLoaded ()Z
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ShieldedKeys {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun coinPublicKeyBytes ()[B
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/ShieldedKeys;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/ShieldedKeys;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/ShieldedKeys;
+	public final fun encryptionPublicKeyBytes ()[B
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCoinPublicKey ()Ljava/lang/String;
+	public final fun getEncryptionPublicKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/SpendResult {
+	public fun <init> (JLjava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()J
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (JLjava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/SpendResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/SpendResult;JLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/SpendResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBindingRandomnessHex ()Ljava/lang/String;
+	public final fun getInputHex ()Ljava/lang/String;
+	public final fun getNewStatePtr ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/TransferResult {
+	public fun <init> (Ljava/lang/String;JLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/crypto/shielded/TransferResult;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOfferHex ()Ljava/lang/String;
+	public final fun getTransactionHex ()Ljava/lang/String;
+	public final fun getUpdatedStatePtr ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ZswapLocalState : java/lang/AutoCloseable {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState$Companion;
+	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun getBalances ()Ljava/util/Map;
+	public final fun getCoinCount ()I
+	public final fun getFirstFree ()J
+	public final fun replayEvents ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
+	public final fun serialize ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ZswapLocalState$Companion {
+	public final fun create ()Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
+	public final fun deserialize (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
+	public final fun freeNativePtr (J)V
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder {
+	public static final field Companion Lcom/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion;
+}
+
+public final class com/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion {
+	public final fun buildTransaction (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;
+	public static synthetic fun buildTransaction$default (Lcom/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Ljava/lang/String;
+	public final fun buildTransactionWithDust (Ljava/lang/String;Ljava/lang/String;J[BLjava/lang/String;JJ)Ljava/lang/String;
+	public final fun buildTransfer (Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
+	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion;Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
+	public final fun createOutput (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/crypto/shielded/OutputResult;
+	public final fun nativeBuildOfferPublic (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	public final fun parseOfferResult (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/OfferResult;
+	public final fun parseOutputResult (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/OutputResult;
+	public final fun parseSelectedCoins (Ljava/lang/String;)Ljava/util/List;
+	public final fun parseSpendResult (Ljava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/SpendResult;
+	public final fun validateTransferInputs ([BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;)Ljava/lang/String;
+}
+

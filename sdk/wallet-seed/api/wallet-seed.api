@@ -1,0 +1,60 @@
+public final class com/midnight/kuira/sdk/walletseed/BuildConfig {
+	public static final field BUILD_TYPE Ljava/lang/String;
+	public static final field DEBUG Z
+	public static final field DEV_SEED_HEX Ljava/lang/String;
+	public static final field LIBRARY_PACKAGE_NAME Ljava/lang/String;
+	public fun <init> ()V
+}
+
+public final class com/midnight/kuira/sdk/walletseed/ForgeResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/sdk/walletseed/ForgeResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/walletseed/ForgeResult;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/walletseed/ForgeResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getPublicKeyHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/SigilSession {
+	public static final field CHALLENGE_SIZE I
+	public static final field POST_CREATE_SETTLE_MS J
+	public static final field TAG Ljava/lang/String;
+	public static final field USER_ID_BYTES I
+	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;)V
+	public final fun forge (Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun signIn (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/SigilSession_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletseed/SigilSession_Factory;
+	public fun get ()Lcom/midnight/kuira/sdk/walletseed/SigilSession;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;)Lcom/midnight/kuira/sdk/walletseed/SigilSession;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource {
+	public static final field Companion Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource$Companion;
+	public static final field KEY_SEED_IS_PRF_DERIVED Ljava/lang/String;
+	public static final field PREFS_NAME Ljava/lang/String;
+	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/auth/SeedVault;Lcom/midnight/kuira/core/auth/WalletKeyManager;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)V
+	public final fun acceptPreDerivedSeed (Landroidx/fragment/app/FragmentActivity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun ensureSeedReady (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource$Companion {
+	public final fun devSeedBytes (ZLjava/lang/String;)[B
+}
+
+public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource_Factory;
+	public fun get ()Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/core/auth/SeedVault;Lcom/midnight/kuira/core/auth/WalletKeyManager;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;
+}
+

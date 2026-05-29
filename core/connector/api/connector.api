@@ -1,0 +1,448 @@
+public final class com/midnight/kuira/core/connector/ApprovalCategory : java/lang/Enum {
+	public static final field INTENT Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static final field READ Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static final field SIGN Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static final field TRANSACTION Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static final field TRANSFER Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public static fun values ()[Lcom/midnight/kuira/core/connector/ApprovalCategory;
+}
+
+public abstract interface class com/midnight/kuira/core/connector/ApprovalManager {
+	public abstract fun requestApproval (Lcom/midnight/kuira/core/connector/ApprovalRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/connector/ApprovalRequest {
+	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/connector/ApprovalCategory;Lkotlinx/serialization/json/JsonObject;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public final fun component3 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/connector/ApprovalCategory;Lkotlinx/serialization/json/JsonObject;)Lcom/midnight/kuira/core/connector/ApprovalRequest;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/ApprovalRequest;Ljava/lang/String;Lcom/midnight/kuira/core/connector/ApprovalCategory;Lkotlinx/serialization/json/JsonObject;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/ApprovalRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCategory ()Lcom/midnight/kuira/core/connector/ApprovalCategory;
+	public final fun getMethod ()Ljava/lang/String;
+	public final fun getParams ()Lkotlinx/serialization/json/JsonObject;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/core/connector/BalanceProvider {
+	public abstract fun getDustBalance (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getShieldedBalances (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getUnshieldedBalances (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/connector/ConnectedAPIHandler {
+	public static final field Companion Lcom/midnight/kuira/core/connector/ConnectedAPIHandler$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/WalletAddresses;Lcom/midnight/kuira/core/connector/BalanceProvider;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function3;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/WalletAddresses;Lcom/midnight/kuira/core/connector/BalanceProvider;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun balanceSealedTransaction (Ljava/lang/String;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun balanceSealedTransaction$default (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Ljava/lang/String;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun balanceUnsealedTransaction (Ljava/lang/String;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun balanceUnsealedTransaction$default (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Ljava/lang/String;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getConfiguration ()Lcom/midnight/kuira/core/connector/model/Configuration;
+	public final fun getConnectionStatus ()Lcom/midnight/kuira/core/connector/model/ConnectionStatus;
+	public final fun getDustAddress ()Lcom/midnight/kuira/core/connector/model/DustAddressResult;
+	public final fun getDustBalance (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getProvingProvider ()Lcom/midnight/kuira/core/connector/model/ProvingProviderResult;
+	public final fun getShieldedAddresses ()Lcom/midnight/kuira/core/connector/model/ShieldedAddressesResult;
+	public final fun getShieldedBalances (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getTxHistory (IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getUnshieldedAddress ()Lcom/midnight/kuira/core/connector/model/UnshieldedAddressResult;
+	public final fun getUnshieldedBalances (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getWalletAddresses ()Lcom/midnight/kuira/core/connector/WalletAddresses;
+	public final fun hintUsage (Ljava/util/List;)V
+	public final fun makeIntent (Ljava/util/List;Ljava/util/List;Lcom/midnight/kuira/core/connector/model/IntentOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun makeTransfer (Ljava/util/List;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun makeTransfer$default (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Ljava/util/List;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun signData (Ljava/lang/String;Lcom/midnight/kuira/core/connector/model/SignDataOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun submitTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/connector/ConnectedAPIHandler$Companion {
+}
+
+public final class com/midnight/kuira/core/connector/ConnectorManager {
+	public static final field Companion Lcom/midnight/kuira/core/connector/ConnectorManager$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/ApprovalManager;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/ApprovalManager;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getBinder ()Lcom/midnight/kuira/core/connector/transport/ConnectorBinder;
+	public final fun getJsBridge ()Lcom/midnight/kuira/core/connector/transport/ConnectorJsBridge;
+	public final fun getPort ()I
+	public final fun isRunning ()Z
+	public final fun start (Lcom/midnight/kuira/core/connector/WalletAddresses;Lcom/midnight/kuira/core/connector/BalanceProvider;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;I)V
+	public static synthetic fun start$default (Lcom/midnight/kuira/core/connector/ConnectorManager;Lcom/midnight/kuira/core/connector/WalletAddresses;Lcom/midnight/kuira/core/connector/BalanceProvider;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;IILjava/lang/Object;)V
+	public final fun stop ()V
+}
+
+public final class com/midnight/kuira/core/connector/ConnectorManager$Companion {
+}
+
+public final class com/midnight/kuira/core/connector/ConnectorWebSocketServer : org/java_websocket/server/WebSocketServer {
+	public static final field Companion Lcom/midnight/kuira/core/connector/ConnectorWebSocketServer$Companion;
+	public static final field DEFAULT_PORT I
+	public fun <init> (Lcom/midnight/kuira/core/connector/JsonRpcRouter;Lkotlinx/coroutines/CoroutineScope;I)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/connector/JsonRpcRouter;Lkotlinx/coroutines/CoroutineScope;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun onClose (Lorg/java_websocket/WebSocket;ILjava/lang/String;Z)V
+	public fun onError (Lorg/java_websocket/WebSocket;Ljava/lang/Exception;)V
+	public fun onMessage (Lorg/java_websocket/WebSocket;Ljava/lang/String;)V
+	public fun onOpen (Lorg/java_websocket/WebSocket;Lorg/java_websocket/handshake/ClientHandshake;)V
+	public fun onStart ()V
+}
+
+public final class com/midnight/kuira/core/connector/ConnectorWebSocketServer$Companion {
+}
+
+public final class com/midnight/kuira/core/connector/InitialAPI {
+	public static final field API_VERSION Ljava/lang/String;
+	public static final field Companion Lcom/midnight/kuira/core/connector/InitialAPI$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lkotlin/jvm/functions/Function1;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/network/NetworkConfig;Lkotlin/jvm/functions/Function1;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun connect (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;
+	public final fun getApiVersion ()Ljava/lang/String;
+	public final fun getIcon ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getRdns ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/InitialAPI$Companion {
+}
+
+public final class com/midnight/kuira/core/connector/JsonRpcRouter {
+	public static final field Companion Lcom/midnight/kuira/core/connector/JsonRpcRouter$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Lcom/midnight/kuira/core/connector/ApprovalManager;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Lcom/midnight/kuira/core/connector/ApprovalManager;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun handleMessage (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/connector/JsonRpcRouter$Companion {
+}
+
+public final class com/midnight/kuira/core/connector/WalletAddresses {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/WalletAddresses;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/WalletAddresses;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/WalletAddresses;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDustAddress ()Ljava/lang/String;
+	public final fun getShieldedAddress ()Ljava/lang/String;
+	public final fun getShieldedCoinPublicKey ()Ljava/lang/String;
+	public final fun getShieldedEncryptionPublicKey ()Ljava/lang/String;
+	public final fun getUnshieldedAddress ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/di/ConnectorModule {
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/di/ConnectorModule;
+	public final fun provideConnectorManager (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/ApprovalManager;)Lcom/midnight/kuira/core/connector/ConnectorManager;
+}
+
+public final class com/midnight/kuira/core/connector/di/ConnectorModule_ProvideConnectorManagerFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/core/connector/di/ConnectorModule_ProvideConnectorManagerFactory;
+	public fun get ()Lcom/midnight/kuira/core/connector/ConnectorManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideConnectorManager (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/connector/ApprovalManager;)Lcom/midnight/kuira/core/connector/ConnectorManager;
+}
+
+public final class com/midnight/kuira/core/connector/model/Configuration {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/Configuration;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/Configuration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/Configuration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIndexerUri ()Ljava/lang/String;
+	public final fun getIndexerWsUri ()Ljava/lang/String;
+	public final fun getNetworkId ()Ljava/lang/String;
+	public final fun getSubstrateNodeUri ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/connector/model/ConnectionStatus {
+}
+
+public final class com/midnight/kuira/core/connector/model/ConnectionStatus$Connected : com/midnight/kuira/core/connector/model/ConnectionStatus {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/ConnectionStatus$Connected;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/ConnectionStatus$Connected;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/ConnectionStatus$Connected;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getNetworkId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/ConnectionStatus$Disconnected : com/midnight/kuira/core/connector/model/ConnectionStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/model/ConnectionStatus$Disconnected;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/ConnectorApiError : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getCode ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/DesiredInput {
+	public fun <init> (Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun copy (Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/connector/model/DesiredInput;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/DesiredInput;Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/DesiredInput;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public final fun getType ()Ljava/lang/String;
+	public final fun getValue ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/DesiredOutput {
+	public fun <init> (Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/DesiredOutput;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/DesiredOutput;Lcom/midnight/kuira/core/connector/model/TransferKind;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/DesiredOutput;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public final fun getRecipient ()Ljava/lang/String;
+	public final fun getType ()Ljava/lang/String;
+	public final fun getValue ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/DustAddressResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/DustAddressResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/DustAddressResult;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/DustAddressResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDustAddress ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/DustBalance {
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/connector/model/DustBalance;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/DustBalance;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/DustBalance;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBalance ()Ljava/math/BigInteger;
+	public final fun getCap ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/ErrorCodes {
+	public static final field DISCONNECTED Ljava/lang/String;
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/model/ErrorCodes;
+	public static final field INTERNAL_ERROR Ljava/lang/String;
+	public static final field INVALID_REQUEST Ljava/lang/String;
+	public static final field PERMISSION_REJECTED Ljava/lang/String;
+	public static final field REJECTED Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/HistoryEntry {
+	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/connector/model/TxStatus;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/midnight/kuira/core/connector/model/TxStatus;
+	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/connector/model/TxStatus;)Lcom/midnight/kuira/core/connector/model/HistoryEntry;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/HistoryEntry;Ljava/lang/String;Lcom/midnight/kuira/core/connector/model/TxStatus;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/HistoryEntry;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTxHash ()Ljava/lang/String;
+	public final fun getTxStatus ()Lcom/midnight/kuira/core/connector/model/TxStatus;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/connector/model/IntentId {
+}
+
+public final class com/midnight/kuira/core/connector/model/IntentId$Fixed : com/midnight/kuira/core/connector/model/IntentId {
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Lcom/midnight/kuira/core/connector/model/IntentId$Fixed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/IntentId$Fixed;IILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/IntentId$Fixed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/IntentId$Random : com/midnight/kuira/core/connector/model/IntentId {
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/model/IntentId$Random;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/IntentOptions {
+	public fun <init> (Lcom/midnight/kuira/core/connector/model/IntentId;Z)V
+	public final fun component1 ()Lcom/midnight/kuira/core/connector/model/IntentId;
+	public final fun component2 ()Z
+	public final fun copy (Lcom/midnight/kuira/core/connector/model/IntentId;Z)Lcom/midnight/kuira/core/connector/model/IntentOptions;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/IntentOptions;Lcom/midnight/kuira/core/connector/model/IntentId;ZILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/IntentOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIntentId ()Lcom/midnight/kuira/core/connector/model/IntentId;
+	public final fun getPayFees ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/ProvingProviderResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/ProvingProviderResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/ProvingProviderResult;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/ProvingProviderResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getProverServerUri ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/ShieldedAddressesResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/ShieldedAddressesResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/ShieldedAddressesResult;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/ShieldedAddressesResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getShieldedAddress ()Ljava/lang/String;
+	public final fun getShieldedCoinPublicKey ()Ljava/lang/String;
+	public final fun getShieldedEncryptionPublicKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/SignDataOptions {
+	public fun <init> (Lcom/midnight/kuira/core/connector/model/SignEncoding;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/connector/model/SignEncoding;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/midnight/kuira/core/connector/model/SignEncoding;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/SignDataOptions;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/SignDataOptions;Lcom/midnight/kuira/core/connector/model/SignEncoding;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/SignDataOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoding ()Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public final fun getKeyType ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/SignEncoding : java/lang/Enum {
+	public static final field BASE64 Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public static final field HEX Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public static final field TEXT Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/SignEncoding;
+	public static fun values ()[Lcom/midnight/kuira/core/connector/model/SignEncoding;
+}
+
+public final class com/midnight/kuira/core/connector/model/SignatureResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/SignatureResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/SignatureResult;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/SignatureResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getData ()Ljava/lang/String;
+	public final fun getSignature ()Ljava/lang/String;
+	public final fun getVerifyingKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/TransferKind : java/lang/Enum {
+	public static final field SHIELDED Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public static final field UNSHIELDED Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/TransferKind;
+	public static fun values ()[Lcom/midnight/kuira/core/connector/model/TransferKind;
+}
+
+public abstract class com/midnight/kuira/core/connector/model/TxStatus {
+}
+
+public final class com/midnight/kuira/core/connector/model/TxStatus$Confirmed : com/midnight/kuira/core/connector/model/TxStatus {
+	public fun <init> (Ljava/util/Map;)V
+	public final fun component1 ()Ljava/util/Map;
+	public final fun copy (Ljava/util/Map;)Lcom/midnight/kuira/core/connector/model/TxStatus$Confirmed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/TxStatus$Confirmed;Ljava/util/Map;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/TxStatus$Confirmed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getExecutionStatus ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/TxStatus$Discarded : com/midnight/kuira/core/connector/model/TxStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/model/TxStatus$Discarded;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/TxStatus$Finalized : com/midnight/kuira/core/connector/model/TxStatus {
+	public fun <init> (Ljava/util/Map;)V
+	public final fun component1 ()Ljava/util/Map;
+	public final fun copy (Ljava/util/Map;)Lcom/midnight/kuira/core/connector/model/TxStatus$Finalized;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/TxStatus$Finalized;Ljava/util/Map;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/TxStatus$Finalized;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getExecutionStatus ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/TxStatus$Pending : com/midnight/kuira/core/connector/model/TxStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/core/connector/model/TxStatus$Pending;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/model/UnshieldedAddressResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/connector/model/UnshieldedAddressResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/UnshieldedAddressResult;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/UnshieldedAddressResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getUnshieldedAddress ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/connector/transport/ConnectorBinder : android/os/Binder {
+	public fun <init> (Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;Lcom/midnight/kuira/core/connector/JsonRpcRouter;)V
+	public final fun getHandler ()Lcom/midnight/kuira/core/connector/ConnectedAPIHandler;
+	public final fun handleJsonRpc (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/connector/transport/ConnectorJsBridge {
+	public fun <init> (Lcom/midnight/kuira/core/connector/JsonRpcRouter;Lkotlinx/coroutines/CoroutineScope;)V
+	public final fun inject (Landroid/webkit/WebView;)V
+	public final fun request (Ljava/lang/String;)Ljava/lang/String;
+	public final fun requestAsync (Landroid/webkit/WebView;Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_connector_di_ConnectorModule {
+	public fun <init> ()V
+}
+

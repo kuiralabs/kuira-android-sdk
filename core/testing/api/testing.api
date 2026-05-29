@@ -1,0 +1,14 @@
+public final class com/midnight/kuira/core/testing/MainDispatcherRule : org/junit/rules/TestWatcher {
+	public fun <init> ()V
+	public fun <init> (Lkotlinx/coroutines/test/TestDispatcher;)V
+	public synthetic fun <init> (Lkotlinx/coroutines/test/TestDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/testing/TestFixtures {
+	public static final field EXPECTED_SEED_EMPTY_PASSPHRASE Ljava/lang/String;
+	public static final field EXPECTED_SEED_TREZOR_PASSPHRASE Ljava/lang/String;
+	public static final field INSTANCE Lcom/midnight/kuira/core/testing/TestFixtures;
+	public static final field TEST_ADDRESS Ljava/lang/String;
+	public static final field TEST_MNEMONIC_24_WORDS Ljava/lang/String;
+}
+

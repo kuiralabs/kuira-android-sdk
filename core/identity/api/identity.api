@@ -1,0 +1,409 @@
+public final class com/midnight/kuira/core/identity/accesskey/AccessKeyManager {
+	public static final field Companion Lcom/midnight/kuira/core/identity/accesskey/AccessKeyManager$Companion;
+	public static final field IDENTITY_ROLE_INDEX I
+	public fun <init> (Lcom/midnight/kuira/core/crypto/bip32/HDWallet;I)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/crypto/bip32/HDWallet;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun deriveAccessKeyAt (I)Lcom/midnight/kuira/core/crypto/bip32/DerivedKey;
+	public final fun deriveDefaultAccessKey ()Lcom/midnight/kuira/core/crypto/bip32/DerivedKey;
+}
+
+public final class com/midnight/kuira/core/identity/accesskey/AccessKeyManager$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationPayload {
+	public fun <init> ([B[BLcom/midnight/kuira/core/identity/auth/AuthorizationScope;JJ)V
+	public final fun component1 ()[B
+	public final fun component2 ()[B
+	public final fun component3 ()Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public final fun component4 ()J
+	public final fun component5 ()J
+	public final fun copy ([B[BLcom/midnight/kuira/core/identity/auth/AuthorizationScope;JJ)Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;[B[BLcom/midnight/kuira/core/identity/auth/AuthorizationScope;JJILjava/lang/Object;)Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAccessPublicKey ()[B
+	public final fun getExpiryMs ()J
+	public final fun getHasExpiry ()Z
+	public final fun getRootPublicKey ()[B
+	public final fun getScope ()Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public final fun getTimestampMs ()J
+	public fun hashCode ()I
+	public final fun isExpired (J)Z
+	public static synthetic fun isExpired$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;JILjava/lang/Object;)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationRecord {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B[B[B[BLjava/lang/String;Ljava/lang/String;ZJLjava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B[B[B[BLjava/lang/String;Ljava/lang/String;ZJLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAccessKeyPath ()Ljava/lang/String;
+	public final fun getAuthenticatorData ()[B
+	public final fun getClientDataJson ()[B
+	public final fun getCreatedAtMs ()J
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getPayload ()[B
+	public final fun getRevoked ()Z
+	public final fun getRevokedAtMs ()Ljava/lang/Long;
+	public final fun getSignature ()[B
+	public fun hashCode ()I
+	public final fun parsePayload ()Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationScope {
+	public static final field APPROVE I
+	public static final field Companion Lcom/midnight/kuira/core/identity/auth/AuthorizationScope$Companion;
+	public static final field NOTIFY I
+	public static final field SILENT I
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;IILjava/lang/Object;)Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFlags ()I
+	public final fun hasPermission (I)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationScope$Companion {
+	public final fun fromFlags (I)Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public final fun getFULL_ACCESS ()Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public final fun getREAD_ONLY ()Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+	public final fun getTRANSACT ()Lcom/midnight/kuira/core/identity/auth/AuthorizationScope;
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationStore {
+	public static final field Companion Lcom/midnight/kuira/core/identity/auth/AuthorizationStore$Companion;
+	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/auth/WalletKeyManager;)V
+	public final fun findActiveByDid (Ljava/lang/String;Ljavax/crypto/Cipher;)Ljava/util/List;
+	public static synthetic fun findActiveByDid$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;Ljava/lang/String;Ljavax/crypto/Cipher;ILjava/lang/Object;)Ljava/util/List;
+	public final fun findById (Ljava/lang/String;Ljavax/crypto/Cipher;)Lcom/midnight/kuira/core/identity/auth/AuthorizationRecord;
+	public static synthetic fun findById$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;Ljava/lang/String;Ljavax/crypto/Cipher;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/auth/AuthorizationRecord;
+	public final fun generateId ()Ljava/lang/String;
+	public final fun hasRecords ()Z
+	public final fun listAll (Ljavax/crypto/Cipher;)Ljava/util/List;
+	public static synthetic fun listAll$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;Ljavax/crypto/Cipher;ILjava/lang/Object;)Ljava/util/List;
+	public final fun prepareCipherForDecrypt ()Ljavax/crypto/Cipher;
+	public final fun revoke (Ljava/lang/String;Ljavax/crypto/Cipher;Ljavax/crypto/Cipher;)Z
+	public static synthetic fun revoke$default (Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;Ljava/lang/String;Ljavax/crypto/Cipher;Ljavax/crypto/Cipher;ILjava/lang/Object;)Z
+	public final fun save (Lcom/midnight/kuira/core/identity/auth/AuthorizationRecord;Ljavax/crypto/Cipher;)V
+	public final fun warmCache (Ljavax/crypto/Cipher;)V
+}
+
+public final class com/midnight/kuira/core/identity/auth/AuthorizationStore$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/auth/KeyAuthorization {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/auth/KeyAuthorization;
+	public static final field NO_EXPIRY J
+	public static final field PAYLOAD_SIZE I
+	public final fun buildPayload ([B[BLcom/midnight/kuira/core/identity/auth/AuthorizationScope;JJ)[B
+	public static synthetic fun buildPayload$default (Lcom/midnight/kuira/core/identity/auth/KeyAuthorization;[B[BLcom/midnight/kuira/core/identity/auth/AuthorizationScope;JJILjava/lang/Object;)[B
+	public final fun hashPayload ([B)[B
+	public final fun parsePayload ([B)Lcom/midnight/kuira/core/identity/auth/AuthorizationPayload;
+}
+
+public final class com/midnight/kuira/core/identity/backup/AppStateBackup {
+	public static final field Companion Lcom/midnight/kuira/core/identity/backup/AppStateBackup$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/backup/BackupStorage;)V
+	public final fun backup (Landroid/app/Activity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun backup$default (Lcom/midnight/kuira/core/identity/backup/AppStateBackup;Landroid/app/Activity;[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun deleteBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun hasBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun isStorageAvailable (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun restore (Landroid/app/Activity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/backup/AppStateBackup$Companion {
+	public final fun getBACKUP_SALT ()[B
+}
+
+public final class com/midnight/kuira/core/identity/backup/AppStateBackupEncryptor {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/AppStateBackupEncryptor;
+	public static final field MAX_METADATA_SIZE I
+	public final fun decrypt ([B[B)[B
+	public final fun encrypt ([B[B)[B
+}
+
+public final class com/midnight/kuira/core/identity/backup/BackupDecryptionException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/identity/backup/BackupException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public abstract interface class com/midnight/kuira/core/identity/backup/BackupStorage {
+	public abstract fun delete (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun isAvailable (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun retrieve (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun store ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/backup/BlockStoreBackupStorage : com/midnight/kuira/core/identity/backup/BackupStorage {
+	public static final field Companion Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public fun delete (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun isAvailable (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun retrieve (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun store ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/backup/BlockStoreBackupStorage$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/backup/PrfKeyDeriver {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/PrfKeyDeriver;
+	public static final field PRF_OUTPUT_SIZE I
+	public final fun deriveKey ([BLjava/lang/String;)[B
+	public static synthetic fun deriveKey$default (Lcom/midnight/kuira/core/identity/backup/PrfKeyDeriver;[BLjava/lang/String;ILjava/lang/Object;)[B
+}
+
+public final class com/midnight/kuira/core/identity/backup/PrfSeedMaterial {
+	public fun <init> ([B[B)V
+	public final fun getBip39Seed ()[B
+	public final fun getEntropy ()[B
+	public final fun wipe ()V
+}
+
+public final class com/midnight/kuira/core/identity/backup/RestoredAppState {
+	public fun <init> ([B)V
+	public final fun getAppMetadata ()[B
+	public final fun wipe ()V
+}
+
+public final class com/midnight/kuira/core/identity/backup/SeedDeriver {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/SeedDeriver;
+	public final fun deriveBip39Seed (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun derivePrfEntropy (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun derivePrfMaterial (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun entropyToBip39Seed ([B)[B
+	public final fun getSEED_SALT ()[B
+	public final fun getSIGIL_SALT ()[B
+}
+
+public final class com/midnight/kuira/core/identity/backup/SigilRequiredException : java/lang/Exception {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/identity/di/IdentityModule {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/di/IdentityModule;
+	public final fun provideAuthorizationStore (Landroid/content/Context;Lcom/midnight/kuira/core/auth/WalletKeyManager;)Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;
+	public final fun providePasskeyManager (Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;)Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;
+}
+
+public final class com/midnight/kuira/core/identity/di/IdentityModule_ProvideAuthorizationStoreFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/core/identity/di/IdentityModule_ProvideAuthorizationStoreFactory;
+	public fun get ()Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideAuthorizationStore (Landroid/content/Context;Lcom/midnight/kuira/core/auth/WalletKeyManager;)Lcom/midnight/kuira/core/identity/auth/AuthorizationStore;
+}
+
+public final class com/midnight/kuira/core/identity/di/IdentityModule_ProvidePasskeyManagerFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/identity/di/IdentityModule_ProvidePasskeyManagerFactory;
+	public fun get ()Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun providePasskeyManager (Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;)Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;
+}
+
+public abstract class com/midnight/kuira/core/identity/di/SigilIdentityModule {
+	public fun <init> ()V
+	public abstract fun bindSigilIdentityProvider (Lcom/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider;)Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;
+}
+
+public final class com/midnight/kuira/core/identity/did/DidKeyGenerator {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/did/DidKeyGenerator;
+	public final fun compressP256 ([B[B)[B
+	public final fun fromCompressedP256 ([B)Ljava/lang/String;
+	public final fun fromECPublicKey (Ljava/security/interfaces/ECPublicKey;)Ljava/lang/String;
+	public final fun fromEd25519 ([B)Ljava/lang/String;
+	public final fun fromP256Coordinates ([B[B)Ljava/lang/String;
+	public final fun isLegacyP256 (Ljava/lang/String;)Z
+	public final fun toCompressedP256 (Ljava/lang/String;)[B
+}
+
+public final class com/midnight/kuira/core/identity/passkey/AttestationParseException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/identity/passkey/AttestationParser {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/passkey/AttestationParser;
+	public final fun extractPublicKey (Ljava/lang/String;)Lcom/midnight/kuira/core/identity/passkey/P256PublicKey;
+}
+
+public final class com/midnight/kuira/core/identity/passkey/P256PublicKey {
+	public fun <init> ([B[B)V
+	public final fun compressedHex ()Ljava/lang/String;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCompressed ()[B
+	public final fun getUncompressed ()[B
+	public final fun getX ()[B
+	public final fun getY ()[B
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyAssertionResult {
+	public fun <init> (Ljava/lang/String;[B[B[BLjava/lang/String;)V
+	public final fun getAssertionResponseJson ()Ljava/lang/String;
+	public final fun getAuthenticatorData ()[B
+	public final fun getClientDataJson ()[B
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getSignature ()[B
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyConfig {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;J)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;J)Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRpId ()Ljava/lang/String;
+	public final fun getRpName ()Ljava/lang/String;
+	public final fun getTimeoutMs ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyManager {
+	public static final field Companion Lcom/midnight/kuira/core/identity/passkey/PasskeyManager$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;)V
+	public final fun authenticate (Landroid/app/Activity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun authenticateWithPrf (Landroid/app/Activity;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun authenticateWithPrf$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Landroid/app/Activity;[B[B[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun createPasskey (Landroid/app/Activity;[BLjava/lang/String;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun createPasskey$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Landroid/app/Activity;[BLjava/lang/String;[B[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyManager$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PasskeyRegistrationResult {
+	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/P256PublicKey;Ljava/lang/String;Ljava/lang/String;[B[B)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/identity/passkey/P256PublicKey;Ljava/lang/String;Ljava/lang/String;[B[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getPrfOutput ()[B
+	public final fun getPrfOutputSecond ()[B
+	public final fun getPublicKey ()Lcom/midnight/kuira/core/identity/passkey/P256PublicKey;
+	public final fun getRegistrationResponseJson ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/passkey/PrfAssertionResult {
+	public fun <init> (Ljava/lang/String;[B[B[BLjava/lang/String;[B[B)V
+	public synthetic fun <init> (Ljava/lang/String;[B[B[BLjava/lang/String;[B[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAssertionResponseJson ()Ljava/lang/String;
+	public final fun getAuthenticatorData ()[B
+	public final fun getClientDataJson ()[B
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getHasPrf ()Z
+	public final fun getHasPrfSecond ()Z
+	public final fun getPrfOutput ()[B
+	public final fun getPrfOutputSecond ()[B
+	public final fun getSignature ()[B
+}
+
+public final class com/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider : com/midnight/kuira/core/identity/sigil/SigilIdentityProvider {
+	public static final field CHALLENGE_SIZE I
+	public static final field ED25519_SEED_SIZE I
+	public fun <init> ()V
+	public fun deriveFromPrfOutput ([B)Ljava/lang/String;
+	public fun deriveSigilDid (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getPrfSalt ()[B
+}
+
+public final class com/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider_Factory : dagger/internal/Factory {
+	public fun <init> ()V
+	public static fun create ()Lcom/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider_Factory;
+	public fun get ()Lcom/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance ()Lcom/midnight/kuira/core/identity/sigil/Ed25519PrfSigilProvider;
+}
+
+public final class com/midnight/kuira/core/identity/sigil/SigilDerivation {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/sigil/SigilDerivation;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/sigil/SigilDerivation;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/sigil/SigilDerivation;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/core/identity/sigil/SigilIdentityProvider {
+	public abstract fun deriveFromPrfOutput ([B)Ljava/lang/String;
+	public abstract fun deriveSigilDid (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getPrfSalt ()[B
+}
+
+public final class com/midnight/kuira/core/identity/sigil/SigilSnapshot {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/sigil/SigilSnapshot;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/sigil/SigilSnapshot;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/sigil/SigilSnapshot;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getPublicKeyHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/sigil/SigilStateStore {
+	public static final field Companion Lcom/midnight/kuira/core/identity/sigil/SigilStateStore$Companion;
+	public static final field KEY_BACKUP_DISMISSED Ljava/lang/String;
+	public static final field KEY_CREDENTIAL_ID Ljava/lang/String;
+	public static final field KEY_DID Ljava/lang/String;
+	public static final field KEY_PUBLIC_KEY_HEX Ljava/lang/String;
+	public static final field PREFS_NAME Ljava/lang/String;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun clear ()V
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getPublicKeyHex ()Ljava/lang/String;
+	public final fun getSnapshotFlow ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun hasSigil ()Z
+	public final fun isBackupDismissed ()Z
+	public final fun markBackupDismissed ()V
+	public final fun persistSigil (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun snapshot ()Lcom/midnight/kuira/core/identity/sigil/SigilSnapshot;
+}
+
+public final class com/midnight/kuira/core/identity/sigil/SigilStateStore$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/sigil/SigilStateStore_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/identity/sigil/SigilStateStore_Factory;
+	public fun get ()Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_identity_di_IdentityModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_core_identity_di_SigilIdentityModule {
+	public fun <init> ()V
+}
+
