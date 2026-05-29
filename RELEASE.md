@@ -1,7 +1,7 @@
-# Kuira SDK — Release Guide
+# Kuira Android SDK — Release Guide
 
-How to ship a Kuira SDK version to Maven Central. Two phases: **one-time
-setup**, then the **per-release ritual**.
+How to ship a Kuira Android SDK version to Maven Central. Two phases:
+**one-time setup**, then the **per-release ritual**.
 
 The pipeline itself is
 [`.github/workflows/publish-maven-central.yml`](.github/workflows/publish-maven-central.yml).
@@ -112,17 +112,17 @@ tag still exists but nothing is staged. Investigate, fix, re-tag.
 
 After the artifacts are live on Central, regenerate the multi-module
 Dokka HTML and push it to the public docs repo so
-`kuiralabs.github.io/kuira-sdk/api/` matches what's on Central:
+`kuiralabs.github.io/kuira-sdk-android/api/` matches what's on Central:
 
 ```bash
 # In the monorepo:
 ./gradlew dokkaHtmlMultiModule
 
 # Copy into the public docs repo (path may differ on your machine):
-rsync -a --delete build/dokka/htmlMultiModule/ ../../kuira-sdk/docs/api/
+rsync -a --delete build/dokka/htmlMultiModule/ ../../kuira-sdk-android/docs/api/
 
 # Commit + push (triggers the docs.yml workflow → gh-pages):
-cd ../../kuira-sdk
+cd ../../kuira-sdk-android
 git add docs/api/
 git commit -m "feat(api): refresh Dokka API ref for v0.1.0-alphaXX"
 git push

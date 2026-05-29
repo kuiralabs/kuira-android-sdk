@@ -1,4 +1,4 @@
-# Kuira SDK — Integration Guide
+# Kuira Android SDK — Integration Guide
 
 **Alpha — `0.1.0-alpha01`**
 

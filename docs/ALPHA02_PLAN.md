@@ -1,4 +1,4 @@
-# Kuira SDK — Alpha 02 Plan
+# Kuira Android SDK — Alpha 02 Plan
 
 **Goal:** lift `0.1.0-alpha01` from "the binary lands on Central" to "a
 third-party Android developer can discover, integrate, and verify the
@@ -60,7 +60,7 @@ below.
 - [ ] **Pick the public docs host repo.** Options on the table:
   (a) `nel349/nel349.github.io` — already live at `nel349.github.io`,
       currently serves `assetlinks.json` for the SDK's default rpId;
-  (b) a new `kuiralabs/kuira-sdk` repo — clean kuiralabs branding,
+  (b) a new `kuiralabs/kuira-sdk-android` repo — clean kuiralabs branding,
       no personal-site mixing;
   (c) GitHub Pages on this monorepo's `gh-pages` branch — possible
       with a paid plan that supports Pages on private repos.
@@ -160,7 +160,7 @@ recipe is the source of truth — humans render it as a cookbook page,
 agents fetch it raw. No vendor-locked tooling; no maintenance-heavy
 custom UI.
 
-- [ ] **mkdocs-material site at `kuiralabs.github.io/kuira-sdk/`** —
+- [ ] **mkdocs-material site at `kuiralabs.github.io/kuira-sdk-android/`** —
   replaces the bare README rendering. Tag-based recipe discovery,
   built-in search, dark mode, default theme, no custom CSS.
 - [ ] **`/api/` subdirectory** hosting the aggregated multi-module
@@ -177,7 +177,7 @@ custom UI.
   Hand-authored for `alpha02`; auto-generated from recipe frontmatter
   in `alpha03+`.
 - [ ] **Deploy via GitHub Actions** on every push to `main` in
-  `kuiralabs/kuira-sdk` (`mkdocs gh-deploy --force` → `gh-pages`
+  `kuiralabs/kuira-sdk-android` (`mkdocs gh-deploy --force` → `gh-pages`
   branch). Dokka HTML deploys from the monorepo's publish workflow on
   every tag, into the same site under `/api/`.
 
@@ -232,12 +232,12 @@ connector wishlist in `examples/midnight-kicks/docs/PLAN.md`.
 
 If everything above is too broad, the high-leverage subset is:
 
-1. ✅ **Pick the public docs host repo** (A) — `kuiralabs/kuira-sdk` selected,
+1. ✅ **Pick the public docs host repo** (A) — `kuiralabs/kuira-sdk-android` selected,
    bootstrapped with README/INTEGRATION/SECURITY/LICENSE, GitHub Pages live.
 2. ✅ **Dokka wired into the publish flow** (A) — per-module `javadoc.jar`
    now contains real KDoc HTML (was empty placeholder).
 3. ✅ **POM URL fix** (A) — landed; `url` + `scm.*` point at
-   `kuiralabs/kuira-sdk`. Effective alpha02 (alpha01's POM is immutable).
+   `kuiralabs/kuira-sdk-android`. Effective alpha02 (alpha01's POM is immutable).
 4. **mkdocs-material site + recipes + `llms.txt`** (G) — replaces the bare
    README rendering; first three recipes; agent-prompt buttons; auto-deploy.
    The cookbook foundation.
