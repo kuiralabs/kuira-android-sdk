@@ -1,129 +1,122 @@
-# Kuira Wallet - Midnight Blockchain Android Wallet
+# Kuira Android SDK — monorepo
 
-A production-grade Android wallet for the Midnight blockchain, built with modern Android architecture and best practices.
+The source repository for the [Kuira Android SDK](https://kuiralabs.github.io/kuira-sdk-android/),
+the wallet app, and the example dApps. This repository is **private**; the
+SDK is consumed publicly via [Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs)
+and documented at [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/).
 
-## Project Overview
+If you're trying to **use** the SDK in your own dApp, go to the docs site
+instead — this README is for maintainers and authorized contributors
+working on the SDK itself.
 
-**Technology Stack:**
-- Kotlin
-- Jetpack Compose (pure Compose, no XML)
-- Material3 Design
-- Multi-module Clean Architecture
-- Hilt Dependency Injection
-- Coroutines & Flow
+---
 
-**Current Phase:** Phase 1 - Crypto Module
-- BIP-39 mnemonic generation
-- BIP-32 HD key derivation
-- Schnorr signatures over secp256k1
-- Bech32m address formatting
+## Public face
 
-## Project Structure
+The SDK ships to consumers via three permanent surfaces:
 
-```
-kuira-android-wallet/
-├── app/                              # Main application module
-├── core/
-│   ├── crypto/                       # Cryptography (BIP-39, BIP-32, Schnorr)
-│   └── testing/                      # Shared test utilities
-├── guidelines/                       # Engineering guidelines
-│   ├── ARCHITECTURE_GUIDELINES.md
-│   ├── KOTLIN_GUIDELINES.md
-│   ├── SECURITY_GUIDELINES.md
-│   ├── TESTING_GUIDELINES.md
-│   ├── COMPOSE_GUIDELINES.md
-│   └── MIDNIGHT_GUIDELINES.md
-├── CLAUDE.md                         # Claude AI context
-└── LEARNING_STRATEGY.md              # Collaboration approach
-```
+| Surface | Where |
+|---|---|
+| Maven Central artifacts | `io.github.kuiralabs:*` |
+| Docs site | <https://kuiralabs.github.io/kuira-sdk-android> |
+| Docs repo (public) | <https://github.com/kuiralabs/kuira-sdk-android> |
 
-## Architecture Reference
+The Maven coordinates and the docs URL are pinned in the POM at release
+time and never change between versions of the same line.
 
-This project uses [Now in Android](../now-in-android-reference/) as an architectural reference for:
-- Multi-module structure
-- Convention plugins
-- Testing patterns
-- Compose best practices
+---
 
-## Getting Started
+## How this monorepo is laid out
 
-### Prerequisites
-- Android Studio Ladybug | 2024.2.1 or later
-- JDK 17
-- Android SDK 35
-- Minimum Android version: API 24 (Android 7.0)
+Conceptually, three concerns share the tree:
 
-### Build and Run
+- **The SDK** — the Kotlin code published to Maven Central. Lives in
+  the `sdk/*` and `core/*` module groups. `sdk:midnight-sdk`, `sdk:dapp-ui`,
+  and `sdk:contract-plugin` are the umbrella consumer entry points;
+  the `core/*` modules are SDK building blocks.
+- **The wallet app** — a reference dApp built on the SDK. Lives in
+  `app/` and `feature/*`. Not published; demonstrates the SDK end-to-end
+  on a real product.
+- **Example dApps** — `examples/bboard` and `examples/midnight-kicks`
+  (the latter as a submodule). Standalone Gradle projects that consume
+  the SDK from Maven Local or Central, proving the published surface
+  is enough to build a working dApp.
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd kuira-android-wallet
+The `sdk/*` + `core/*` modules are the published surface. `app/` +
+`feature/*` are intentionally NOT published; they're the wallet app's
+own internals. The publishing build script enforces this.
 
-# Build the project
-./gradlew build
+Engineering plans, decision logs, research notes, and internal design
+docs live under `docs/`. That directory is internal — consumer-facing
+documentation lives in the kuira-sdk-android repository.
 
-# Run tests
-./gradlew test
+---
 
-# Install on device/emulator
-./gradlew installDebug
-```
+## Build, test, publish
 
-## Development Guidelines
+| Task | Command |
+|---|---|
+| Build everything | `./gradlew build` |
+| Run all unit tests | `./gradlew test` |
+| Verify the public API surface hasn't drifted | `./gradlew apiCheck` |
+| Regenerate API baselines after intentional changes | `./gradlew apiDump` |
+| Generate aggregated Dokka HTML for the docs site | `./gradlew dokkaHtmlMultiModule` |
+| Install the wallet app to a device | `./gradlew installDebug` |
+| Publish all SDK modules to Maven Local | `./gradlew publishToMavenLocal` |
+| Publish to Maven Central staging | see [`RELEASE.md`](RELEASE.md) |
 
-All code must follow the guidelines in the `/guidelines` directory:
+The publish workflow runs `test`, `apiCheck`, the BBoard acceptance gate,
+and `publishToMavenCentral` in order; breaking changes block uploads.
 
-- **Architecture:** Clean Architecture with multi-module structure
-- **Kotlin:** Immutability, null safety, sealed classes
-- **Security:** Never log secrets, wipe keys after use
-- **Testing:** TDD with given-when-then structure
-- **Compose:** State hoisting, side effects management
+`group` and `version` come from `gradle.properties` — single source of
+truth across every published module. A release is a one-line bump there
+plus a tag.
 
-See `CLAUDE.md` for complete development context.
+---
 
-## Roadmap
+## Where to find what
 
-### Phase 1: Crypto Module (Current) ✅
-- BIP-39 mnemonic generation
-- BIP-32 HD key derivation
-- Schnorr signatures
-- Secure storage
+| Looking for | Read |
+|---|---|
+| What the SDK does and how to consume it | [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/) |
+| End-to-end integration recipe for the SDK | [`INTEGRATION.md`](INTEGRATION.md) |
+| Security policy, threat model, signature verification | [`SECURITY.md`](SECURITY.md) |
+| API stability + deprecation policy | [`STABILITY.md`](STABILITY.md) |
+| Per-release ritual (tag → CI → Central) | [`RELEASE.md`](RELEASE.md) |
+| What's landing in the next alpha cycle | [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) |
+| SDK-connector wishlist (open friction + design rationales) | `examples/midnight-kicks/docs/PLAN.md` |
+| Engineering guidelines | [`guidelines/`](guidelines/) |
+| Day-to-day collaboration approach | [`LEARNING_STRATEGY.md`](LEARNING_STRATEGY.md) |
 
-### Phase 2: Unshielded Transactions
-- Midnight node RPC client
-- Transaction building
-- Balance fetching
+---
 
-### Phase 3: Shielded Transactions
-- ZK proof integration
-- Shielded wallet operations
+## Tooling
 
-### Phase 4: Indexer Integration
-- Fast state synchronization
-- Transaction history
+- **Android Studio Ladybug** or newer for Android development.
+- **JDK 17** as `sourceCompatibility` and `jvmTarget`.
+- **Kotlin 2.3.x** and **AGP 8.13.x**.
+- **`compactc`** matching `@midnight-ntwrk/compact-runtime` pinned in each
+  example's `contract/package.json`. The version is sensitive — read
+  `examples/midnight-kicks/docs/PLAN.md` § wishlist `#13` if you hit
+  a bytecode mismatch.
 
-### Phase 5: DApp Connector
-- Deep link handling
-- Contract signing
+For the Rust FFI submodule (`kuira-crypto-ffi`), the local build needs
+the Android NDK. The `build-android.sh` script auto-detects it through
+`ANDROID_HOME`; the publish workflow does the same with the runner's
+installed NDK.
 
-### Phase 6: UI & Polish
-- Complete Compose UI
-- Material3 design system
-- Accessibility
-
-## Contributing
-
-This is a learning/production project. Development follows:
-- Test-first approach when possible
-- Security-first mindset
-- Clean Architecture principles
-- Modern Android best practices
+---
 
 ## License
 
-[License to be determined]
+[Apache License 2.0](LICENSE). The license declared in every POM
+matches this file; any change to the LICENSE must propagate to the
+POM block in the root `build.gradle.kts`.
+
+---
 
 ## Contact
 
-[Contact information to be added]
+Maintainer: [Norman Lopez](https://github.com/nel349) ·
+`kuiralabs@gmail.com` ·
+[security policy](SECURITY.md) for vulnerability reports.
