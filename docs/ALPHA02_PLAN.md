@@ -50,21 +50,36 @@ work is everything *around* the bundle.
 
 ### A. Docs & discoverability
 
-- [ ] **`public/` + `docs/` convention** — codify "anything outside
-  `public/` is internal." `public/` becomes the affirmative allow-list
-  for consumer-facing material. `docs/` becomes deny-by-default.
-  GitHub-convention files (`README`, `LICENSE`, `SECURITY.md`,
-  `CONTRIBUTING.md`) stay at repo root.
-- [ ] **Repo root `README.md`** — first-impression doc. What Kuira is,
-  Maven coordinates, link to the docs site, alpha status, link to
-  `INTEGRATION.md`. Currently absent — anyone landing on the repo gets
-  a directory listing.
+**Architectural decision driving this workstream:** the SDK's public
+face does NOT live inside this monorepo. This repository stays fully
+private for the foreseeable future; the SDK's consumer-facing docs
+(INTEGRATION.md, README, future Dokka HTML) ship from a separate
+public repo. That host repo needs to be chosen — see *Open question*
+below.
+
+- [ ] **Pick the public docs host repo.** Options on the table:
+  (a) `nel349/nel349.github.io` — already live at `nel349.github.io`,
+      currently serves `assetlinks.json` for the SDK's default rpId;
+  (b) a new `kuiralabs/kuira-sdk` repo — clean kuiralabs branding,
+      no personal-site mixing;
+  (c) GitHub Pages on this monorepo's `gh-pages` branch — possible
+      with a paid plan that supports Pages on private repos.
+- [ ] **Repo-root `README.md` in THIS monorepo.** Orients maintainers:
+  "this is the SDK + wallet monorepo; SDK source lives in
+  `sdk/*` and `core/*`; consumer-facing docs live at <public site>."
+  Internal-facing, since the monorepo is private — different audience
+  from the public README that ships in the docs host repo.
+- [ ] **Migrate `INTEGRATION.md` to the public docs host** once chosen.
+  Single source of truth; this monorepo links out to it.
 - [ ] **Wire Dokka into the publish flow.** Turns the empty
   `javadoc.jar` into a rendered API reference derived from KDoc.
-- [ ] **GitHub Pages docs site.** Dokka HTML deploys to `gh-pages` on
-  every tag. The public docs URL becomes the canonical reference.
-- [ ] **Fix POM `url` + `scm.url`.** Currently points at the private
-  repo and 404s. Point at the GitHub Pages URL once it exists.
+  Dokka HTML output deploys to the public docs host on every tag.
+- [ ] **Public README on the docs host repo.** Consumer-facing
+  first-impression doc: what Kuira is, Maven coordinates, alpha
+  status, link to INTEGRATION.md and Dokka site.
+- [ ] **Fix POM `url` + `scm.url`.** Currently points at this private
+  repo and 404s for any consumer who clicks through from Central.
+  Point at the public docs host URL once it exists.
 
 ### B. Developer Experience
 
@@ -155,11 +170,12 @@ connector wishlist in `examples/midnight-kicks/docs/PLAN.md`.
 
 If everything above is too broad, the high-leverage subset is:
 
-1. **`public/` + `docs/` convention** (A)
-2. **Repo root `README.md`** (A)
-3. **Dokka + GitHub Pages docs site** (A) — this single move fixes the
-   empty `javadoc.jar`, gives the SDK a public docs URL, and unblocks
-   the POM URL fix.
+1. **Pick the public docs host repo** (A) — unblocks every other
+   Workstream A item.
+2. **Public README on the docs host** (A) — first-impression doc the
+   consumer actually reaches.
+3. **Dokka + Pages deploy from the publish workflow** (A) — fixes the
+   empty `javadoc.jar` and gives the SDK a public docs URL.
 4. **POM URL fix** (A) — kills the 404 a consumer sees today.
 5. **Contract Gradle plugin (#11)** (B) — biggest concrete DX win.
 6. **`binary-compatibility-validator` + `@ExperimentalKuiraApi`** (C) —
