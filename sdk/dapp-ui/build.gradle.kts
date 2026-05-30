@@ -85,11 +85,16 @@ dependencies {
     // `core:auth:AuthModule` + `core:identity:IdentityModule`; this
     // module only adds Block Store + SigilBackup on top. Consumers
     // override the passkey rpId by replacing `IdentityModule`.
-    // `hilt-navigation-compose` gives Composables `hiltViewModel()`
-    // for VM resolution at the call site.
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    // `hilt-navigation-compose` is api-exposed because consumers MUST
+    // call `hiltViewModel()` at the SigilStatusPanel / WalletStatusPanel
+    // call site to obtain the panel's @HiltViewModel — if it were
+    // `implementation`-scoped, consumers would have to re-declare it
+    // in every dapp module's build.gradle, which they all do today.
+    // Promoting to `api` makes the one-line `dapp-ui` dependency in
+    // Recipe 1 self-sufficient for the SigilStatusPanel call.
+    api("androidx.hilt:hilt-navigation-compose:1.1.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
