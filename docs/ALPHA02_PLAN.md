@@ -88,9 +88,13 @@ below.
   published as `io.github.kuiralabs:contract-plugin` + the plugin marker
   `com.midnight.kuira.contract`. Consumers replace ~30 lines of
   `syncContractAssets` Copy-task boilerplate with `kuiraContract { source.set("...") }`.
-  6 TestKit functional tests cover the rename, asset layout, default
-  alias, override alias, missing-source failure, and `preBuild`
-  wiring. Public surface locked at `api/contract-plugin.api`.
+  7 TestKit functional tests (including the missing-`source` validation
+  added in the review-driven polish pass). Public surface locked at
+  `api/contract-plugin.api`. **Kicks migrated** to the plugin as a real-app
+  acceptance test — `examples/midnight-kicks/app/build.gradle.kts` shed 26
+  lines and the produced asset layout matches the previous hand-rolled
+  task byte-for-byte. BBoard ships pre-built assets so doesn't need the
+  plugin.
 - [ ] **Test-seed path (#8).** Deterministic seed entry-point so
   consumers can write JVM unit tests without going through passkey or
   sigil. Single opt-in.
