@@ -78,14 +78,23 @@ GitHub → **Actions** → "Publish to Maven Central" → **Run workflow** → b
 ## Phase 2 — per-release ritual
 
 ```bash
-# 1. Bump the version in the root build.gradle.kts:
-#      val kuiraVersion = "0.1.0-alphaXX"
-
-# 2. Commit + tag + push (the workflow triggers on the tag):
-git add build.gradle.kts
+# 1. Monorepo: bump the version in gradle.properties:
+#      version=0.1.0-alphaXX
+git add gradle.properties
 git commit -m "release: v0.1.0-alphaXX"
 git tag v0.1.0-alphaXX
 git push origin main --follow-tags
+
+# 2. Public docs repo (kuira-sdk-android): bump the same version in
+#    mkdocs.yml's `extra:` block — single edit ripples through every
+#    page that uses {{ kuira_version }}.
+#      kuira_version: "0.1.0-alphaXX"
+#      kuira_contract_plugin_version: "0.1.0-alphaXX"   # match from alpha02+
+cd /path/to/kuira-sdk-android
+# edit mkdocs.yml
+git add mkdocs.yml
+git commit -m "docs: bump version pin to v0.1.0-alphaXX"
+git push
 ```
 
 From here it's automated:
