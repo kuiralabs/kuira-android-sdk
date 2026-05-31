@@ -75,4 +75,33 @@ abstract class KuiraContractExtension {
      * and skips silently regardless of this flag's value.
      */
     abstract val requireRuntimeMatch: Property<Boolean>
+
+    /**
+     * Passkey `rpId` for the consuming app — the hostname (no scheme,
+     * no path) that this app's `PasskeyConfig.rpId` is set to. When
+     * provided, the `kuiraDoctor` task verifies that `assetlinks.json`
+     * is hosted at `https://<rpId>/.well-known/assetlinks.json` AND
+     * lists the consuming app's `applicationId` in its targets.
+     *
+     * Mirrored here rather than inferred from the Hilt module because
+     * Gradle has no reliable way to read a Kotlin `const val` from
+     * inside a Hilt-annotated object at build-time. The cost of
+     * duplication is the consumer keeps two declarations in sync;
+     * the cost of NOT mirroring is the doctor can't check this
+     * critical failure class.
+     *
+     * Unset → the assetlinks reachability check skips with a
+     * "set kuiraContract.rpId to enable this check" log line.
+     */
+    abstract val rpId: Property<String>
+
+    /**
+     * Whether `kuiraDoctor` should fail the build on a FAIL-severity
+     * check, vs. log + return success. Default `false` (warn-only).
+     *
+     * Set to `true` on release builds + in CI to gate the APK on
+     * doctor passing. WARN-severity checks (network unreachable,
+     * skipped checks) never fail the task regardless of this flag.
+     */
+    abstract val requireDoctorPass: Property<Boolean>
 }

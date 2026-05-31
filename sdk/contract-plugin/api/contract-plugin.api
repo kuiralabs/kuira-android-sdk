@@ -2,7 +2,9 @@ public abstract class com/midnight/kuira/contract/KuiraContractExtension {
 	public fun <init> ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
 	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRequireDoctorPass ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRpId ()Lorg/gradle/api/provider/Property;
 	public abstract fun getSource ()Lorg/gradle/api/provider/Property;
 }
 
@@ -14,5 +16,45 @@ public final class com/midnight/kuira/contract/KuiraContractPlugin : org/gradle/
 }
 
 public final class com/midnight/kuira/contract/KuiraContractPlugin$Companion {
+}
+
+public abstract class com/midnight/kuira/contract/KuiraDoctorTask : org/gradle/api/DefaultTask {
+	public static final field Companion Lcom/midnight/kuira/contract/KuiraDoctorTask$Companion;
+	public fun <init> ()V
+	public abstract fun getApplicationId ()Lorg/gradle/api/provider/Property;
+	public abstract fun getContractSource ()Lorg/gradle/api/file/DirectoryProperty;
+	public abstract fun getExpectedCompactRuntime ()Lorg/gradle/api/provider/Property;
+	public abstract fun getMinSdk ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRequireDoctorPass ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRpId ()Lorg/gradle/api/provider/Property;
+	public final fun runDoctor ()V
+}
+
+public final class com/midnight/kuira/contract/KuiraDoctorTask$CheckResult {
+	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;Ljava/lang/String;)Lcom/midnight/kuira/contract/KuiraDoctorTask$CheckResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/contract/KuiraDoctorTask$CheckResult;Ljava/lang/String;Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/contract/KuiraDoctorTask$CheckResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getSeverity ()Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/contract/KuiraDoctorTask$Companion {
+}
+
+public final class com/midnight/kuira/contract/KuiraDoctorTask$Severity : java/lang/Enum {
+	public static final field FAIL Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public static final field PASS Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public static final field SKIP Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public static final field WARN Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+	public static fun values ()[Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
 }
 

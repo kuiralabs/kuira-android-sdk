@@ -280,6 +280,155 @@ class KuiraContractPluginTest {
         )
     }
 
+    // ── kuiraDoctor (Fix #8) ─────────────────────────────────────────
+
+    @Test
+    fun `doctor — minSdk check fails when below 30`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 28,
+            requireDoctorPass = true,
+        )
+
+        val result = runExpectingFailure("kuiraDoctor")
+        assertTrue(
+            "report should call out the minSdk floor: ${result.output}",
+            result.output.contains("minSdk = 28") &&
+                result.output.contains("below Kuira SDK's required floor of 30"),
+        )
+    }
+
+    @Test
+    fun `doctor — minSdk check passes at 30`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+
+        val result = run("kuiraDoctor")
+        assertEquals(TaskOutcome.SUCCESS, result.task(":kuiraDoctor")?.outcome)
+        assertTrue(
+            "report should show minSdk passing: ${result.output}",
+            result.output.contains("✓") && result.output.contains("minSdk"),
+        )
+    }
+
+    @Test
+    fun `doctor — cleartext check warns when debug manifest missing`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+        // No app/src/debug/AndroidManifest.xml written.
+
+        val result = run("kuiraDoctor")
+        assertEquals(TaskOutcome.SUCCESS, result.task(":kuiraDoctor")?.outcome)
+        assertTrue(
+            "should warn about missing debug manifest: ${result.output}",
+            result.output.contains("No app/src/debug/AndroidManifest.xml"),
+        )
+    }
+
+    @Test
+    fun `doctor — cleartext check passes when networkSecurityConfig is declared`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+        writeDebugManifest(includesCleartext = true)
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "should pass cleartext check: ${result.output}",
+            result.output.contains("PASS ") && result.output.contains("debug-cleartext"),
+        )
+    }
+
+    @Test
+    fun `doctor — assetlinks check skips when rpId is unset`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+            // rpId omitted on purpose.
+        )
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "should explain why assetlinks check was skipped: ${result.output}",
+            result.output.contains("kuiraContract.rpId is unset"),
+        )
+    }
+
+    @Test
+    fun `doctor — compact-runtime check appears in unified report`() {
+        // Mismatched runtime triggers a FAIL severity in the doctor report
+        // but the doctor itself doesn't fail (default requireDoctorPass=false).
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.15.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+
+        val result = run("kuiraDoctor")
+        assertEquals(TaskOutcome.SUCCESS, result.task(":kuiraDoctor")?.outcome)
+        assertTrue(
+            "should call out the runtime mismatch in the report: ${result.output}",
+            result.output.contains("Contract was compiled against runtime 0.16.0") &&
+                result.output.contains("consumer pinned 0.15.0"),
+        )
+    }
+
+    @Test
+    fun `doctor — requireDoctorPass=true converts FAIL to a build failure`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 28,
+            requireDoctorPass = true,
+        )
+
+        val result = runExpectingFailure("kuiraDoctor")
+        assertTrue(
+            "task failure should reference kuiraDoctor: ${result.output}",
+            result.output.contains("kuiraDoctor failed"),
+        )
+    }
+
+    @Test
+    fun `doctor — unified report shows tallies for PASS WARN FAIL SKIP`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "report should include the tally line: ${result.output}",
+            result.output.contains(Regex("""\d+ passed, \d+ warning, \d+ error, \d+ skipped""")),
+        )
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────
 
     /**
@@ -334,6 +483,10 @@ class KuiraContractPluginTest {
         alias: String? = null,
         expectedRuntimeVersion: String? = null,
         requireRuntimeMatch: Boolean? = null,
+        rpId: String? = null,
+        requireDoctorPass: Boolean? = null,
+        applicationId: String? = null,
+        minSdk: Int? = null,
     ) {
         val aliasLine = alias?.let { "    alias.set(\"$it\")" } ?: ""
         val expectedLine = expectedRuntimeVersion?.let {
@@ -342,6 +495,26 @@ class KuiraContractPluginTest {
         val requireLine = requireRuntimeMatch?.let {
             "    requireRuntimeMatch.set($it)"
         } ?: ""
+        val rpIdLine = rpId?.let { "    rpId.set(\"$it\")" } ?: ""
+        val requireDoctorLine = requireDoctorPass?.let {
+            "    requireDoctorPass.set($it)"
+        } ?: ""
+
+        // For kuiraDoctor's auto-discovery: applicationId + minSdk are
+        // pulled from this file by simple regex. Including them in the
+        // test fixture means the doctor task picks them up the same
+        // way it would in a real consumer project.
+        val androidShim = if (applicationId != null || minSdk != null) {
+            buildString {
+                append("\n\n// Auto-discoverable AGP-shaped values for kuiraDoctor.\n")
+                append("// Not a real Android DSL block — just text the regex matches.\n")
+                if (applicationId != null) append("// applicationId = \"$applicationId\"\n")
+                if (minSdk != null) append("// minSdk = $minSdk\n")
+            }
+        } else {
+            ""
+        }
+
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
@@ -359,13 +532,41 @@ class KuiraContractPluginTest {
                 $aliasLine
                 $expectedLine
                 $requireLine
+                $rpIdLine
+                $requireDoctorLine
             }
+            $androidShim
             """.trimIndent(),
         )
         projectDir.resolve("settings.gradle.kts").writeText(
             """rootProject.name = "kuira-contract-test"
             """.trimIndent(),
         )
+    }
+
+    /**
+     * Writes `app/src/debug/AndroidManifest.xml` at the test project
+     * root. Used by the kuiraDoctor cleartext-manifest check tests.
+     */
+    private fun writeDebugManifest(includesCleartext: Boolean) {
+        val dir = projectDir.resolve("src/debug")
+        dir.mkdirs()
+        val content = if (includesCleartext) {
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <application android:networkSecurityConfig="@xml/network_security_config" />
+            </manifest>
+            """.trimIndent()
+        } else {
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <application />
+            </manifest>
+            """.trimIndent()
+        }
+        dir.resolve("AndroidManifest.xml").writeText(content)
     }
 
     private fun contractInfoJson(runtimeVersion: String) = """

@@ -58,6 +58,10 @@ class KuiraContractPlugin : Plugin<Project> {
         // prevent. Consumers opt out explicitly per the extension's
         // documentation if they have a deliberate reason.
         extension.requireRuntimeMatch.convention(true)
+        // kuiraDoctor is warn-only by default. Consumers gating release
+        // builds in CI set this to true to convert FAIL severities into
+        // task failures.
+        extension.requireDoctorPass.convention(false)
 
         // Resolve source lazily so it picks up the consumer's
         // configuration even if it's set after these register calls.
@@ -119,6 +123,28 @@ class KuiraContractPlugin : Plugin<Project> {
                 spec.into(ASSETS_KEYS_SUBDIR)
             }
             task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
+        }
+
+        // kuiraDoctor — standalone preflight task. NOT wired to preBuild.
+        // Consumer invokes explicitly (`./gradlew :app:kuiraDoctor`) or
+        // wires into a release-only lifecycle in their own build script.
+        project.tasks.register(KuiraDoctorTask.TASK_NAME, KuiraDoctorTask::class.java) { task ->
+            task.rpId.set(extension.rpId)
+            task.contractSource.set(sourceProvider)
+            task.expectedCompactRuntime.set(extension.expectedRuntimeVersion)
+            task.requireDoctorPass.set(extension.requireDoctorPass)
+            // Auto-discover applicationId + minSdk from the consumer's
+            // app/build.gradle.kts via simple regex. Robust enough for
+            // the canonical Android Kotlin DSL layout; consumers with
+            // non-standard setups can override via task properties.
+            val buildFile = project.layout.projectDirectory.file(CONSUMER_BUILD_FILE).asFile
+            if (buildFile.isFile) {
+                val text = runCatching { buildFile.readText() }.getOrNull()
+                if (text != null) {
+                    APP_ID_REGEX.find(text)?.groupValues?.get(1)?.let { task.applicationId.set(it) }
+                    MIN_SDK_REGEX.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let { task.minSdk.set(it) }
+                }
+            }
         }
 
         // Validate consumer config + wire into preBuild. afterEvaluate runs
@@ -267,6 +293,18 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val ASSETS_DEST = "src/main/assets"
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"
         internal const val ASSETS_KEYS_SUBDIR = "keys"
+
+        // Consumer's app-module build script used for applicationId +
+        // minSdk auto-discovery by the kuiraDoctor task.
+        private const val CONSUMER_BUILD_FILE = "build.gradle.kts"
+
+        // Regex-based readers for the most common Android-Kotlin-DSL
+        // shapes. Robust enough for canonical setups; consumers with
+        // computed/property-based config can override via task inputs.
+        private val APP_ID_REGEX =
+            """applicationId\s*=\s*"([^"]+)"""".toRegex()
+        private val MIN_SDK_REGEX =
+            """minSdk\s*=\s*(\d+)""".toRegex()
 
         // Plugin label used in lifecycle/warn log lines so the user
         // can tell our diagnostics from arbitrary Gradle output.
