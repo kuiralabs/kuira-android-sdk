@@ -413,6 +413,71 @@ class KuiraContractPluginTest {
     }
 
     @Test
+    fun `doctor — sdk-bundled-runtime check SKIPs when no compact-engine AAR is on classpath`() {
+        // Scratch project with no Kuira SDK dep — there's no AAR to inspect.
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+        )
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "should skip with the no-AAR-found explanation: ${result.output}",
+            result.output.contains("sdk-bundled-runtime") &&
+                result.output.contains("Could not locate compact-engine AAR"),
+        )
+    }
+
+    @Test
+    fun `doctor — sdk-bundled-runtime PASSes when fake AAR has matching version`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        // Stage a synthetic compact-engine AAR with versionString = "0.16.0"
+        // in the project's flatDir repo. We bypass the real compact-engine
+        // dependency (which would drag in 100s of MB of Android) and provide
+        // just enough surface for the AAR-reader check to find a match.
+        val fakeAarDir = projectDir.resolve("local-aars")
+        writeFakeCompactEngineAar(fakeAarDir.resolve("compact-engine-fake.aar"), runtimeVersion = "0.16.0")
+        writeBuildScriptWithFakeAar(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+            aarDir = fakeAarDir,
+        )
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "should PASS with versions matching: ${result.output}",
+            result.output.contains("sdk-bundled-runtime") &&
+                result.output.contains("PASS") &&
+                result.output.contains("compact-runtime 0.16.0"),
+        )
+    }
+
+    @Test
+    fun `doctor — sdk-bundled-runtime FAILs when fake AAR has mismatched version`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        val fakeAarDir = projectDir.resolve("local-aars")
+        writeFakeCompactEngineAar(fakeAarDir.resolve("compact-engine-fake.aar"), runtimeVersion = "0.15.0")
+        writeBuildScriptWithFakeAar(
+            source = "contract/src/managed/counter",
+            applicationId = "com.example.app",
+            minSdk = 30,
+            aarDir = fakeAarDir,
+        )
+
+        val result = run("kuiraDoctor")
+        assertTrue(
+            "should FAIL naming both versions: ${result.output}",
+            result.output.contains("sdk-bundled-runtime") &&
+                result.output.contains("FAIL") &&
+                result.output.contains("SDK bundles compact-runtime 0.15.0") &&
+                result.output.contains("contract expects runtime 0.16.0"),
+        )
+    }
+
+    @Test
     fun `doctor — unified report shows tallies for PASS WARN FAIL SKIP`() {
         writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
         writePackageJson("contract", runtimeVersion = "0.16.0")
@@ -534,6 +599,83 @@ class KuiraContractPluginTest {
                 $requireLine
                 $rpIdLine
                 $requireDoctorLine
+            }
+            $androidShim
+            """.trimIndent(),
+        )
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * Writes a minimal synthetic compact-engine AAR (zip) containing
+     * just `assets/runtime/compact-runtime-iife.js` with the requested
+     * `versionString`. Just enough surface for the sdk-bundled-runtime
+     * check to find a target without dragging the real (100+ MB)
+     * compact-engine module into the TestKit project.
+     */
+    private fun writeFakeCompactEngineAar(aarPath: File, runtimeVersion: String) {
+        aarPath.parentFile.mkdirs()
+        java.util.zip.ZipOutputStream(aarPath.outputStream()).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("assets/runtime/compact-runtime-iife.js"))
+            zip.write(
+                """
+                var __compactRuntime = (() => {
+                  var versionString = "$runtimeVersion";
+                  return { versionString };
+                })();
+                """.trimIndent().toByteArray(),
+            )
+            zip.closeEntry()
+        }
+    }
+
+    /**
+     * Variant of [writeBuildScript] that also wires a flatDir repo
+     * pointing at [aarDir] and declares an implementation dep on the
+     * fake `compact-engine` AAR. Gradle resolves this via flatDir so
+     * the sdk-bundled-runtime check's `config.files` walk finds the AAR.
+     */
+    private fun writeBuildScriptWithFakeAar(
+        source: String,
+        applicationId: String,
+        minSdk: Int,
+        aarDir: File,
+    ) {
+        val androidShim = buildString {
+            append("\n\n// applicationId = \"$applicationId\"\n")
+            append("// minSdk = $minSdk\n")
+        }
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("com.midnight.kuira.contract")
+            }
+
+            repositories {
+                flatDir { dirs(file("${aarDir.absolutePath.replace("\\", "/")}")) }
+            }
+
+            // Synthetic runtime classpath. AGP would normally provide
+            // debugRuntimeClasspath / releaseRuntimeClasspath; in TestKit
+            // we declare a plain Java configuration so the doctor's
+            // walker finds the fake AAR. Name matches what the doctor's
+            // RESOLVABLE_CONFIG_NAMES looks for.
+            val runtimeClasspath: Configuration by configurations.creating {
+                isCanBeResolved = true
+                isCanBeConsumed = false
+            }
+            dependencies {
+                runtimeClasspath(files("${aarDir.absolutePath.replace("\\", "/")}/compact-engine-fake.aar"))
+            }
+
+            // The plugin needs a `preBuild` task to wire into.
+            tasks.register("preBuild")
+
+            kuiraContract {
+                source.set("$source")
             }
             $androidShim
             """.trimIndent(),

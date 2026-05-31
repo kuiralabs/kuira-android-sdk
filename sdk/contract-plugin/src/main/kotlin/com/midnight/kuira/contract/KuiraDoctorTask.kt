@@ -11,6 +11,7 @@ import org.gradle.api.tasks.TaskAction
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.ZipFile
 
 /**
  * `kuiraDoctor` — preflight check task that catches consumer-side
@@ -104,6 +105,7 @@ abstract class KuiraDoctorTask : DefaultTask() {
             checkCleartextManifest(),
             checkAssetlinks(),
             checkCompactRuntimePin(),
+            checkSdkBundledRuntime(),
         )
         printReport(results)
 
@@ -266,6 +268,20 @@ abstract class KuiraDoctorTask : DefaultTask() {
         }
     }
 
+    /**
+     * Verify the consumer-pinned npm runtime (in package.json) matches
+     * what the compiled contract expects (in compiler/contract-info.json).
+     * This catches misalignment at the **contract compilation toolchain**
+     * layer — what version `compactc` was emitting for vs. what the
+     * consumer's `npm install` resolved.
+     *
+     * Note: this does NOT catch the SDK's *bundled* runtime version
+     * (the actual JS that runs inside QuickJS at execution time on a
+     * user's device). For that, see [checkSdkBundledRuntime] — which
+     * inspects the resolved compact-engine AAR's
+     * `assets/runtime/compact-runtime-iife.js` and compares its
+     * `versionString = "X.Y.Z"` to the contract's emitted version.
+     */
     private fun checkCompactRuntimePin(): CheckResult {
         val srcDir = contractSource.orNull?.asFile
             ?: return CheckResult(
@@ -314,6 +330,110 @@ abstract class KuiraDoctorTask : DefaultTask() {
                     "error message for the full remediation list.",
             )
         }
+    }
+
+    /**
+     * Verify the SDK's bundled compact-runtime version (read from the
+     * resolved compact-engine AAR's
+     * `assets/runtime/compact-runtime-iife.js`) matches the contract's
+     * emitted runtime version.
+     *
+     * This is the **runtime-execution layer** check — distinct from
+     * [checkCompactRuntimePin] which validates the consumer's npm
+     * tooling pin. The SDK ships its own compact-runtime JS that loads
+     * inside QuickJS at contract-call time; if it doesn't match what
+     * `compactc` emitted, the QuickJS `checkRuntimeVersion` call throws
+     * `CompactError: Version mismatch: compiled code expects X.Y.Z,
+     * runtime is A.B.C` on the user's device.
+     *
+     * The consumer cannot override what the SDK bundles, so the only
+     * remediation when this check FAILs is to (a) bump the SDK to a
+     * version that bundles the right runtime, or (b) recompile the
+     * contract with a compactc version that emits the runtime version
+     * the current SDK bundles.
+     */
+    private fun checkSdkBundledRuntime(): CheckResult {
+        val emitted = contractSource.orNull?.asFile?.let { readContractInfoRuntime(it) }
+            ?: return CheckResult(
+                name = "sdk-bundled-runtime",
+                severity = Severity.SKIP,
+                message = "No contract artifact to compare against. Set " +
+                    "kuiraContract.source so the check has a target.",
+            )
+
+        val bundled = findSdkBundledRuntimeVersion()
+            ?: return CheckResult(
+                name = "sdk-bundled-runtime",
+                severity = Severity.SKIP,
+                message = "Could not locate compact-engine AAR in the project's " +
+                    "resolved configurations. Either the SDK isn't on the consumer's " +
+                    "classpath (apply com.android.application + add the Kuira SDK " +
+                    "dependency) or the AAR cache hasn't been populated yet (try a " +
+                    "build first).",
+            )
+
+        return if (emitted == bundled) {
+            CheckResult(
+                name = "sdk-bundled-runtime",
+                severity = Severity.PASS,
+                message = "SDK bundles compact-runtime $bundled; contract emits for " +
+                    "runtime $emitted. QuickJS checkRuntimeVersion will accept.",
+            )
+        } else {
+            CheckResult(
+                name = "sdk-bundled-runtime",
+                severity = Severity.FAIL,
+                message = "SDK bundles compact-runtime $bundled but the contract " +
+                    "expects runtime $emitted. The QuickJS runtime will throw " +
+                    "'Version mismatch: compiled code expects $emitted, runtime is " +
+                    "$bundled' at the contract's first call (deploy() or call()).\n" +
+                    "\n" +
+                    "Fix one of:\n" +
+                    "  - Bump the Kuira SDK to a version whose compact-engine AAR " +
+                    "bundles runtime $emitted.\n" +
+                    "  - Recompile this contract with a compactc version that emits " +
+                    "runtime $bundled (`compactc --runtime-version` to confirm before " +
+                    "recompiling).\n" +
+                    "  - As a last resort, opt out for this build with " +
+                    "kuiraContract.requireDoctorPass.set(false).",
+            )
+        }
+    }
+
+    /**
+     * Find the SDK's bundled compact-runtime version string by:
+     *   1. Walking the project's resolvable runtime classpaths
+     *   2. Filtering files to `.aar` artifacts whose name starts with
+     *      `compact-engine` (the SDK module that ships the iife bundle)
+     *   3. Reading `assets/runtime/compact-runtime-iife.js` from the
+     *      AAR (zip) and extracting `versionString = "X.Y.Z"`
+     *
+     * Returns null when no such AAR is found in the resolved classpath
+     * (consumer hasn't applied the Android plugin, hasn't added the
+     * Kuira SDK dependency, or the dependency cache is empty).
+     *
+     * Resolves configurations lazily — only inspected at task-execution
+     * time, not at configuration time.
+     */
+    private fun findSdkBundledRuntimeVersion(): String? {
+        val candidateConfigs = project.configurations.filter { config ->
+            config.isCanBeResolved && config.name in RESOLVABLE_CONFIG_NAMES
+        }
+        for (config in candidateConfigs) {
+            val files = runCatching { config.files }.getOrNull() ?: continue
+            val aar = files.firstOrNull { f ->
+                f.name.startsWith("compact-engine") && f.name.endsWith(".aar")
+            } ?: continue
+            val version = runCatching {
+                ZipFile(aar).use { zip ->
+                    val entry = zip.getEntry(BUNDLED_RUNTIME_ASSET_PATH) ?: return@use null
+                    val text = zip.getInputStream(entry).bufferedReader().use { it.readText() }
+                    RUNTIME_VERSION_STRING_REGEX.find(text)?.groupValues?.get(1)
+                }
+            }.getOrNull()
+            if (version != null) return version
+        }
+        return null
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -423,5 +543,30 @@ abstract class KuiraDoctorTask : DefaultTask() {
         // A response that starts with anything else (HTML, plain text)
         // is a hosting misconfiguration.
         private val ASSETLINKS_ROOT_JSON = """^\s*\[""".toRegex()
+
+        // Resolvable Android runtime classpath configuration names that
+        // checkSdkBundledRuntime walks. AGP populates these with the
+        // compact-engine AAR when the consumer applies the Kuira SDK
+        // dependency. Listed explicitly (rather than filtering all
+        // resolvable configurations) to bound the inspection cost and
+        // avoid scanning unrelated classpaths.
+        private val RESOLVABLE_CONFIG_NAMES = setOf(
+            "debugRuntimeClasspath",
+            "releaseRuntimeClasspath",
+            "runtimeClasspath",
+        )
+
+        // Path inside the compact-engine AAR where the bundled
+        // compact-runtime IIFE lives. Bumping this requires a coordinated
+        // change in core/compact-engine/src/main/assets/runtime/.
+        private const val BUNDLED_RUNTIME_ASSET_PATH =
+            "assets/runtime/compact-runtime-iife.js"
+
+        // Matches the runtime's self-declared versionString, e.g.
+        //   var versionString = "0.16.0";
+        // — esbuild-emitted JS keeps quotes consistent, so the regex
+        // is tight enough not to false-match on adjacent docstrings.
+        private val RUNTIME_VERSION_STRING_REGEX =
+            """versionString\s*=\s*"([^"]+)"""".toRegex()
     }
 }
