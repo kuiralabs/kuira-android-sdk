@@ -4,6 +4,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.Copy
+import java.io.File
 
 /**
  * `com.midnight.kuira.contract` — wires a compiled Compact contract into
@@ -27,6 +28,13 @@ import org.gradle.api.tasks.Copy
  *    `preBuild` task, so assets are synced before any APK is assembled.
  * 4. Fails fast at task execution time with a clear message if the
  *    source directory is missing.
+ * 5. Cross-checks the compiled contract's
+ *    `compiler/contract-info.json` `runtime-version` against the
+ *    consumer's pinned `@midnight-ntwrk/compact-runtime` version (either
+ *    auto-discovered from a co-located `package.json`, or explicitly
+ *    set via `kuiraContract.expectedRuntimeVersion`). Fails the build
+ *    on mismatch so the consumer doesn't ship an APK that crashes at
+ *    runtime with "Unsupported bytecode version."
  *
  * The plugin requires an Android plugin (`com.android.application` or
  * `com.android.library`) to be applied to the same project.
@@ -45,6 +53,11 @@ class KuiraContractPlugin : Plugin<Project> {
         extension.alias.convention(
             extension.source.map { it.trimEnd('/').substringAfterLast('/') },
         )
+        // Runtime-mismatch failure is the safe default — silently shipping
+        // a mismatched APK is the failure mode this plugin exists to
+        // prevent. Consumers opt out explicitly per the extension's
+        // documentation if they have a deliberate reason.
+        extension.requireRuntimeMatch.convention(true)
 
         // Resolve source lazily so it picks up the consumer's
         // configuration even if it's set after these register calls.
@@ -61,7 +74,7 @@ class KuiraContractPlugin : Plugin<Project> {
         // the plugin (not deferred to a runtime crash).
         val validateTask = project.tasks.register(VALIDATE_TASK_NAME) { task ->
             task.group = "verification"
-            task.description = "Verify the Kuira contract source directory exists and is non-empty."
+            task.description = "Verify the Kuira contract source directory exists and its emitted runtime-version matches the consumer's pin."
             // Always run — the check is cheap and the cost of a false
             // up-to-date is "consumer ships a broken APK."
             task.outputs.upToDateWhen { false }
@@ -78,6 +91,12 @@ class KuiraContractPlugin : Plugin<Project> {
                             "compile your contract first (e.g. `npm run compact` in your contract directory).",
                     )
                 }
+                validateRuntimeVersion(
+                    project = project,
+                    sourceDir = sourceDir,
+                    explicitExpected = extension.expectedRuntimeVersion.orNull,
+                    requireMatch = extension.requireRuntimeMatch.get(),
+                )
             }
         }
 
@@ -124,6 +143,115 @@ class KuiraContractPlugin : Plugin<Project> {
         }
     }
 
+    /**
+     * Verify the contract's emitted runtime-version matches the
+     * consumer's pin.
+     *
+     * Resolution order for the expected version:
+     *   1. [explicitExpected] (if `kuiraContract.expectedRuntimeVersion` was set)
+     *   2. Auto-discovered from the nearest co-located `package.json`
+     *      that declares `@midnight-ntwrk/compact-runtime` in its
+     *      `dependencies` (walked up from [sourceDir])
+     *   3. Skip the check (log only) if neither is available
+     *
+     * Skipped silently when:
+     *   - `compiler/contract-info.json` is missing or unparseable
+     *     (older compactc output; can't make a meaningful claim)
+     *   - No expected version can be determined (case 3 above)
+     *
+     * Fails loudly when versions are known and don't match, unless
+     * [requireMatch] is false (logs warning instead).
+     */
+    private fun validateRuntimeVersion(
+        project: Project,
+        sourceDir: File,
+        explicitExpected: String?,
+        requireMatch: Boolean,
+    ) {
+        val emitted = readEmittedRuntimeVersion(sourceDir) ?: run {
+            project.logger.lifecycle(
+                "[$PLUGIN_NAME] No compiler/contract-info.json under $sourceDir " +
+                    "— runtime-version check skipped. Older compactc output may not emit this file.",
+            )
+            return
+        }
+
+        val expected = explicitExpected ?: autoDiscoverExpectedRuntime(sourceDir) ?: run {
+            project.logger.lifecycle(
+                "[$PLUGIN_NAME] No package.json declaring @midnight-ntwrk/compact-runtime " +
+                    "found near $sourceDir, and kuiraContract.expectedRuntimeVersion was not set " +
+                    "— runtime-version check skipped. Set expectedRuntimeVersion if you ship " +
+                    "contracts without a co-located package.json.",
+            )
+            return
+        }
+
+        if (emitted == expected) return
+
+        val message = buildString {
+            append("Compact runtime version mismatch.\n")
+            append("  Contract at $sourceDir was compiled against @midnight-ntwrk/compact-runtime $emitted\n")
+            append("  Consumer pinned @midnight-ntwrk/compact-runtime $expected\n")
+            append("\n")
+            append("  Shipping the APK with this mismatch will produce an 'Unsupported bytecode " +
+                "version' error at runtime when the QuickJS contract runtime loads the contract.\n")
+            append("\n")
+            append("  Fix one of:\n")
+            append("    - Bump the package.json dependency on @midnight-ntwrk/compact-runtime to $emitted, " +
+                "or set kuiraContract.expectedRuntimeVersion.set(\"$emitted\") if you don't have a co-located package.json.\n")
+            append("    - Recompile the contract with a compactc that emits runtime $expected " +
+                "(compactc --runtime-version to confirm before recompiling).\n")
+            append("    - As a last resort, opt out for this build with kuiraContract.requireRuntimeMatch.set(false).")
+        }
+        if (requireMatch) {
+            throw GradleException(message)
+        }
+        project.logger.warn("[$PLUGIN_NAME] $message")
+    }
+
+    /**
+     * Extract `runtime-version` from `<sourceDir>/compiler/contract-info.json`.
+     * Returns null if the file or field is missing — we don't pull a
+     * JSON parser dependency into a Gradle plugin's classpath for a
+     * single-field probe; regex is sufficient and resilient to the
+     * cosmetic JSON layout (compactc emits a stable shape, and any
+     * future shape change would surface in code review).
+     */
+    private fun readEmittedRuntimeVersion(sourceDir: File): String? {
+        val infoFile = sourceDir.resolve("$COMPILER_SUBDIR/$CONTRACT_INFO_FILE")
+        if (!infoFile.isFile) return null
+        val text = runCatching { infoFile.readText() }.getOrNull() ?: return null
+        return RUNTIME_VERSION_REGEX.find(text)?.groupValues?.get(1)
+    }
+
+    /**
+     * Walk up from `sourceDir` looking for a `package.json` that
+     * declares `@midnight-ntwrk/compact-runtime` in its `dependencies`.
+     * Returns the pinned version string or null.
+     *
+     * Stops at the filesystem root or after [MAX_PACKAGE_JSON_WALK_UP]
+     * directory levels, whichever comes first — bounds the walk so an
+     * unrelated package.json many levels up doesn't get picked up by
+     * accident.
+     */
+    private fun autoDiscoverExpectedRuntime(sourceDir: File): String? {
+        var current: File? = sourceDir
+        repeat(MAX_PACKAGE_JSON_WALK_UP) {
+            current?.let { dir ->
+                val pkg = dir.resolve(PACKAGE_JSON_FILE)
+                if (pkg.isFile) {
+                    val text = runCatching { pkg.readText() }.getOrNull()
+                    if (text != null) {
+                        val match = COMPACT_RUNTIME_DEP_REGEX.find(text)
+                        if (match != null) return match.groupValues[1]
+                    }
+                }
+                current = dir.parentFile
+            }
+        }
+        return null
+    }
+
     companion object {
         internal const val SYNC_TASK_NAME = "syncContractAssets"
         internal const val VALIDATE_TASK_NAME = "validateKuiraContractSource"
@@ -132,9 +260,38 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val CONTRACT_SUBDIR = "contract"
         internal const val KEYS_SUBDIR = "keys"
         internal const val ZKIR_SUBDIR = "zkir"
+        internal const val COMPILER_SUBDIR = "compiler"
+        internal const val CONTRACT_INFO_FILE = "contract-info.json"
+        internal const val PACKAGE_JSON_FILE = "package.json"
 
         internal const val ASSETS_DEST = "src/main/assets"
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"
         internal const val ASSETS_KEYS_SUBDIR = "keys"
+
+        // Plugin label used in lifecycle/warn log lines so the user
+        // can tell our diagnostics from arbitrary Gradle output.
+        private const val PLUGIN_NAME = "kuira-contract"
+
+        // Bound the package.json walk-up to avoid picking up an
+        // unrelated package.json from a parent monorepo. Six levels
+        // covers the canonical contract/src/managed/<name> layout
+        // (which is 3 levels deep) plus reasonable nesting headroom.
+        private const val MAX_PACKAGE_JSON_WALK_UP = 6
+
+        // Single-line JSON regex for the contract-info.json runtime-version
+        // field. compactc emits whitespace-normalized JSON; this matches
+        // both `"runtime-version": "0.16.0"` and `"runtime-version":"0.16.0"`.
+        private val RUNTIME_VERSION_REGEX =
+            """"runtime-version"\s*:\s*"([^"]+)"""".toRegex()
+
+        // package.json npm-dependency entry for @midnight-ntwrk/compact-runtime.
+        // Captures the version specifier verbatim (caret/tilde ranges
+        // included — the comparator at the call site does exact string
+        // match, which surfaces "you pinned ^0.16.0 but the contract
+        // wants 0.16.0" as a mismatch the consumer must resolve
+        // explicitly. Exact pinning is the recommended pattern for
+        // wallet-grade reproducibility.).
+        private val COMPACT_RUNTIME_DEP_REGEX =
+            """"@midnight-ntwrk/compact-runtime"\s*:\s*"([^"]+)"""".toRegex()
     }
 }

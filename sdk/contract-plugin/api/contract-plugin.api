@@ -1,6 +1,8 @@
 public abstract class com/midnight/kuira/contract/KuiraContractExtension {
 	public fun <init> ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
+	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
 	public abstract fun getSource ()Lorg/gradle/api/provider/Property;
 }
 

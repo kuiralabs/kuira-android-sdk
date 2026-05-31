@@ -152,6 +152,134 @@ class KuiraContractPluginTest {
         )
     }
 
+    // ── Runtime-version pin enforcement (Fix #9) ─────────────────────
+
+    @Test
+    fun `runtime match — contract and co-located package_json agree`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(source = "contract/src/managed/counter")
+
+        val result = run("validateKuiraContractSource")
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":validateKuiraContractSource")?.outcome,
+        )
+    }
+
+    @Test
+    fun `runtime mismatch — contract vs co-located package_json fails with both versions named`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.15.0")
+        writeBuildScript(source = "contract/src/managed/counter")
+
+        val result = runExpectingFailure("syncContractAssets")
+        val output = result.output
+
+        assertTrue(
+            "error should name the emitted runtime version: $output",
+            output.contains("compiled against @midnight-ntwrk/compact-runtime 0.16.0"),
+        )
+        assertTrue(
+            "error should name the consumer-pinned runtime version: $output",
+            output.contains("Consumer pinned @midnight-ntwrk/compact-runtime 0.15.0"),
+        )
+        assertTrue(
+            "error should mention the runtime crash this prevents: $output",
+            output.contains("Unsupported bytecode version"),
+        )
+    }
+
+    @Test
+    fun `runtime check skipped when contract-info_json missing — older compactc output`() {
+        // Tree WITHOUT compiler/contract-info.json — older compactc didn't emit it.
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = null)
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(source = "contract/src/managed/counter")
+
+        val result = run("validateKuiraContractSource")
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":validateKuiraContractSource")?.outcome,
+        )
+        assertTrue(
+            "should log that the check was skipped because the info file is absent: ${result.output}",
+            result.output.contains("runtime-version check skipped"),
+        )
+    }
+
+    @Test
+    fun `runtime check skipped when no package_json and no explicit pin`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        // No writePackageJson — no co-located pin and no explicit one.
+        writeBuildScript(source = "contract/src/managed/counter")
+
+        val result = run("validateKuiraContractSource")
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":validateKuiraContractSource")?.outcome,
+        )
+        assertTrue(
+            "should log that auto-discovery found no package.json: ${result.output}",
+            result.output.contains("No package.json declaring"),
+        )
+    }
+
+    @Test
+    fun `explicit expectedRuntimeVersion overrides auto-discovery and validates correctly`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        // No package.json — exercise the explicit-pin-only path.
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            expectedRuntimeVersion = "0.16.0",
+        )
+
+        val result = run("validateKuiraContractSource")
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":validateKuiraContractSource")?.outcome,
+        )
+    }
+
+    @Test
+    fun `explicit expectedRuntimeVersion fails on mismatch even without a package_json`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            expectedRuntimeVersion = "0.15.0",
+        )
+
+        val result = runExpectingFailure("syncContractAssets")
+        assertTrue(
+            "error should name the emitted version: ${result.output}",
+            result.output.contains("0.16.0"),
+        )
+        assertTrue(
+            "error should name the explicit-pin version: ${result.output}",
+            result.output.contains("0.15.0"),
+        )
+    }
+
+    @Test
+    fun `requireRuntimeMatch=false downgrades mismatch to a warning, build succeeds`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.15.0")
+        writeBuildScript(
+            source = "contract/src/managed/counter",
+            requireRuntimeMatch = false,
+        )
+
+        val result = run("validateKuiraContractSource")
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":validateKuiraContractSource")?.outcome,
+        )
+        assertTrue(
+            "should warn even when not failing: ${result.output}",
+            result.output.contains("Compact runtime version mismatch"),
+        )
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────
 
     /**
@@ -162,8 +290,15 @@ class KuiraContractPluginTest {
      *   keys/<circuit>.prover
      *   keys/<circuit>.verifier
      *   zkir/<circuit>.bzkir
+     *   compiler/contract-info.json   (only when [emittedRuntimeVersion] is set)
+     *
+     * Passing null for [emittedRuntimeVersion] models the older-compactc
+     * case where the contract-info.json file is absent.
      */
-    private fun writeCanonicalContractTree(name: String) {
+    private fun writeCanonicalContractTree(
+        name: String,
+        emittedRuntimeVersion: String? = null,
+    ) {
         val managed = projectDir.resolve("contract/src/managed/$name")
         managed.resolve("contract").mkdirs()
         managed.resolve("keys").mkdirs()
@@ -173,10 +308,40 @@ class KuiraContractPluginTest {
         managed.resolve("keys/circuit1.prover").writeText(STUB_PROVER)
         managed.resolve("keys/circuit1.verifier").writeText(STUB_VERIFIER)
         managed.resolve("zkir/circuit1.bzkir").writeText(STUB_BZKIR)
+
+        if (emittedRuntimeVersion != null) {
+            managed.resolve("compiler").mkdirs()
+            managed.resolve("compiler/contract-info.json").writeText(
+                contractInfoJson(emittedRuntimeVersion),
+            )
+        }
     }
 
-    private fun writeBuildScript(source: String, alias: String? = null) {
+    /**
+     * Writes a `package.json` at `<projectDir>/<relativeDir>/package.json`
+     * declaring the given `@midnight-ntwrk/compact-runtime` version. The
+     * directory must exist; tests can place this at `contract/` for the
+     * canonical layout or elsewhere for auto-discovery walk-up tests.
+     */
+    private fun writePackageJson(relativeDir: String, runtimeVersion: String) {
+        val dir = projectDir.resolve(relativeDir)
+        dir.mkdirs()
+        dir.resolve("package.json").writeText(packageJson(runtimeVersion))
+    }
+
+    private fun writeBuildScript(
+        source: String,
+        alias: String? = null,
+        expectedRuntimeVersion: String? = null,
+        requireRuntimeMatch: Boolean? = null,
+    ) {
         val aliasLine = alias?.let { "    alias.set(\"$it\")" } ?: ""
+        val expectedLine = expectedRuntimeVersion?.let {
+            "    expectedRuntimeVersion.set(\"$it\")"
+        } ?: ""
+        val requireLine = requireRuntimeMatch?.let {
+            "    requireRuntimeMatch.set($it)"
+        } ?: ""
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
@@ -192,6 +357,8 @@ class KuiraContractPluginTest {
             kuiraContract {
                 source.set("$source")
                 $aliasLine
+                $expectedLine
+                $requireLine
             }
             """.trimIndent(),
         )
@@ -200,6 +367,28 @@ class KuiraContractPluginTest {
             """.trimIndent(),
         )
     }
+
+    private fun contractInfoJson(runtimeVersion: String) = """
+        {
+          "compiler-version": "0.31.0",
+          "language-version": "0.23.0",
+          "runtime-version": "$runtimeVersion",
+          "circuits": [],
+          "witnesses": [],
+          "contracts": [],
+          "ledger": []
+        }
+    """.trimIndent()
+
+    private fun packageJson(runtimeVersion: String) = """
+        {
+          "name": "stub",
+          "version": "0.0.0",
+          "dependencies": {
+            "@midnight-ntwrk/compact-runtime": "$runtimeVersion"
+          }
+        }
+    """.trimIndent()
 
     private fun run(vararg args: String) =
         GradleRunner.create()
