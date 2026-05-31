@@ -38,3 +38,7 @@ examples/midnight-kicks/contract/dist/
 examples/midnight-kicks/contract/midnight-level-db/
 examples/midnight-kicks/local.properties
 .claude/scheduled_tasks.lock
+gradle.properties
+
+# Scratch docs-preview screenshots from mkdocs review sessions.
+.preview-*.png

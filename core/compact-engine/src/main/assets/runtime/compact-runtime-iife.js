@@ -567,9 +567,9 @@ var __compactRuntime = (() => {
     }
   });
 
-  // node_modules/@midnight-ntwrk/compact-runtime/dist/index.js
-  var index_exports = {};
-  __export(index_exports, {
+  // entry.js
+  var entry_exports = {};
+  __export(entry_exports, {
     Bytes32Descriptor: () => Bytes32Descriptor,
     CONTRACT_ADDRESS_BYTE_LENGTH: () => CONTRACT_ADDRESS_BYTE_LENGTH,
     ChargedState: () => ChargedState,
@@ -676,6 +676,7 @@ var __compactRuntime = (() => {
     signingKeyFromBip340: () => signingKeyFromBip340,
     subField: () => subField,
     toHex: () => toHex,
+    transformPublicTranscript: () => transformPublicTranscript,
     transientCommit: () => transientCommit2,
     transientHash: () => transientHash2,
     typeError: () => typeError,
@@ -704,7 +705,7 @@ var __compactRuntime = (() => {
     throw new CompactError(msg);
   }
 
-  // shim.js
+  // onchain-runtime-shim.js
   var StateValue = class _StateValue {
     constructor(data) {
       this._data = data || null;
@@ -885,6 +886,79 @@ var __compactRuntime = (() => {
       value,
       alignment: av.alignment || [{ tag: "atom", value: { tag: "field" } }]
     };
+  }
+  function transformAlignedValuePadded(av) {
+    if (!av) return { value: [[]], alignment: [{ tag: "atom", value: { tag: "field" } }] };
+    const alignment = av.alignment || [{ tag: "atom", value: { tag: "field" } }];
+    let value = (av.value || [[]]).map((v) => {
+      if (v instanceof Uint8Array) return Array.from(v);
+      if (Array.isArray(v)) return v;
+      if (typeof v === "object" && v !== null) {
+        const keys = Object.keys(v).filter((k) => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
+        if (keys.length === 0) return [];
+        return keys.map((k) => v[k]);
+      }
+      return [];
+    });
+    if (alignment.length > 0 && value.length > 0) {
+      value = value.map((slot, i) => {
+        if (slot.length > 0) return slot;
+        const align = alignment[i];
+        if (!align) return slot;
+        if (align.tag === "atom" && align.value) {
+          if (align.value.tag === "field" || align.value.tag === "compress") {
+            return new Array(32).fill(0);
+          }
+          if (align.value.tag === "bytes" && align.value.length) {
+            return new Array(align.value.length).fill(0);
+          }
+        }
+        return slot;
+      });
+    }
+    if (value.length === 0 && alignment.length > 0) {
+      value = alignment.map((align) => {
+        if (align.tag === "atom" && align.value) {
+          if (align.value.tag === "field" || align.value.tag === "compress") {
+            return new Array(32).fill(0);
+          }
+          if (align.value.tag === "bytes" && align.value.length) {
+            return new Array(align.value.length).fill(0);
+          }
+        }
+        return [];
+      });
+    }
+    return { value, alignment };
+  }
+  function transformPublicTranscript(transcript) {
+    return transcript.map((op) => {
+      if (typeof op === "string") return op;
+      if (typeof op !== "object" || op === null) return op;
+      if ("popeq" in op) {
+        return {
+          popeq: {
+            cached: op.popeq.cached,
+            result: transformAlignedValuePadded(op.popeq.result)
+          }
+        };
+      }
+      if ("idx" in op) {
+        return {
+          idx: {
+            cached: op.idx.cached,
+            pushPath: op.idx.pushPath || false,
+            path: (op.idx.path || []).map((key) => {
+              if (key.tag === "value") {
+                return { tag: "value", value: transformAlignedValuePadded(key.value) };
+              }
+              return key;
+            })
+          }
+        };
+      }
+      return transformOpForRust(op);
+    });
   }
   var QueryContext = class _QueryContext {
     constructor(chargedState, contractAddress) {
@@ -1884,5 +1958,5 @@ var __compactRuntime = (() => {
     }
     return [...dependencies];
   };
-  return __toCommonJS(index_exports);
+  return __toCommonJS(entry_exports);
 })();

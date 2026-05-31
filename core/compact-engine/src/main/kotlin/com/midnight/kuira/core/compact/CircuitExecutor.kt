@@ -150,7 +150,7 @@ class CircuitExecutor(private val context: Context) {
                     // Capture the state handle for the deploy transaction assembler
                     __capture(initResult.currentContractState._rustHandle.toString());
                 } catch (e) {
-                    __captureError(e.toString());
+                    __captureError(String(e) + (e && e.stack ? "\n" + e.stack : ""));
                 }
             """.trimIndent()
 
@@ -376,7 +376,7 @@ class CircuitExecutor(private val context: Context) {
                     },
                 }));
             } catch (e) {
-                __captureError(e.toString());
+                __captureError(String(e) + (e && e.stack ? "\n" + e.stack : ""));
             }
         """.trimIndent()
     }
