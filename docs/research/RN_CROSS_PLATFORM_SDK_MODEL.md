@@ -8,7 +8,7 @@
 
 ## TL;DR
 
-**No, this design cannot be done in pure React Native.** The Sigil — passkey/PRF, secure storage, biometric gating, and cloud backup — touches platform OS APIs and a native Rust library. React Native has **no JavaScript access** to any of these. Every one of them must be implemented as a **Turbo Native Module**, which by definition is written **twice**: once in **Kotlin** (Android) and once in **Swift** (iOS), behind a single shared TypeScript interface.
+**No, this design cannot be done in pure React Native.** The Sigil — passkey/PRF, secure storage, biometric gating, and cloud backup — touches platform OS APIs and a native Rust library. React Native has **no JavaScript access** to any of these. Every one of them must be implemented as a **Turbo Native Module**, which by definition is written **twice**: once in **Kotlin** (Android) and once in **Swift** (iOS), behind a single shared TypeScript interface. (In practice most of these have mature off-the-shelf RN packages that ship both native halves for you — only the Rust crypto core and the Block Store↔iCloud backup are genuinely custom work; see *Off-the-Shelf vs Custom* below.)
 
 So: **a complete Sigil RN SDK is gated on having both native implementations.** Building the iOS-native Sigil *is* building the iOS half of the RN package — they are the same code.
 
@@ -72,6 +72,28 @@ Note the cloud-backup row especially: iOS has **no Block Store**. The iOS side i
 
 ---
 
+## Off-the-Shelf vs Custom: Which L2 Modules You Actually Build
+
+"L2" means *native on both platforms* — but it does **not** mean *write everything from scratch*. Most of the OS-API capabilities already have mature, maintained React Native packages that ship the Kotlin and Swift halves for you. Only two pieces are genuinely yours to build:
+
+| L2 capability | Off-the-shelf RN package | Build it yourself? |
+|---------------|--------------------------|--------------------|
+| **Rust crypto core** | none possible — it's *your* code, not an OS API | **Yes — always.** UniFFI → Kotlin+Swift + a thin Turbo Module. (ZK *proving* can run remotely over HTTP from L1, shrinking the native surface to key-derivation / signing / dust / contract-exec.) |
+| **Cloud backup** (Block Store ↔ iCloud) | fragmented: `react-native-block-store` (Android, single-maintainer) + `react-native-cloud-storage` (iCloud/Drive) — *different APIs per platform* | **Likely yes**, or wrap both behind one interface, to enforce one identical encrypted-blob format + cloud-backup control across platforms |
+| Passkey + PRF | `react-native-passkeys` (PRF `eval` + `evalByCredential`, create + assert) | No — adopt + verify multi-salt / PRF-on-create |
+| Secure storage + wipe | `react-native-keychain` (StrongBox / Secure-Enclave aware) or `react-native-sensitive-info` — **not** the older `react-native-secure-key-store`, which is local Keystore/Keychain storage (≠ Block Store) and effectively unmaintained | No — adopt |
+| Biometric gate | `react-native-biometrics`, `expo-local-authentication` | No — adopt |
+| Unity embedding (Kicks) | `@azesmway/react-native-unity` (Fabric / New-Arch, both platforms; wraps the same UaaL Android lib + iOS `UnityFramework`) | No — adopt + verify Unity / AGP / RN-version compat |
+
+**Accurate framing:** every L2 capability needs a native module per platform, but only the **crypto core** and the **cloud-backup unification** are yours to write. The rest — passkey/PRF, secure storage, biometrics, Unity — are *adopt-and-verify*. That is a materially lighter lift than "write the whole Sigil twice."
+
+Two caveats keep this honest:
+
+- **"Adopt" still depends on iOS-native existing.** These packages *are* the two native stacks; they just ship the Swift half for you. The iOS-gating conclusion in the next section is unchanged.
+- **Verify maturity against *your* stack before committing:** `react-native-block-store` (keyed entries? cloud-backup flag? restore flow?), `react-native-passkeys` (`eval.first` + `eval.second`, PRF-on-create), and `@azesmway/react-native-unity` (your Unity/URP/IL2CPP + AGP 9 + RN 0.85 New-Architecture).
+
+---
+
 ## The Consequence for the RN Roadmap
 
 Because the Sigil is entirely L2:
@@ -110,7 +132,7 @@ This is the real barrier to entry, and it is **why the Sigil is defensible**: it
 ## What's Portable vs Not (Summary)
 
 - **Portable, write once (L1):** the connector/ConnectedAPI, transaction orchestration, indexer client (GraphQL + WebSocket), and the pure-math Sigil DID derivation. Shared with the agent SDK.
-- **Not portable, write twice (L2):** the Rust crypto core binding, passkey/PRF, secure storage, biometrics, cloud backup. The entire Sigil.
+- **Not portable, native on both platforms (L2):** the Rust crypto core binding, passkey/PRF, secure storage, biometrics, cloud backup, Unity embedding. The entire Sigil. *But only the crypto core and the Block Store↔iCloud backup are custom work — the rest ship as mature off-the-shelf packages (see Off-the-Shelf vs Custom).*
 - **Rewritten per UI framework (L3):** all screens. Compose does not cross over; design translates, code does not.
 
 ---
@@ -126,7 +148,7 @@ This is the real barrier to entry, and it is **why the Sigil is defensible**: it
 
 ## Verification Status
 
-Checked 2026-05-24. One claim in the first draft was corrected (passkey PRF maturity).
+Checked 2026-05-24; RN package landscape added 2026-05-27. One claim in the first draft was corrected (passkey PRF maturity).
 
 **Verified against this codebase (prior session investigations):**
 - The Rust crypto core is Android-only via JNI (`kuira-crypto-ffi`, `System.loadLibrary`); there is no Kotlin Multiplatform anywhere in the repo.
@@ -140,9 +162,15 @@ Checked 2026-05-24. One claim in the first draft was corrected (passkey PRF matu
 - **CORRECTION — RN passkey PRF is not immature.** The first draft of this document claimed RN passkey PRF support was immature and would likely require a fork. In fact `react-native-passkeys` (peterferguson) supports the PRF extension — `eval` and `evalByCredential`, on both create and assert. The passkey row's risk was downgraded **High → Medium** accordingly. (Still verify multi-salt and PRF-on-create against our specific flow.)
 - **UniFFI** (Mozilla) has first-party support for **Kotlin, Swift, and Python** from a single Rust interface definition — the same crypto core can bind to both mobile native bridges *and* a Python agent SDK. ✅
 
+**Verified externally (web, 2026-05-27) — RN package landscape:**
+- Off-the-shelf packages exist and are maintained for secure storage (`react-native-keychain`, StrongBox/Secure-Enclave aware), biometrics (`react-native-biometrics`), passkey/PRF (`react-native-passkeys`), and Unity embedding (`@azesmway/react-native-unity`, New-Architecture, both platforms). ✅
+- The package the team found, `react-native-secure-key-store`, wraps **local** Keystore/Keychain storage — it is **not** Block Store (cloud recovery) and is effectively unmaintained. Use `react-native-keychain` instead. ✅
+- Cloud backup has **no clean single package**: `react-native-block-store` (Android, single-maintainer) + a separate iCloud package (`react-native-cloud-storage`) — different APIs. This and the crypto core are the only genuinely custom L2 modules. ✅
+
 **Sources:**
 - [React Native New Architecture — Turbo Modules](https://github.com/reactwg/react-native-new-architecture/blob/main/docs/turbo-modules.md)
 - [Apple — ASAuthorizationPublicKeyCredentialPRFAssertionInput](https://developer.apple.com/documentation/authenticationservices/asauthorizationpublickeycredentialprfassertioninput-swift.struct)
 - [Passkeys & WebAuthn PRF for End-to-End Encryption (Corbado, 2026)](https://www.corbado.com/blog/passkeys-prf-webauthn)
 - [react-native-passkeys (peterferguson)](https://github.com/peterferguson/react-native-passkeys)
 - [UniFFI — multi-language bindings generator for Rust (Mozilla)](https://github.com/mozilla/uniffi-rs)
+- [react-native-keychain](https://github.com/oblador/react-native-keychain) · [react-native-block-store (matinzd)](https://github.com/matinzd/react-native-block-store) · [react-native-cloud-storage](https://www.npmjs.com/package/react-native-cloud-storage) · [react-native-biometrics (kjoonas1)](https://github.com/kjoonas1/react-native-biometrics) · [@azesmway/react-native-unity](https://github.com/azesmway/react-native-unity)

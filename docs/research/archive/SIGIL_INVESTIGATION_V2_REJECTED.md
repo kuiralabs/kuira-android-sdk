@@ -1,7 +1,28 @@
-# Sigil portability v2 — escaping the WebAuthn rpId trap (revised)
+# Sigil portability — escaping the WebAuthn rpId trap (V2 — REJECTED)
+
+> **Archive note (2026-05-30):** This was the second of three rounds in
+> the sigil-portability investigation. It recommended canonical-rpId +
+> *shared `SEED_SALT` preserved* + opt-in `appScope`. Closer to right
+> than V1 (no regression), but committed Kuira-org to operating a
+> critical-path custom domain (`sigil.kuira.app`) forever, didn't
+> address cross-account recovery, and made third-party portability
+> conditional on third parties accepting Kuira's salt convention.
+> Rejected by the maintainer. Kept for the design-journey record.
+>
+> The chosen path is documented in `docs/research/SIGIL_V2_DESIGN.md`
+> (formerly V3 internally; ships publicly as "Sigil V2" — the public
+> name and the internal "round 3" name happen to collide; this archive
+> note exists to disambiguate).
+>
+> Note: this file's history uses "V1" / "V2" / "V3" to mean
+> investigation rounds, not shipping versions. The first shipped
+> sigil architecture is "Sigil V1" publicly; the chosen path here
+> ships publicly as "Sigil V2."
+
+---
 
 *Investigation date: 2026-05-30*
-*Status: revised recommendation; supersedes V1*
+*Status: REJECTED — see archive note above*
 *Author note: V2 was commissioned because V1 (a) violated the
 non-regression constraint by recommending per-app `SEED_SALT` that
 would break existing BBoard+Kicks shared-funds behaviour, and (b)

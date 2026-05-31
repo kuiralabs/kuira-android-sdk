@@ -1,7 +1,19 @@
-# Sigil portability — escaping the WebAuthn rpId trap
+# Sigil portability — escaping the WebAuthn rpId trap (V1 — REJECTED)
+
+> **Archive note (2026-05-30):** This was the first of three rounds in
+> the sigil-portability investigation. It recommended canonical-rpId +
+> *per-app `SEED_SALT`*, which would have regressed shipped BBoard +
+> Kicks shared-funds behaviour without restoring an isolation property
+> the rpId boundary doesn't actually provide. Rejected by the
+> maintainer. Kept for the design-journey record.
+>
+> The chosen path is documented in `docs/research/SIGIL_V2_DESIGN.md`
+> (formerly V3 internally; ships publicly as "Sigil V2").
+
+---
 
 *Investigation date: 2026-05-30*
-*Status: recommendation pending maintainer approval*
+*Status: REJECTED — see archive note above*
 
 ## TL;DR
 

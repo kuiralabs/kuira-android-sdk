@@ -1,7 +1,17 @@
-# Sigil portability v3 — PRF as unlock, seed as data
+# Sigil V2 — design (PRF as unlock, seed as data)
+
+> **Naming note.** This is the *public-facing* "Sigil V2" — Kuira's
+> next-generation sigil architecture. Earlier internal commit messages
+> and research filenames called this design "V3" because it was the
+> third round of a three-round investigation. The first two rounds
+> proposed canonical-rpId+per-app-salt (V1, rejected) and canonical-
+> rpId+shared-salt+appScope (V2, rejected); both live in
+> `docs/research/archive/` for the design-journey record. The currently
+> *shipped* sigil architecture is "Sigil V1" publicly. This document is
+> Sigil V2's design spec.
 
 *Investigation date: 2026-05-30*
-*Status: revised recommendation; supersedes V2*
+*Status: chosen architectural path; ships as "Sigil V2" publicly*
 *Primitive shift: PRF is an unlock mechanism, not a derivation. Inspired by Signal SVR2 + Dashlane production deployment.*
 
 ---

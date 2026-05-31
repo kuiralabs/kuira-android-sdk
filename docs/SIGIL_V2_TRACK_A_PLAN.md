@@ -1,20 +1,31 @@
-# Sigil V3 — Track A Plan
+# Sigil V2 — Track A Plan
 
-**Goal:** ship the V3 master-seed-as-data architecture to feature parity
-with V2 *plus* cross-app enrollment, *plus* the design hooks that let
-Midnight Passport land cleanly as a future plug-in. After Track A,
-existing first-party Kuira apps continue to work; the starter (and any
-future Kuira-built or third-party app) can join an existing user's
-sigil via an explicit biometric-on-both-ends enrollment; and Passport's
-account-abstraction + universal-DID + verifiable-credential layers have
-a reserved place in the architecture to plug into when their spec is
-public.
+> **Naming note.** This plan describes Track A for **Sigil V2** —
+> Kuira's next-generation sigil architecture (publicly named "Sigil
+> V2"; internally the design that the third investigation round
+> arrived at, so older commit messages and the doc body below
+> sometimes still say "V3"). The currently *shipped* sigil
+> architecture is publicly **Sigil V1**, called "V2" in the Status
+> table below. The historical phrase "V2 → V3 migration" therefore
+> equals "Sigil V1 → Sigil V2 migration." Earlier investigation
+> rounds (V1 and V2) were rejected and live under
+> `docs/research/archive/` for the design-journey record.
+
+**Goal:** ship the Sigil V2 master-seed-as-data architecture to feature
+parity with the currently-shipped sigil *plus* cross-app enrollment,
+*plus* the design hooks that let Midnight Passport land cleanly as a
+future plug-in. After Track A, existing first-party Kuira apps
+continue to work; the starter (and any future Kuira-built or
+third-party app) can join an existing user's sigil via an explicit
+biometric-on-both-ends enrollment; and Passport's account-abstraction
++ universal-DID + verifiable-credential layers have a reserved place
+in the architecture to plug into when their spec is public.
 
 Background reading:
-- V3 architecture and full justification:
-  [`docs/research/SIGIL_PORTABILITY_INVESTIGATION_V3.md`](research/SIGIL_PORTABILITY_INVESTIGATION_V3.md)
+- Sigil V2 design and full justification:
+  [`docs/research/SIGIL_V2_DESIGN.md`](research/SIGIL_V2_DESIGN.md)
 - Viability addendum (confidence scoring, 14 plan amendments, device-
-  testing gates): [`docs/SIGIL_V3_TRACK_A_VIABILITY.md`](SIGIL_V3_TRACK_A_VIABILITY.md)
+  testing gates): [`docs/SIGIL_V2_TRACK_A_VIABILITY.md`](SIGIL_V2_TRACK_A_VIABILITY.md)
 
 **Scope corrections vs. earlier revisions of this plan.**
 The previous revision included a "V2 → V3 migration" work surface. That

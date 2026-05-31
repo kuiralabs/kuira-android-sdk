@@ -1,9 +1,18 @@
-# Sigil V3 Track A — Viability addendum
+# Sigil V2 — Track A Viability addendum
+
+> **Naming note.** This addendum supports **Sigil V2** — Kuira's
+> next-generation sigil architecture (publicly named "Sigil V2";
+> internally the design the third investigation round arrived at, so
+> the body below sometimes still says "V3"). The currently *shipped*
+> sigil architecture is publicly **Sigil V1**, called "V2" in the
+> body's Status references. The historical phrase "V2 → V3 migration"
+> = "Sigil V1 → Sigil V2 migration." Rejected investigation rounds
+> live under `docs/research/archive/`.
 
 *Investigation date: 2026-05-30*
 *Status: confidence-building before implementation commits.*
-*Companion to: `docs/SIGIL_V3_TRACK_A_PLAN.md`*
-*Scope corrections from V1 of this addendum: V2 migration dropped (alpha + testnet, no real-fund risk, re-forge is free); Midnight Passport integration added as a Track A design constraint.*
+*Companion to: [`docs/SIGIL_V2_TRACK_A_PLAN.md`](SIGIL_V2_TRACK_A_PLAN.md)*
+*Scope corrections from prior revisions: Sigil V1 → V2 migration dropped (alpha + testnet, no real-fund risk, re-forge is free); Midnight Passport integration added as a Track A design constraint.*
 
 ---
 
