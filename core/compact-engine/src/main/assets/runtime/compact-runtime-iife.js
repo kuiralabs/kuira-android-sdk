@@ -1,8 +1,13 @@
 var __compactRuntime = (() => {
+  var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __commonJS = (cb, mod) => function __require() {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
   var __export = (target, all) => {
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
@@ -15,9 +20,554 @@ var __compactRuntime = (() => {
     }
     return to;
   };
+  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod
+  ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // index.js
+  // (disabled):node_modules/object-inspect/util.inspect
+  var require_util = __commonJS({
+    "(disabled):node_modules/object-inspect/util.inspect"() {
+    }
+  });
+
+  // node_modules/object-inspect/index.js
+  var require_object_inspect = __commonJS({
+    "node_modules/object-inspect/index.js"(exports, module) {
+      var hasMap = typeof Map === "function" && Map.prototype;
+      var mapSizeDescriptor = Object.getOwnPropertyDescriptor && hasMap ? Object.getOwnPropertyDescriptor(Map.prototype, "size") : null;
+      var mapSize = hasMap && mapSizeDescriptor && typeof mapSizeDescriptor.get === "function" ? mapSizeDescriptor.get : null;
+      var mapForEach = hasMap && Map.prototype.forEach;
+      var hasSet = typeof Set === "function" && Set.prototype;
+      var setSizeDescriptor = Object.getOwnPropertyDescriptor && hasSet ? Object.getOwnPropertyDescriptor(Set.prototype, "size") : null;
+      var setSize = hasSet && setSizeDescriptor && typeof setSizeDescriptor.get === "function" ? setSizeDescriptor.get : null;
+      var setForEach = hasSet && Set.prototype.forEach;
+      var hasWeakMap = typeof WeakMap === "function" && WeakMap.prototype;
+      var weakMapHas = hasWeakMap ? WeakMap.prototype.has : null;
+      var hasWeakSet = typeof WeakSet === "function" && WeakSet.prototype;
+      var weakSetHas = hasWeakSet ? WeakSet.prototype.has : null;
+      var hasWeakRef = typeof WeakRef === "function" && WeakRef.prototype;
+      var weakRefDeref = hasWeakRef ? WeakRef.prototype.deref : null;
+      var booleanValueOf = Boolean.prototype.valueOf;
+      var objectToString = Object.prototype.toString;
+      var functionToString = Function.prototype.toString;
+      var $match = String.prototype.match;
+      var $slice = String.prototype.slice;
+      var $replace = String.prototype.replace;
+      var $toUpperCase = String.prototype.toUpperCase;
+      var $toLowerCase = String.prototype.toLowerCase;
+      var $test = RegExp.prototype.test;
+      var $concat = Array.prototype.concat;
+      var $join = Array.prototype.join;
+      var $arrSlice = Array.prototype.slice;
+      var $floor = Math.floor;
+      var bigIntValueOf = typeof BigInt === "function" ? BigInt.prototype.valueOf : null;
+      var gOPS = Object.getOwnPropertySymbols;
+      var symToString = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? Symbol.prototype.toString : null;
+      var hasShammedSymbols = typeof Symbol === "function" && typeof Symbol.iterator === "object";
+      var toStringTag = typeof Symbol === "function" && Symbol.toStringTag && (typeof Symbol.toStringTag === hasShammedSymbols ? "object" : "symbol") ? Symbol.toStringTag : null;
+      var isEnumerable = Object.prototype.propertyIsEnumerable;
+      var gPO = (typeof Reflect === "function" ? Reflect.getPrototypeOf : Object.getPrototypeOf) || ([].__proto__ === Array.prototype ? function(O) {
+        return O.__proto__;
+      } : null);
+      function addNumericSeparator(num, str) {
+        if (num === Infinity || num === -Infinity || num !== num || num && num > -1e3 && num < 1e3 || $test.call(/e/, str)) {
+          return str;
+        }
+        var sepRegex = /[0-9](?=(?:[0-9]{3})+(?![0-9]))/g;
+        if (typeof num === "number") {
+          var int = num < 0 ? -$floor(-num) : $floor(num);
+          if (int !== num) {
+            var intStr = String(int);
+            var dec = $slice.call(str, intStr.length + 1);
+            return $replace.call(intStr, sepRegex, "$&_") + "." + $replace.call($replace.call(dec, /([0-9]{3})/g, "$&_"), /_$/, "");
+          }
+        }
+        return $replace.call(str, sepRegex, "$&_");
+      }
+      var utilInspect = require_util();
+      var inspectCustom = utilInspect.custom;
+      var inspectSymbol = isSymbol(inspectCustom) ? inspectCustom : null;
+      var quotes = {
+        __proto__: null,
+        "double": '"',
+        single: "'"
+      };
+      var quoteREs = {
+        __proto__: null,
+        "double": /(["\\])/g,
+        single: /(['\\])/g
+      };
+      module.exports = function inspect_(obj, options, depth, seen) {
+        var opts = options || {};
+        if (has(opts, "quoteStyle") && !has(quotes, opts.quoteStyle)) {
+          throw new TypeError('option "quoteStyle" must be "single" or "double"');
+        }
+        if (has(opts, "maxStringLength") && (typeof opts.maxStringLength === "number" ? opts.maxStringLength < 0 && opts.maxStringLength !== Infinity : opts.maxStringLength !== null)) {
+          throw new TypeError('option "maxStringLength", if provided, must be a positive integer, Infinity, or `null`');
+        }
+        var customInspect = has(opts, "customInspect") ? opts.customInspect : true;
+        if (typeof customInspect !== "boolean" && customInspect !== "symbol") {
+          throw new TypeError("option \"customInspect\", if provided, must be `true`, `false`, or `'symbol'`");
+        }
+        if (has(opts, "indent") && opts.indent !== null && opts.indent !== "	" && !(parseInt(opts.indent, 10) === opts.indent && opts.indent > 0)) {
+          throw new TypeError('option "indent" must be "\\t", an integer > 0, or `null`');
+        }
+        if (has(opts, "numericSeparator") && typeof opts.numericSeparator !== "boolean") {
+          throw new TypeError('option "numericSeparator", if provided, must be `true` or `false`');
+        }
+        var numericSeparator = opts.numericSeparator;
+        if (typeof obj === "undefined") {
+          return "undefined";
+        }
+        if (obj === null) {
+          return "null";
+        }
+        if (typeof obj === "boolean") {
+          return obj ? "true" : "false";
+        }
+        if (typeof obj === "string") {
+          return inspectString(obj, opts);
+        }
+        if (typeof obj === "number") {
+          if (obj === 0) {
+            return Infinity / obj > 0 ? "0" : "-0";
+          }
+          var str = String(obj);
+          return numericSeparator ? addNumericSeparator(obj, str) : str;
+        }
+        if (typeof obj === "bigint") {
+          var bigIntStr = String(obj) + "n";
+          return numericSeparator ? addNumericSeparator(obj, bigIntStr) : bigIntStr;
+        }
+        var maxDepth = typeof opts.depth === "undefined" ? 5 : opts.depth;
+        if (typeof depth === "undefined") {
+          depth = 0;
+        }
+        if (depth >= maxDepth && maxDepth > 0 && typeof obj === "object") {
+          return isArray(obj) ? "[Array]" : "[Object]";
+        }
+        var indent = getIndent(opts, depth);
+        if (typeof seen === "undefined") {
+          seen = [];
+        } else if (indexOf(seen, obj) >= 0) {
+          return "[Circular]";
+        }
+        function inspect2(value, from, noIndent) {
+          if (from) {
+            seen = $arrSlice.call(seen);
+            seen.push(from);
+          }
+          if (noIndent) {
+            var newOpts = {
+              depth: opts.depth
+            };
+            if (has(opts, "quoteStyle")) {
+              newOpts.quoteStyle = opts.quoteStyle;
+            }
+            return inspect_(value, newOpts, depth + 1, seen);
+          }
+          return inspect_(value, opts, depth + 1, seen);
+        }
+        if (typeof obj === "function" && !isRegExp(obj)) {
+          var name = nameOf(obj);
+          var keys = arrObjKeys(obj, inspect2);
+          return "[Function" + (name ? ": " + name : " (anonymous)") + "]" + (keys.length > 0 ? " { " + $join.call(keys, ", ") + " }" : "");
+        }
+        if (isSymbol(obj)) {
+          var symString = hasShammedSymbols ? $replace.call(String(obj), /^(Symbol\(.*\))_[^)]*$/, "$1") : symToString.call(obj);
+          return typeof obj === "object" && !hasShammedSymbols ? markBoxed(symString) : symString;
+        }
+        if (isElement(obj)) {
+          var s = "<" + $toLowerCase.call(String(obj.nodeName));
+          var attrs = obj.attributes || [];
+          for (var i = 0; i < attrs.length; i++) {
+            s += " " + attrs[i].name + "=" + wrapQuotes(quote(attrs[i].value), "double", opts);
+          }
+          s += ">";
+          if (obj.childNodes && obj.childNodes.length) {
+            s += "...";
+          }
+          s += "</" + $toLowerCase.call(String(obj.nodeName)) + ">";
+          return s;
+        }
+        if (isArray(obj)) {
+          if (obj.length === 0) {
+            return "[]";
+          }
+          var xs = arrObjKeys(obj, inspect2);
+          if (indent && !singleLineValues(xs)) {
+            return "[" + indentedJoin(xs, indent) + "]";
+          }
+          return "[ " + $join.call(xs, ", ") + " ]";
+        }
+        if (isError(obj)) {
+          var parts = arrObjKeys(obj, inspect2);
+          if (!("cause" in Error.prototype) && "cause" in obj && !isEnumerable.call(obj, "cause")) {
+            return "{ [" + String(obj) + "] " + $join.call($concat.call("[cause]: " + inspect2(obj.cause), parts), ", ") + " }";
+          }
+          if (parts.length === 0) {
+            return "[" + String(obj) + "]";
+          }
+          return "{ [" + String(obj) + "] " + $join.call(parts, ", ") + " }";
+        }
+        if (typeof obj === "object" && customInspect) {
+          if (inspectSymbol && typeof obj[inspectSymbol] === "function" && utilInspect) {
+            return utilInspect(obj, { depth: maxDepth - depth });
+          } else if (customInspect !== "symbol" && typeof obj.inspect === "function") {
+            return obj.inspect();
+          }
+        }
+        if (isMap(obj)) {
+          var mapParts = [];
+          if (mapForEach) {
+            mapForEach.call(obj, function(value, key) {
+              mapParts.push(inspect2(key, obj, true) + " => " + inspect2(value, obj));
+            });
+          }
+          return collectionOf("Map", mapSize.call(obj), mapParts, indent);
+        }
+        if (isSet(obj)) {
+          var setParts = [];
+          if (setForEach) {
+            setForEach.call(obj, function(value) {
+              setParts.push(inspect2(value, obj));
+            });
+          }
+          return collectionOf("Set", setSize.call(obj), setParts, indent);
+        }
+        if (isWeakMap(obj)) {
+          return weakCollectionOf("WeakMap");
+        }
+        if (isWeakSet(obj)) {
+          return weakCollectionOf("WeakSet");
+        }
+        if (isWeakRef(obj)) {
+          return weakCollectionOf("WeakRef");
+        }
+        if (isNumber(obj)) {
+          return markBoxed(inspect2(Number(obj)));
+        }
+        if (isBigInt(obj)) {
+          return markBoxed(inspect2(bigIntValueOf.call(obj)));
+        }
+        if (isBoolean(obj)) {
+          return markBoxed(booleanValueOf.call(obj));
+        }
+        if (isString(obj)) {
+          return markBoxed(inspect2(String(obj)));
+        }
+        if (typeof window !== "undefined" && obj === window) {
+          return "{ [object Window] }";
+        }
+        if (typeof globalThis !== "undefined" && obj === globalThis || typeof global !== "undefined" && obj === global) {
+          return "{ [object globalThis] }";
+        }
+        if (!isDate(obj) && !isRegExp(obj)) {
+          var ys = arrObjKeys(obj, inspect2);
+          var isPlainObject = gPO ? gPO(obj) === Object.prototype : obj instanceof Object || obj.constructor === Object;
+          var protoTag = obj instanceof Object ? "" : "null prototype";
+          var stringTag = !isPlainObject && toStringTag && Object(obj) === obj && toStringTag in obj ? $slice.call(toStr(obj), 8, -1) : protoTag ? "Object" : "";
+          var constructorTag = isPlainObject || typeof obj.constructor !== "function" ? "" : obj.constructor.name ? obj.constructor.name + " " : "";
+          var tag = constructorTag + (stringTag || protoTag ? "[" + $join.call($concat.call([], stringTag || [], protoTag || []), ": ") + "] " : "");
+          if (ys.length === 0) {
+            return tag + "{}";
+          }
+          if (indent) {
+            return tag + "{" + indentedJoin(ys, indent) + "}";
+          }
+          return tag + "{ " + $join.call(ys, ", ") + " }";
+        }
+        return String(obj);
+      };
+      function wrapQuotes(s, defaultStyle, opts) {
+        var style = opts.quoteStyle || defaultStyle;
+        var quoteChar = quotes[style];
+        return quoteChar + s + quoteChar;
+      }
+      function quote(s) {
+        return $replace.call(String(s), /"/g, "&quot;");
+      }
+      function canTrustToString(obj) {
+        return !toStringTag || !(typeof obj === "object" && (toStringTag in obj || typeof obj[toStringTag] !== "undefined"));
+      }
+      function isArray(obj) {
+        return toStr(obj) === "[object Array]" && canTrustToString(obj);
+      }
+      function isDate(obj) {
+        return toStr(obj) === "[object Date]" && canTrustToString(obj);
+      }
+      function isRegExp(obj) {
+        return toStr(obj) === "[object RegExp]" && canTrustToString(obj);
+      }
+      function isError(obj) {
+        return toStr(obj) === "[object Error]" && canTrustToString(obj);
+      }
+      function isString(obj) {
+        return toStr(obj) === "[object String]" && canTrustToString(obj);
+      }
+      function isNumber(obj) {
+        return toStr(obj) === "[object Number]" && canTrustToString(obj);
+      }
+      function isBoolean(obj) {
+        return toStr(obj) === "[object Boolean]" && canTrustToString(obj);
+      }
+      function isSymbol(obj) {
+        if (hasShammedSymbols) {
+          return obj && typeof obj === "object" && obj instanceof Symbol;
+        }
+        if (typeof obj === "symbol") {
+          return true;
+        }
+        if (!obj || typeof obj !== "object" || !symToString) {
+          return false;
+        }
+        try {
+          symToString.call(obj);
+          return true;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isBigInt(obj) {
+        if (!obj || typeof obj !== "object" || !bigIntValueOf) {
+          return false;
+        }
+        try {
+          bigIntValueOf.call(obj);
+          return true;
+        } catch (e) {
+        }
+        return false;
+      }
+      var hasOwn = Object.prototype.hasOwnProperty || function(key) {
+        return key in this;
+      };
+      function has(obj, key) {
+        return hasOwn.call(obj, key);
+      }
+      function toStr(obj) {
+        return objectToString.call(obj);
+      }
+      function nameOf(f) {
+        if (f.name) {
+          return f.name;
+        }
+        var m = $match.call(functionToString.call(f), /^function\s*([\w$]+)/);
+        if (m) {
+          return m[1];
+        }
+        return null;
+      }
+      function indexOf(xs, x) {
+        if (xs.indexOf) {
+          return xs.indexOf(x);
+        }
+        for (var i = 0, l = xs.length; i < l; i++) {
+          if (xs[i] === x) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      function isMap(x) {
+        if (!mapSize || !x || typeof x !== "object") {
+          return false;
+        }
+        try {
+          mapSize.call(x);
+          try {
+            setSize.call(x);
+          } catch (s) {
+            return true;
+          }
+          return x instanceof Map;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isWeakMap(x) {
+        if (!weakMapHas || !x || typeof x !== "object") {
+          return false;
+        }
+        try {
+          weakMapHas.call(x, weakMapHas);
+          try {
+            weakSetHas.call(x, weakSetHas);
+          } catch (s) {
+            return true;
+          }
+          return x instanceof WeakMap;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isWeakRef(x) {
+        if (!weakRefDeref || !x || typeof x !== "object") {
+          return false;
+        }
+        try {
+          weakRefDeref.call(x);
+          return true;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isSet(x) {
+        if (!setSize || !x || typeof x !== "object") {
+          return false;
+        }
+        try {
+          setSize.call(x);
+          try {
+            mapSize.call(x);
+          } catch (m) {
+            return true;
+          }
+          return x instanceof Set;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isWeakSet(x) {
+        if (!weakSetHas || !x || typeof x !== "object") {
+          return false;
+        }
+        try {
+          weakSetHas.call(x, weakSetHas);
+          try {
+            weakMapHas.call(x, weakMapHas);
+          } catch (s) {
+            return true;
+          }
+          return x instanceof WeakSet;
+        } catch (e) {
+        }
+        return false;
+      }
+      function isElement(x) {
+        if (!x || typeof x !== "object") {
+          return false;
+        }
+        if (typeof HTMLElement !== "undefined" && x instanceof HTMLElement) {
+          return true;
+        }
+        return typeof x.nodeName === "string" && typeof x.getAttribute === "function";
+      }
+      function inspectString(str, opts) {
+        if (str.length > opts.maxStringLength) {
+          var remaining = str.length - opts.maxStringLength;
+          var trailer = "... " + remaining + " more character" + (remaining > 1 ? "s" : "");
+          return inspectString($slice.call(str, 0, opts.maxStringLength), opts) + trailer;
+        }
+        var quoteRE = quoteREs[opts.quoteStyle || "single"];
+        quoteRE.lastIndex = 0;
+        var s = $replace.call($replace.call(str, quoteRE, "\\$1"), /[\x00-\x1f]/g, lowbyte);
+        return wrapQuotes(s, "single", opts);
+      }
+      function lowbyte(c) {
+        var n = c.charCodeAt(0);
+        var x = {
+          8: "b",
+          9: "t",
+          10: "n",
+          12: "f",
+          13: "r"
+        }[n];
+        if (x) {
+          return "\\" + x;
+        }
+        return "\\x" + (n < 16 ? "0" : "") + $toUpperCase.call(n.toString(16));
+      }
+      function markBoxed(str) {
+        return "Object(" + str + ")";
+      }
+      function weakCollectionOf(type) {
+        return type + " { ? }";
+      }
+      function collectionOf(type, size, entries, indent) {
+        var joinedEntries = indent ? indentedJoin(entries, indent) : $join.call(entries, ", ");
+        return type + " (" + size + ") {" + joinedEntries + "}";
+      }
+      function singleLineValues(xs) {
+        for (var i = 0; i < xs.length; i++) {
+          if (indexOf(xs[i], "\n") >= 0) {
+            return false;
+          }
+        }
+        return true;
+      }
+      function getIndent(opts, depth) {
+        var baseIndent;
+        if (opts.indent === "	") {
+          baseIndent = "	";
+        } else if (typeof opts.indent === "number" && opts.indent > 0) {
+          baseIndent = $join.call(Array(opts.indent + 1), " ");
+        } else {
+          return null;
+        }
+        return {
+          base: baseIndent,
+          prev: $join.call(Array(depth + 1), baseIndent)
+        };
+      }
+      function indentedJoin(xs, indent) {
+        if (xs.length === 0) {
+          return "";
+        }
+        var lineJoiner = "\n" + indent.prev + indent.base;
+        return lineJoiner + $join.call(xs, "," + lineJoiner) + "\n" + indent.prev;
+      }
+      function arrObjKeys(obj, inspect2) {
+        var isArr = isArray(obj);
+        var xs = [];
+        if (isArr) {
+          xs.length = obj.length;
+          for (var i = 0; i < obj.length; i++) {
+            xs[i] = has(obj, i) ? inspect2(obj[i], obj) : "";
+          }
+        }
+        var syms = typeof gOPS === "function" ? gOPS(obj) : [];
+        var symMap;
+        if (hasShammedSymbols) {
+          symMap = {};
+          for (var k = 0; k < syms.length; k++) {
+            symMap["$" + syms[k]] = syms[k];
+          }
+        }
+        for (var key in obj) {
+          if (!has(obj, key)) {
+            continue;
+          }
+          if (isArr && String(Number(key)) === key && key < obj.length) {
+            continue;
+          }
+          if (hasShammedSymbols && symMap["$" + key] instanceof Symbol) {
+            continue;
+          } else if ($test.call(/[^\w$]/, key)) {
+            xs.push(inspect2(key, obj) + ": " + inspect2(obj[key], obj));
+          } else {
+            xs.push(key + ": " + inspect2(obj[key], obj));
+          }
+        }
+        if (typeof gOPS === "function") {
+          for (var j = 0; j < syms.length; j++) {
+            if (isEnumerable.call(obj, syms[j])) {
+              xs.push("[" + inspect2(syms[j]) + "]: " + inspect2(obj[syms[j]], obj));
+            }
+          }
+        }
+        return xs;
+      }
+    }
+  });
+
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/index.js
   var index_exports = {};
   __export(index_exports, {
     Bytes32Descriptor: () => Bytes32Descriptor,
@@ -126,7 +676,6 @@ var __compactRuntime = (() => {
     signingKeyFromBip340: () => signingKeyFromBip340,
     subField: () => subField,
     toHex: () => toHex,
-    transformPublicTranscript: () => transformPublicTranscript,
     transientCommit: () => transientCommit2,
     transientHash: () => transientHash2,
     typeError: () => typeError,
@@ -136,17 +685,8 @@ var __compactRuntime = (() => {
     versionString: () => versionString
   });
 
-  // object-inspect-shim.js
-  function inspect(obj) {
-    try {
-      return JSON.stringify(obj);
-    } catch (e) {
-      return String(obj);
-    }
-  }
-  var object_inspect_shim_default = inspect;
-
-  // error.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/error.js
+  var import_object_inspect = __toESM(require_object_inspect(), 1);
   var CompactError = class extends Error {
     constructor(msg) {
       super(msg);
@@ -160,11 +700,11 @@ var __compactRuntime = (() => {
     }
   }
   function typeError(who, what, where, type, x) {
-    const msg = `type error: ${who} ${what} at ${where}; expected value of type ${type} but received ${object_inspect_shim_default(x)}`;
+    const msg = `type error: ${who} ${what} at ${where}; expected value of type ${type} but received ${(0, import_object_inspect.default)(x)}`;
     throw new CompactError(msg);
   }
 
-  // onchain-runtime-v3.js
+  // shim.js
   var StateValue = class _StateValue {
     constructor(data) {
       this._data = data || null;
@@ -242,13 +782,11 @@ var __compactRuntime = (() => {
     _ensureRustHandle() {
       if (this._rustHandle) return this._rustHandle;
       if (typeof globalThis.__native_stateCreateWithNulls !== "function") return 0;
-      // Serialize the JS state structure to JSON so Rust can build the correct
-      // nested array/null layout (penalty contract has Array([Array([Null x N]), ...]))
-      var structureJson = "0"; // fallback: 0 slots
-      if (this._data && this._data._state && this._data._state._data) {
-        structureJson = JSON.stringify(this._stateToStructure(this._data._state._data));
+      let numSlots = 0;
+      if (this._data && this._data._state && this._data._state._data && this._data._state._data.type === "array") {
+        numSlots = this._data._state._data.items.length;
       }
-      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(structureJson));
+      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
       for (const name of Object.keys(this._operations)) {
         if (typeof globalThis.__native_stateSetOperation === "function") {
           globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
@@ -258,20 +796,6 @@ var __compactRuntime = (() => {
         this._data._rustHandle = this._rustHandle;
       }
       return this._rustHandle;
-    }
-    // Convert JS StateValue to a structure descriptor for Rust
-    _stateToStructure(data) {
-      if (!data) return null;
-      if (typeof data === 'object' && data.type === "null") return null;
-      if (typeof data === 'object' && data.type === "array" && Array.isArray(data.items)) {
-        return { array: data.items.map(function(item) {
-          if (item && typeof item === 'object' && item._data) return this._stateToStructure(item._data);
-          if (item && typeof item === 'object' && item.type) return this._stateToStructure(item);
-          return null;
-        }.bind(this)) };
-      }
-      // Cell, map, bmt — treat as null placeholder
-      return null;
     }
   };
   var ContractOperation = class {
@@ -361,60 +885,6 @@ var __compactRuntime = (() => {
       value,
       alignment: av.alignment || [{ tag: "atom", value: { tag: "field" } }]
     };
-  }
-  function transformAlignedValuePadded(av) {
-    if (!av) return { value: [[]], alignment: [{ tag: "atom", value: { tag: "field" } }] };
-    const alignment = av.alignment || [{ tag: "atom", value: { tag: "field" } }];
-    // CRITICAL: Do NOT pad empty value slots with zeros.
-    // On-chain state stores values in normalized form (trailing zeros stripped
-    // via ValueAtom.normalize()). The on-chain verifier compares popeq results
-    // using byte-exact PartialEq. Padding empty slots (e.g. ValueAtom([]) →
-    // ValueAtom([0,0,...,0])) causes ReadMismatch → Error 104 (Transcript).
-    let value = (av.value || [[]]).map((v) => {
-      if (v instanceof Uint8Array) return Array.from(v);
-      if (Array.isArray(v)) return v;
-      if (typeof v === "object" && v !== null) {
-        const keys = Object.keys(v).filter((k) => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
-        if (keys.length === 0) return [];
-        return keys.map((k) => v[k]);
-      }
-      return [];
-    });
-    // If value array is empty but alignment has segments, create matching
-    // empty slots (one per alignment segment) — but do NOT fill with zeros.
-    if (value.length === 0 && alignment.length > 0) {
-      value = alignment.map(() => []);
-    }
-    return { value, alignment };
-  }
-  function transformPublicTranscript(transcript) {
-    return transcript.map((op) => {
-      if (typeof op === "string") return op;
-      if (typeof op !== "object" || op === null) return op;
-      if ("popeq" in op) {
-        return {
-          popeq: {
-            cached: op.popeq.cached,
-            result: transformAlignedValuePadded(op.popeq.result)
-          }
-        };
-      }
-      if ("idx" in op) {
-        return {
-          idx: {
-            cached: op.idx.cached,
-            pushPath: op.idx.pushPath || false,
-            path: (op.idx.path || []).map((key) => {
-              if (key.tag === "value") {
-                return { tag: "value", value: transformAlignedValuePadded(key.value) };
-              }
-              return key;
-            })
-          }
-        };
-      }
-      return transformOpForRust(op);
-    });
   }
   var QueryContext = class _QueryContext {
     constructor(chargedState, contractAddress) {
@@ -512,9 +982,9 @@ var __compactRuntime = (() => {
     }
     throw new Error("persistentHash: native FFI not available");
   }
-  function persistentCommit(alignment, value, openings) {
+  function persistentCommit(value, opening) {
     if (typeof globalThis.__native_persistentCommit === "function") {
-      return globalThis.__native_persistentCommit(alignment, value, openings);
+      return globalThis.__native_persistentCommit(value, opening);
     }
     throw new Error("persistentCommit: native function not bound");
   }
@@ -674,12 +1144,12 @@ var __compactRuntime = (() => {
     throw new Error("runProgram: not yet implemented \u2014 will delegate to Rust FFI");
   }
 
-  // constants.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/constants.js
   var MAX_FIELD = maxField();
   var DUMMY_ADDRESS = dummyContractAddress();
 
-  // version.js
-  var versionString = "0.15.0";
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/version.js
+  var versionString = "0.16.0";
   var checkRuntimeVersion = (expectedRuntimeVersionString) => {
     const expectedRuntimeVersion = expectedRuntimeVersionString.split("-")[0].split(".").map(Number);
     const actualRuntimeVersion = versionString.split("-")[0].split(".").map(Number);
@@ -692,7 +1162,7 @@ var __compactRuntime = (() => {
     }
   };
 
-  // compact-types.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/compact-types.js
   var CompactTypeJubjubPoint = {
     alignment() {
       return [
@@ -1005,7 +1475,7 @@ var __compactRuntime = (() => {
     }
   };
 
-  // built-ins.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/built-ins.js
   var FIELD_MODULUS = MAX_FIELD + 1n;
   function addField(x, y) {
     const t = x + y;
@@ -1081,7 +1551,7 @@ var __compactRuntime = (() => {
     return res;
   }
 
-  // casts.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/casts.js
   function convertFieldToBytes(n, x, src) {
     const x_0 = x;
     const a = new Uint8Array(n);
@@ -1099,7 +1569,7 @@ var __compactRuntime = (() => {
     for (let i = n - 1; i >= 0; i -= 1) {
       x = x * 0x100n + BigInt(a[i]);
       if (x > MAX_FIELD) {
-        const msg = `range error at ${src}: the integer value of ${a} is greater than the maximum value of a Field`;
+        const msg = `range error at ${src}: byte vector [${Array.from(a.slice(0, n)).join(",")}] exceeds maximum value ${MAX_FIELD} of Field type`;
         throw new CompactError(msg);
       }
     }
@@ -1110,14 +1580,14 @@ var __compactRuntime = (() => {
     for (let i = n - 1; i >= 0; i -= 1) {
       x = x * 0x100n + BigInt(a[i]);
       if (x > maxval) {
-        const msg = `range error at ${src}: the integer value of ${a} is greater than the maximum value of Uint<0..${maxval + 1}>`;
+        const msg = `range error at ${src}: byte vector [${Array.from(a.slice(0, n)).join(",")}] exceeds maximum value ${maxval} of target Uint type`;
         throw new CompactError(msg);
       }
     }
     return x;
   }
 
-  // utils.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/utils.js
   var HEX_REGEX_NO_PREFIX = /^([0-9A-Fa-f]{2})*$/;
   var CONTRACT_ADDRESS_BYTE_LENGTH = 32;
   function isContractAddress(x) {
@@ -1129,7 +1599,7 @@ var __compactRuntime = (() => {
   var fromHex = (s) => Buffer.from(s, "hex");
   var toHex = (s) => Buffer.from(s).toString("hex");
 
-  // zswap.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/zswap.js
   var emptyZswapLocalState = (coinPublicKey) => ({
     coinPublicKey: typeof coinPublicKey === "string" ? { bytes: encodeCoinPublicKey(coinPublicKey) } : coinPublicKey,
     currentIndex: 0n,
@@ -1197,13 +1667,13 @@ var __compactRuntime = (() => {
   }
   var hasCoinCommitment = (context, coinInfo, recipient) => context.currentQueryContext.comIndices.has(toHex(Bytes32Descriptor.fromValue(createCoinCommitment(coinInfo, recipient).value)));
 
-  // constructor-context.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/constructor-context.js
   var createConstructorContext = (initialPrivateState, coinPublicKey) => ({
     initialPrivateState,
     initialZswapLocalState: emptyZswapLocalState(coinPublicKey)
   });
 
-  // circuit-context.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/circuit-context.js
   var coerceToChargedState = (contractState) => {
     let state;
     if (contractState instanceof ChargedState) {
@@ -1268,10 +1738,7 @@ var __compactRuntime = (() => {
       partialProofData.publicTranscript = partialProofData.publicTranscript.concat(program.map((op) => typeof op === "object" && "popeq" in op ? {
         popeq: {
           ...op.popeq,
-          result: (() => {
-            const c = reads[i++].content;
-            return { value: c.value.map((v) => v instanceof Uint8Array ? new Uint8Array(v) : v.slice ? v.slice() : v), alignment: c.alignment };
-          })()
+          result: reads[i++].content
         }
       } : op));
       if (res.events.length === 1) {
@@ -1289,7 +1756,7 @@ var __compactRuntime = (() => {
     }
   };
 
-  // witness.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/witness.js
   function createWitnessContext(ledger, privateState, contractAddress) {
     return {
       ledger,
@@ -1298,7 +1765,7 @@ var __compactRuntime = (() => {
     };
   }
 
-  // contract-dependencies.js
+  // node_modules/@midnight-ntwrk/compact-runtime/dist/contract-dependencies.js
   function isCompactVector(x) {
     return Array.isArray(x) && x.every((element) => isCompactValue(element));
   }
