@@ -372,13 +372,15 @@ class DustRepository @Inject constructor(
             val lastEventId = getLastAppliedEventId(address)
 
             if (existingState != null && lastEventId != null) {
-                existingState.close()
-                // Delta sync: stream only new events from checkpoint
+                // Delta sync: replay only events after the checkpoint ON TOP of
+                // the loaded state (streamDustEvents takes ownership of it).
                 android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                val result = streamDustEvents(address, dustSeed, fromId = lastEventId + 1, onProgress = onProgress)
+                val result = streamDustEvents(
+                    address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
+                )
                 if (result) return true
 
-                // Streaming returned false (no events or replay failed). Fall through to full sync.
+                // Resume failed — drop the checkpoint and rebuild from genesis.
                 android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
                 deleteState(address)
             } else {
@@ -419,8 +421,15 @@ class DustRepository @Inject constructor(
         address: String,
         dustSeed: ByteArray,
         fromId: Long?,
+        baseState: DustLocalState? = null,
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): Boolean {
+        // Delta resume: when baseState is provided, the streamed events are only
+        // the delta since the last checkpoint and are replayed ON TOP of it
+        // (replayEventsFromFile clones the receiver). Ownership of baseState
+        // transfers here — it is closed after replay, or kept as lastSyncedState
+        // if there were no new events. When null, a fresh state is built (full
+        // sync from genesis).
         // Write events to a temp file (one hex per line). Rust reads the file
         // in native memory and replays in 500-event chunks — proven identical
         // to WASM at full PREPROD scale (253k events, roots match byte-for-byte).
@@ -498,6 +507,13 @@ class DustRepository @Inject constructor(
 
         if (totalEvents == 0) {
             tempFile.delete()
+            if (baseState != null) {
+                // Delta resume with nothing new on chain — the loaded checkpoint
+                // is already current. Keep it live for callers.
+                lastSyncedState?.close()
+                lastSyncedState = baseState
+                return true
+            }
             return fromId != null
         }
 
@@ -506,14 +522,17 @@ class DustRepository @Inject constructor(
         // Use negative totalEvents as sentinel for "replaying" phase
         onProgress?.invoke(-1, totalEvents)
 
-        val state = DustLocalState.create()
+        // Delta resume replays onto the loaded checkpoint; full sync onto a
+        // fresh empty state.
+        val state = baseState ?: (DustLocalState.create()
             ?: run {
                 tempFile.delete()
                 android.util.Log.e(TAG, "Failed to create DustLocalState")
                 return false
-            }
+            })
 
-        android.util.Log.d(TAG, "Replaying $totalEvents events (${tempFile.length() / 1024}KB file)")
+        val replayKind = if (baseState != null) "delta onto checkpoint" else "full from genesis"
+        android.util.Log.d(TAG, "Replaying $totalEvents events ($replayKind, ${tempFile.length() / 1024}KB file)")
         val newState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             state.replayEventsFromFile(dustSeed, tempFile.absolutePath)
         }
@@ -536,8 +555,11 @@ class DustRepository @Inject constructor(
         }
         android.util.Log.d(TAG, "Sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
 
-        // Store the live state so callers can retrieve it without deserializing.
-        // Serialize/deserialize corrupts Merkle tree roots (SDK-001).
+        // Keep the live state so same-process callers skip a re-deserialize.
+        // (Serialization is root-lossless — proven by the compact-engine
+        // serialize_deserialize_reproduces_root test — so this is a perf
+        // shortcut, not a correctness workaround; the saved checkpoint above
+        // is authoritative across process restarts.)
         lastSyncedState?.close()
         lastSyncedState = newState
 
@@ -697,6 +719,10 @@ class DustRepository @Inject constructor(
     suspend fun saveState(address: String, state: DustLocalState) {
         val serialized = state.serialize()
             ?: throw IllegalStateException("Failed to serialize dust state for $address")
+        // Size drives the cross-device backup transport choice (Block Store caps
+        // at 4KB/entry; larger needs Drive/file). Logged so we can measure it at
+        // real PREPROD scale before wiring backup.
+        android.util.Log.d(TAG, "Dust state serialized: ${serialized.size} bytes")
         saveSerializedState(address, serialized)
     }
 
