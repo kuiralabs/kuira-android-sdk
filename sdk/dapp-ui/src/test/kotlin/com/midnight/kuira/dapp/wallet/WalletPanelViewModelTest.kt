@@ -310,5 +310,6 @@ class WalletPanelViewModelTest {
     private fun newVmWithStore(store: SigilStateStore): WalletPanelViewModel = WalletPanelViewModel(
         sdkProvider = sdkProvider,
         sigilStateStore = store,
+        driveAuth = mockk(relaxed = true),
     )
 }
