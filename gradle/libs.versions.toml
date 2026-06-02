@@ -27,6 +27,7 @@ ksp = "2.3.6"
 biometric = "1.1.0"
 credentials = "1.5.0"
 playServicesBlockstore = "16.4.0"
+playServicesAuth = "21.3.0"
 lottieCompose = "6.6.6"
 zxingCore = "3.5.3"
 # Testing — added for sdk/dapp-ui test suite (chunk 3 of dapp-ui-extraction.md)
@@ -85,6 +86,10 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 # Google Block Store — encrypted cloud backup for sigil recovery (Identity)
 play-services-blockstore = { group = "com.google.android.gms", name = "play-services-auth-blockstore", version.ref = "playServicesBlockstore" }
+# Google Identity Authorization — Drive appDataFolder OAuth (drive.appdata scope)
+# for cross-device dust-state backup. Drive REST itself goes over HttpURLConnection
+# (see DriveBackupStorage), so no heavy google-api-services-drive client is needed.
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 # Coroutine adapters for Play Services Task API
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 # Lottie for animated progress indicators (8B.1 design sprint)
