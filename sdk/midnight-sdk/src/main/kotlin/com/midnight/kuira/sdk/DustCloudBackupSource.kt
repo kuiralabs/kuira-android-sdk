@@ -34,3 +34,18 @@ fun interface DustCloudBackupSource {
     /** The cloud checkpoint for [address], or null if none / unavailable. */
     suspend fun fetch(address: String): RestoredDustCheckpoint?
 }
+
+/**
+ * Full cross-device dust backup — adds the upload side to [DustCloudBackupSource].
+ * One implementation serves both views: [DustSyncManager] consumes only `fetch`,
+ * [MidnightWallet] also drives `upload`.
+ */
+interface DustCloudBackup : DustCloudBackupSource {
+    /**
+     * Snapshot this address's checkpoint into the (multi-network) cloud bundle,
+     * preserving other networks' entries. Best-effort + idempotent: a content
+     * hash skips re-upload when nothing changed. Callers wrap in `runCatching`
+     * so a backup failure never affects wallet operations.
+     */
+    suspend fun upload(address: String, stateBytes: ByteArray, lastEventId: Long)
+}

@@ -220,6 +220,7 @@ class MidnightSdk private constructor(
         private var accountIndex: Int = 0
         private var provingMode: ProvingMode = ProvingMode.DEFAULT
         private var proofServerUrl: String? = null
+        private var dustCloudBackupFactory: ((address: String, dustSeed: ByteArray) -> DustCloudBackup)? = null
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
         fun network(network: MidnightNetwork) = apply { this.network = network }
@@ -251,6 +252,17 @@ class MidnightSdk private constructor(
          * SDK supports). Pass an explicit URL to point at a hosted prover.
          */
         fun proofServerUrl(url: String?) = apply { this.proofServerUrl = url }
+
+        /**
+         * Optional cross-device dust backup. The factory is invoked once during
+         * [build] with the derived address + dust seed (so the coordinator can
+         * derive its encryption key); the resulting [DustCloudBackup] is wired
+         * into both the dust-sync cold-start (restore) and the wallet (upload).
+         * Omit it (the default) and dust backup is simply absent.
+         */
+        fun dustCloudBackupFactory(
+            factory: (address: String, dustSeed: ByteArray) -> DustCloudBackup,
+        ) = apply { this.dustCloudBackupFactory = factory }
 
         /**
          * Build the SDK. This is a blocking operation on first launch:
@@ -354,11 +366,16 @@ class MidnightSdk private constructor(
 
             // ── Create wallet with tip-aware dust sync + shielded tracker ──
 
+            // Optional cross-device dust backup. One coordinator instance feeds
+            // both the dust-sync cold-start (fetch/restore) and the wallet (upload).
+            val dustCloudBackup = dustCloudBackupFactory?.invoke(keys.address, keys.dustSeed)
+
             val dustSyncManager = DustSyncManager(
                 dustRepository = dustRepository,
                 nodeRpcClient = nodeRpcClient,
                 walletAddress = keys.address,
                 dustSeed = keys.dustSeed,
+                cloudBackupSource = dustCloudBackup,
             )
 
             val wallet = MidnightWallet(
@@ -372,6 +389,7 @@ class MidnightSdk private constructor(
                 dustSeed = keys.dustSeed,
                 provingKeysDir = provingKeyManager.keysDir.absolutePath,
                 networkId = net.rustNetworkId,
+                dustCloudBackup = dustCloudBackup,
             )
 
             // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──

@@ -40,6 +40,7 @@ class MidnightWallet internal constructor(
     private val dustSeed: ByteArray,
     private val provingKeysDir: String,
     private val networkId: String,
+    private val dustCloudBackup: DustCloudBackup? = null,
 ) : TransactionBalancer {
 
     private val balanceMutex = Mutex()
@@ -319,6 +320,32 @@ class MidnightWallet internal constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
         }
+        // Best-effort cloud backup of the freshly-synced checkpoint (no-op when
+        // unconfigured; the coordinator's hash guard skips an unchanged blob).
+        // Never let a backup failure surface to the caller.
+        try {
+            backupDustToCloud()
+        } catch (e: Exception) {
+            Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
+        }
+    }
+
+    /**
+     * Snapshot the current dust checkpoint and hand it to the cloud backup
+     * coordinator (e.g. Google Drive) for cross-device recovery. No-op when no
+     * coordinator is wired or there's no checkpoint yet. The coordinator
+     * hash-guards redundant uploads, so this is cheap to call after every sync.
+     */
+    suspend fun backupDustToCloud() {
+        val backup = dustCloudBackup ?: return
+        val state = dustRepository.loadState(walletAddress) ?: return
+        val bytes = try {
+            state.serialize()
+        } finally {
+            state.close()
+        } ?: return
+        val lastEventId = dustRepository.getLastAppliedEventId(walletAddress) ?: return
+        backup.upload(walletAddress, bytes, lastEventId)
     }
 
     private fun isDustSpendProofError(e: NodeRpcError): Boolean {
