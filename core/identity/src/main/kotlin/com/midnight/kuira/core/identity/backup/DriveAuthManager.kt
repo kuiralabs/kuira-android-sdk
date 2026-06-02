@@ -50,6 +50,19 @@ interface DriveAuthManager {
     fun tokenFromConsent(data: Intent?): DriveAuth
 }
 
+/**
+ * Returns a `drive.appdata` access token **without UI**, or throws if consent
+ * has not been granted yet. Use from headless paths (e.g. the dust backup
+ * coordinator during a routine refresh) — the first-time consent must come
+ * from a UI flow ([DriveAuthManager.authorize] + launching the IntentSender).
+ */
+suspend fun DriveAuthManager.silentTokenOrThrow(): String =
+    when (val outcome = authorize()) {
+        is AuthorizeOutcome.Authorized -> outcome.auth.accessToken
+        is AuthorizeOutcome.NeedsConsent ->
+            throw IllegalStateException("Drive consent not granted — enable cloud backup first")
+    }
+
 class PlayServicesDriveAuthManager(
     context: Context,
 ) : DriveAuthManager {

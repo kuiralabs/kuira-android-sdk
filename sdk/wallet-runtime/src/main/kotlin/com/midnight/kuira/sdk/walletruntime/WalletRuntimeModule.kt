@@ -1,6 +1,11 @@
 package com.midnight.kuira.sdk.walletruntime
 
 import android.content.Context
+import com.midnight.kuira.core.identity.backup.DriveAuthManager
+import com.midnight.kuira.core.identity.backup.DriveBackupStorage
+import com.midnight.kuira.core.identity.backup.PlayServicesDriveAuthManager
+import com.midnight.kuira.core.identity.backup.SeedDerivedKeyDeriver
+import com.midnight.kuira.core.identity.backup.silentTokenOrThrow
 import com.midnight.kuira.sdk.MidnightSdk
 import dagger.Module
 import dagger.Provides
@@ -26,14 +31,37 @@ object WalletRuntimeModule {
 
     @Provides
     @Singleton
+    fun provideDriveAuthManager(
+        @ApplicationContext context: Context,
+    ): DriveAuthManager = PlayServicesDriveAuthManager(context)
+
+    @Provides
+    @Singleton
     fun provideMidnightSdkFactory(
         @ApplicationContext context: Context,
+        driveAuth: DriveAuthManager,
     ): MidnightSdkFactory = MidnightSdkFactory { config, seed ->
         MidnightSdk.Builder(context)
             .network(config.network)
             .seed(seed)
             .provingMode(config.provingMode)
             .also { builder -> config.proofServerUrl?.let { builder.proofServerUrl(it) } }
+            // Cross-device dust backup: assemble the coordinator from the proven
+            // pieces. Drive REST (DriveBackupStorage) gets a silent token; if
+            // consent hasn't been granted via the UI yet, silentTokenOrThrow
+            // throws → fetch returns null / upload is skipped, both best-effort.
+            .dustCloudBackupFactory { address, dustSeed ->
+                DustCloudBackupCoordinator(
+                    storage = DriveBackupStorage(
+                        fileName = DUST_BACKUP_FILE,
+                        tokenProvider = { _ -> driveAuth.silentTokenOrThrow() },
+                    ),
+                    encryptionKey = SeedDerivedKeyDeriver.deriveDustBackupKey(dustSeed),
+                    digestStore = PrefsDustBackupDigestStore(context),
+                )
+            }
             .build()
     }
+
+    private const val DUST_BACKUP_FILE = "kuira-dust-backup.bin"
 }
