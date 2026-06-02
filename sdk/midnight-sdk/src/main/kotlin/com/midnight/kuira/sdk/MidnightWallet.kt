@@ -312,7 +312,10 @@ class MidnightWallet internal constructor(
             Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
         }
         try {
-            forceFullSync()
+            // Routine refresh = incremental delta on the persisted checkpoint,
+            // NOT a genesis wipe. forceFullSync (forceResync) is only for
+            // error-170 recovery where stale roots demand a clean rebuild.
+            dustSyncManager.refreshIncremental()
         } catch (e: Exception) {
             Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
         }

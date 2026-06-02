@@ -42,11 +42,17 @@ class DustSyncManager(
             onProgress = onSyncProgress,
         )
 
+        // Prefer the live state the sync just produced; otherwise rehydrate
+        // from the persisted checkpoint. A cold process always has a null
+        // in-memory state, so deleting + re-syncing from genesis here threw
+        // away the checkpoint that syncFromBlockchain just delta-applied —
+        // that was the "re-streams ~900k events on every launch / network
+        // switch" bug. Load the checkpoint instead; only delete + full-resync
+        // if there is genuinely none to recover.
         var freshState = dustRepository.getLastSyncedState()
+            ?: dustRepository.loadState(walletAddress)
 
         if (freshState == null) {
-            // Delta sync found no new events — lastSyncedState wasn't set.
-            // Force a full sync from genesis to get an in-memory state.
             dustRepository.deleteState(walletAddress)
             dustRepository.syncFromBlockchain(
                 address = walletAddress,
@@ -64,6 +70,24 @@ class DustSyncManager(
     /** After submit: no-op. State stays in memory. */
     suspend fun invalidateMemo() {
         // Intentionally empty. The in-memory state is reused across transactions.
+    }
+
+    /**
+     * On-demand incremental refresh (UI "refresh" affordance, between-tx
+     * freshness): drop the in-memory memo and re-sync, which lands as a fast
+     * DELTA on the persisted checkpoint. Unlike [forceResync] this does NOT
+     * delete the checkpoint, so a routine refresh never triggers a full genesis
+     * re-sync. [forceResync] stays reserved for error-170 recovery, where stale
+     * roots require a clean rebuild from genesis.
+     */
+    suspend fun refreshIncremental(
+        onSyncProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
+    ): DustLocalState {
+        mutex.withLock {
+            state?.close()
+            state = null
+        }
+        return ensureSynced(onSyncProgress)
     }
 
     /** Force a completely fresh sync. Clears everything. For error 170 recovery. */

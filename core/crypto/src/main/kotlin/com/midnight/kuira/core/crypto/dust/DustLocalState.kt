@@ -294,6 +294,24 @@ class DustLocalState private constructor(
     }
 
     /**
+     * Commitment-tree Merkle root as a lowercase hex string, or null if the
+     * tree has no root (state not rehashed). Two states that have applied the
+     * same events — whether replayed in one pass or as checkpoint + delta —
+     * have equal roots; this is the identity tests assert and the chain
+     * validates a dust spend against.
+     */
+    fun commitmentRoot(): String? {
+        checkNotClosed()
+        return nativeDustCommitmentRoot(nativePtr)
+    }
+
+    /** Generation-tree Merkle root as a lowercase hex string, or null. See [commitmentRoot]. */
+    fun generationRoot(): String? {
+        checkNotClosed()
+        return nativeDustGenerationRoot(nativePtr)
+    }
+
+    /**
      * Serializes the DustLocalState to bytes for persistent storage.
      *
      * **Serialization Format:**
@@ -606,6 +624,10 @@ class DustLocalState private constructor(
      * @return Balance as decimal string (e.g., "1000000"), or null on error
      */
     private external fun nativeDustWalletBalance(statePtr: Long, timeMillis: Long): String?
+
+    private external fun nativeDustCommitmentRoot(statePtr: Long): String?
+
+    private external fun nativeDustGenerationRoot(statePtr: Long): String?
 
     /**
      * Serializes native state to bytes.
