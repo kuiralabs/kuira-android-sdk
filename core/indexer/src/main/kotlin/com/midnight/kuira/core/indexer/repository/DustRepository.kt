@@ -563,7 +563,12 @@ class DustRepository @Inject constructor(
         lastSyncedState?.close()
         lastSyncedState = newState
 
-        return utxoCount > 0
+        // Success = the sync completed and the checkpoint is saved, NOT "has
+        // dust". Returning utxoCount > 0 here made a 0-UTXO wallet look like a
+        // failed delta sync, so syncFromBlockchain deleted the checkpoint and
+        // re-synced from genesis on every refresh. UTXO count is a separate
+        // query (getUtxoCount / getBalance).
+        return true
     }
 
     /**
