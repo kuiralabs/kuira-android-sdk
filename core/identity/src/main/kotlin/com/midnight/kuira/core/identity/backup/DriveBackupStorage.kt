@@ -3,6 +3,7 @@ package com.midnight.kuira.core.identity.backup
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -63,7 +64,7 @@ class DriveBackupStorage(
         val token = tokenProvider(false)
         return try {
             block(token)
-        } catch (e: UnauthorizedException) {
+        } catch (_: UnauthorizedException) {
             Log.i(TAG, "Drive token rejected (401) — refreshing + retrying once")
             block(tokenProvider(true))
         }
@@ -83,7 +84,7 @@ class DriveBackupStorage(
     private fun createFile(token: String): String {
         val metadata = JSONObject()
             .put("name", fileName)
-            .put("parents", org.json.JSONArray().put("appDataFolder"))
+            .put("parents", JSONArray().put("appDataFolder"))
             .toString()
         val (code, resp) = request(
             method = "POST",
@@ -92,7 +93,7 @@ class DriveBackupStorage(
             contentType = "application/json; charset=UTF-8",
             body = metadata.toByteArray(Charsets.UTF_8),
         )
-        if (code !in 200..299) fail("createFile", code, resp)
+        if (!code.isHttpSuccess()) fail("createFile", code, resp)
         return JSONObject(String(resp, Charsets.UTF_8)).getString("id")
     }
 
@@ -104,7 +105,7 @@ class DriveBackupStorage(
             contentType = "application/octet-stream",
             body = bytes,
         )
-        if (code !in 200..299) fail("uploadMedia", code, resp)
+        if (!code.isHttpSuccess()) fail("uploadMedia", code, resp)
     }
 
     private fun downloadMedia(token: String, fileId: String): ByteArray {
@@ -113,22 +114,24 @@ class DriveBackupStorage(
             urlString = "$DRIVE_V3/files/$fileId?alt=media",
             token = token,
         )
-        if (code !in 200..299) fail("downloadMedia", code, resp)
+        if (!code.isHttpSuccess()) fail("downloadMedia", code, resp)
         return resp
     }
 
     private fun httpGet(token: String, urlString: String): String? {
         val (code, resp) = request("GET", urlString, token)
         if (code == HttpURLConnection.HTTP_NOT_FOUND) return null
-        if (code !in 200..299) fail("get", code, resp)
+        if (!code.isHttpSuccess()) fail("get", code, resp)
         return String(resp, Charsets.UTF_8)
     }
 
     private fun httpDelete(token: String, urlString: String) {
         val (code, resp) = request("DELETE", urlString, token)
         // 404 = already gone; treat as success (delete is idempotent).
-        if (code != HttpURLConnection.HTTP_NOT_FOUND && code !in 200..299) fail("delete", code, resp)
+        if (code != HttpURLConnection.HTTP_NOT_FOUND && !code.isHttpSuccess()) fail("delete", code, resp)
     }
+
+    private fun Int.isHttpSuccess(): Boolean = this in 200..299
 
     /**
      * Single REST round-trip. Returns (status, body bytes). Throws
@@ -154,7 +157,7 @@ class DriveBackupStorage(
             }
             val code = conn.responseCode
             if (code == HttpURLConnection.HTTP_UNAUTHORIZED) throw UnauthorizedException()
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val stream = if (code.isHttpSuccess()) conn.inputStream else conn.errorStream
             val bytes = stream?.use { it.readBytes() } ?: ByteArray(0)
             return code to bytes
         } finally {
