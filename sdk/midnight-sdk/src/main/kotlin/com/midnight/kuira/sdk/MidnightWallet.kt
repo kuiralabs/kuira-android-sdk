@@ -3,6 +3,7 @@ package com.midnight.kuira.sdk
 import android.util.Log
 import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.TransactionBalancer
+import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
@@ -205,34 +206,34 @@ class MidnightWallet internal constructor(
         onProgress: (suspend (BalanceProgress) -> Unit)?,
     ): Unit = balanceMutex.withLock {
         onProgress?.invoke(BalanceProgress.SyncingDust)
-        val balanced = doBalance(provenTxHex, onProgress)
 
-        onProgress?.invoke(BalanceProgress.Submitting)
-        try {
-            nodeRpcClient.submitAndWaitForFinalization(balanced) { stage ->
-                when (stage) {
-                    SubmissionStage.IN_BLOCK ->
+        // Error-170 recovery escalates: a fast delta re-sync first (the common case —
+        // the dust state is just behind the tip), then a full genesis rebuild only if
+        // that still fails (a genuinely corrupt checkpoint). The initial attempt has
+        // no recovery prefix; each subsequent attempt runs the next, harder strategy.
+        val recoveries: List<Pair<String, suspend () -> Unit>> = listOf(
+            "delta re-sync" to { dustSyncManager.refreshIncremental(); Unit },
+            "genesis rebuild" to { forceFullSync() },
+        )
+        var attempt = 0
+        while (true) {
+            try {
+                val balanced = doBalance(provenTxHex, onProgress)
+                onProgress?.invoke(BalanceProgress.Submitting)
+                nodeRpcClient.submitAndWaitForFinalization(balanced) { stage ->
+                    if (stage == SubmissionStage.IN_BLOCK) {
                         onProgress?.invoke(BalanceProgress.WaitingFinalization)
-                    else -> { /* SUBMITTED, BROADCAST — stay on Submitting */ }
+                    }
                 }
+                dustSyncManager.invalidateMemo()
+                return@withLock
+            } catch (e: NodeRpcError) {
+                if (!isDustSpendProofError(e) || attempt >= recoveries.size) throw e
+                val (label, recover) = recoveries[attempt++]
+                Log.w(TAG, "Error 170 — $label and retry ($attempt/${recoveries.size})")
+                onProgress?.invoke(BalanceProgress.RetryingDustSync)
+                recover()
             }
-            dustSyncManager.invalidateMemo()
-        } catch (e: NodeRpcError) {
-            if (!isDustSpendProofError(e)) throw e
-
-            Log.w(TAG, "Error 170, full re-sync and retry once")
-            onProgress?.invoke(BalanceProgress.RetryingDustSync)
-            forceFullSync()
-            val retryBalanced = doBalance(provenTxHex, onProgress)
-            onProgress?.invoke(BalanceProgress.Submitting)
-            nodeRpcClient.submitAndWaitForFinalization(retryBalanced) { stage ->
-                when (stage) {
-                    SubmissionStage.IN_BLOCK ->
-                        onProgress?.invoke(BalanceProgress.WaitingFinalization)
-                    else -> {}
-                }
-            }
-            dustSyncManager.invalidateMemo()
         }
     }
 
@@ -250,13 +251,49 @@ class MidnightWallet internal constructor(
             }
     }
 
+    /**
+     * Return a dust state fresh enough to balance against the chain tip.
+     *
+     * Error 170 (InvalidDustSpendProof) happens iff there are dust events between
+     * our checkpoint and the block the node verifies the spend against (the tip):
+     * the locally-replayed root then lags the tip's root. So probe whether the
+     * indexer has dust events beyond our checkpoint; if it does, delta-refresh
+     * first (fast — the events exist, so no first-event wait). If not, the memoized
+     * state's dust root is already current (later blocks with no dust events don't
+     * change it), so balance against the cached state.
+     *
+     * The probe uses a short timeout and degrades to the cached state on failure —
+     * a wrong "not behind" only costs one 170 + the [balanceAndSubmit] retry.
+     */
+    private suspend fun ensureDustFresh(
+        onProgress: (suspend (BalanceProgress) -> Unit)?,
+    ): DustLocalState {
+        val progress: suspend (Int, Int) -> Unit = { processed, total ->
+            onProgress?.invoke(BalanceProgress.SyncingDustProgress(processed, total))
+        }
+        val checkpoint = dustRepository.getLastAppliedEventId(walletAddress)
+        val behind = checkpoint != null && runCatching {
+            indexerClient.queryDustEventsDelta(
+                fromId = checkpoint + 1,
+                timeoutMs = DUST_FRESHNESS_PROBE_MS,
+            ).eventCount > 0
+        }.getOrElse {
+            Log.w(TAG, "dust freshness probe failed; using cached state: ${it.message}")
+            false
+        }
+        return if (behind) {
+            Log.i(TAG, "dust state behind tip — delta refresh before balancing")
+            dustSyncManager.refreshIncremental(progress)
+        } else {
+            dustSyncManager.ensureSynced(progress)
+        }
+    }
+
     private suspend fun tryBalance(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
     ): String? {
-        val dustState = dustSyncManager.ensureSynced { processed, total ->
-            onProgress?.invoke(BalanceProgress.SyncingDustProgress(processed, total))
-        }
+        val dustState = ensureDustFresh(onProgress)
 
         val blockInfo = indexerClient.getCurrentBlockWithParams()
         val ledgerParamsHex = blockInfo.ledgerParameters
@@ -360,6 +397,13 @@ class MidnightWallet internal constructor(
 
     companion object {
         private const val TAG = "MidnightWallet"
+
+        /**
+         * Timeout for the pre-balance "are there dust events beyond my checkpoint?"
+         * probe. Short on purpose: a behind state returns the first event well within
+         * this; a caught-up state just waits it out and balances against the cache.
+         */
+        private const val DUST_FRESHNESS_PROBE_MS = 1_000L
 
         /**
          * Default cap for [waitForFunding]. 5 minutes is the same envelope used

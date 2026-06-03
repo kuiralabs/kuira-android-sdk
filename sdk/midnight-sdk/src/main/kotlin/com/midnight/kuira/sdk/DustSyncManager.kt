@@ -33,6 +33,14 @@ class DustSyncManager(
     private var state: DustLocalState? = null
 
     /**
+     * Set by [forceResync] so the next [ensureSynced] rebuilds from genesis instead
+     * of restoring the cloud checkpoint. Error-170 recovery means the local root is
+     * stale; re-seeding the same (often older) cloud blob can't fix that — only a
+     * genuine genesis sync can.
+     */
+    private var skipCloudSeedOnce = false
+
+    /**
      * Get a synced DustLocalState. First call does full sync (~60s on PREPROD).
      * All subsequent calls return the same in-memory state instantly.
      *
@@ -45,7 +53,14 @@ class DustSyncManager(
 
         // Cold start with no local checkpoint → try to seed one from the cloud
         // (cross-device restore) so the sync below is a fast delta, not genesis.
-        maybeSeedCheckpointFromCloud()
+        // Skipped exactly once after forceResync (error-170 recovery), so recovery
+        // rebuilds from genesis rather than restoring the stale cloud checkpoint.
+        if (skipCloudSeedOnce) {
+            skipCloudSeedOnce = false
+            Log.i(TAG, "cloud-restore: skipped — error-170 recovery rebuilds from genesis")
+        } else {
+            maybeSeedCheckpointFromCloud()
+        }
 
         dustRepository.syncFromBlockchain(
             address = walletAddress,
@@ -152,6 +167,9 @@ class DustSyncManager(
         state = null
         dustRepository.clearLastSyncedState()
         dustRepository.deleteState(walletAddress)
+        // Recovery must rebuild from genesis — the next ensureSynced must NOT
+        // restore the (stale) cloud checkpoint that put us in this state.
+        skipCloudSeedOnce = true
     }
 
     /** Release native resources. */

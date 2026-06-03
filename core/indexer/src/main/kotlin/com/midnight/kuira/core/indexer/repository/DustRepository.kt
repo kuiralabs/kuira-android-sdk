@@ -13,7 +13,9 @@ import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -447,39 +449,42 @@ class DustRepository @Inject constructor(
                 val isDelta = fromId != null
 
                 if (isDelta) {
-                    var firstEvent: com.midnight.kuira.core.indexer.model.RawLedgerEvent? = null
-                    kotlinx.coroutines.withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
-                        flow.collect { event ->
-                            firstEvent = event
-                            throw StreamingCompleteSignal()
-                        }
+                    // Wait up to the timeout for the first new event. firstOrNull
+                    // returns null if the subscription completes with nothing new;
+                    // withTimeoutOrNull returns null if none arrives in time — either
+                    // way the checkpoint is already current, totalEvents stays 0, and
+                    // the totalEvents == 0 block below keeps the loaded state.
+                    //
+                    // This previously collected the first event then threw
+                    // StreamingCompleteSignal, which unwound straight to the outer
+                    // catch — skipping the write + resume, so every delta applied zero
+                    // events and the checkpoint never advanced past its seed.
+                    val firstEvent = withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
+                        flow.firstOrNull()
                     }
 
-                    if (firstEvent == null) {
-                        return true
-                    }
+                    if (firstEvent != null) {
+                        writer.write(firstEvent.rawHex)
+                        writer.newLine()
+                        latestEventId = firstEvent.id
+                        totalEvents++
 
-                    val event = firstEvent!!
-                    writer.write(event.rawHex)
-                    writer.newLine()
-                    latestEventId = event.id
-                    totalEvents++
+                        if (firstEvent.id < firstEvent.maxId) {
+                            val resumeFlow = indexerClient.subscribeToDustEvents(fromId = firstEvent.id + 1)
+                            resumeFlow.collect { nextEvent ->
+                                writer.write(nextEvent.rawHex)
+                                writer.newLine()
+                                latestEventId = nextEvent.id
+                                totalEvents++
 
-                    if (event.id < event.maxId) {
-                        val resumeFlow = indexerClient.subscribeToDustEvents(fromId = event.id + 1)
-                        resumeFlow.collect { nextEvent ->
-                            writer.write(nextEvent.rawHex)
-                            writer.newLine()
-                            latestEventId = nextEvent.id
-                            totalEvents++
+                                if (totalEvents % 5000 == 0) {
+                                    android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
+                                    onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
+                                }
 
-                            if (totalEvents % 5000 == 0) {
-                                android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
-                                onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
-                            }
-
-                            if (nextEvent.id >= nextEvent.maxId) {
-                                throw StreamingCompleteSignal()
+                                if (nextEvent.id >= nextEvent.maxId) {
+                                    throw StreamingCompleteSignal()
+                                }
                             }
                         }
                     }
