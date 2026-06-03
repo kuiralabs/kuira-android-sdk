@@ -42,6 +42,7 @@ dependencies {
     // WalletConfig (this module's public type) is expressed in these primitives.
     api(project(":core:network"))                  // MidnightNetwork
     api(project(":core:compact-engine"))            // ProvingMode + ProvingKeyManager
+    implementation(project(":core:identity"))       // Drive backup storage + dust-backup crypto
 
     implementation(libs.androidx.core.ktx)
     // FragmentActivity flows through to WalletSeedSource (biometric host).

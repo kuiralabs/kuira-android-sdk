@@ -1,9 +1,13 @@
 package com.midnight.kuira.dapp.wallet
 
+import android.content.Intent
 import android.util.Log
+import androidx.activity.result.IntentSenderRequest
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.identity.backup.AuthorizeOutcome
+import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
@@ -46,10 +50,24 @@ import javax.inject.Inject
 class WalletPanelViewModel @Inject constructor(
     private val sdkProvider: MidnightSdkProvider,
     private val sigilStateStore: SigilStateStore,
+    private val driveAuth: DriveAuthManager,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
+
+    /** UI feedback for the "enable cloud backup" affordance. */
+    private val _backupStatus = MutableStateFlow<DustBackupUiState>(DustBackupUiState.Idle)
+    val backupStatus: StateFlow<DustBackupUiState> = _backupStatus
+
+    /**
+     * One-shot Drive consent requests. When enabling cloud backup needs the
+     * first-time `drive.appdata` grant, the VM emits the IntentSender here; the
+     * panel launches it via `rememberLauncherForActivityResult` and reports the
+     * result back to [onConsentResult]. SharedFlow (not State) — it's an action.
+     */
+    private val _consentRequests = MutableSharedFlow<IntentSenderRequest>(extraBufferCapacity = 1)
+    val consentRequests: SharedFlow<IntentSenderRequest> = _consentRequests.asSharedFlow()
 
     /**
      * Live balance observer (collects [com.midnight.kuira.sdk.MidnightWallet.balanceFlow]).
@@ -310,6 +328,51 @@ class WalletPanelViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Enable cross-device dust cloud backup: obtain the Drive `drive.appdata`
+     * grant, then take an immediate backup so the blob is there to restore on
+     * another device. If consent is already granted this runs silently; if not,
+     * emits an [IntentSenderRequest] via [consentRequests] for the panel to
+     * launch — the result returns through [onConsentResult].
+     */
+    fun enableCloudBackup(config: WalletConfig, activity: FragmentActivity) {
+        viewModelScope.launch {
+            _backupStatus.value = DustBackupUiState.Working
+            try {
+                when (val outcome = driveAuth.authorize()) {
+                    is AuthorizeOutcome.Authorized -> backupNow(config, activity)
+                    is AuthorizeOutcome.NeedsConsent ->
+                        _consentRequests.emit(
+                            IntentSenderRequest.Builder(outcome.intentSender).build(),
+                        )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "enableCloudBackup failed", e)
+                _backupStatus.value = DustBackupUiState.Failed(e.message ?: "Backup setup failed")
+            }
+        }
+    }
+
+    /** Continue after the Drive consent activity returns. */
+    fun onConsentResult(config: WalletConfig, activity: FragmentActivity, data: Intent?) {
+        viewModelScope.launch {
+            try {
+                // Confirms the grant; throws if the user dismissed consent.
+                driveAuth.tokenFromConsent(data)
+                backupNow(config, activity)
+            } catch (e: Exception) {
+                Log.w(TAG, "Drive consent not completed", e)
+                _backupStatus.value = DustBackupUiState.Failed(e.message ?: "Consent not completed")
+            }
+        }
+    }
+
+    private suspend fun backupNow(config: WalletConfig, activity: FragmentActivity) {
+        val built = sdkProvider.ensureSdk(activity, config)
+        built.wallet.backupDustToCloud()
+        _backupStatus.value = DustBackupUiState.Enabled
+    }
+
     companion object {
         private const val TAG = "WalletPanel"
 
@@ -319,4 +382,12 @@ class WalletPanelViewModel @Inject constructor(
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
     }
+}
+
+/** UI state for the dust cloud-backup affordance. */
+sealed interface DustBackupUiState {
+    data object Idle : DustBackupUiState
+    data object Working : DustBackupUiState
+    data object Enabled : DustBackupUiState
+    data class Failed(val message: String) : DustBackupUiState
 }

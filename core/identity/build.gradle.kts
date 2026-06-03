@@ -63,6 +63,10 @@ dependencies {
     // Google Block Store — encrypted cloud backup
     implementation(libs.play.services.blockstore)
 
+    // Google Identity Authorization — Drive appDataFolder OAuth (drive.appdata)
+    // for cross-device dust-state backup
+    implementation(libs.play.services.auth)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)

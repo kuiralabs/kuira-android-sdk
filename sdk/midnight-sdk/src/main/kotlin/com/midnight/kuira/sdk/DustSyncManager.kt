@@ -9,18 +9,24 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Dust state manager — keeps a single in-memory DustLocalState for the session.
  *
- * Serialize/deserialize of DustLocalState corrupts Merkle tree roots (SDK-001),
- * so the state is NEVER loaded from disk. On first call: full sync from genesis,
- * keep in memory. All subsequent calls reuse the same state. The node's historic
- * root set keeps old roots valid for 1+ hours.
+ * On the first sync the persisted checkpoint (if any) is reused for a fast
+ * delta; only a genuinely-empty start falls back to a full genesis sync.
+ * Serialize/deserialize is root-lossless (proven by the compact-engine
+ * serialize_deserialize_reproduces_root test), so the checkpoint is
+ * authoritative across process restarts. On error 170: [forceResync] does a
+ * fresh full sync from genesis.
  *
- * On error 170: [forceResync] does a fresh full sync from genesis.
+ * On a cold start with no local checkpoint, an optional [cloudBackupSource]
+ * (e.g. Google Drive, cross-device) is consulted to seed one before genesis —
+ * see [maybeSeedCheckpointFromCloud]. Null (the default) preserves today's
+ * behavior exactly.
  */
 class DustSyncManager(
     private val dustRepository: DustRepository,
     private val nodeRpcClient: NodeRpcClient,
     private val walletAddress: String,
     private val dustSeed: ByteArray,
+    private val cloudBackupSource: DustCloudBackupSource? = null,
 ) {
     private val mutex = Mutex()
     private var state: DustLocalState? = null
@@ -35,6 +41,10 @@ class DustSyncManager(
         onSyncProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): DustLocalState = mutex.withLock {
         state?.let { return@withLock it }
+
+        // Cold start with no local checkpoint → try to seed one from the cloud
+        // (cross-device restore) so the sync below is a fast delta, not genesis.
+        maybeSeedCheckpointFromCloud()
 
         dustRepository.syncFromBlockchain(
             address = walletAddress,
@@ -65,6 +75,33 @@ class DustSyncManager(
 
         state = freshState
         freshState
+    }
+
+    /**
+     * On a cold start with no local checkpoint, fetch one from [cloudBackupSource]
+     * and write it to [DustRepository] so the subsequent [DustRepository.syncFromBlockchain]
+     * takes the delta branch. No-op when: no cloud source is wired, a local
+     * checkpoint already exists (local wins), the cloud has nothing for this
+     * address, or any step fails (→ clean genesis fallback, never a crash).
+     */
+    private suspend fun maybeSeedCheckpointFromCloud() {
+        val source = cloudBackupSource ?: return
+        // Local checkpoint present → don't overwrite it with the cloud copy.
+        if (dustRepository.loadState(walletAddress) != null &&
+            dustRepository.getLastAppliedEventId(walletAddress) != null
+        ) {
+            return
+        }
+        val restored = runCatching { source.fetch(walletAddress) }
+            .getOrElse { null }
+            ?: return
+        val state = DustLocalState.deserialize(restored.stateBytes) ?: return
+        try {
+            dustRepository.saveState(walletAddress, state)
+            dustRepository.saveLastAppliedEventId(walletAddress, restored.lastEventId)
+        } finally {
+            state.close()
+        }
     }
 
     /** After submit: no-op. State stays in memory. */
