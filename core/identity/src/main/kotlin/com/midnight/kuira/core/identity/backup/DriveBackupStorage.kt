@@ -72,7 +72,10 @@ class DriveBackupStorage(
 
     /** Find the backup file's id in appDataFolder by name, or null if absent. */
     private fun findFileId(token: String): String? {
-        val q = URLEncoder.encode("name = '$fileName'", "UTF-8")
+        // Escape single quotes per Drive query syntax (a literal ' becomes \') so
+        // a fileName containing one can't break out of the name = '...' clause.
+        val escapedName = fileName.replace("\\", "\\\\").replace("'", "\\'")
+        val q = URLEncoder.encode("name = '$escapedName'", "UTF-8")
         val url = "$DRIVE_V3/files?spaces=appDataFolder&q=$q&fields=files(id,name)"
         val body = httpGet(token, url) ?: return null
         val files = JSONObject(body).optJSONArray("files") ?: return null

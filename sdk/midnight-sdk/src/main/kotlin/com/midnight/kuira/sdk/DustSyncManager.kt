@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk
 
+import android.util.Log
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
@@ -87,36 +88,36 @@ class DustSyncManager(
     private suspend fun maybeSeedCheckpointFromCloud() {
         val source = cloudBackupSource
         if (source == null) {
-            android.util.Log.i(TAG, "cloud-restore: no cloud source wired — skipping")
+            Log.i(TAG, "cloud-restore: no cloud source wired — skipping")
             return
         }
         // Local checkpoint present → don't overwrite it with the cloud copy.
         val haveLocalState = dustRepository.loadState(walletAddress) != null
         val haveLocalEventId = dustRepository.getLastAppliedEventId(walletAddress) != null
         if (haveLocalState && haveLocalEventId) {
-            android.util.Log.i(TAG, "cloud-restore: local checkpoint present — using it (no cloud fetch)")
+            Log.i(TAG, "cloud-restore: local checkpoint present — using it (no cloud fetch)")
             return
         }
-        android.util.Log.i(
+        Log.i(
             TAG,
             "cloud-restore: no local checkpoint (state=$haveLocalState, eventId=$haveLocalEventId) — trying cloud for $walletAddress",
         )
         val restored = runCatching { source.fetch(walletAddress) }
-            .onFailure { android.util.Log.w(TAG, "cloud-restore: fetch failed: ${it.message}", it) }
+            .onFailure { Log.w(TAG, "cloud-restore: fetch failed: ${it.message}", it) }
             .getOrNull()
         if (restored == null) {
-            android.util.Log.w(TAG, "cloud-restore: no checkpoint in cloud for $walletAddress — genesis fallback")
+            Log.w(TAG, "cloud-restore: no checkpoint in cloud for $walletAddress — genesis fallback")
             return
         }
         val state = DustLocalState.deserialize(restored.stateBytes)
         if (state == null) {
-            android.util.Log.w(TAG, "cloud-restore: deserialize of cloud checkpoint failed — genesis fallback")
+            Log.w(TAG, "cloud-restore: deserialize of cloud checkpoint failed — genesis fallback")
             return
         }
         try {
             dustRepository.saveState(walletAddress, state)
             dustRepository.saveLastAppliedEventId(walletAddress, restored.lastEventId)
-            android.util.Log.i(TAG, "cloud-restore: SEEDED from cloud, lastEventId=${restored.lastEventId} — next sync is a delta")
+            Log.i(TAG, "cloud-restore: SEEDED from cloud, lastEventId=${restored.lastEventId} — next sync is a delta")
         } finally {
             state.close()
         }
