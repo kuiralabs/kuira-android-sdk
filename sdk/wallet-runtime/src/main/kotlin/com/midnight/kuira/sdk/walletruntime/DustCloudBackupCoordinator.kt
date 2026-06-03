@@ -38,9 +38,19 @@ class DustCloudBackupCoordinator(
 ) : DustCloudBackup {
 
     override suspend fun fetch(address: String): RestoredDustCheckpoint? {
-        val blob = storage.retrieve() ?: return null
+        val blob = storage.retrieve()
+        if (blob == null) {
+            android.util.Log.i(TAG, "fetch: nothing in cloud storage")
+            return null
+        }
+        android.util.Log.i(TAG, "fetch: retrieved ${blob.size}-byte blob, decrypting…")
         val plaintext = DustBackupEncryptor.decrypt(encryptionKey, blob)
-        val entry = DustCloudBundleCodec.entryFor(plaintext, address) ?: return null
+        val entry = DustCloudBundleCodec.entryFor(plaintext, address)
+        if (entry == null) {
+            android.util.Log.w(TAG, "fetch: bundle has no entry for $address")
+            return null
+        }
+        android.util.Log.i(TAG, "fetch: found entry for $address, lastEventId=${entry.lastEventId}")
         return RestoredDustCheckpoint(stateBytes = entry.stateBytes, lastEventId = entry.lastEventId)
     }
 
@@ -71,5 +81,9 @@ class DustCloudBackupCoordinator(
         md.update((lastEventId ushr 32).toByte())
         md.update(stateBytes)
         return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private companion object {
+        const val TAG = "DustCloudBackup"
     }
 }

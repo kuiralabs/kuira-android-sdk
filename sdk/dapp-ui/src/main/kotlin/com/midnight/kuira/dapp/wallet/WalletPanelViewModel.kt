@@ -329,18 +329,21 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Enable cross-device dust cloud backup: obtain the Drive `drive.appdata`
-     * grant, then take an immediate backup so the blob is there to restore on
-     * another device. If consent is already granted this runs silently; if not,
-     * emits an [IntentSenderRequest] via [consentRequests] for the panel to
-     * launch — the result returns through [onConsentResult].
+     * Enable cross-device dust cloud sync: obtain the Drive `drive.appdata`
+     * grant, then run a full sync. This is **bidirectional** — once consent
+     * exists, `wallet.refresh()` first restores from the cloud checkpoint if
+     * this device has none (so a fresh device deltas instead of replaying
+     * genesis), then uploads the latest checkpoint. If consent is already
+     * granted it runs silently; otherwise it emits an [IntentSenderRequest]
+     * via [consentRequests] for the panel to launch — the result returns
+     * through [onConsentResult].
      */
     fun enableCloudBackup(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
             _backupStatus.value = DustBackupUiState.Working
             try {
                 when (val outcome = driveAuth.authorize()) {
-                    is AuthorizeOutcome.Authorized -> backupNow(config, activity)
+                    is AuthorizeOutcome.Authorized -> cloudSyncNow(config, activity)
                     is AuthorizeOutcome.NeedsConsent ->
                         _consentRequests.emit(
                             IntentSenderRequest.Builder(outcome.intentSender).build(),
@@ -348,7 +351,7 @@ class WalletPanelViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "enableCloudBackup failed", e)
-                _backupStatus.value = DustBackupUiState.Failed(e.message ?: "Backup setup failed")
+                _backupStatus.value = DustBackupUiState.Failed(backupErrorMessage(e))
             }
         }
     }
@@ -359,17 +362,43 @@ class WalletPanelViewModel @Inject constructor(
             try {
                 // Confirms the grant; throws if the user dismissed consent.
                 driveAuth.tokenFromConsent(data)
-                backupNow(config, activity)
+                cloudSyncNow(config, activity)
             } catch (e: Exception) {
                 Log.w(TAG, "Drive consent not completed", e)
-                _backupStatus.value = DustBackupUiState.Failed(e.message ?: "Consent not completed")
+                _backupStatus.value = DustBackupUiState.Failed(backupErrorMessage(e))
             }
         }
     }
 
-    private suspend fun backupNow(config: WalletConfig, activity: FragmentActivity) {
+    /**
+     * Map a Drive/auth failure to an actionable message. The most common one in
+     * a fresh setup is the app's OAuth client not being registered in a Google
+     * Cloud project (status UNREGISTERED_ON_API_CONSOLE) — which is a one-time
+     * console setup, not a user error — so we say so rather than echoing the raw
+     * GMS code or a misleading "consent cancelled".
+     */
+    private fun backupErrorMessage(e: Throwable): String {
+        val raw = e.message.orEmpty()
+        return when {
+            raw.contains("UNREGISTERED_ON_API_CONSOLE", ignoreCase = true) ->
+                "Drive not set up for this app — register its OAuth client (package + SHA-1) in Google Cloud Console."
+            raw.contains("cancel", ignoreCase = true) ->
+                "Cloud sync cancelled."
+            else -> raw.ifBlank { "Cloud sync failed" }
+        }
+    }
+
+    /**
+     * Full bidirectional cloud sync, run once consent exists. [com.midnight.kuira.sdk.MidnightWallet.refresh]
+     * restores from the Drive checkpoint when this device has no local one (cold
+     * start / fresh device → delta instead of genesis), then uploads the latest
+     * checkpoint (hash-guarded). So the single "cloud sync" action covers both
+     * directions — back up on the device that has data, restore on the one that
+     * doesn't.
+     */
+    private suspend fun cloudSyncNow(config: WalletConfig, activity: FragmentActivity) {
         val built = sdkProvider.ensureSdk(activity, config)
-        built.wallet.backupDustToCloud()
+        built.wallet.refresh()
         _backupStatus.value = DustBackupUiState.Enabled
     }
 

@@ -7,7 +7,12 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+// Robolectric only for `android.util.Log` shadowing (the coordinator logs its
+// fetch decisions); the logic under test is pure JVM.
+@RunWith(RobolectricTestRunner::class)
 class DustCloudBackupCoordinatorTest {
 
     /** In-memory [BackupStorage] standing in for Drive. */

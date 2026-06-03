@@ -85,20 +85,38 @@ class DustSyncManager(
      * address, or any step fails (→ clean genesis fallback, never a crash).
      */
     private suspend fun maybeSeedCheckpointFromCloud() {
-        val source = cloudBackupSource ?: return
-        // Local checkpoint present → don't overwrite it with the cloud copy.
-        if (dustRepository.loadState(walletAddress) != null &&
-            dustRepository.getLastAppliedEventId(walletAddress) != null
-        ) {
+        val source = cloudBackupSource
+        if (source == null) {
+            android.util.Log.i(TAG, "cloud-restore: no cloud source wired — skipping")
             return
         }
+        // Local checkpoint present → don't overwrite it with the cloud copy.
+        val haveLocalState = dustRepository.loadState(walletAddress) != null
+        val haveLocalEventId = dustRepository.getLastAppliedEventId(walletAddress) != null
+        if (haveLocalState && haveLocalEventId) {
+            android.util.Log.i(TAG, "cloud-restore: local checkpoint present — using it (no cloud fetch)")
+            return
+        }
+        android.util.Log.i(
+            TAG,
+            "cloud-restore: no local checkpoint (state=$haveLocalState, eventId=$haveLocalEventId) — trying cloud for $walletAddress",
+        )
         val restored = runCatching { source.fetch(walletAddress) }
-            .getOrElse { null }
-            ?: return
-        val state = DustLocalState.deserialize(restored.stateBytes) ?: return
+            .onFailure { android.util.Log.w(TAG, "cloud-restore: fetch failed: ${it.message}", it) }
+            .getOrNull()
+        if (restored == null) {
+            android.util.Log.w(TAG, "cloud-restore: no checkpoint in cloud for $walletAddress — genesis fallback")
+            return
+        }
+        val state = DustLocalState.deserialize(restored.stateBytes)
+        if (state == null) {
+            android.util.Log.w(TAG, "cloud-restore: deserialize of cloud checkpoint failed — genesis fallback")
+            return
+        }
         try {
             dustRepository.saveState(walletAddress, state)
             dustRepository.saveLastAppliedEventId(walletAddress, restored.lastEventId)
+            android.util.Log.i(TAG, "cloud-restore: SEEDED from cloud, lastEventId=${restored.lastEventId} — next sync is a delta")
         } finally {
             state.close()
         }
@@ -139,5 +157,9 @@ class DustSyncManager(
     fun close() {
         state?.close()
         state = null
+    }
+
+    private companion object {
+        const val TAG = "DustSyncManager"
     }
 }

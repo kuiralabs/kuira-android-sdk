@@ -531,14 +531,15 @@ private fun WalletSheetContent(
             PanelButton("receive", enabled = canReceive, modifier = Modifier.weight(1f), colors = colors, onClick = onReceive)
         }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
-        // Cross-device dust backup — first tap runs the Drive consent flow,
-        // then uploads the encrypted checkpoint. Only meaningful once the wallet
-        // is Ready (there's a checkpoint to back up).
+        // Cross-device dust cloud sync — first tap runs the Drive consent flow,
+        // then does a bidirectional sync: restores the checkpoint from Drive if
+        // this device has none (delta instead of genesis), and uploads the
+        // latest. Only meaningful once the wallet is Ready.
         val backupLabel = when (backupStatus) {
-            DustBackupUiState.Working -> "backing up…"
-            DustBackupUiState.Enabled -> "backed up ✓"
-            is DustBackupUiState.Failed -> "back up failed — retry"
-            DustBackupUiState.Idle -> "cloud backup"
+            DustBackupUiState.Working -> "syncing…"
+            DustBackupUiState.Enabled -> "cloud synced ✓"
+            is DustBackupUiState.Failed -> "cloud sync failed — retry"
+            DustBackupUiState.Idle -> "cloud sync"
         }
         PanelButton(
             backupLabel,
