@@ -378,6 +378,43 @@ class ProvingKeyManager(private val context: Context) {
     }
 
     /**
+     * Install a dApp's own contract circuit keys from the APK's bundled assets
+     * into the prover's [keysDir], where the local prover resolves them.
+     *
+     * Contract keys (e.g. bboard's `post`/`takeDown`) are `compactc` build
+     * outputs of the dApp's `.compact` source — unique to that contract, hosted
+     * nowhere — so the dApp ships them inside the APK and this copies them onto
+     * device storage once. This is the contract-key counterpart to
+     * [ensureWalletKeysAvailable], which provisions the protocol-level **wallet**
+     * keys (zswap/dust/BLS) that are shared across all dApps and downloaded from
+     * S3. Wallet keys download; contract keys bundle.
+     *
+     * Reads every `.prover`/`.verifier`/`.bzkir` under `assets/[assetDir]`.
+     * Idempotent and size-aware: skips a key already present and non-empty,
+     * re-copies a 0-byte one (a truncated prior copy). Writes via temp-file +
+     * rename so an interrupted copy can't strand a partial key.
+     */
+    fun installCircuitKeysFromAssets(assetDir: String = "keys", overwrite: Boolean = false) {
+        validatePathSegment(assetDir, "assetDir")
+        keysDir.mkdirs()
+        val names = context.assets.list(assetDir).orEmpty()
+            .filter { it.substringAfterLast('.', "") in CIRCUIT_KEY_EXTENSIONS }
+        for (name in names) {
+            val dest = File(keysDir, name)
+            if (dest.isPopulated() && !overwrite) continue
+            val tmp = File(keysDir, "$name.tmp")
+            context.assets.open("$assetDir/$name").use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (!tmp.renameTo(dest)) {
+                tmp.copyTo(dest, overwrite = true)
+                tmp.delete()
+            }
+            Log.d(TAG, "Installed $name from assets/$assetDir (${dest.length()} bytes)")
+        }
+    }
+
+    /**
      * Dev-only convenience: install proving keys from a local-tmp staging area
      * pushed via `adb push` (the convention used by Kicks's build script, the
      * SDK e2e test, and BBoard's canary). Looks at two well-known directories

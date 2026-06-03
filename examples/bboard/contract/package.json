@@ -1,0 +1,11 @@
+{
+  "name": "@midnight-example/bboard-contract",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compact": "compact compile src/bboard.compact src/managed/bboard"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0"
+  }
+}

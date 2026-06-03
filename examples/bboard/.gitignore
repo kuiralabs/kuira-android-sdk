@@ -1,0 +1,5 @@
+# Synced from contract/src/managed/bboard by the com.midnight.kuira.contract
+# plugin (syncContractAssets, wired into preBuild) — regenerated on every
+# build, so not committed. Source of truth is contract/src/managed/bboard.
+app/src/main/assets/runtime/bboard-contract.js
+app/src/main/assets/keys/

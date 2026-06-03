@@ -1,7 +1,7 @@
-// compact-runtime loaded as global __compactRuntime
-__compactRuntime.checkRuntimeVersion('0.15.0');
+import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
+__compactRuntime.checkRuntimeVersion('0.16.0');
 
-var State;
+export var State;
 (function (State) {
   State[State['VACANT'] = 0] = 'VACANT';
   State[State['OCCUPIED'] = 1] = 'OCCUPIED';
@@ -76,7 +76,7 @@ const _descriptor_10 = new _ContractAddress_0();
 
 const _descriptor_11 = new __compactRuntime.CompactTypeUnsignedInteger(255n, 1);
 
-class Contract {
+export class Contract {
   witnesses;
   constructor(...args_0) {
     if (args_0.length !== 1) {
@@ -465,7 +465,7 @@ class Contract {
     return true;
   }
 }
-function ledger(stateOrChargedState) {
+export function ledger(stateOrChargedState) {
   const state = stateOrChargedState instanceof __compactRuntime.StateValue ? stateOrChargedState : stateOrChargedState.state;
   const chargedState = stateOrChargedState instanceof __compactRuntime.StateValue ? new __compactRuntime.ChargedState(stateOrChargedState) : stateOrChargedState;
   const context = {
@@ -541,7 +541,7 @@ const _emptyContext = {
   currentQueryContext: new __compactRuntime.QueryContext(new __compactRuntime.ContractState().data, __compactRuntime.dummyContractAddress())
 };
 const _dummyContract = new Contract({ localSecretKey: (...args) => undefined });
-const pureCircuits = {
+export const pureCircuits = {
   publicKey: (...args_0) => {
     if (args_0.length !== 2) {
       throw new __compactRuntime.CompactError(`publicKey: expected 2 arguments (as invoked from Typescript), received ${args_0.length}`);
@@ -565,6 +565,6 @@ const pureCircuits = {
     return _dummyContract._publicKey_0(sk_0, sequence_0);
   }
 };
-const contractReferenceLocations =
+export const contractReferenceLocations =
   { tag: 'publicLedgerArray', indices: { } };
 //# sourceMappingURL=index.js.map

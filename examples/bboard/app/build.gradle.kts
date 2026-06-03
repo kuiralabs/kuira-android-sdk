@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("com.midnight.kuira.contract") version "0.1.0-alpha01"
+}
+
+kuiraContract {
+    source.set("../contract/src/managed/bboard")
 }
 
 android {

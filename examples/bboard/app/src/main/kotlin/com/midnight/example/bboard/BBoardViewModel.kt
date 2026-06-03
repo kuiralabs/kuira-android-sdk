@@ -157,7 +157,7 @@ class BBoardViewModel @Inject constructor(
                 val bboard = MidnightContract.create(midnightSdk.config) {
                     name = "bboard"
                     contractJs = context.assets
-                        .open("runtime/bboard-contract-iife.js")
+                        .open("runtime/bboard-contract.js")
                     witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
                     initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
                     coinPublicKey = midnightSdk.coinPublicKey
@@ -179,7 +179,7 @@ class BBoardViewModel @Inject constructor(
                 _state.value = BBoardState.Connecting("Deployed at ${addr.take(8)}... Waiting for indexer...")
                 val waitContract = MidnightContract.create(midnightSdk.config) {
                     contractJs = context.assets
-                        .open("runtime/bboard-contract-iife.js")
+                        .open("runtime/bboard-contract.js")
                     address = addr
                 }
                 val tempRepo = BBoardRepository(waitContract)
@@ -395,26 +395,8 @@ class BBoardViewModel @Inject constructor(
         is BalanceProgress.RetryingDustSync -> "Retrying dust sync..."
     }
 
-    /**
-     * Install BBoard's contract-specific circuit keys (`post`, `takeDown`)
-     * from the adb-pushed staging dir `/data/local/tmp/bboard_keys`.
-     *
-     * Wallet proving keys are NOT installed here — [MidnightSdkProvider] owns
-     * those (`ensureWalletKeysAvailable`: local-tmp shortcut → S3 fallback).
-     * This is purely the dApp's own circuit keys, which the SDK can't know
-     * about.
-     */
     private fun installContractKeys() {
-        val bboardSrc = File("/data/local/tmp/bboard_keys")
-        if (!bboardSrc.exists()) {
-            Log.w(TAG, "bboard_keys not found at /data/local/tmp — adb-push contract proving keys")
-            return
-        }
-        ProvingKeyManager(context).installCircuitKeysForProving(
-            circuitNames = listOf("post", "takeDown"),
-            keysSourceDir = bboardSrc,
-            zkirSourceDir = bboardSrc,
-        )
+        ProvingKeyManager(context).installCircuitKeysFromAssets()
     }
 
     companion object {
