@@ -13,6 +13,24 @@ production-bug-driven hardening that preceded it.
 
 ### Added
 
+- **Cross-device dust cloud sync** — a "cloud sync" action in the wallet
+  panel backs up the encrypted dust checkpoint to Google Drive
+  `appDataFolder` and restores it on another device (or a fresh install)
+  so the first dust sync is a fast delta instead of a ~900k-event genesis
+  replay. Bidirectional: `WalletPanelViewModel.cloudSyncNow` runs
+  `MidnightWallet.refresh()`, which auto-restores from the cloud checkpoint
+  when the device has none, then uploads the latest. First use runs the
+  Drive `drive.appdata` consent flow (`DriveAuthManager` +
+  `StartIntentSenderForResult`); thereafter it's silent. The blob is
+  AES-256-GCM encrypted with a seed-derived key before upload (Drive is
+  transport only). Requires a one-time Google Cloud OAuth client per app
+  (package + SHA-1) — surfaced as an actionable message when missing.
+  Backend: `DriveBackupStorage`, `DustBackupEncryptor`,
+  `DustCloudBundleCodec`, `SeedDerivedKeyDeriver` (`core:identity`);
+  `DustCloudBackupCoordinator` (`sdk:wallet-runtime`);
+  `DustCloudBackupSource` + cold-start seeding in `DustSyncManager`
+  (`sdk:midnight-sdk`).
+
 - **`dapp-ui` module** at `sdk/dapp-ui` (formerly `examples/common`).
   First-class SDK module: published to Maven Local via the parent
   project's `publishToMavenLocal`, consumed by BBoard + Kicks as
