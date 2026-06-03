@@ -245,7 +245,7 @@ class BBoardViewModel @Inject constructor(
         _state.value = BBoardState.Connecting("Loading contract...")
         val bboard = MidnightContract.create(cfg) {
             contractJs = context.assets
-                .open("runtime/bboard-contract-iife.js")
+                .open("runtime/bboard-contract.js")
             address = contractAddress
             witness("localSecretKey") { WitnessResult(null, SECRET_KEY.copyOf()) }
             initialPrivateState = mapOf("secretKey" to SECRET_KEY.copyOf())
