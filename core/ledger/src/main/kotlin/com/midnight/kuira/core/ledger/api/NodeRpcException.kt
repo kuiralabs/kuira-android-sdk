@@ -86,9 +86,11 @@ class NodeRpcError(
  * - TTL expired
  * - Invalid format
  *
- * **Custom Error Codes (from node):**
- * - 115: InputNotInUtxos (UTXO doesn't exist or already spent)
- * - 139: EffectsCheckFailure (signature verification failed)
+ * **Custom Error Codes (authoritative, from midnight-node):**
+ * - 115: InvalidProof (the ZK proof failed verification — regenerate the proof /
+ *   check the proving-key & contract verifier-key versions match)
+ * - 186: EffectsCheckFailure
+ * - 195: InputNotInUtxos (an unshielded UTXO input is already spent or missing)
  *
  * **Recovery:** Don't retry (fix transaction)
  */
@@ -99,13 +101,19 @@ class TransactionRejected(
 ) : NodeRpcException("Transaction rejected: $reason${txHash?.let { " (hash: $it)" } ?: ""}") {
 
     companion object {
-        /** UTXO doesn't exist on-chain (already spent or never existed) */
-        const val ERROR_INPUT_NOT_IN_UTXOS = 115
+        /** The ZK proof failed verification (wrong/stale public inputs or key mismatch). */
+        const val ERROR_INVALID_PROOF = 115
 
-        /** Signature verification failed */
-        const val ERROR_EFFECTS_CHECK_FAILURE = 139
+        /** A contract effects check failed. */
+        const val ERROR_EFFECTS_CHECK_FAILURE = 186
+
+        /** An unshielded UTXO input doesn't exist on-chain (already spent or never existed). */
+        const val ERROR_INPUT_NOT_IN_UTXOS = 195
     }
 
-    /** True if this error indicates the UTXO was already spent */
+    /** True if the node rejected the transaction's ZK proof (node error 115). */
+    val isInvalidProof: Boolean get() = customErrorCode == ERROR_INVALID_PROOF
+
+    /** True if an unshielded UTXO input was already spent / missing (node error 195). */
     val isStaleUtxo: Boolean get() = customErrorCode == ERROR_INPUT_NOT_IN_UTXOS
 }

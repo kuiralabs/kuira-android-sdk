@@ -6,8 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 /**
  * Manages proving key download, caching, and version tracking for local ZK proving.
@@ -23,10 +25,34 @@ import java.net.URL
  * - `bls_midnight_2p13` (1.5 MB)
  * - Corresponding `.verifier` and `.bzkir` files
  */
-class ProvingKeyManager(private val context: Context) {
+class ProvingKeyManager(
+    private val context: Context,
+    apkStampOverride: (() -> String?)? = null,
+) {
 
     /** Directory where proving keys are cached on device. */
     val keysDir: File = File(context.filesDir, KEYS_DIR_NAME)
+
+    /**
+     * An opaque token that changes whenever the installed APK changes — which is
+     * the only way bundled assets (proving keys shipped in the APK) can change.
+     * Used by [installCircuitKeysFromAssets] as a cheap gate to decide whether the
+     * device's cached keys need re-verifying against the (possibly recompiled)
+     * assets. `lastUpdateTime` is bumped by every (re)install and update, so a
+     * recompiled-then-reinstalled contract is always caught.
+     *
+     * Overridable in tests (the default reads [android.content.pm.PackageInfo],
+     * which isn't available in pure-JVM unit tests). Returns null if package info
+     * can't be read — callers then fall back to always verifying content.
+     */
+    private val apkStamp: () -> String? = apkStampOverride ?: {
+        runCatching {
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .lastUpdateTime
+                .toString()
+        }.getOrNull()
+    }
 
     /** Whether all wallet-required proving keys are cached and current version. */
     fun hasWalletKeys(): Boolean {
@@ -169,6 +195,51 @@ class ProvingKeyManager(private val context: Context) {
         Log.d(TAG, "Installed ${dst.name} (${dst.length()} bytes)")
     }
 
+    /** Streaming SHA-256 of this stream's remaining bytes, as lowercase hex. */
+    private fun InputStream.sha256Hex(): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = read(buf)
+            if (n < 0) break
+            md.update(buf, 0, n)
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * True iff [a] and [b] both exist and hold identical bytes. A length
+     * pre-check cheaply rejects most mismatches before hashing. This is the
+     * content-aware replacement for the old presence-only skip: a key that
+     * exists but whose bytes drifted from the source (e.g. a recompiled circuit)
+     * is NOT considered the same, so it gets refreshed.
+     */
+    private fun sameContent(a: File, b: File): Boolean {
+        if (!a.exists() || !b.exists()) return false
+        if (a.length() != b.length()) return false
+        return a.inputStream().use { it.sha256Hex() } == b.inputStream().use { it.sha256Hex() }
+    }
+
+    /** True iff [dest] exists and matches the bytes of `assets/[assetPath]`. */
+    private fun destMatchesAsset(assetPath: String, dest: File): Boolean {
+        if (!dest.exists()) return false
+        val destHash = dest.inputStream().use { it.sha256Hex() }
+        val assetHash = context.assets.open(assetPath).use { it.sha256Hex() }
+        return destHash == assetHash
+    }
+
+    /** Copy `assets/[assetPath]` → [dest] via temp file + rename (never partial). */
+    private fun copyAssetAtomically(assetPath: String, dest: File) {
+        val tmp = File(dest.parentFile, "${dest.name}.tmp")
+        context.assets.open(assetPath).use { input ->
+            tmp.outputStream().use { output -> input.copyTo(output) }
+        }
+        if (!tmp.renameTo(dest)) {
+            tmp.copyTo(dest, overwrite = true)
+            tmp.delete()
+        }
+    }
+
     private fun downloadFile(urlString: String, destination: File) {
         // Write to temp file first, rename on completion (atomic — prevents partial files)
         val tempFile = File(destination.parent, "${destination.name}.tmp")
@@ -259,9 +330,10 @@ class ProvingKeyManager(private val context: Context) {
                 val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
                 val source = File(sourceDir, "$circuit.$ext")
                 val dest = File(destDir, "$circuit.$ext")
-                if (source.isPopulated() && (overwrite || !dest.isPopulated())) {
-                    source.copyTo(dest, overwrite = true)
-                    Log.d(TAG, "Installed $contractName/$circuit.$ext (${dest.length()} bytes)")
+                // Content-aware: refresh when absent OR the source bytes drifted
+                // (a recompiled circuit), not just when absent. Atomic copy.
+                if (source.isPopulated() && (overwrite || !sameContent(source, dest))) {
+                    copyAtomically(source, dest)
                 }
             }
         }
@@ -369,9 +441,10 @@ class ProvingKeyManager(private val context: Context) {
                 val sourceDir = if (ext == "bzkir") zkirSourceDir else keysSourceDir
                 val source = File(sourceDir, "$circuit.$ext")
                 val dest = File(keysDir, "$circuit.$ext")
-                if (source.isPopulated() && (overwrite || !dest.isPopulated())) {
-                    source.copyTo(dest, overwrite = true)
-                    Log.d(TAG, "Installed $circuit.$ext to keysDir (${dest.length()} bytes)")
+                // Content-aware: refresh when absent OR the source bytes drifted
+                // (a recompiled circuit), not just when absent. Atomic copy.
+                if (source.isPopulated() && (overwrite || !sameContent(source, dest))) {
+                    copyAtomically(source, dest)
                 }
             }
         }
@@ -390,28 +463,51 @@ class ProvingKeyManager(private val context: Context) {
      * S3. Wallet keys download; contract keys bundle.
      *
      * Reads every `.prover`/`.verifier`/`.bzkir` under `assets/[assetDir]`.
-     * Idempotent and size-aware: skips a key already present and non-empty,
-     * re-copies a 0-byte one (a truncated prior copy). Writes via temp-file +
-     * rename so an interrupted copy can't strand a partial key.
+     *
+     * **Content-aware (not just presence-aware).** A recompiled circuit ships new
+     * key bytes in the APK, but the device may already hold the OLD key from a
+     * prior install. A presence/size check can't tell them apart, so it would keep
+     * the stale key — and the local prover would then prove against an outdated
+     * verifier key the chain rejects (node error 115 / InvalidProof). This caused
+     * Kicks's `revealRegulation` to fail after the 0.16 recompile while
+     * `commitRegulation` (unchanged) kept working.
+     *
+     * The fix verifies content. Bundled assets can only change when the APK is
+     * (re)installed, which bumps [apkStamp]; so:
+     *  - **stamp unchanged** (the hot path): trust the cached copies, skip hashing.
+     *  - **stamp changed / absent / [overwrite]**: SHA-256 each key against the
+     *    asset and re-copy ONLY the ones whose bytes drifted (here, just the
+     *    recompiled circuit's files — not the whole set).
+     *
+     * Idempotent and self-healing: writes via temp-file + rename (never a partial
+     * key), and stamps LAST so an interrupted refresh re-verifies next launch.
      */
     fun installCircuitKeysFromAssets(assetDir: String = "keys", overwrite: Boolean = false) {
         validatePathSegment(assetDir, "assetDir")
         keysDir.mkdirs()
+
+        val stamp = apkStamp()
+        val stampFile = File(keysDir, ".$assetDir.apk_stamp")
+        val stampMatches = stamp != null &&
+            stampFile.takeIf { it.exists() }?.readText()?.trim() == stamp
+        // When the stamp can't be read (null), never trust presence alone — verify.
+        val verifyContent = overwrite || !stampMatches
+
         val names = context.assets.list(assetDir).orEmpty()
             .filter { it.substringAfterLast('.', "") in CIRCUIT_KEY_EXTENSIONS }
         for (name in names) {
             val dest = File(keysDir, name)
-            if (dest.isPopulated() && !overwrite) continue
-            val tmp = File(keysDir, "$name.tmp")
-            context.assets.open("$assetDir/$name").use { input ->
-                tmp.outputStream().use { output -> input.copyTo(output) }
-            }
-            if (!tmp.renameTo(dest)) {
-                tmp.copyTo(dest, overwrite = true)
-                tmp.delete()
-            }
+            // Hot path: a complete prior install under the same APK — trust it.
+            if (dest.isPopulated() && !verifyContent) continue
+            // Verify path: re-copy only when the device key's bytes actually drifted.
+            if (dest.isPopulated() && destMatchesAsset("$assetDir/$name", dest)) continue
+            copyAssetAtomically("$assetDir/$name", dest)
             Log.d(TAG, "Installed $name from assets/$assetDir (${dest.length()} bytes)")
         }
+
+        // Stamp LAST: if any copy above threw or the process died mid-refresh, the
+        // stamp stays stale and the next launch re-verifies — self-healing.
+        if (stamp != null) stampFile.runCatching { writeText(stamp) }
     }
 
     /**

@@ -226,8 +226,10 @@ class NodeRpcClientImpl(
                     }
 
                     println("[NodeRpc]   Custom error code: $customErrorCode")
-                    if (customErrorCode == 115) {
-                        println("[NodeRpc]   ERROR 115 = UTXO not found or already spent on blockchain")
+                    when (customErrorCode) {
+                        115 -> println("[NodeRpc]   115 = InvalidProof (ZK proof failed verification — check proving-key/verifier-key versions & proof public inputs)")
+                        195 -> println("[NodeRpc]   195 = InputNotInUtxos (an unshielded UTXO input is already spent or missing)")
+                        186 -> println("[NodeRpc]   186 = EffectsCheckFailure")
                     }
 
                     throw TransactionRejected(
@@ -371,20 +373,23 @@ class NodeRpcClientImpl(
 
                                     Log.e(TAG, "WebSocket error: code=$errorCode, message=$errorMessage, data=$errorData")
 
-                                    // Check for error 115 (stale UTXO)
+                                    // code 1010 = "Invalid Transaction" with a node
+                                    // custom error code in `data` (e.g. "Custom error: 115").
+                                    // These are transaction REJECTIONS — surface them as
+                                    // TransactionRejected carrying the real custom code so
+                                    // callers can branch on it. Authoritative codes (from
+                                    // midnight-node): 115 = InvalidProof, 195 = InputNotInUtxos
+                                    // ("UTXO already spent"), 186 = EffectsCheckFailure.
                                     if (errorCode == 1010) {
                                         val customErrorCode = errorData?.let { data ->
                                             Regex("Custom error: (\\d+)").find(data)?.groupValues?.get(1)?.toIntOrNull()
                                         }
-
-                                        if (customErrorCode == 115) {
-                                            Log.e(TAG, "ERROR 115: UTXO already spent!")
-                                            throw TransactionRejected(
-                                                reason = errorMessage,
-                                                txHash = txHash,
-                                                customErrorCode = 115
-                                            )
-                                        }
+                                        Log.e(TAG, "Transaction rejected: custom error $customErrorCode ($errorData)")
+                                        throw TransactionRejected(
+                                            reason = errorMessage,
+                                            txHash = txHash,
+                                            customErrorCode = customErrorCode,
+                                        )
                                     }
 
                                     throw NodeRpcError(
