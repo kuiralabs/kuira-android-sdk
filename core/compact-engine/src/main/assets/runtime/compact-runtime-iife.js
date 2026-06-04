@@ -1802,6 +1802,15 @@ var __compactRuntime = (() => {
     bytesWritten: 0n,
     bytesDeleted: 0n
   });
+  function snapshotReadContent(content) {
+    if (!content) return content;
+    return {
+      value: (content.value || []).map((atom) =>
+        atom instanceof Uint8Array ? new Uint8Array(atom) : Array.isArray(atom) ? atom.slice() : atom
+      ),
+      alignment: content.alignment
+    };
+  }
   var queryLedgerState = (circuitContext, partialProofData, program) => {
     try {
       const res = circuitContext.currentQueryContext.query(program, circuitContext.costModel, circuitContext.gasLimit);
@@ -1812,7 +1821,13 @@ var __compactRuntime = (() => {
       partialProofData.publicTranscript = partialProofData.publicTranscript.concat(program.map((op) => typeof op === "object" && "popeq" in op ? {
         popeq: {
           ...op.popeq,
-          result: reads[i++].content
+          // Snapshot the read value. The same `event.content` object is also returned
+          // to the contract (below), which decodes it with `_descriptor.fromValue` —
+          // and `fromValue` mutates by `value.shift()`. Storing the live reference let
+          // that shift empty the array, so `transformPublicTranscript` later zero-filled
+          // the recorded read (e.g. a Counter value of 1 → all-zero), producing a
+          // partition_transcripts ReadMismatch on any evolved contract state.
+          result: snapshotReadContent(reads[i++].content)
         }
       } : op));
       if (res.events.length === 1) {
