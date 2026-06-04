@@ -752,6 +752,15 @@ var __compactRuntime = (() => {
       return cs;
     }
   };
+  function stateValueDescriptor(svData) {
+    // Convert a JS StateValue's internal `_data` tree into the descriptor JSON the
+    // native build_state_from_descriptor understands: array → {array:[...]}
+    // recursively, everything else → null. Cells/nulls become null skeletons —
+    // constructors fill leaf values via subsequent `ins` ops; only the nested
+    // container shape must exist natively for those inserts to land.
+    if (!svData || svData.type !== "array") return null;
+    return { array: svData.items.map((item) => stateValueDescriptor(item && item._data)) };
+  }
   var ContractState = class {
     constructor() {
       this._data = null;
@@ -783,11 +792,17 @@ var __compactRuntime = (() => {
     _ensureRustHandle() {
       if (this._rustHandle) return this._rustHandle;
       if (typeof globalThis.__native_stateCreateWithNulls !== "function") return 0;
-      let numSlots = 0;
-      if (this._data && this._data._state && this._data._state._data && this._data._state._data.type === "array") {
-        numSlots = this._data._state._data.items.length;
-      }
-      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(numSlots.toString()));
+      // Build the FULL nested skeleton, not just the top-level slot count. A
+      // contract whose initial ledger state has nested containers (e.g. an array
+      // of records) needs those sub-arrays to exist natively *before* the
+      // constructor's `ins` ops navigate into them. Passing a flat count left
+      // nested slots as Null, so `ins` into slot 0 failed with
+      // "attempted to ins, only array, map, and bmt are supported".
+      const rootData = this._data && this._data._state && this._data._state._data;
+      const descriptor = rootData && rootData.type === "array"
+        ? JSON.stringify(stateValueDescriptor(rootData))
+        : "0";
+      this._rustHandle = Number(globalThis.__native_stateCreateWithNulls(descriptor));
       for (const name of Object.keys(this._operations)) {
         if (typeof globalThis.__native_stateSetOperation === "function") {
           globalThis.__native_stateSetOperation(this._rustHandle.toString(), name);
@@ -982,7 +997,16 @@ var __compactRuntime = (() => {
             this._rustHandle.toString(),
             opcodesJson
           );
-          const result = JSON.parse(resultJson);
+          let result;
+          try {
+            result = JSON.parse(resultJson);
+          } catch (parseErr) {
+            // The native error path builds its JSON via an unescaped {:?} debug,
+            // so a genuine VM error arrives as unparseable text. Surface the raw
+            // response rather than a misleading "expecting '}'" so the real failure
+            // is visible.
+            throw new Error("native query returned non-JSON: " + String(resultJson).slice(0, 800));
+          }
           if (result.error) {
             throw new Error(result.error);
           }
@@ -1056,9 +1080,13 @@ var __compactRuntime = (() => {
     }
     throw new Error("persistentHash: native FFI not available");
   }
-  function persistentCommit(value, opening) {
+  function persistentCommit(alignment, value, openings) {
+    // persistentCommit2 calls this with THREE args — (alignment, toValue(value),
+    // [opening]) — and the native bridge (__native_persistentCommit) reads all
+    // three (arguments[0..2]). The old 2-param signature dropped the opening, so
+    // the native side saw 0 opening bytes → "opening must be 32 bytes, got 0".
     if (typeof globalThis.__native_persistentCommit === "function") {
-      return globalThis.__native_persistentCommit(value, opening);
+      return globalThis.__native_persistentCommit(alignment, value, openings);
     }
     throw new Error("persistentCommit: native function not bound");
   }
