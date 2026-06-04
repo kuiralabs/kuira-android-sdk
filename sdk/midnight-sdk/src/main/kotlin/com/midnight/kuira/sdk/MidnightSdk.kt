@@ -19,6 +19,7 @@ import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.repository.ShieldedRepository
+import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
 import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
@@ -308,12 +309,18 @@ class MidnightSdk private constructor(
                 "kuira-sdk-utxo-database", // Separate DB name to avoid conflict with Kuira app
             ).build()
 
+            // DustRepository and SpentDustNullifierStore share the one dust
+            // DataStore (different preference keys): the repo holds the synced dust
+            // state, the store holds nullifiers the wallet spent but the event
+            // stream hasn't reflected — see SpentDustNullifierStore for the 115 fix.
+            val dustStateDataStore = sdkDustStateDataStore(appContext)
             val dustRepository = DustRepository(
                 dustDao = database.dustDao(),
-                dustStateDataStore = sdkDustStateDataStore(appContext),
+                dustStateDataStore = dustStateDataStore,
                 balanceCalculator = DustBalanceCalculator(),
                 indexerClient = indexerClient,
             )
+            val spentDustNullifierStore = SpentDustNullifierStore(dustStateDataStore)
 
             val provingKeyManager = ProvingKeyManager(appContext)
 
@@ -389,6 +396,7 @@ class MidnightSdk private constructor(
                 dustSeed = keys.dustSeed,
                 provingKeysDir = provingKeyManager.keysDir.absolutePath,
                 networkId = net.rustNetworkId,
+                spentDustNullifierStore = spentDustNullifierStore,
                 dustCloudBackup = dustCloudBackup,
             )
 

@@ -573,6 +573,25 @@ class DustLocalState private constructor(
     }
 
     /**
+     * Lowercase-hex nullifiers of every UTXO currently in this state.
+     *
+     * The wallet uses this to prune its durable spent-dust skip-set (drop recorded
+     * nullifiers the synced state no longer holds — the event stream caught up) and
+     * to detect when all spendable dust is already excluded. A dust nullifier is
+     * derived from the secret key, so the seed is required.
+     *
+     * @param seed 32-byte dust seed
+     * @return the nullifier hex list (empty if the state has no UTXOs), or **null**
+     *   if the native call failed. Callers MUST treat null as "unknown" and skip
+     *   pruning — treating it as empty would wrongly drop the whole skip-set.
+     */
+    fun currentNullifiers(seed: ByteArray): List<String>? {
+        checkNotClosed()
+        val raw = nativeDustCurrentNullifiers(nativePtr, seed) ?: return null
+        return if (raw.isEmpty()) emptyList() else raw.split(",").filter { it.isNotEmpty() }
+    }
+
+    /**
      * Frees the native DustLocalState memory.
      *
      * **Important:**
@@ -628,6 +647,12 @@ class DustLocalState private constructor(
     private external fun nativeDustCommitmentRoot(statePtr: Long): String?
 
     private external fun nativeDustGenerationRoot(statePtr: Long): String?
+
+    /**
+     * Lists current dust UTXO nullifiers (lowercase hex, comma-separated; empty
+     * string if no UTXOs), or null on native error.
+     */
+    private external fun nativeDustCurrentNullifiers(statePtr: Long, seed: ByteArray): String?
 
     /**
      * Serializes native state to bytes.

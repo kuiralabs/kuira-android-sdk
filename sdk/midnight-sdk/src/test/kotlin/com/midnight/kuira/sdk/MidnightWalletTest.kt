@@ -8,6 +8,7 @@ import com.midnight.kuira.core.indexer.model.TokenBalance
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,9 +76,12 @@ class MidnightWalletTest {
     fun `balanceTransaction throws if indexer returns no ledger params`() = runTest {
         val dustState = mock<DustLocalState> {
             on { getStatePointer() } doReturn 12345L
+            // null = "couldn't determine current nullifiers" → wallet skips prune /
+            // fast-fail and proceeds to the ledger-params check under test.
+            on { currentNullifiers(any()) } doReturn null
         }
         val syncManager = mock<DustSyncManager> {
-            onBlocking { ensureSynced() } doReturn dustState
+            onBlocking { ensureSynced(anyOrNull()) } doReturn dustState
         }
         val indexer = mock<IndexerClient> {
             onBlocking { getCurrentBlockWithParams() } doReturn BlockInfo(
@@ -89,6 +93,25 @@ class MidnightWalletTest {
         }
 
         val wallet = createWallet(dustSyncManager = syncManager, indexerClient = indexer)
+        wallet.balanceTransaction("proven_hex")
+    }
+
+    @Test(expected = InsufficientDustException::class)
+    fun `balanceTransaction fast-fails when every dust UTXO is already excluded`() = runTest {
+        // Synced state holds two UTXOs, both already in the spent-dust skip-set →
+        // no spendable dust → fail fast (no wasteful re-sync, no balance attempt).
+        val dustState = mock<DustLocalState> {
+            on { getStatePointer() } doReturn 12345L
+            on { currentNullifiers(any()) } doReturn listOf("aa", "bb")
+        }
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced(anyOrNull()) } doReturn dustState
+        }
+        val store = mock<SpentDustNullifierStore> {
+            onBlocking { spentNullifiers(any()) } doReturn setOf("aa", "bb")
+        }
+
+        val wallet = createWallet(dustSyncManager = syncManager, spentDustNullifierStore = store)
         wallet.balanceTransaction("proven_hex")
     }
 
@@ -167,6 +190,9 @@ class MidnightWalletTest {
         dustSeed: ByteArray = ByteArray(32),
         provingKeysDir: String = "/tmp/keys",
         networkId: String = "undeployed",
+        spentDustNullifierStore: SpentDustNullifierStore = mock {
+            onBlocking { spentNullifiers(any()) } doReturn emptySet()
+        },
     ) = MidnightWallet(
         dustSyncManager = dustSyncManager,
         dustRepository = dustRepository,
@@ -178,5 +204,6 @@ class MidnightWalletTest {
         dustSeed = dustSeed,
         provingKeysDir = provingKeysDir,
         networkId = networkId,
+        spentDustNullifierStore = spentDustNullifierStore,
     )
 }

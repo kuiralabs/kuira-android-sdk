@@ -47,4 +47,15 @@ sealed class BalanceProgress {
 
     /** Error 170 recovery: re-syncing dust from genesis and retrying. */
     data object RetryingDustSync : BalanceProgress()
+
+    /**
+     * Error 115 recovery: a dust UTXO the wallet picked was already spent on-chain
+     * (the indexer's event stream hadn't reflected our own earlier fee spend yet).
+     * The wallet is recording it, re-selecting a different dust UTXO, and retrying.
+     *
+     * This is expected and self-healing — surface it as "recovering, this can take a
+     * moment", NOT as an error or a hang. It may repeat briefly while the wallet
+     * works past each already-spent UTXO.
+     */
+    data object RecoveringDustState : BalanceProgress()
 }

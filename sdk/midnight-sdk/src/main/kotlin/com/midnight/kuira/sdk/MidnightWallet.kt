@@ -8,9 +8,11 @@ import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
+import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -41,10 +43,20 @@ class MidnightWallet internal constructor(
     private val dustSeed: ByteArray,
     private val provingKeysDir: String,
     private val networkId: String,
+    private val spentDustNullifierStore: SpentDustNullifierStore,
     private val dustCloudBackup: DustCloudBackup? = null,
 ) : TransactionBalancer {
 
     private val balanceMutex = Mutex()
+
+    /**
+     * Dust nullifiers captured during [balanceTransaction], keyed by the balanced
+     * tx hex, awaiting their [submitTransaction]. Recorded as spent only once the
+     * node accepts the tx — a balanced-but-unsubmitted UTXO is still spendable, so
+     * recording it early would wrongly exclude it. [balanceAndSubmit] records
+     * directly (it owns both steps) and doesn't use this map.
+     */
+    private val pendingSpentNullifiers = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
     /** Bech32m address this wallet receives NIGHT at. Exposed for dApps that want to display / share it. */
     val address: String get() = walletAddress
@@ -193,11 +205,27 @@ class MidnightWallet internal constructor(
     }
 
     override suspend fun balanceTransaction(provenTxHex: String): String = balanceMutex.withLock {
-        doBalance(provenTxHex)
+        val balanced = doBalance(provenTxHex)
+        // Defer recording until submit succeeds (see [pendingSpentNullifiers]).
+        if (balanced.spentNullifiers.isNotEmpty()) {
+            pendingSpentNullifiers[balanced.txHex] = balanced.spentNullifiers
+        }
+        balanced.txHex
     }
 
     override suspend fun submitTransaction(balancedTxHex: String) {
-        nodeRpcClient.submitAndWaitForFinalization(balancedTxHex)
+        // Remove the pending entry up front so it can't leak if submit throws.
+        val pending = pendingSpentNullifiers.remove(balancedTxHex)
+        try {
+            nodeRpcClient.submitAndWaitForFinalization(balancedTxHex)
+        } catch (e: TransactionRejected) {
+            // Error 115: the node says these dust UTXOs are already spent — record
+            // them so the caller's next balance excludes them. (The split path can't
+            // re-balance here, so we record then rethrow for the caller to retry.)
+            if (e.isStaleUtxo) recordSpentNullifiers(pending)
+            throw e
+        }
+        recordSpentNullifiers(pending)
         dustSyncManager.invalidateMemo()
     }
 
@@ -207,10 +235,12 @@ class MidnightWallet internal constructor(
     ): Unit = balanceMutex.withLock {
         onProgress?.invoke(BalanceProgress.SyncingDust)
 
-        // Error-170 recovery escalates: a fast delta re-sync first (the common case —
-        // the dust state is just behind the tip), then a full genesis rebuild only if
-        // that still fails (a genuinely corrupt checkpoint). The initial attempt has
-        // no recovery prefix; each subsequent attempt runs the next, harder strategy.
+        // Error-170 (stale dust root) recovery escalates: a fast delta re-sync first,
+        // then a full genesis rebuild only if that still 170s. Other failures —
+        // including error 115 — propagate as a clean BalancingFailed (no in-place
+        // loop). With the zero-fee fix in balance_ffi, 0-fee networks spend no dust,
+        // so 115 doesn't arise there; PREPROD's own-fee-spend handling is tracked
+        // separately (it depends on the indexer reflecting contract-tx fee spends).
         val recoveries: List<Pair<String, suspend () -> Unit>> = listOf(
             "delta re-sync" to { dustSyncManager.refreshIncremental(); Unit },
             "genesis rebuild" to { forceFullSync() },
@@ -220,11 +250,14 @@ class MidnightWallet internal constructor(
             try {
                 val balanced = doBalance(provenTxHex, onProgress)
                 onProgress?.invoke(BalanceProgress.Submitting)
-                nodeRpcClient.submitAndWaitForFinalization(balanced) { stage ->
+                nodeRpcClient.submitAndWaitForFinalization(balanced.txHex) { stage ->
                     if (stage == SubmissionStage.IN_BLOCK) {
                         onProgress?.invoke(BalanceProgress.WaitingFinalization)
                     }
                 }
+                // Record the dust nullifier(s) the node accepted as spent so a later
+                // balance can exclude them (no-op on 0-fee, where nothing is spent).
+                recordSpentNullifiers(balanced.spentNullifiers)
                 dustSyncManager.invalidateMemo()
                 return@withLock
             } catch (e: NodeRpcError) {
@@ -240,7 +273,7 @@ class MidnightWallet internal constructor(
     private suspend fun doBalance(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
-    ): String {
+    ): BalanceEnvelope {
         return tryBalance(provenTxHex, onProgress)
             ?: run {
                 Log.w(TAG, "Balance failed, forcing full dust re-sync")
@@ -249,6 +282,17 @@ class MidnightWallet internal constructor(
                 tryBalance(provenTxHex, onProgress)
                     ?: throw IllegalStateException("Balance failed after full re-sync, check logcat")
             }
+    }
+
+    /** Durably record dust nullifiers the node just accepted as spent, so the
+     *  balancer never re-selects them (the dust event stream doesn't reliably
+     *  reflect the wallet's own fee spends → otherwise error 115). Best-effort:
+     *  the tx already landed, so a storage hiccup must not surface as a failure. */
+    private suspend fun recordSpentNullifiers(nullifiers: List<String>?) {
+        nullifiers?.forEach { nullifier ->
+            runCatching { spentDustNullifierStore.recordSpent(walletAddress, nullifier) }
+                .onFailure { Log.w(TAG, "Failed to record spent dust nullifier: ${it.message}") }
+        }
     }
 
     /**
@@ -292,8 +336,58 @@ class MidnightWallet internal constructor(
     private suspend fun tryBalance(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
-    ): String? {
-        val dustState = ensureDustFresh(onProgress)
+    ): BalanceEnvelope? = balanceAgainst(ensureDustFresh(onProgress), provenTxHex, onProgress)
+
+    /**
+     * Balance against an already-synced dust state — **no chain sync of its own**.
+     *
+     * Split out from the sync so an error-115 retry can re-balance against the same
+     * in-memory state with an updated skip-set (just re-selecting a different UTXO),
+     * without re-streaming + re-replaying dust events on every attempt. Re-syncing is
+     * only warranted for error 170 (stale root), handled by the caller.
+     */
+    private suspend fun balanceAgainst(
+        dustState: DustLocalState,
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)? = null,
+    ): BalanceEnvelope? {
+        // Nullifiers the wallet recorded as spent but the synced state may still list
+        // as available (the event stream lags our own fee spends). The native balancer
+        // skips these so it can't re-select a consumed UTXO → node error 115.
+        val recorded = spentDustNullifierStore.spentNullifiers(walletAddress)
+
+        // Prune against the freshly-synced state: keep only recorded nullifiers whose
+        // UTXO is still present (stream behind), drop those now gone (stream caught up
+        // → spend confirmed). `currentNullifiers` returns null on a native error —
+        // treat that as "unknown" and skip pruning, never as empty (which would
+        // wrongly clear the whole skip-set and re-enable 115). The exclude set sent to
+        // native is the pruned set, computed in-memory; we persist only when the prune
+        // actually drops something, to avoid a DataStore write on every balance.
+        val presentNullifiers = dustState.currentNullifiers(dustSeed)?.toSet()
+        val excludeNullifiers: Set<String> = if (presentNullifiers != null) {
+            val pruned = recorded intersect presentNullifiers
+            if (pruned.size != recorded.size) {
+                runCatching { spentDustNullifierStore.retainPresent(walletAddress, presentNullifiers) }
+                    .onFailure { Log.w(TAG, "dust skip-set prune failed: ${it.message}") }
+            }
+            pruned
+        } else {
+            recorded
+        }
+
+        // Fast-fail: if the synced state has UTXOs but every one is excluded, all of
+        // the wallet's dust is spent-but-unconfirmed — no balance can succeed. Surface
+        // a clear error instead of a wasteful full re-sync that ends in an opaque
+        // failure (the path `doBalance` takes on a null return).
+        if (presentNullifiers != null &&
+            presentNullifiers.isNotEmpty() &&
+            (presentNullifiers - excludeNullifiers).isEmpty()
+        ) {
+            throw InsufficientDustException(
+                "No spendable dust: all ${presentNullifiers.size} dust UTXO(s) are awaiting " +
+                    "confirmation of a recent fee spend. Wait for the dust to reconfirm, then retry.",
+            )
+        }
 
         val blockInfo = indexerClient.getCurrentBlockWithParams()
         val ledgerParamsHex = blockInfo.ledgerParameters
@@ -309,7 +403,7 @@ class MidnightWallet internal constructor(
         // and rejects with `MalformedError::InvalidDustSpendProof` (Custom error 170).
         // The TS wallet does the same: see midnight-wallet/.../RunningV1Variant.ts
         // (`currentTime ?? blockData.timestamp`).
-        return TransactionBalancerNative.nativeBalanceProvenTransaction(
+        val raw = TransactionBalancerNative.nativeBalanceProvenTransaction(
             provenTxHex = provenTxHex,
             dustStatePtr = dustState.getStatePointer(),
             seed = dustSeed,
@@ -317,7 +411,9 @@ class MidnightWallet internal constructor(
             currentTimeMs = blockInfo.timestamp,
             keysDir = provingKeysDir,
             networkId = networkId,
-        )
+            excludeNullifiers = excludeNullifiers.joinToString(","),
+        ) ?: return null
+        return BalanceEnvelope.parse(raw)
     }
 
     private suspend fun forceFullSync() {
