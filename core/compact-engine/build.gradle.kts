@@ -191,4 +191,10 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    // Instrumented tests load the native FFI via System.loadLibrary("kuira_crypto_ffi").
+    // The main artifact relies on the consuming app to supply that .so, so the
+    // androidTest APK has no source for it — pull core:crypto (which builds the .so
+    // from kuira-crypto-ffi's CMake) into the test APK only. Test-scoped, so the
+    // core:crypto → core:compact-engine api edge doesn't form a main-variant cycle.
+    androidTestImplementation(project(":core:crypto"))
 }

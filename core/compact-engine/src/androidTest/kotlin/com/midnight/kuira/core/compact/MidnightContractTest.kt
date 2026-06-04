@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
