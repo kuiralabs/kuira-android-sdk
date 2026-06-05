@@ -49,9 +49,11 @@ sealed class BalanceProgress {
     data object RetryingDustSync : BalanceProgress()
 
     /**
-     * Error 115 recovery: a dust UTXO the wallet picked was already spent on-chain
-     * (the indexer's event stream hadn't reflected our own earlier fee spend yet).
-     * The wallet is recording it, re-selecting a different dust UTXO, and retrying.
+     * Spent-dust recovery (node error 195 = `InputNotInUtxos`): a dust UTXO the
+     * wallet picked was already spent on-chain — the indexer's event stream hadn't
+     * reflected our own earlier fee spend yet. The wallet records it, re-selects a
+     * different dust UTXO, and retries. (This is *not* error 115, which is an
+     * `InvalidProof` — an unrelated failure mode.)
      *
      * This is expected and self-healing — surface it as "recovering, this can take a
      * moment", NOT as an error or a hang. It may repeat briefly while the wallet

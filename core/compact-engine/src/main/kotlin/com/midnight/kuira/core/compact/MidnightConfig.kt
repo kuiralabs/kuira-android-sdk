@@ -76,23 +76,6 @@ class MidnightConfig private constructor(
             .let { data ->
                 data.optJSONObject("contractAction")
                     ?.getString("state")
-                    ?.also { state ->
-                        // TEMP (error-115/InvalidProof diagnosis): fingerprint the fetched
-                        // contract state so we can tell whether a sequential reveal proved
-                        // against a STALE state (reveal's fp == the prior commit's fp →
-                        // indexer hadn't reflected the commit → proof invalid). Remove after.
-                        android.util.Log.i(
-                            "MidnightConfig",
-                            "fetchContractState($address): len=${state.length} fp=${state.hashCode()} " +
-                                "head=${state.take(24)} tail=${state.takeLast(24)}",
-                        )
-                        // TEMP (InvalidProof capture): full state hex so we can replay
-                        // the failing reveal through the ledger verifier offline.
-                        // Chunked because logcat truncates long lines.
-                        state.chunked(3500).forEachIndexed { i, c ->
-                            android.util.Log.i("MidnightConfig", "CAPTURE_STATE_HEX[$i]=$c")
-                        }
-                    }
                     ?: throw ContractCallException.StateFetchFailed(
                         "Contract not found at address: $address"
                     )
