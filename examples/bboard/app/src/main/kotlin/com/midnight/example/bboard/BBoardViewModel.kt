@@ -393,6 +393,7 @@ class BBoardViewModel @Inject constructor(
         is BalanceProgress.Submitting -> "Submitting to blockchain..."
         is BalanceProgress.WaitingFinalization -> "Waiting for finalization..."
         is BalanceProgress.RetryingDustSync -> "Retrying dust sync..."
+        is BalanceProgress.RecoveringDustState -> "Recovering dust balance — this can take a moment..."
     }
 
     private fun installContractKeys() {
