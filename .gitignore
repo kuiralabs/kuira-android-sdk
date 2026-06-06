@@ -29,14 +29,10 @@ release.keystore
 # Separate repos with own git tracking
 docs/security/
 
-# Kicks — generated artifacts (not source)
-examples/midnight-kicks/unityLibrary/
-examples/midnight-kicks/libs/
-examples/midnight-kicks/shared/
-examples/midnight-kicks/contract/node_modules/
-examples/midnight-kicks/contract/dist/
-examples/midnight-kicks/contract/midnight-level-db/
-examples/midnight-kicks/local.properties
+# Kicks example — its own independent git repo (github.com/nel349/midnight-kicks),
+# not tracked by this repo. Carries ~265MB of Unity source art that doesn't
+# belong in the SDK history; consumes the SDK via Maven like any external dApp.
+examples/midnight-kicks/
 .claude/scheduled_tasks.lock
 gradle.properties
 
