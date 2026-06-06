@@ -5,6 +5,9 @@ import android.util.Log
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.quickJs
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
@@ -31,7 +34,13 @@ import org.json.JSONObject
  * // result.unprovenTxHex is ready for proving
  * ```
  */
-class CircuitExecutor(private val context: Context) {
+class CircuitExecutor(
+    private val context: Context,
+    // Heavy work (QuickJS circuit execution + native JNI tx-assembly) runs here,
+    // off the caller's thread — so a dApp calling on Dispatchers.Main (wallet
+    // panel, match flow) doesn't freeze the UI. Injectable for tests.
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) {
 
     /**
      * Execute a contract circuit and assemble an UnprovenTransaction.
@@ -66,7 +75,7 @@ class CircuitExecutor(private val context: Context) {
         networkId: String = "undeployed",
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
-    ): ExecutionResult {
+    ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
         validateIdentifier(networkId, "networkId")
@@ -90,7 +99,7 @@ class CircuitExecutor(private val context: Context) {
             ledgerParametersHex = ledgerParametersHex,
         )
 
-        return assembleTransaction(params)
+        assembleTransaction(params)
     }
 
     /**
@@ -120,7 +129,7 @@ class CircuitExecutor(private val context: Context) {
         coinPublicKey: ByteArray,
         networkId: String = "undeployed",
         verifierKeys: Map<String, String> = emptyMap(),
-    ): DeployExecutionResult {
+    ): DeployExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(networkId, "networkId")
 
         var stateHandle: String? = null
@@ -164,7 +173,7 @@ class CircuitExecutor(private val context: Context) {
         val handle = stateHandle?.toLongOrNull()
             ?: throw CircuitExecutionException("Constructor produced no state handle")
 
-        return assembleDeployTransaction(handle, networkId, verifierKeys)
+        assembleDeployTransaction(handle, networkId, verifierKeys)
     }
 
     private fun assembleDeployTransaction(
