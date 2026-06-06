@@ -113,6 +113,15 @@ class WalletPanelViewModel @Inject constructor(
      */
     private var lastRequestedConfig: WalletConfig? = null
 
+    /** Wallet the live [observeBalanceJob] is bound to — so it's re-armed only on
+     *  bootstrap / network switch, not on every refresh. */
+    private var observedWalletAddress: String? = null
+
+    /** Wall-clock of the last heavy resync ([com.midnight.kuira.sdk.MidnightWallet.refresh]).
+     *  The resync is throttled to [FULL_REFRESH_INTERVAL_MS]: the live observer keeps
+     *  the balance current in between, so we don't re-sync on every menu visit. */
+    private var lastFullRefreshAtMs = 0L
+
     init {
         observeSigilForAutoRetry()
     }
@@ -179,7 +188,7 @@ class WalletPanelViewModel @Inject constructor(
      * calls reuse the existing SDK as long as every field of [config] matches
      * what the SDK was built with.
      */
-    fun refreshBalance(config: WalletConfig, activity: FragmentActivity) {
+    fun refreshBalance(config: WalletConfig, activity: FragmentActivity, force: Boolean = false) {
         lastRequestedConfig = config
         viewModelScope.launch {
             // Don't overwrite the Ready state on a refresh — that would flash
@@ -190,52 +199,60 @@ class WalletPanelViewModel @Inject constructor(
             }
             try {
                 val built = sdkProvider.ensureSdk(activity, config)
-                // Phase 1 — addresses up immediately. balance() is a cheap
-                // read against already-populated state; whatever it returns
-                // (often zero on a fresh wallet, or stale on a long-idle
-                // wallet) is fine because we re-emit after refresh.
+                // A different wallet (first bootstrap / network switch) always
+                // re-arms the observer and forces a fresh resync.
+                val walletChanged = observedWalletAddress != built.walletAddress
+
+                // Phase 1 — addresses + cached balance, instant.
                 val initial = built.wallet.balance()
                 _status.value = WalletStatus.Ready(
                     address = built.walletAddress,
                     shieldedAddress = built.shieldedWalletAddress,
                     balance = initial,
-                    busy = "Syncing balances…",
                 )
                 Log.i(TAG, "bootstrap: addresses ready (unshielded=${built.walletAddress.take(40)}…)")
 
-                // Phase 2 — full resync. On PREPROD this can take a few
-                // seconds (zswap replay); on localnet it's near-instant.
-                // Failures don't abort: the cached values from Phase 1 stay
-                // visible and the user can hit balance again to retry.
-                runCatching { built.wallet.refresh() }
-                    .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
-                val fresh = built.wallet.balance()
-                _status.value = WalletStatus.Ready(
-                    address = built.walletAddress,
-                    shieldedAddress = built.shieldedWalletAddress,
-                    balance = fresh,
-                )
-                Log.i(
-                    TAG,
-                    "balance: unshieldedNight=${fresh.unshieldedNight} " +
-                        "shieldedNight=${fresh.shieldedNight} " +
-                        "dust=${fresh.dust} registered=${fresh.dustRegistered}",
-                )
-
-                // Keep the panel live. The indexer subscription updates the
-                // wallet's balance as funds land (airdrop, incoming tx); observe
-                // it and push every change into Ready, preserving the addresses.
-                // Without this the new balance was synced + logged but the panel
-                // never re-rendered. Launched on viewModelScope (not as a child
-                // of this coroutine) so it outlives refreshBalance; re-armed each
-                // call, so only one observer runs.
-                observeBalanceJob?.cancel()
-                observeBalanceJob = viewModelScope.launch {
-                    built.wallet.balanceFlow().collect { live ->
-                        (_status.value as? WalletStatus.Ready)?.let { ready ->
-                            _status.value = ready.copy(balance = live)
+                // Live observer — balanceFlow pushes incoming funds (airdrop /
+                // incoming tx) and shielded changes automatically, so the balance
+                // stays current WITHOUT a heavy resync. Armed once per wallet.
+                if (observeBalanceJob?.isActive != true || walletChanged) {
+                    observeBalanceJob?.cancel()
+                    observedWalletAddress = built.walletAddress
+                    observeBalanceJob = viewModelScope.launch {
+                        built.wallet.balanceFlow().collect { live ->
+                            (_status.value as? WalletStatus.Ready)?.let { ready ->
+                                _status.value = ready.copy(balance = live)
+                            }
                         }
                     }
+                }
+
+                // Phase 2 — heavy zswap + dust resync, THROTTLED. The observer
+                // keeps the balance live between syncs, so the expensive resync
+                // only runs on a forced/explicit refresh, a wallet change, or once
+                // per FULL_REFRESH_INTERVAL_MS — not on every menu visit.
+                val now = System.currentTimeMillis()
+                if (force || walletChanged || now - lastFullRefreshAtMs >= FULL_REFRESH_INTERVAL_MS) {
+                    (_status.value as? WalletStatus.Ready)?.let {
+                        _status.value = it.copy(busy = "Syncing balances…")
+                    }
+                    runCatching { built.wallet.refresh() }
+                        .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
+                    lastFullRefreshAtMs = now
+                    val fresh = built.wallet.balance()
+                    _status.value = WalletStatus.Ready(
+                        address = built.walletAddress,
+                        shieldedAddress = built.shieldedWalletAddress,
+                        balance = fresh,
+                    )
+                    Log.i(
+                        TAG,
+                        "balance: unshieldedNight=${fresh.unshieldedNight} " +
+                            "shieldedNight=${fresh.shieldedNight} " +
+                            "dust=${fresh.dust} registered=${fresh.dustRegistered}",
+                    )
+                } else {
+                    Log.i(TAG, "refreshBalance: resync throttled (${(now - lastFullRefreshAtMs) / 1000}s since last) — live observer keeps balance current")
                 }
             } catch (e: SigilRequiredException) {
                 // Bootstrap blocked because no passkey is forged. Host UI
@@ -410,6 +427,11 @@ class WalletPanelViewModel @Inject constructor(
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
+
+        /** Throttle on the heavy zswap + dust resync. Between syncs the live
+         *  balanceFlow observer keeps the panel current, so the expensive resync
+         *  only needs to run periodically (or on an explicit/forced refresh). */
+        private const val FULL_REFRESH_INTERVAL_MS = 5 * 60_000L
     }
 }
 

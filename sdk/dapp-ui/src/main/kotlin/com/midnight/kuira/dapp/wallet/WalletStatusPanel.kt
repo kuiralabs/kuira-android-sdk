@@ -273,7 +273,7 @@ fun WalletStatusPanel(
                 },
                 onProvingModeChange = { provingMode = it },
                 onProofServerUrlChange = { proofServerUrl = it },
-                onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it) } },
+                onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it, force = true) } },
                 onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
                 backupStatus = backupStatus,
                 onEnableCloudBackup = { activity?.let { viewModel.enableCloudBackup(config, it) } },

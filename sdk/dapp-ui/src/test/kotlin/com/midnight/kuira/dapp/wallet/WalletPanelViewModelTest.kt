@@ -14,6 +14,7 @@ import com.midnight.kuira.sdk.WalletBalance
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -292,7 +293,78 @@ class WalletPanelViewModelTest {
         assertEquals("address preserved across the live update", "addr", ready1.address)
     }
 
+    // ── Heavy-resync throttle ──
+
+    @Test
+    fun `repeated menu visits trigger only one heavy resync within the interval`() = runTest {
+        // Returning to the menu re-fires refreshBalance. The live observer keeps
+        // the balance current, so the expensive wallet.refresh() must NOT run on
+        // every visit — only the first (wallet just bootstrapped) within the window.
+        val wallet = stubReadyWallet()
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity) // bootstrap → resync
+        vm.refreshBalance(devConfig(), activity) // same wallet, within window → throttled
+        vm.refreshBalance(devConfig(), activity) // still throttled
+
+        coVerify(exactly = 1) { wallet.refresh() }
+    }
+
+    @Test
+    fun `explicit force bypasses the throttle`() = runTest {
+        // The user tapping the "balance" button is an intentional "sync now" —
+        // force=true must run a real resync even though we're inside the window.
+        val wallet = stubReadyWallet()
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity) // bootstrap → resync
+        vm.refreshBalance(devConfig(), activity, force = true) // explicit tap → resync
+
+        coVerify(exactly = 2) { wallet.refresh() }
+    }
+
+    @Test
+    fun `a different wallet re-syncs even within the interval`() = runTest {
+        // A network switch yields a new wallet address. walletChanged must force a
+        // resync (and re-arm the observer on the new wallet) regardless of timing.
+        val first = stubReadyWallet(address = "addr_undeployed")
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity)
+        coVerify(exactly = 1) { first.refresh() }
+
+        val second = stubReadyWallet(address = "addr_preprod")
+        vm.refreshBalance(devConfig(), activity)
+        coVerify(exactly = 1) { second.refresh() }
+    }
+
     // ── Helpers ──
+
+    /**
+     * Wire [sdkProvider] to return a Ready SDK whose wallet reports [balance] and
+     * exposes a live [MutableStateFlow] balanceFlow. Returns the wallet mock so the
+     * test can verify resync calls.
+     */
+    private fun stubReadyWallet(
+        address: String = "addr",
+        balance: WalletBalance = WalletBalance(
+            unshieldedNight = BigInteger.ZERO,
+            shieldedNight = BigInteger.ZERO,
+            dust = BigInteger.ZERO,
+            dustRegistered = false,
+        ),
+    ): MidnightWallet {
+        val wallet = mockk<MidnightWallet>(relaxed = true)
+        coEvery { wallet.balance() } returns balance
+        coEvery { wallet.refresh() } returns Unit
+        every { wallet.balanceFlow() } returns MutableStateFlow(balance)
+
+        val builtSdk = mockk<MidnightSdk>(relaxed = true)
+        every { builtSdk.wallet } returns wallet
+        every { builtSdk.walletAddress } returns address
+        every { builtSdk.shieldedWalletAddress } returns "shielded_$address"
+        coEvery { sdkProvider.ensureSdk(activity, any()) } returns builtSdk
+        return wallet
+    }
 
     private fun devConfig(): WalletConfig = WalletConfig(
         network = MidnightNetwork.UNDEPLOYED,
