@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import java.io.IOException
 import kotlin.math.min
-import kotlin.math.pow
 
 /**
  * Manages subscription lifecycle for UTXO syncing.
@@ -68,6 +67,10 @@ class SubscriptionManager(
         // branch in retryWhen.
         private const val INITIAL_RETRY_DELAY_MS = 1000L
         private const val MAX_RETRY_DELAY_MS = 32000L
+        // Cap the backoff exponent. 1000ms shl 5 = 32000ms = MAX_RETRY_DELAY_MS,
+        // so 5 is the highest shift that contributes; clamping here is what keeps
+        // the delay from overflowing once attempt climbs (see calculateRetryDelay).
+        private const val MAX_RETRY_SHIFT = 5L
 
         // Throttle DataStore writes to reduce battery drain and disk I/O
         // Only save progress if this many milliseconds have passed since last save
@@ -365,8 +368,16 @@ class SubscriptionManager(
      * Formula: min(INITIAL_DELAY * 2^attempt, MAX_DELAY)
      * Example: 1s, 2s, 4s, 8s, 16s, 32s (max)
      */
-    private fun calculateRetryDelay(attempt: Long): Long {
-        val exponentialDelay = INITIAL_RETRY_DELAY_MS * 2.0.pow(attempt.toDouble()).toLong()
+    internal fun calculateRetryDelay(attempt: Long): Long {
+        // Clamp the exponent BEFORE shifting. The old `2.0.pow(attempt)` overflowed
+        // Double→Long to a negative value once attempt grew large — e.g. screen off
+        // + offline, where every reconnect throws UnknownHostException and attempt
+        // climbs without bound. A negative product made min(...) return a negative
+        // delay, so delay() returned instantly and the retry loop span thousands of
+        // times per second. Shifting by at most MAX_RETRY_SHIFT keeps the result in
+        // 1000ms..32000ms and can never overflow.
+        val shift = attempt.coerceIn(0L, MAX_RETRY_SHIFT).toInt()
+        val exponentialDelay = INITIAL_RETRY_DELAY_MS shl shift
         return min(exponentialDelay, MAX_RETRY_DELAY_MS)
     }
 }

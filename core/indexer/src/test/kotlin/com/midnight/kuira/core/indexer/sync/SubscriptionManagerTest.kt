@@ -70,6 +70,41 @@ class SubscriptionManagerTest {
         clearAllMocks()
     }
 
+    // ── Retry backoff (regression: offline-with-screen-off spun the retry loop) ──
+    //
+    // The old delay = INITIAL * 2.0.pow(attempt) overflowed Double→Long to a
+    // NEGATIVE value once attempt grew large (screen off → no network → attempt
+    // climbs without bound). A negative delay made delay() return instantly, so
+    // the loop retried thousands of times/sec (logcat showed "retrying in -1000ms
+    // (attempt 117799)"). The delay must stay positive and capped at every attempt.
+
+    @Test
+    fun `calculateRetryDelay grows from initial to the 32s cap`() {
+        assertEquals(1000L, subscriptionManager.calculateRetryDelay(0))
+        assertEquals(2000L, subscriptionManager.calculateRetryDelay(1))
+        assertEquals(4000L, subscriptionManager.calculateRetryDelay(2))
+        assertEquals(8000L, subscriptionManager.calculateRetryDelay(3))
+        assertEquals(16000L, subscriptionManager.calculateRetryDelay(4))
+        assertEquals(32000L, subscriptionManager.calculateRetryDelay(5))
+    }
+
+    @Test
+    fun `calculateRetryDelay stays capped and positive for large attempt counts`() {
+        // These are the values that overflowed to negative before the fix.
+        for (attempt in longArrayOf(6, 32, 63, 64, 117_799, Long.MAX_VALUE)) {
+            val delay = subscriptionManager.calculateRetryDelay(attempt)
+            assertTrue(
+                "delay must never go negative (attempt=$attempt was $delay)",
+                delay > 0,
+            )
+            assertEquals(
+                "delay must stay capped at MAX_RETRY_DELAY_MS (attempt=$attempt)",
+                32000L,
+                delay,
+            )
+        }
+    }
+
     @Test
     fun `startSubscription emits Connecting state first`() = runTest {
         // Given: Empty subscription
