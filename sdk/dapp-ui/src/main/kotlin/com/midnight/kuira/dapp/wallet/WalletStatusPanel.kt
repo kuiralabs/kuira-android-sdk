@@ -715,7 +715,11 @@ private fun ProvingModeToggle(
         ) {
             ProvingMode.entries.forEach { mode ->
                 ChipButton(
-                    text = mode.name.lowercase(),
+                    // "on-device" is clearer than "local" for where the proof runs.
+                    text = when (mode) {
+                        ProvingMode.LOCAL -> "on-device"
+                        ProvingMode.REMOTE -> "remote"
+                    },
                     selected = mode == selected,
                     colors = colors,
                     modifier = Modifier.weight(1f),
