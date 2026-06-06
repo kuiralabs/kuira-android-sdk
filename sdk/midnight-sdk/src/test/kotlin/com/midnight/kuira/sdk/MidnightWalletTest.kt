@@ -15,6 +15,7 @@ import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -70,6 +71,41 @@ class MidnightWalletTest {
 
         verify(nodeRpc).submitAndWaitForFinalization(eq("balanced_hex"), any(), anyOrNull())
         verify(syncManager).invalidateMemo()
+    }
+
+    // ── #226: heavy SDK work runs off the caller's thread (withContext IO),
+    //    so a main-thread caller (wallet panel, match flow) doesn't jank. ──
+
+    @Test
+    fun `balance offloads its work off the caller thread`() = runTest {
+        val callerThread = Thread.currentThread()
+        var workThread: Thread? = null
+        val balanceRepo = mock<BalanceRepository> {
+            on { observeBalances(any()) } doAnswer {
+                workThread = Thread.currentThread()
+                flowOf(emptyList<TokenBalance>())
+            }
+        }
+        val dustRepo = mock<DustRepository> {
+            onBlocking { getCurrentBalance(any()) } doReturn BigInteger.ZERO
+        }
+        val tracker = mock<ShieldedBalanceTracker> {
+            on { currentNight() } doReturn BigInteger.ZERO
+        }
+        val wallet = createWallet(
+            balanceRepository = balanceRepo,
+            dustRepository = dustRepo,
+            shieldedTracker = tracker,
+        )
+
+        wallet.balance()
+
+        assertNotNull("balance() should query the balance repository", workThread)
+        assertNotEquals(
+            "balance() must run its work off the caller thread (withContext(Dispatchers.IO))",
+            callerThread,
+            workThread,
+        )
     }
 
     // ── syncDust delegates to DustRepository ──

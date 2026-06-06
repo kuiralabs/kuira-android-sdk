@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -87,20 +89,25 @@ class MidnightSdkProvider @Inject constructor(
                 teardown()
             }
 
+            // Seed unlock may show a biometric prompt — keep it on the main thread.
             val seed = walletSeedSource.ensureSeedReady(activity)
-            val built = try {
-                sdkFactory.create(config, seed)
-            } finally {
-                // Builder copies the seed; wipe our view so BIP-39 material
-                // doesn't linger on the heap (even if create() threw).
-                seed.fill(0)
+            // SDK build + proving-key prep are CPU/FFI/IO heavy — run off the main
+            // thread so the bootstrap doesn't jank the UI.
+            val built = withContext(Dispatchers.IO) {
+                val sdk = try {
+                    sdkFactory.create(config, seed)
+                } finally {
+                    // Builder copies the seed; wipe our view so BIP-39 material
+                    // doesn't linger on the heap (even if create() threw).
+                    seed.fill(0)
+                }
+                // Wallet proving-key readiness (local-tmp shortcut → S3 fallback)
+                // is part of "the SDK is usable". The SDK owns the recipe; we just
+                // await it. dApp-specific contract keys are NOT our concern — those
+                // stay with the dApp (e.g. BBoard's post/takeDown verifier keys).
+                sdk.provingKeyManager.ensureWalletKeysAvailable(logger = { Log.i(TAG, it) })
+                sdk
             }
-
-            // Wallet proving-key readiness (local-tmp shortcut → S3 fallback)
-            // is part of "the SDK is usable". The SDK owns the recipe; we just
-            // await it. dApp-specific contract keys are NOT our concern — those
-            // stay with the dApp (e.g. BBoard's post/takeDown verifier keys).
-            built.provingKeyManager.ensureWalletKeysAvailable(logger = { Log.i(TAG, it) })
 
             // Publish config before the SDK: any awaitSdk() waiter unblocks on
             // a non-null sdk, and must see the matching activeConfig when it does.

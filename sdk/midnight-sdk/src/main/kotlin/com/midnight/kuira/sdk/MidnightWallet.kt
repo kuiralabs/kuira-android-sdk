@@ -14,12 +14,14 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.NodeRpcException
 import com.midnight.kuira.core.ledger.api.TransactionRejected
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.math.BigInteger
 
@@ -83,7 +85,7 @@ class MidnightWallet internal constructor(
      * For a forced resync (e.g. before a sequential tx or when the UI wants
      * to skip the subscription's natural cadence), call [refresh] first.
      */
-    suspend fun balance(): WalletBalance {
+    suspend fun balance(): WalletBalance = withContext(Dispatchers.IO) {
         val tokenBalances = balanceRepository.observeBalances(walletAddress).first()
         val unshielded = tokenBalances
             .firstOrNull { it.tokenType == TokenTypeMapper.NIGHT_SYMBOL }
@@ -91,7 +93,7 @@ class MidnightWallet internal constructor(
             ?: BigInteger.ZERO
         val shielded = shieldedTracker.currentNight()
         val dust = dustRepository.getCurrentBalance(walletAddress)
-        return WalletBalance(
+        WalletBalance(
             unshieldedNight = unshielded,
             shieldedNight = shielded,
             dust = dust,
@@ -152,7 +154,7 @@ class MidnightWallet internal constructor(
         minNight: BigInteger,
         @Suppress("UNUSED_PARAMETER") pollIntervalMs: Long = 3_000L,
         timeoutMs: Long = DEFAULT_FUNDING_TIMEOUT_MS,
-    ): WalletBalance {
+    ): WalletBalance = withContext(Dispatchers.IO) {
         val funded = withTimeout(timeoutMs) {
             balanceRepository.observeBalances(walletAddress)
                 .first { balances ->
@@ -171,7 +173,7 @@ class MidnightWallet internal constructor(
             ?.balance
             ?: BigInteger.ZERO
         val dust = dustRepository.getCurrentBalance(walletAddress)
-        return WalletBalance(
+        WalletBalance(
             unshieldedNight = unshielded,
             // Shielded NIGHT is the SDK's cached value — external funding
             // lands on the unshielded address, so we don't trigger a shielded
@@ -202,19 +204,21 @@ class MidnightWallet internal constructor(
     suspend fun syncDust(
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ) {
-        dustSyncManager.ensureSynced(onSyncProgress = onProgress)
+        withContext(Dispatchers.IO) { dustSyncManager.ensureSynced(onSyncProgress = onProgress) }
     }
 
-    override suspend fun balanceTransaction(provenTxHex: String): String = balanceMutex.withLock {
-        val balanced = doBalance(provenTxHex)
-        // Defer recording until submit succeeds (see [pendingSpentNullifiers]).
-        if (balanced.spentNullifiers.isNotEmpty()) {
-            pendingSpentNullifiers[balanced.txHex] = balanced.spentNullifiers
+    override suspend fun balanceTransaction(provenTxHex: String): String = withContext(Dispatchers.IO) {
+        balanceMutex.withLock {
+            val balanced = doBalance(provenTxHex)
+            // Defer recording until submit succeeds (see [pendingSpentNullifiers]).
+            if (balanced.spentNullifiers.isNotEmpty()) {
+                pendingSpentNullifiers[balanced.txHex] = balanced.spentNullifiers
+            }
+            balanced.txHex
         }
-        balanced.txHex
     }
 
-    override suspend fun submitTransaction(balancedTxHex: String) {
+    override suspend fun submitTransaction(balancedTxHex: String) = withContext(Dispatchers.IO) {
         // Remove the pending entry up front so it can't leak if submit throws.
         val pending = pendingSpentNullifiers.remove(balancedTxHex)
         try {
@@ -233,7 +237,7 @@ class MidnightWallet internal constructor(
     override suspend fun balanceAndSubmit(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)?,
-    ): Unit = balanceMutex.withLock {
+    ): Unit = withContext(Dispatchers.IO) { balanceMutex.withLock {
         onProgress?.invoke(BalanceProgress.SyncingDust)
 
         // Error-170 (stale dust root) recovery escalates: a fast delta re-sync first,
@@ -269,7 +273,7 @@ class MidnightWallet internal constructor(
                 recover()
             }
         }
-    }
+    } }
 
     private suspend fun doBalance(
         provenTxHex: String,
@@ -440,7 +444,7 @@ class MidnightWallet internal constructor(
      * Errors in shielded resync don't abort the dust resync (and vice versa) —
      * partial freshness is better than no freshness.
      */
-    suspend fun refresh() {
+    suspend fun refresh() = withContext(Dispatchers.IO) {
         try {
             shieldedTracker.resync()
         } catch (e: Exception) {
@@ -477,15 +481,15 @@ class MidnightWallet internal constructor(
      * coordinator is wired or there's no checkpoint yet. The coordinator
      * hash-guards redundant uploads, so this is cheap to call after every sync.
      */
-    suspend fun backupDustToCloud() {
-        val backup = dustCloudBackup ?: return
-        val state = dustRepository.loadState(walletAddress) ?: return
+    suspend fun backupDustToCloud() = withContext(Dispatchers.IO) {
+        val backup = dustCloudBackup ?: return@withContext
+        val state = dustRepository.loadState(walletAddress) ?: return@withContext
         val bytes = try {
             state.serialize()
         } finally {
             state.close()
-        } ?: return
-        val lastEventId = dustRepository.getLastAppliedEventId(walletAddress) ?: return
+        } ?: return@withContext
+        val lastEventId = dustRepository.getLastAppliedEventId(walletAddress) ?: return@withContext
         backup.upload(walletAddress, bytes, lastEventId)
     }
 
