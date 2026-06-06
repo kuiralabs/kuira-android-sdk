@@ -12,6 +12,7 @@ import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
+import com.midnight.kuira.core.ledger.api.NodeRpcException
 import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
@@ -260,7 +261,7 @@ class MidnightWallet internal constructor(
                 recordSpentNullifiers(balanced.spentNullifiers)
                 dustSyncManager.invalidateMemo()
                 return@withLock
-            } catch (e: NodeRpcError) {
+            } catch (e: NodeRpcException) {
                 if (!isDustSpendProofError(e) || attempt >= recoveries.size) throw e
                 val (label, recover) = recoveries[attempt++]
                 Log.w(TAG, "Error 170 — $label and retry ($attempt/${recoveries.size})")
@@ -449,7 +450,14 @@ class MidnightWallet internal constructor(
             // Routine refresh = incremental delta on the persisted checkpoint,
             // NOT a genesis wipe. forceFullSync (forceResync) is only for
             // error-170 recovery where stale roots demand a clean rebuild.
-            dustSyncManager.refreshIncremental()
+            //
+            // Under balanceMutex: refreshIncremental closes the shared
+            // DustLocalState, which must not happen while a balance is mid-flight
+            // (it holds the same state) — otherwise the balance resumes onto a
+            // closed state and fails with "DustLocalState has been closed".
+            balanceMutex.withLock {
+                dustSyncManager.refreshIncremental()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
         }
@@ -481,9 +489,13 @@ class MidnightWallet internal constructor(
         backup.upload(walletAddress, bytes, lastEventId)
     }
 
-    private fun isDustSpendProofError(e: NodeRpcError): Boolean {
-        val data = e.data ?: return false
-        return data.contains("Custom error: 170")
+    /** Node error 170 = InvalidDustSpendProof. Submit throws it as a
+     *  [TransactionRejected] (customErrorCode); a raw RPC error carries it in
+     *  [NodeRpcError.data]. Both must be detected or the 170 recovery never fires. */
+    internal fun isDustSpendProofError(e: NodeRpcException): Boolean = when (e) {
+        is TransactionRejected -> e.customErrorCode == 170
+        is NodeRpcError -> e.data?.contains("Custom error: 170") == true
+        else -> false
     }
 
     fun close() {

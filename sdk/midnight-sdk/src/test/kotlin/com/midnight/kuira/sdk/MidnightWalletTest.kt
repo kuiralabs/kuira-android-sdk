@@ -9,8 +9,11 @@ import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
+import com.midnight.kuira.core.ledger.api.NodeNetworkException
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
+import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
+import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -35,6 +38,19 @@ class MidnightWalletTest {
     fun `MidnightWallet implements TransactionBalancer`() {
         val wallet = createWallet()
         assertTrue(wallet is TransactionBalancer)
+    }
+
+    // ── Error-170 (InvalidDustSpendProof) detection drives the balanceAndSubmit
+    //    recovery loop. Regression: a submit-time 170 arrives as TransactionRejected,
+    //    not NodeRpcError — the loop used to miss it and fail without recovering. ──
+
+    @Test
+    fun `isDustSpendProofError detects 170 from TransactionRejected and NodeRpcError, not others`() {
+        val wallet = createWallet()
+        assertTrue(wallet.isDustSpendProofError(TransactionRejected("Invalid Transaction", customErrorCode = 170)))
+        assertTrue(wallet.isDustSpendProofError(NodeRpcError(1010, "Invalid Transaction", "Custom error: 170")))
+        assertFalse(wallet.isDustSpendProofError(TransactionRejected("Invalid Transaction", customErrorCode = 115)))
+        assertFalse(wallet.isDustSpendProofError(NodeNetworkException("offline")))
     }
 
     // ── submitTransaction delegates to NodeRpcClient ──
