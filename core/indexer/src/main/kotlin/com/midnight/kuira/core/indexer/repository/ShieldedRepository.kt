@@ -14,6 +14,7 @@ import com.midnight.kuira.core.indexer.websocket.GraphQLWebSocketClient
 import com.midnight.kuira.core.network.NetworkConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -55,6 +56,11 @@ class ShieldedRepository @Inject constructor(
     private fun createFreshWsClient(): GraphQLWebSocketClient {
         val httpClient = HttpClient(OkHttp) {
             install(io.ktor.client.plugins.websocket.WebSockets)
+            // Keep the shielded-events subscription alive. Ktor's plugin-level
+            // pingInterval is a no-op on the OkHttp engine (KTOR-4752), so set
+            // OkHttp's own ping: without it this socket is dropped at the ~60s
+            // idle timeout and flaps (subscribe → error → reconnect) every minute.
+            engine { config { pingInterval(20, TimeUnit.SECONDS) } }
         }
         return GraphQLWebSocketClient(url = wsEndpoint, httpClient = httpClient)
     }

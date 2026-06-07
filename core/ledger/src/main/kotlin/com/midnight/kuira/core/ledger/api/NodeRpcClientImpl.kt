@@ -3,6 +3,7 @@ package com.midnight.kuira.core.ledger.api
 import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import java.util.concurrent.TimeUnit
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -82,6 +83,13 @@ class NodeRpcClientImpl(
 
             // WebSocket support for transaction status subscription
             install(WebSockets)
+
+            // Keep the finalization WebSocket alive. Ktor's plugin-level
+            // pingInterval is a no-op on the OkHttp engine (KTOR-4752), so set
+            // OkHttp's own ping: RFC6455 ping frames every 20s stop a slow
+            // finalization wait (or a ~60s proxy/server idle timeout) from
+            // silently dropping the socket, and surface dead connections promptly.
+            engine { config { pingInterval(20, TimeUnit.SECONDS) } }
 
             // Timeout configuration
             install(HttpTimeout) {

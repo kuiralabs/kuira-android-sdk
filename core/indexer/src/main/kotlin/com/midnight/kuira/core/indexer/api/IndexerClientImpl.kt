@@ -10,6 +10,7 @@ import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import java.util.concurrent.TimeUnit
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -92,6 +93,13 @@ class IndexerClientImpl(
                 level = LogLevel.INFO
             }
             install(WebSockets)
+
+            // Keep subscription WebSockets alive. Ktor's plugin-level pingInterval
+            // is a no-op on the OkHttp engine (KTOR-4752), so set OkHttp's own
+            // ping: RFC6455 ping frames every 20s stop the indexer's subscriptions
+            // from being dropped at the ~60s idle timeout (which otherwise causes
+            // the subscribe → error → reconnect flapping seen in logcat).
+            engine { config { pingInterval(20, TimeUnit.SECONDS) } }
 
             // Timeout configuration
             install(HttpTimeout) {

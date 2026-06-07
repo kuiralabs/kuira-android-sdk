@@ -74,6 +74,14 @@ class GraphQLWebSocketClient(
          * Prevents OOM on high-volume subscriptions (PREPROD has 247k+ dust events).
          */
         private const val SUBSCRIPTION_CHANNEL_CAPACITY = 64
+
+        /**
+         * Application-level (graphql-transport-ws) ping cadence. Kept under the
+         * server/proxy idle close (~60s observed) so the connection never looks
+         * idle. Belt-and-suspenders with the engine's RFC6455 ping — covers a
+         * server that times out on the graphql-ws layer rather than the socket.
+         */
+        private const val KEEPALIVE_INTERVAL_MS = 20_000L
     }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -138,6 +146,10 @@ class GraphQLWebSocketClient(
 
         // Start message processing loop — NOW it won't miss any messages
         startMessageProcessing()
+        // Send periodic app-level pings so the server/proxy never sees the
+        // connection as idle (the server closes idle sockets ~60s, which showed
+        // up as subscribe → error → reconnect flapping every minute).
+        startKeepAlive()
     }
 
     /**
@@ -276,6 +288,27 @@ class GraphQLWebSocketClient(
             "ping" -> json.decodeFromString<GraphQLWebSocketMessage.Ping>(text)
             "pong" -> json.decodeFromString<GraphQLWebSocketMessage.Pong>(text)
             else -> throw IllegalArgumentException("Unknown message type: $type")
+        }
+    }
+
+    /**
+     * Periodically send a graphql-transport-ws `ping` while connected, so the
+     * connection never idles past the server's close timeout. Runs on [scope],
+     * so [close] (which cancels the scope) stops it; a send failure means the
+     * session is already gone, so the loop exits and the message loop handles
+     * teardown/reconnect.
+     */
+    private fun startKeepAlive() {
+        scope.launch {
+            while (isActive && connected.get()) {
+                delay(KEEPALIVE_INTERVAL_MS)
+                if (!connected.get()) break
+                try {
+                    ping()
+                } catch (e: Exception) {
+                    break
+                }
+            }
         }
     }
 
