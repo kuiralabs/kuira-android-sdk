@@ -1,3 +1,15 @@
+public abstract interface class com/midnight/kuira/sdk/walletruntime/DustBackupDigestStore {
+	public abstract fun get (Ljava/lang/String;)Ljava/lang/String;
+	public abstract fun put (Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/DustCloudBackupCoordinator : com/midnight/kuira/sdk/DustCloudBackup {
+	public static final field TAG Ljava/lang/String;
+	public fun <init> (Lcom/midnight/kuira/core/identity/backup/BackupStorage;[BLcom/midnight/kuira/sdk/walletruntime/DustBackupDigestStore;)V
+	public fun fetch (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun upload (Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract interface class com/midnight/kuira/sdk/walletruntime/MidnightSdkFactory {
 	public abstract fun create (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;[B)Lcom/midnight/kuira/sdk/MidnightSdk;
 }
@@ -19,6 +31,13 @@ public final class com/midnight/kuira/sdk/walletruntime/MidnightSdkProvider_Fact
 	public static fun newInstance (Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;
 }
 
+public final class com/midnight/kuira/sdk/walletruntime/PrefsDustBackupDigestStore : com/midnight/kuira/sdk/walletruntime/DustBackupDigestStore {
+	public static final field PREFS Ljava/lang/String;
+	public fun <init> (Landroid/content/Context;)V
+	public fun get (Ljava/lang/String;)Ljava/lang/String;
+	public fun put (Ljava/lang/String;Ljava/lang/String;)V
+}
+
 public final class com/midnight/kuira/sdk/walletruntime/WalletConfig {
 	public fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Lcom/midnight/kuira/core/compact/proving/ProvingMode;Ljava/lang/String;)V
 	public synthetic fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Lcom/midnight/kuira/core/compact/proving/ProvingMode;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -37,14 +56,22 @@ public final class com/midnight/kuira/sdk/walletruntime/WalletConfig {
 
 public final class com/midnight/kuira/sdk/walletruntime/WalletRuntimeModule {
 	public static final field INSTANCE Lcom/midnight/kuira/sdk/walletruntime/WalletRuntimeModule;
-	public final fun provideMidnightSdkFactory (Landroid/content/Context;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;
+	public final fun provideDriveAuthManager (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;
+	public final fun provideMidnightSdkFactory (Landroid/content/Context;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/WalletRuntimeModule_ProvideDriveAuthManagerFactory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/WalletRuntimeModule_ProvideDriveAuthManagerFactory;
+	public fun get ()Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun provideDriveAuthManager (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;
 }
 
 public final class com/midnight/kuira/sdk/walletruntime/WalletRuntimeModule_ProvideMidnightSdkFactoryFactory : dagger/internal/Factory {
-	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/WalletRuntimeModule_ProvideMidnightSdkFactoryFactory;
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/WalletRuntimeModule_ProvideMidnightSdkFactoryFactory;
 	public fun get ()Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;
 	public synthetic fun get ()Ljava/lang/Object;
-	public static fun provideMidnightSdkFactory (Landroid/content/Context;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;
+	public static fun provideMidnightSdkFactory (Landroid/content/Context;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;
 }
 
 public class hilt_aggregated_deps/_com_midnight_kuira_sdk_walletruntime_WalletRuntimeModule {

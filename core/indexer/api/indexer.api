@@ -1157,6 +1157,21 @@ public final class com/midnight/kuira/core/indexer/repository/ShieldedRepository
 	public static fun newInstance (Landroidx/datastore/core/DataStore;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/network/NetworkConfig;)Lcom/midnight/kuira/core/indexer/repository/ShieldedRepository;
 }
 
+public final class com/midnight/kuira/core/indexer/repository/SpentDustNullifierStore {
+	public fun <init> (Landroidx/datastore/core/DataStore;)V
+	public final fun clear (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun recordSpent (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun retainPresent (Ljava/lang/String;Ljava/util/Set;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun spentNullifiers (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/indexer/repository/SpentDustNullifierStore_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore_Factory;
+	public fun get ()Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroidx/datastore/core/DataStore;)Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore;
+}
+
 public abstract interface class com/midnight/kuira/core/indexer/storage/EventCache {
 	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getEventCount (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

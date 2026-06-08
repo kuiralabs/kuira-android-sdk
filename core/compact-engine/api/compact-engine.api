@@ -26,6 +26,13 @@ public final class com/midnight/kuira/core/compact/BalanceProgress$ProvingDust :
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/midnight/kuira/core/compact/BalanceProgress$RecoveringDustState : com/midnight/kuira/core/compact/BalanceProgress {
+	public static final field INSTANCE Lcom/midnight/kuira/core/compact/BalanceProgress$RecoveringDustState;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/compact/BalanceProgress$RetryingDustSync : com/midnight/kuira/core/compact/BalanceProgress {
 	public static final field INSTANCE Lcom/midnight/kuira/core/compact/BalanceProgress$RetryingDustSync;
 	public fun equals (Ljava/lang/Object;)Z
@@ -73,7 +80,8 @@ public final class com/midnight/kuira/core/compact/CircuitExecutionException : j
 
 public final class com/midnight/kuira/core/compact/CircuitExecutor {
 	public static final field Companion Lcom/midnight/kuira/core/compact/CircuitExecutor$Companion;
-	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroid/content/Context;Lkotlinx/coroutines/CoroutineDispatcher;)V
+	public synthetic fun <init> (Landroid/content/Context;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun executeCircuit (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun executeCircuit$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun executeConstructor (Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -529,7 +537,8 @@ public final class com/midnight/kuira/core/compact/proving/LocalProver$Companion
 public final class com/midnight/kuira/core/compact/proving/ProvingKeyManager {
 	public static final field CURRENT_VERSION I
 	public static final field Companion Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager$Companion;
-	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroid/content/Context;Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Landroid/content/Context;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun cachedSizeBytes ()J
 	public final fun clearCache ()V
 	public final fun contractKeysDir (Ljava/lang/String;)Ljava/io/File;
@@ -546,6 +555,8 @@ public final class com/midnight/kuira/core/compact/proving/ProvingKeyManager {
 	public final fun hasWalletKeys ()Z
 	public final fun installCircuitKeysForProving (Ljava/util/List;Ljava/io/File;Ljava/io/File;Z)V
 	public static synthetic fun installCircuitKeysForProving$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/util/List;Ljava/io/File;Ljava/io/File;ZILjava/lang/Object;)V
+	public final fun installCircuitKeysFromAssets (Ljava/lang/String;Z)V
+	public static synthetic fun installCircuitKeysFromAssets$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/lang/String;ZILjava/lang/Object;)V
 	public final fun installContractKeys (Ljava/lang/String;Ljava/util/List;Ljava/io/File;Ljava/io/File;Z)V
 	public static synthetic fun installContractKeys$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/lang/String;Ljava/util/List;Ljava/io/File;Ljava/io/File;ZILjava/lang/Object;)V
 	public final fun installFromLocalTmp (Ljava/io/File;)Z

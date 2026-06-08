@@ -129,6 +129,31 @@ public final class com/midnight/kuira/core/identity/backup/AppStateBackupEncrypt
 	public final fun encrypt ([B[B)[B
 }
 
+public abstract interface class com/midnight/kuira/core/identity/backup/AuthorizeOutcome {
+}
+
+public final class com/midnight/kuira/core/identity/backup/AuthorizeOutcome$Authorized : com/midnight/kuira/core/identity/backup/AuthorizeOutcome {
+	public fun <init> (Lcom/midnight/kuira/core/identity/backup/DriveAuth;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+	public final fun copy (Lcom/midnight/kuira/core/identity/backup/DriveAuth;)Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$Authorized;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$Authorized;Lcom/midnight/kuira/core/identity/backup/DriveAuth;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$Authorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAuth ()Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/backup/AuthorizeOutcome$NeedsConsent : com/midnight/kuira/core/identity/backup/AuthorizeOutcome {
+	public fun <init> (Landroid/content/IntentSender;)V
+	public final fun component1 ()Landroid/content/IntentSender;
+	public final fun copy (Landroid/content/IntentSender;)Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$NeedsConsent;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$NeedsConsent;Landroid/content/IntentSender;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/backup/AuthorizeOutcome$NeedsConsent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIntentSender ()Landroid/content/IntentSender;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/identity/backup/BackupDecryptionException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -158,6 +183,79 @@ public final class com/midnight/kuira/core/identity/backup/BlockStoreBackupStora
 public final class com/midnight/kuira/core/identity/backup/BlockStoreBackupStorage$Companion {
 }
 
+public final class com/midnight/kuira/core/identity/backup/DriveAuth {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/backup/DriveAuth;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAccessToken ()Ljava/lang/String;
+	public final fun getAccountEmail ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/core/identity/backup/DriveAuthManager {
+	public abstract fun authorize (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun tokenFromConsent (Landroid/content/Intent;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+}
+
+public final class com/midnight/kuira/core/identity/backup/DriveAuthManagerKt {
+	public static final fun silentTokenOrThrow (Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/backup/DriveBackupStorage : com/midnight/kuira/core/identity/backup/BackupStorage {
+	public static final field Companion Lcom/midnight/kuira/core/identity/backup/DriveBackupStorage$Companion;
+	public fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
+	public fun delete (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun isAvailable (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun retrieve (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun store ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/identity/backup/DriveBackupStorage$Companion {
+}
+
+public final class com/midnight/kuira/core/identity/backup/DustBackupEncryptor {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/DustBackupEncryptor;
+	public final fun decrypt ([B[B)[B
+	public final fun encrypt ([B[B)[B
+}
+
+public final class com/midnight/kuira/core/identity/backup/DustBackupEntry {
+	public fun <init> (Ljava/lang/String;J[B)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun component3 ()[B
+	public final fun copy (Ljava/lang/String;J[B)Lcom/midnight/kuira/core/identity/backup/DustBackupEntry;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/backup/DustBackupEntry;Ljava/lang/String;J[BILjava/lang/Object;)Lcom/midnight/kuira/core/identity/backup/DustBackupEntry;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAddress ()Ljava/lang/String;
+	public final fun getLastEventId ()J
+	public final fun getStateBytes ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/backup/DustCloudBundleCodec {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/DustCloudBundleCodec;
+	public final fun decode ([B)Ljava/util/List;
+	public final fun encode (Ljava/util/List;)[B
+	public final fun entryFor ([BLjava/lang/String;)Lcom/midnight/kuira/core/identity/backup/DustBackupEntry;
+}
+
+public final class com/midnight/kuira/core/identity/backup/PlayServicesDriveAuthManager : com/midnight/kuira/core/identity/backup/DriveAuthManager {
+	public static final field Companion Lcom/midnight/kuira/core/identity/backup/PlayServicesDriveAuthManager$Companion;
+	public static final field DRIVE_APPDATA_SCOPE Ljava/lang/String;
+	public fun <init> (Landroid/content/Context;)V
+	public fun authorize (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun tokenFromConsent (Landroid/content/Intent;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
+}
+
+public final class com/midnight/kuira/core/identity/backup/PlayServicesDriveAuthManager$Companion {
+}
+
 public final class com/midnight/kuira/core/identity/backup/PrfKeyDeriver {
 	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/PrfKeyDeriver;
 	public static final field PRF_OUTPUT_SIZE I
@@ -176,6 +274,11 @@ public final class com/midnight/kuira/core/identity/backup/RestoredAppState {
 	public fun <init> ([B)V
 	public final fun getAppMetadata ()[B
 	public final fun wipe ()V
+}
+
+public final class com/midnight/kuira/core/identity/backup/SeedDerivedKeyDeriver {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/SeedDerivedKeyDeriver;
+	public final fun deriveDustBackupKey ([B)[B
 }
 
 public final class com/midnight/kuira/core/identity/backup/SeedDeriver {
