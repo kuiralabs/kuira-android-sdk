@@ -3,6 +3,7 @@ package com.midnight.kuira.dapp.sigil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.midnight.kuira.dapp.dappPressable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,7 +93,11 @@ fun SigilStatusPanel(
     SigilPill(
         status = status,
         colors = colors,
-        modifier = modifier.clickable { sheetOpen = true },
+        // dappPressable gives the pill the pressed/hover/focus state layer +
+        // press scale, matching the rest of the app's interactive surfaces.
+        modifier = modifier.dappPressable(
+            shape = RoundedCornerShape(SigilDimens.PillCornerRadius),
+        ) { sheetOpen = true },
     )
 
     if (sheetOpen) {

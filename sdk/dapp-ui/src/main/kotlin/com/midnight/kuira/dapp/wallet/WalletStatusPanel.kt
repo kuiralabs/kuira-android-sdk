@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +49,7 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -194,13 +194,16 @@ fun WalletStatusPanel(
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
 
-    // The pill — always rendered. Tap opens the sheet.
+    // The pill — always rendered. Tap opens the sheet. dappPressable gives it
+    // the pressed/hover/focus state layer + press scale the rest of the app has.
     WalletPill(
         status = status,
         network = network,
         formatter = formatter,
         colors = colors,
-        modifier = modifier.clickable { sheetOpen = true },
+        modifier = modifier.dappPressable(
+            shape = RoundedCornerShape(PanelDimens.PillCornerRadius),
+        ) { sheetOpen = true },
     )
 
     // FragmentActivity is required by SeedVault.loadSeed / storeSeed for the
@@ -769,13 +772,17 @@ private fun ChipButton(
 ) {
     val bg = if (selected) colors.onSheet else colors.button
     val fg = if (selected) colors.sheetBackground else colors.onSheetDim
+    val chipShape = RoundedCornerShape(PanelDimens.ButtonCornerRadius)
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .height(PanelDimens.ButtonHeight)
-            .clip(RoundedCornerShape(PanelDimens.ButtonCornerRadius))
-            .background(bg)
-            .clickable(onClick = onClick),
+            // dappPressable is the OUTER modifier so the whole chip scales on
+            // press and the state layer draws over the fill; the filled-vs-
+            // outlined bg/fg above remains the at-rest SELECTED style.
+            .dappPressable(shape = chipShape, selected = selected, onClick = onClick)
+            .clip(chipShape)
+            .background(bg),
     ) {
         Text(
             text = text,
