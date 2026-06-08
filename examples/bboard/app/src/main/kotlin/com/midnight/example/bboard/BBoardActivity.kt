@@ -49,8 +49,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import com.midnight.kuira.core.compact.ContractCallStage
 import com.midnight.kuira.core.network.MidnightNetwork
 import androidx.compose.ui.text.AnnotatedString
+import com.midnight.kuira.dapp.ContractCallProgressBar
 import com.midnight.kuira.dapp.PanelBar
 import com.midnight.kuira.dapp.sigil.SigilStatus
 import dagger.hilt.android.AndroidEntryPoint
@@ -418,14 +420,26 @@ private fun VacantBoard(onPost: (String) -> Unit, isEnabled: Boolean = true) {
 }
 
 @Composable
-private fun WorkingBoard(stage: String) {
+private fun WorkingBoard(stage: ContractCallStage?) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.ScreenPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CircularProgressIndicator(color = Colors.OnSurface, strokeWidth = 2.dp, modifier = Modifier.size(SPINNER_SIZE_DP.dp))
         Spacer(modifier = Modifier.height(Spacing.ItemGap))
-        Text(stage, color = Colors.OnSurfaceDim, fontSize = Type.Label)
+        if (stage == null) {
+            // Brief pre-stage beat before the first ContractCallStage arrives.
+            Text("Preparing…", color = Colors.OnSurfaceDim, fontSize = Type.Label)
+        } else {
+            // SDK drop-in: staged label + monotonic, eased progress bar, fed by
+            // the live ContractCallStage from the contract call's onProgress.
+            ContractCallProgressBar(
+                stage = stage,
+                accent = Colors.Accent,
+                trackColor = Colors.Disabled,
+                labelColor = Colors.OnSurfaceDim,
+            )
+        }
     }
 }
 

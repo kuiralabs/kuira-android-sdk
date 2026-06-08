@@ -4,9 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.ContractCallException
 import com.midnight.kuira.core.compact.ContractCallStage
+import com.midnight.kuira.dapp.defaultLabel
 import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.MidnightContract
 import com.midnight.kuira.core.compact.TransactionStatus
@@ -165,7 +165,7 @@ class BBoardViewModel @Inject constructor(
                 }
 
                 val deployResult = bboard.deploy { stage ->
-                    val label = stageLabel(stage)
+                    val label = stage.defaultLabel() ?: "Working…"
                     Log.i(TAG, "Deploy stage: $label")
                     _state.value = BBoardState.Connecting(label)
                 }
@@ -284,12 +284,11 @@ class BBoardViewModel @Inject constructor(
 
         viewModelScope.launch {
             Log.i(TAG, "Posting: $message")
-            _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
+            _state.value = current.copy(boardState = BoardState.Working(null))
             try {
                 val receipt = bboard.call("post", message) { stage ->
-                    val label = stageLabel(stage)
-                    Log.i(TAG, "Post stage: $label")
-                    _state.value = current.copy(boardState = BoardState.Working(label))
+                    Log.i(TAG, "Post stage: ${stage.defaultLabel()}")
+                    _state.value = current.copy(boardState = BoardState.Working(stage))
                 }
 
                 if (receipt.status == TransactionStatus.SUBMITTED) {
@@ -323,12 +322,11 @@ class BBoardViewModel @Inject constructor(
 
         viewModelScope.launch {
             Log.i(TAG, "Taking down")
-            _state.value = current.copy(boardState = BoardState.Working("Preparing..."))
+            _state.value = current.copy(boardState = BoardState.Working(null))
             try {
                 bboard.call("takeDown") { stage ->
-                    val label = stageLabel(stage)
-                    Log.i(TAG, "TakeDown stage: $label")
-                    _state.value = current.copy(boardState = BoardState.Working(label))
+                    Log.i(TAG, "TakeDown stage: ${stage.defaultLabel()}")
+                    _state.value = current.copy(boardState = BoardState.Working(stage))
                 }
                 Log.i(TAG, "TakeDown submitted!")
 
@@ -376,25 +374,9 @@ class BBoardViewModel @Inject constructor(
         _state.value = BBoardState.Setup
     }
 
-    private fun stageLabel(stage: ContractCallStage): String = when (stage) {
-        is ContractCallStage.FetchingState -> "Fetching state..."
-        is ContractCallStage.Executing -> "Executing circuit..."
-        is ContractCallStage.Proving -> "Generating ZK proof..."
-        is ContractCallStage.Balancing -> "Balancing transaction..."
-        is ContractCallStage.BalancingDetail -> balanceLabel(stage.progress)
-        is ContractCallStage.Submitting -> "Submitting to chain..."
-    }
-
-    private fun balanceLabel(progress: BalanceProgress): String = when (progress) {
-        is BalanceProgress.SyncingDust -> "Syncing dust wallet..."
-        is BalanceProgress.SyncingDustProgress ->
-            "Syncing dust: ${progress.eventsProcessed}/${progress.totalEvents}"
-        is BalanceProgress.ProvingDust -> "Proving dust payment..."
-        is BalanceProgress.Submitting -> "Submitting to blockchain..."
-        is BalanceProgress.WaitingFinalization -> "Waiting for finalization..."
-        is BalanceProgress.RetryingDustSync -> "Retrying dust sync..."
-        is BalanceProgress.RecoveringDustState -> "Recovering dust balance — this can take a moment..."
-    }
+    // Stage → label mapping now comes from the SDK
+    // (`com.midnight.kuira.dapp.defaultLabel()`); the connected screen renders
+    // the SDK's `ContractCallProgressBar` directly from the live ContractCallStage.
 
     private fun installContractKeys() {
         ProvingKeyManager(context).installCircuitKeysFromAssets()
@@ -460,7 +442,7 @@ sealed class DustSyncStatus {
 
 sealed class BoardState {
     data object Vacant : BoardState()
-    data class Working(val stage: String) : BoardState()
+    data class Working(val stage: ContractCallStage?) : BoardState()
     data class Occupied(val message: String) : BoardState()
     data class CallError(val message: String) : BoardState()
 }
