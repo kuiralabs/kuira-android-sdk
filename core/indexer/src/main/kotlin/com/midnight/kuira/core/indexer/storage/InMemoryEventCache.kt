@@ -24,8 +24,10 @@ import kotlinx.coroutines.sync.withLock
  * **Future:** Replace with Room-based implementation for production.
  *
  * @param maxSize Maximum number of events to cache (default: 10,000)
+ *
+ * @suppress
  */
-class InMemoryEventCache(
+internal class InMemoryEventCache(
     private val maxSize: Int = DEFAULT_MAX_SIZE
 ) : EventCache {
 

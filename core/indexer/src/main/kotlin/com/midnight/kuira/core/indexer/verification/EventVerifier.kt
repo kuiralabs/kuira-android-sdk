@@ -19,8 +19,10 @@ import com.midnight.kuira.core.indexer.model.RawLedgerEvent
  *
  * **Phase 4A:** Placeholder implementation (logs warnings)
  * **Phase 4B:** Full cryptographic verification
+ *
+ * @suppress
  */
-interface EventVerifier {
+internal interface EventVerifier {
 
     /**
      * Verify a single ledger event with Merkle proof.
@@ -117,8 +119,10 @@ data class MerkleProof(
 
 /**
  * Result of event verification.
+ *
+ * @suppress
  */
-sealed class VerificationResult {
+internal sealed class VerificationResult {
     /**
      * Event verified successfully.
      */

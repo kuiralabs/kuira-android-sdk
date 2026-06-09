@@ -12,8 +12,10 @@ import java.math.BigInteger
  * Returns deterministic test data based on event ID (extracted from rawHex hash).
  *
  * **Phase 4B:** Replace with real ledger 7.0.0 deserializer via JNI/FFI.
+ *
+ * @suppress
  */
-class MockDeserializer : LedgerEventDeserializer {
+internal class MockDeserializer : LedgerEventDeserializer {
 
     override suspend fun deserialize(rawHex: String): LedgerEvent {
         // Extract mock event ID from hex hash (for deterministic test data)

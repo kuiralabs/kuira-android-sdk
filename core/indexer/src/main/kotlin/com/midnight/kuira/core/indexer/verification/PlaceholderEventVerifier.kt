@@ -61,8 +61,10 @@ import android.util.Log
  *     }
  * }
  * ```
+ *
+ * @suppress
  */
-class PlaceholderEventVerifier : EventVerifier {
+internal class PlaceholderEventVerifier : EventVerifier {
 
     companion object {
         private const val TAG = "EventVerifier"

@@ -26,11 +26,6 @@ public abstract interface class com/midnight/kuira/core/wallet/deserializer/Ledg
 	public abstract fun deserialize (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
-public final class com/midnight/kuira/core/wallet/deserializer/MockDeserializer : com/midnight/kuira/core/wallet/deserializer/LedgerEventDeserializer {
-	public fun <init> ()V
-	public fun deserialize (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
 public final class com/midnight/kuira/core/wallet/model/Balance {
 	public static final field Companion Lcom/midnight/kuira/core/wallet/model/Balance$Companion;
 	public static final field DUST_PER_MIDNIGHT J

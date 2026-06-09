@@ -9,8 +9,10 @@ import com.midnight.kuira.core.indexer.model.RawLedgerEvent
  * - Store raw hex events from indexer
  * - Support range queries for event replay
  * - Track sync progress
+ *
+ * @suppress
  */
-interface EventCache {
+internal interface EventCache {
 
     /**
      * Store a raw ledger event.

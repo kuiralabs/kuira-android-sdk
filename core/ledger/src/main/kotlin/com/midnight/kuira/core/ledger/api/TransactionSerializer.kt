@@ -468,8 +468,10 @@ class FfiTransactionSerializer(
  * Pure Kotlin stub serializer (for testing without FFI).
  *
  * Generates deterministic mock hex for unit tests.
+ *
+ * @suppress
  */
-class StubTransactionSerializer : TransactionSerializer {
+internal class StubTransactionSerializer : TransactionSerializer {
     override fun serialize(intent: Intent): String {
         // Validate intent structure
         require(intent.guaranteedUnshieldedOffer != null) {

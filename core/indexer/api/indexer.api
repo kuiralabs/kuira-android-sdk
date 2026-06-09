@@ -1181,16 +1181,6 @@ public final class com/midnight/kuira/core/indexer/repository/SpentDustNullifier
 	public static fun newInstance (Landroidx/datastore/core/DataStore;)Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore;
 }
 
-public abstract interface class com/midnight/kuira/core/indexer/storage/EventCache {
-	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun getEventCount (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun getEventRange (JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun getLatestEventId (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun getOldestEventId (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun storeEvent (Lcom/midnight/kuira/core/indexer/model/RawLedgerEvent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun storeEvents (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
 public final class com/midnight/kuira/core/indexer/storage/EventEntity {
 	public fun <init> (JLjava/lang/String;JLjava/lang/Long;Ljava/lang/Long;J)V
 	public synthetic fun <init> (JLjava/lang/String;JLjava/lang/Long;Ljava/lang/Long;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -1211,25 +1201,6 @@ public final class com/midnight/kuira/core/indexer/storage/EventEntity {
 	public final fun getTimestamp ()Ljava/lang/Long;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
-}
-
-public final class com/midnight/kuira/core/indexer/storage/InMemoryEventCache : com/midnight/kuira/core/indexer/storage/EventCache {
-	public static final field Companion Lcom/midnight/kuira/core/indexer/storage/InMemoryEventCache$Companion;
-	public static final field DEFAULT_MAX_SIZE I
-	public static final field MIN_SIZE I
-	public fun <init> ()V
-	public fun <init> (I)V
-	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getEventCount (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getEventRange (JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getLatestEventId (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getOldestEventId (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun storeEvent (Lcom/midnight/kuira/core/indexer/model/RawLedgerEvent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun storeEvents (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
-public final class com/midnight/kuira/core/indexer/storage/InMemoryEventCache$Companion {
 }
 
 public final class com/midnight/kuira/core/indexer/storage/SyncStateManager {
@@ -1508,12 +1479,6 @@ public final class com/midnight/kuira/core/indexer/verification/EventVerificatio
 	public final fun getErrorCode ()Lcom/midnight/kuira/core/indexer/verification/VerificationError;
 }
 
-public abstract interface class com/midnight/kuira/core/indexer/verification/EventVerifier {
-	public abstract fun verifyBlockChain (Lcom/midnight/kuira/core/indexer/model/BlockInfo;Lcom/midnight/kuira/core/indexer/model/BlockInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun verifyBlockSignature (Lcom/midnight/kuira/core/indexer/model/BlockInfo;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun verifyEvent (Lcom/midnight/kuira/core/indexer/model/RawLedgerEvent;Lcom/midnight/kuira/core/indexer/verification/MerkleProof;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
 public final class com/midnight/kuira/core/indexer/verification/MerkleProof {
 	public fun <init> ([B[BLjava/util/List;Ljava/util/List;)V
 	public final fun component1 ()[B
@@ -1531,17 +1496,6 @@ public final class com/midnight/kuira/core/indexer/verification/MerkleProof {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class com/midnight/kuira/core/indexer/verification/PlaceholderEventVerifier : com/midnight/kuira/core/indexer/verification/EventVerifier {
-	public static final field Companion Lcom/midnight/kuira/core/indexer/verification/PlaceholderEventVerifier$Companion;
-	public fun <init> ()V
-	public fun verifyBlockChain (Lcom/midnight/kuira/core/indexer/model/BlockInfo;Lcom/midnight/kuira/core/indexer/model/BlockInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun verifyBlockSignature (Lcom/midnight/kuira/core/indexer/model/BlockInfo;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun verifyEvent (Lcom/midnight/kuira/core/indexer/model/RawLedgerEvent;Lcom/midnight/kuira/core/indexer/verification/MerkleProof;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
-public final class com/midnight/kuira/core/indexer/verification/PlaceholderEventVerifier$Companion {
-}
-
 public final class com/midnight/kuira/core/indexer/verification/VerificationError : java/lang/Enum {
 	public static final field BLOCK_NOT_CANONICAL Lcom/midnight/kuira/core/indexer/verification/VerificationError;
 	public static final field INVALID_BLOCK_HASH Lcom/midnight/kuira/core/indexer/verification/VerificationError;
@@ -1552,37 +1506,6 @@ public final class com/midnight/kuira/core/indexer/verification/VerificationErro
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/indexer/verification/VerificationError;
 	public static fun values ()[Lcom/midnight/kuira/core/indexer/verification/VerificationError;
-}
-
-public abstract class com/midnight/kuira/core/indexer/verification/VerificationResult {
-}
-
-public final class com/midnight/kuira/core/indexer/verification/VerificationResult$Failure : com/midnight/kuira/core/indexer/verification/VerificationResult {
-	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/indexer/verification/VerificationError;)V
-	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Lcom/midnight/kuira/core/indexer/verification/VerificationError;
-	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/indexer/verification/VerificationError;)Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Failure;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Failure;Ljava/lang/String;Lcom/midnight/kuira/core/indexer/verification/VerificationError;ILjava/lang/Object;)Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Failure;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getErrorCode ()Lcom/midnight/kuira/core/indexer/verification/VerificationError;
-	public final fun getReason ()Ljava/lang/String;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class com/midnight/kuira/core/indexer/verification/VerificationResult$Skipped : com/midnight/kuira/core/indexer/verification/VerificationResult {
-	public fun <init> (Ljava/lang/String;)V
-	public final fun component1 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Skipped;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Skipped;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Skipped;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getReason ()Ljava/lang/String;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class com/midnight/kuira/core/indexer/verification/VerificationResult$Success : com/midnight/kuira/core/indexer/verification/VerificationResult {
-	public static final field INSTANCE Lcom/midnight/kuira/core/indexer/verification/VerificationResult$Success;
 }
 
 public final class com/midnight/kuira/core/indexer/websocket/ErrorLocation {

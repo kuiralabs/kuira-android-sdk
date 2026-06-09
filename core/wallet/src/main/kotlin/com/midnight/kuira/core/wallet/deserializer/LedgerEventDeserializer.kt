@@ -3,29 +3,16 @@ package com.midnight.kuira.core.wallet.deserializer
 import com.midnight.kuira.core.wallet.model.LedgerEvent
 
 /**
- * Deserializes raw hex ledger events into domain objects.
- *
- * **Phase 4A:** Mock implementation with test data
- * **Phase 4B:** Real implementation using ledger 7.0.0 via JNI/FFI
- *
- * **Implementation Strategy (Phase 4B):**
- * ```
- * Kotlin → JNI → Rust (ledger 7.0.0 source) → ARM64/x86_64 native libs
- * ```
- *
- * Same approach as Phase 1B (shielded key derivation).
+ * Deserializes raw hex ledger events into domain [LedgerEvent]s.
  */
 interface LedgerEventDeserializer {
 
     /**
-     * Deserialize raw hex event data into structured LedgerEvent.
+     * Deserialize raw hex event data into a structured [LedgerEvent].
      *
-     * **Phase 4A:** Returns mock/test data
-     * **Phase 4B:** Actual deserialization with ledger 7.0.0
-     *
-     * @param rawHex Raw event data as hex string
-     * @return Deserialized ledger event
-     * @throws DeserializationException if rawHex is invalid or unsupported format
+     * @param rawHex Raw event data as a hex string.
+     * @return the deserialized ledger event.
+     * @throws DeserializationException if [rawHex] is invalid or an unsupported format.
      */
     suspend fun deserialize(rawHex: String): LedgerEvent
 }
