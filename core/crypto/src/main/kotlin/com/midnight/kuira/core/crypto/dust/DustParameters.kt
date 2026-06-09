@@ -31,23 +31,15 @@ package com.midnight.kuira.core.crypto.dust
  * → Decay rate: 1,000 Specks/second (back to zero in 100 seconds)
  * ```
  *
- * **Midnight SDK Mapping:**
- * This corresponds to `DustParameters`:
- * ```rust
- * pub struct DustParameters {
- *     pub night_dust_ratio: u64,           // 64-bit unsigned
- *     pub generation_decay_rate: u32,      // 32-bit unsigned ⚠️ IMPORTANT
- *     pub dust_grace_period: Duration,
- * }
- * ```
- *
- * **Type Mapping:**
- * - night_dust_ratio (u64) → Long (Kotlin signed 64-bit, range sufficient)
- * - generation_decay_rate (u32) → Int (Kotlin signed 32-bit, range sufficient for positive values)
+ * **Ledger Mapping:**
+ * Mirrors the ledger's DustParameters: the Night-to-dust ratio, the
+ * generation/decay rate, and a grace period. The ratio is an unsigned 64-bit
+ * value (mapped to Kotlin `Long`) and the rate is an unsigned 32-bit value
+ * (mapped to Kotlin `Int`); both ranges are sufficient for valid positive values.
  *
  * **Network Defaults:**
- * - Testnet: Uses INITIAL_DUST_PARAMETERS
- * - Mainnet: TBD by governance
+ * - Testnet: Uses the initial dust parameters.
+ * - Mainnet: Determined by governance.
  *
  * **Usage:**
  * ```kotlin
@@ -174,27 +166,13 @@ data class DustParameters(
 
     companion object {
         /**
-         * Testnet default parameters (from INITIAL_DUST_PARAMETERS).
+         * Testnet default parameters, matching the ledger's initial dust parameters.
          *
-         * **From midnight-ledger:**
-         * ```rust
-         * pub const INITIAL_DUST_PARAMETERS: DustParameters = DustParameters {
-         *     night_dust_ratio: 5 * (SPECKS_PER_DUST / STARS_PER_NIGHT) as u64,
-         *                     // = 5 * (1e15 / 1e6) = 5 * 1e9 = 5,000,000,000
-         *                     // Meaning: 5 Dust per Night
-         *     generation_decay_rate: 8_267,  // u32
-         *                           // Generation time ≈ 1 week
-         *     dust_grace_period: Duration::from_hours(3), // Not used in Phase 2D-2
-         * };
-         * ```
+         * - `nightDustRatio` = 5,000,000,000 (5 Dust per Night).
+         * - `generationDecayRate` = 8,267 (generation time of roughly one week).
          *
-         * **Constants:**
-         * - SPECKS_PER_DUST = 1,000,000,000,000,000 (1 quadrillion, 10^15)
-         * - STARS_PER_NIGHT = 1,000,000 (1 million, 10^6)
-         *
-         * **Type Verification:**
-         * - nightDustRatio: u64 → Long ✅ (max u64 = 18 quintillion, max Long = 9 quintillion, sufficient)
-         * - generationDecayRate: u32 → Int ✅ (max u32 = 4 billion, max Int = 2 billion, sufficient)
+         * Reference constants: 1 Dust = 1,000,000,000,000,000 Specks (10^15) and
+         * 1 NIGHT = 1,000,000 Stars (10^6).
          */
         val TESTNET_DEFAULTS = DustParameters(
             nightDustRatio = 5_000_000_000L,  // u64: 5 billion (5 Dust per Night)
@@ -202,10 +180,10 @@ data class DustParameters(
         )
 
         /**
-         * Mainnet parameters (TBD).
+         * Mainnet parameters.
          *
-         * **Note:** These will be determined by Midnight governance.
-         * For now, use testnet defaults.
+         * **Note:** Mainnet values are determined by Midnight governance; until
+         * then these mirror the testnet defaults.
          */
         val MAINNET_DEFAULTS = TESTNET_DEFAULTS
 
@@ -220,11 +198,6 @@ data class DustParameters(
             if (params.nightDustRatio <= 0 || params.generationDecayRate <= 0) {
                 return false
             }
-
-            // TODO: Add additional validation rules as needed
-            // - Maximum reasonable ratio
-            // - Maximum reasonable rate
-            // - Consistency checks
 
             return true
         }

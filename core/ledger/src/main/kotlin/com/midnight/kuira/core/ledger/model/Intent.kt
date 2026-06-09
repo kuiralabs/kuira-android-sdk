@@ -9,61 +9,28 @@ import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 /**
  * Represents a complete Midnight transaction intent.
  *
- * **Source:** Based on midnight-ledger `Intent` structure
- * **File:** `midnight-ledger/ledger/src/structure.rs:753`
- *
  * **Purpose:**
  * - Top-level transaction container
  * - Contains offers for unshielded assets
  * - Includes TTL (time-to-live) for transaction expiry
- * - Includes dust actions for fee payment (Phase 2E)
+ * - Includes dust actions for fee payment
  *
- * **Midnight SDK Equivalent:**
- * ```typescript
- * interface Intent {
- *   guaranteedUnshieldedOffer?: UnshieldedOffer;  // Segment 0 (always executes)
- *   fallibleUnshieldedOffer?: UnshieldedOffer;     // Optional fallible segment
- *   actions: ContractAction[];                     // Smart contract calls
- *   dustActions?: DustActions;                     // Dust protocol actions
- *   ttl: Date;                                     // Transaction expiry
- *   bindingCommitment: BindingCommitment;          // Cryptographic binding
- * }
- * ```
- *
- * **Phase 2E (With Dust):**
- * - `guaranteedUnshieldedOffer` for unshielded transfers
- * - `dustActions` for fee payment (REQUIRED for transaction to be valid)
- * - No fallible offer
- * - No smart contract actions
- * - bindingCommitment added in Phase 2D (signing)
- *
- * **JNI Mapping (Phase 2E-FFI):**
- * When serializing via midnight-ledger, the JNI wrapper will construct the
- * full Rust Intent structure:
- * ```rust
- * Intent {
- *     guaranteed_unshielded_offer: Some(...),
- *     fallible_unshielded_offer: None,
- *     actions: vec![],                    // Empty for Phase 2
- *     dust_actions: Some(...),            // Phase 2E: Dust fee payment
- *     ttl: ...,
- *     binding_commitment: PreBinding      // Created by ledger
- * }
- * ```
- *
- * **Future Phases:**
- * - TODO(Phase 3): Add shielded offer support
- * - TODO(Phase 5): Add contract action support (actions field)
+ * **Ledger Mapping:**
+ * Mirrors the ledger's Intent: an optional guaranteed unshielded offer (segment 0,
+ * always executes), an optional fallible unshielded offer, contract actions, dust
+ * actions for fee payment, a TTL, and a cryptographic binding commitment. When the
+ * dust actions are present they are required for the transaction to be valid; the
+ * binding commitment is created by the ledger during signing.
  *
  * **Usage in Transaction:**
  * ```kotlin
- * // Phase 2: Simple unshielded transfer
+ * // Simple unshielded transfer
  * val intent = Intent(
  *     guaranteedUnshieldedOffer = UnshieldedOffer(
  *         inputs = listOf(utxoSpend),
  *         outputs = listOf(recipientOutput, changeOutput)
  *     ),
- *     fallibleUnshieldedOffer = null,  // Not used in Phase 2
+ *     fallibleUnshieldedOffer = null,
  *     ttl = System.currentTimeMillis() + (5 * 60 * 1000)  // 5 minutes
  * )
  * ```
@@ -76,7 +43,7 @@ import com.midnight.kuira.core.ledger.fee.DustSpendCreator
  *
  * @property guaranteedUnshieldedOffer Segment 0 offer (always executes)
  * @property fallibleUnshieldedOffer Optional fallible segment (may fail)
- * @property dustActions List of dust spends for fee payment (Phase 2E)
+ * @property dustActions List of dust spends for fee payment
  * @property ttl Time-to-live in milliseconds (Unix epoch time)
  */
 data class Intent(

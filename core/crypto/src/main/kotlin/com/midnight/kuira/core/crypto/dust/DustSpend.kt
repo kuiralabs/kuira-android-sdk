@@ -35,20 +35,13 @@ import java.math.BigInteger
  * - The fee amount is valid (old_value - new_value = fee)
  * - You're not creating dust out of thin air
  *
- * **Midnight SDK Mapping:**
- * This corresponds to `DustSpend<P, D>`:
- * ```rust
- * pub struct DustSpend<P: ProofKind<D>, D: DB> {
- *     pub v_fee: u128,                  // Fee amount
- *     pub old_nullifier: DustNullifier, // Nullifier of spent token
- *     pub new_commitment: DustCommitment, // Commitment to change
- *     pub proof: P::LatestProof,        // ZK proof
- * }
- * ```
+ * **Ledger Mapping:**
+ * Mirrors the ledger's DustSpend: fee amount, spent-token nullifier, change
+ * commitment, and ZK proof.
  *
  * **Usage:**
  * ```kotlin
- * // Create a dust spend (Phase 2D-6)
+ * // Create a dust spend
  * val spend = wallet.createDustSpend(
  *     oldToken = myDustToken,
  *     feeAmount = BigInteger.valueOf(2_000_000), // 2 Dust
@@ -73,7 +66,7 @@ data class DustSpend(
     val feeAmount: BigInteger,
     val oldNullifier: String, // Hex-encoded field element (32 bytes)
     val newCommitment: String, // Hex-encoded field element (32 bytes)
-    val proof: String? = null // Hex-encoded ZK proof (proof generation in Phase 2D-6)
+    val proof: String? = null // Hex-encoded ZK proof
 ) {
     /**
      * Validates that this dust spend is well-formed.
@@ -105,7 +98,7 @@ data class DustSpend(
             return false
         }
 
-        // TODO: Add proof validation in Phase 2D-6
+        // Proof verification is performed during transaction validation, not here.
 
         return true
     }
@@ -123,16 +116,14 @@ data class DustSpend(
      * Converts this DustSpend to a serializable format for transactions.
      *
      * **Serialization Format:**
-     * Uses Midnight's SCALE codec (same as Rust's Serializable trait).
-     * The format matches `DustSpend::serialize()`.
+     * Uses Midnight's SCALE codec, matching the ledger's DustSpend serialization.
      *
-     * **Note:** This will be implemented in Phase 2E (Transaction Serialization).
+     * **Note:** Not yet implemented.
      *
-     * @return Serialized bytes (placeholder)
+     * @return Serialized bytes
      */
     fun serialize(): ByteArray {
-        // TODO: Implement in Phase 2E
-        // Should match Rust's SCALE codec serialization
+        // Not yet implemented. Should match the ledger's SCALE codec serialization.
 
         throw NotImplementedError("Serialization (Phase 2E)")
     }
@@ -154,13 +145,13 @@ data class DustSpend(
          * 4. Calculate new commitment = Hash(new_initial_value, owner, new_nonce, ctime)
          * 5. Generate zero-knowledge proof
          *
-         * **Note:** This will be implemented in Phase 2D-6.
+         * **Note:** Not yet implemented.
          *
          * @param oldToken The dust token being spent
          * @param feeAmount Amount to pay in fees (Specks)
          * @param secretKey Dust secret key (hex-encoded)
          * @param newNonce New nonce for the change token
-         * @return DustSpend (placeholder)
+         * @return DustSpend
          */
         fun create(
             oldToken: DustToken,
@@ -168,8 +159,7 @@ data class DustSpend(
             secretKey: String,
             newNonce: String
         ): DustSpend {
-            // TODO: Implement in Phase 2D-6
-            // Requires:
+            // Not yet implemented. Requires:
             // - Nullifier calculation (needs secret key)
             // - Commitment calculation (transient hash)
             // - Zero-knowledge proof generation
@@ -180,20 +170,20 @@ data class DustSpend(
         /**
          * Deserializes a DustSpend from bytes.
          *
-         * **Note:** This will be implemented in Phase 2E.
+         * **Note:** Not yet implemented.
          *
          * @param bytes Serialized bytes
-         * @return Deserialized DustSpend (placeholder)
+         * @return Deserialized DustSpend
          */
         fun deserialize(bytes: ByteArray): DustSpend {
-            // TODO: Implement in Phase 2E
+            // Not yet implemented.
             throw NotImplementedError("Deserialization (Phase 2E)")
         }
 
         /**
          * Minimum fee required for a transaction.
-         * This is a placeholder - actual minimum fees depend on transaction size
-         * and network parameters.
+         * This is a conservative floor; actual minimum fees depend on transaction
+         * size and network parameters.
          */
         val MINIMUM_FEE = BigInteger.valueOf(100_000) // 0.1 Dust
     }

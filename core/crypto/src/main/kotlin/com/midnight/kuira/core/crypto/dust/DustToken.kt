@@ -31,10 +31,9 @@ import java.math.BigInteger
  * └─ Empty: Value reaches zero
  * ```
  *
- * **Midnight SDK Mapping:**
- * This corresponds to `DustWalletUtxoState` which contains:
- * - `utxo: QualifiedDustOutput` - The actual dust output
- * - `pending_until: Option<Timestamp>` - If pending, when it becomes available
+ * **Ledger Mapping:**
+ * Mirrors the ledger's dust wallet UTXO state: the qualified dust output plus an
+ * optional "pending until" timestamp for when it becomes available.
  *
  * **Usage:**
  * ```kotlin
@@ -93,21 +92,18 @@ data class DustToken(
      *
      * 4. **Empty Phase**: Value stays at zero
      *
-     * **Note:** This is a placeholder. Full implementation requires DustGenerationInfo
-     * and will be completed in Phase 2D-3.
+     * **Note:** The full time-phase calculation is not yet implemented; this
+     * currently returns the initial value. Full evaluation requires the dust
+     * generation info, the backing Night value, and its destruction time.
      *
      * @param now Current time in milliseconds
      * @param params Dust generation parameters
      * @return Current dust value in Specks
      */
     fun calculateValue(now: Long, params: DustParameters): BigInteger {
-        // TODO: Implement full dust generation algorithm in Phase 2D-3
-        // This requires:
-        // - DustGenerationInfo from Merkle tree
-        // - Backing Night value and destruction time
-        // - Proper time phase calculations
-
-        // For now, return initial value as placeholder
+        // Not yet implemented: returns the initial value until the full
+        // generation algorithm (generation info, backing Night value and
+        // destruction time, time-phase calculations) is in place.
         return initialValue
     }
 
@@ -141,13 +137,12 @@ data class DustToken(
      * nullifier = Hash(owner_secret_key, nonce, ...)
      * ```
      *
-     * **Note:** This requires the secret key and will be implemented in Phase 2D-4.
+     * **Note:** Not yet implemented. Requires the dust secret key.
      *
-     * @return Nullifier as hex string (placeholder)
+     * @return Nullifier as hex string
      */
     fun calculateNullifier(): String {
-        // TODO: Implement in Phase 2D-4
-        // Requires:
+        // Not yet implemented. Requires:
         // - Dust secret key (NOT stored in this class for security)
         // - Proper nullifier derivation algorithm
 
@@ -166,25 +161,19 @@ data class DustToken(
      * commitment = Hash(initial_value, owner, nonce, ctime)
      * ```
      *
-     * **Note:** This will be implemented in Phase 2D-4.
+     * **Note:** Not yet implemented.
      *
-     * @return Commitment as hex string (placeholder)
+     * @return Commitment as hex string
      */
     fun calculateCommitment(): String {
-        // TODO: Implement in Phase 2D-4
-        // Uses transient hash over DustPreProjection
+        // Not yet implemented. Uses a transient hash over the dust pre-projection.
 
         throw NotImplementedError("Commitment calculation (Phase 2D-4)")
     }
 
     companion object {
         /**
-         * Conversion: 1 Dust = 1 quadrillion Specks (10^15)
-         *
-         * **From midnight-ledger:**
-         * ```rust
-         * pub const SPECKS_PER_DUST: u128 = 1_000_000_000_000_000;
-         * ```
+         * Conversion: 1 Dust = 1 quadrillion Specks (10^15).
          */
         const val SPECKS_PER_DUST = 1_000_000_000_000_000L
 

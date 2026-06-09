@@ -34,7 +34,7 @@ import kotlinx.coroutines.withTimeout
  * - WebSocket gives us real-time confirmation directly from the node
  * - This matches the Midnight SDK's implementation exactly
  *
- * **Phase 2E - Dust Fee Payment:**
+ * **Dust Fee Payment:**
  * Use `submitWithFees()` to automatically build and pay dust fees.
  *
  * @property nodeRpcClient Client for submitting transactions to node
@@ -364,7 +364,7 @@ class TransactionSubmitter(
     }
 
     /**
-     * Submit transaction WITH automatic dust fee payment (Phase 2E).
+     * Submit transaction WITH automatic dust fee payment.
      *
      * **Process:**
      * 1. Serialize transaction to calculate fee
@@ -650,7 +650,7 @@ class TransactionSubmitter(
      *
      * **Steps:**
      * 1. Serialize unproven transaction
-     * 2. Prove via proof server (Phase 2 - NEW)
+     * 2. Prove via proof server
      * 3. Seal proven transaction (transform binding commitment)
      * 4. Submit finalized transaction to node
      *

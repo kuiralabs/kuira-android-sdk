@@ -11,8 +11,8 @@ import org.json.JSONObject
 /**
  * Serializes signed transactions to SCALE codec for node submission.
  *
- * **Phase 2:** Unshielded transactions only
- * **Future:** Will delegate to Rust FFI (midnight-ledger SCALE codec)
+ * Covers unshielded transactions, delegating the SCALE encoding to the
+ * Rust ledger via FFI.
  */
 interface TransactionSerializer {
     /**
@@ -39,9 +39,9 @@ interface TransactionSerializer {
 }
 
 /**
- * FFI-based serializer using Rust midnight-ledger (Phase 2E).
+ * FFI-based serializer backed by the Rust ledger.
  *
- * Serializes signed Intent to SCALE codec using midnight-ledger types.
+ * Serializes a signed Intent to SCALE codec using the ledger's types.
  * Converts Kotlin models → JSON → Rust FFI → SCALE hex.
  */
 class FfiTransactionSerializer(
@@ -115,7 +115,7 @@ class FfiTransactionSerializer(
     }
 
     /**
-     * Serialize a signed transaction WITH DUST FEE PAYMENT to SCALE codec hex.
+     * Serialize a signed transaction with Dust fee payment to SCALE codec hex.
      *
      * This method calls the Rust FFI that creates real DustActions by calling
      * state.spend() on the provided DustLocalState.

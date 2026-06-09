@@ -330,7 +330,7 @@ class DustLocalState private constructor(
      * ```
      *
      * **Deserialization:**
-     * To deserialize, you'll need to implement deserialization (Phase 2D-3).
+     * Use [deserialize] to restore a state from these bytes.
      *
      * **Error Handling:**
      * Returns null if:

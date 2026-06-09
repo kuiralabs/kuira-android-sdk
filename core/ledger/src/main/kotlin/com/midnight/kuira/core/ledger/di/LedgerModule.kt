@@ -30,7 +30,7 @@ import javax.inject.Singleton
  *
  * **Provided Dependencies:**
  * - NodeRpcClient: HTTP client for Midnight node JSON-RPC API
- * - ProofServerClient: HTTP client for Midnight proof server (Phase 2)
+ * - ProofServerClient: HTTP client for Midnight proof server
  * - TransactionSerializer: SCALE serialization using Rust FFI
  * - TransactionSubmitter: Transaction submission orchestrator
  * - FeeCalculator: Calculates transaction fees
@@ -124,7 +124,7 @@ object LedgerModule {
     @Singleton
     fun provideDustSpendCreator(): DustSpendCreator = DustSpendCreator
 
-    /** Provide ProvingKeyManager for local ZK proving (Phase 4C). */
+    /** Provide ProvingKeyManager for local ZK proving. */
     @Provides
     @Singleton
     fun provideProvingKeyManager(@ApplicationContext context: Context): ProvingKeyManager {
