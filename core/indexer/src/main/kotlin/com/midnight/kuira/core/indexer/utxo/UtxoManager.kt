@@ -347,7 +347,7 @@ class UtxoManager(
         return resetCount
     }
 
-    // ========== Phase 2B: Coin Selection & Atomic Locking ==========
+    // ========== Coin Selection & Atomic Locking ==========
 
     /**
      * Select and lock UTXOs for transaction (atomic operation).
@@ -378,8 +378,8 @@ class UtxoManager(
      * Result: SAFE! Each thread gets different UTXOs
      * ```
      *
-     * **Source:** Based on midnight-wallet coin selection + state management
-     * **File:** `midnight-wallet/packages/capabilities/src/balancer/Balancer.ts`
+     * Uses the smallest-first coin selection and state management strategy
+     * standard to the Midnight wallet model.
      *
      * **Usage in Transaction Builder:**
      * ```kotlin

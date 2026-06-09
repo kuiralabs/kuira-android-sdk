@@ -534,7 +534,7 @@ private fun WalletSheetContent(
             PanelButton("receive", enabled = canReceive, modifier = Modifier.weight(1f), colors = colors, onClick = onReceive)
         }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
-        // Cross-device dust cloud sync — first tap runs the Drive consent flow,
+        // Cross-device Dust cloud sync — first tap runs the Drive consent flow,
         // then does a bidirectional sync: restores the checkpoint from Drive if
         // this device has none (delta instead of genesis), and uploads the
         // latest. Only meaningful once the wallet is Ready.

@@ -9,27 +9,17 @@ import java.math.BigInteger
 /**
  * Represents an unshielded offer in a Midnight transaction.
  *
- * **Source:** Based on midnight-ledger `UnshieldedOffer` structure
- * **File:** `midnight-ledger/ledger/src/structure.rs:666`
+ * An offer pairs the UTXOs being spent (inputs) with the new UTXOs being
+ * created (outputs), plus the signatures authorizing each input.
  *
  * **Purpose:**
  * - Contains inputs (UTXOs being spent)
  * - Contains outputs (new UTXOs being created)
- * - Will contain signatures (added in Phase 2D)
- *
- * **Midnight SDK Equivalent:**
- * ```typescript
- * interface UnshieldedOffer {
- *   inputs: UtxoSpend[];
- *   outputs: UtxoOutput[];
- *   signatures: Signature[];
- * }
- * ```
+ * - Will contain signatures (added during signing)
  *
  * **Important:**
- * - Inputs and outputs are automatically SORTED by midnight-ledger
+ * - Inputs and outputs are automatically SORTED by the ledger
  * - Signatures must match the sorted input order
- * - Source: `midnight-ledger/ledger/src/unshielded.rs:191-192`
  *
  * **Usage in Transaction:**
  * ```kotlin
@@ -43,13 +33,13 @@ import java.math.BigInteger
  *     )
  * )
  *
- * // Later in Phase 2D: Add signatures
+ * // Later, during signing: add signatures
  * val signed = offer.copy(signatures = listOf(...))
  * ```
  *
  * @property inputs List of UTXOs being spent (at least one required)
  * @property outputs List of new UTXOs being created (at least one required)
- * @property signatures List of Schnorr signatures (one per input, added in Phase 2D)
+ * @property signatures List of Schnorr signatures (one per input, added during signing)
  */
 data class UnshieldedOffer(
     val inputs: List<UtxoSpend>,

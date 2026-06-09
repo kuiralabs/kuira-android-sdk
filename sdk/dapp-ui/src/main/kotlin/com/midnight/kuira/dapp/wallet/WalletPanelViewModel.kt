@@ -227,7 +227,7 @@ class WalletPanelViewModel @Inject constructor(
                     }
                 }
 
-                // Phase 2 — heavy zswap + dust resync, THROTTLED. The observer
+                // Phase 2 — heavy zswap + Dust resync, THROTTLED. The observer
                 // keeps the balance live between syncs, so the expensive resync
                 // only runs on a forced/explicit refresh, a wallet change, or once
                 // per FULL_REFRESH_INTERVAL_MS — not on every menu visit.
@@ -269,10 +269,10 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Register the wallet's NIGHT key for dust generation, then poll until the
-     * first dust UTXO surfaces (or [DUST_VISIBLE_TIMEOUT_MS] elapses). Must run
+     * Register the wallet's NIGHT key for Dust generation, then poll until the
+     * first Dust UTXO surfaces (or [DUST_VISIBLE_TIMEOUT_MS] elapses). Must run
      * once after the wallet first holds NIGHT — until then the chain won't
-     * release spendable dust and contract calls (fee-paying) fail.
+     * release spendable Dust and contract calls (fee-paying) fail.
      */
     fun registerDust(config: WalletConfig, activity: FragmentActivity) {
         lastRequestedConfig = config
@@ -346,7 +346,7 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Enable cross-device dust cloud sync: obtain the Drive `drive.appdata`
+     * Enable cross-device Dust cloud sync: obtain the Drive `drive.appdata`
      * grant, then run a full sync. This is **bidirectional** — once consent
      * exists, `wallet.refresh()` first restores from the cloud checkpoint if
      * this device has none (so a fresh device deltas instead of replaying
@@ -422,20 +422,20 @@ class WalletPanelViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletPanel"
 
-        /** Upper bound on the post-registration dust-visibility poll. */
+        /** Upper bound on the post-registration Dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L
 
-        /** Throttle on the heavy zswap + dust resync. Between syncs the live
+        /** Throttle on the heavy zswap + Dust resync. Between syncs the live
          *  balanceFlow observer keeps the panel current, so the expensive resync
          *  only needs to run periodically (or on an explicit/forced refresh). */
         private const val FULL_REFRESH_INTERVAL_MS = 5 * 60_000L
     }
 }
 
-/** UI state for the dust cloud-backup affordance. */
+/** UI state for the Dust cloud-backup affordance. */
 sealed interface DustBackupUiState {
     data object Idle : DustBackupUiState
     data object Working : DustBackupUiState

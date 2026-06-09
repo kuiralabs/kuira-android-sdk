@@ -89,8 +89,8 @@ class SubscriptionManager(
      *
      * **When this runs:**
      * - `forceFullResync = true` (e.g. Developer options "Force re-sync" button)
-     * - Round 2+: reorg detected, or indexer reports our cached txId is unknown
-     * - NOT on every app launch — that was the old behavior (Phase 8B.3 T1-21 fix).
+     * - Reorg detected, or indexer reports our cached txId is unknown
+     * - NOT on every app launch — that was the old behavior.
      *
      * **What gets cleared:**
      * - `syncStateManager.lastProcessedTransactionId[address]` → null (replay all)
@@ -122,7 +122,7 @@ class SubscriptionManager(
     /**
      * Start subscription for an address with automatic reconnection.
      *
-     * **Incremental by default (Phase 8B.3 T1-21).** Previous behavior wiped the
+     * **Incremental by default.** Previous behavior wiped the
      * local UTXO cache and sync state on every subscription start, causing a
      * visible zero-balance flicker at every app launch. Now the default path
      * resumes from the last saved `transactionId` — full resync only happens
@@ -146,7 +146,7 @@ class SubscriptionManager(
      * - Retryable errors: IOException, connection failures, WebSocket errors.
      * - Non-retryable errors: CancellationException (user cancelled).
      *
-     * **Force re-sync entry point (T1-17 Developer Options).** A UI-level
+     * **Force re-sync entry point (Developer Options).** A UI-level
      * "Force re-sync" button should cancel the currently-collecting Flow
      * first, then re-call `startSubscription(address, forceFullResync = true)`.
      * That wipes local state once (not on every retry) and re-subscribes from
@@ -287,7 +287,7 @@ class SubscriptionManager(
                     is UtxoManager.ProcessingResult.ProgressUpdate -> {
                         val serverMax = result.highestTransactionId
 
-                        // Reorg / indexer-wipe detection (T1-21 Round 2):
+                        // Reorg / indexer-wipe detection:
                         // The indexer never returns an error for an unknown cursor —
                         // empirically verified by poisoning the cursor with INT_MAX
                         // and observing only ordinary Progress updates in response.

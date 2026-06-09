@@ -5,9 +5,6 @@ import java.math.BigInteger
 /**
  * Deserialized ledger event from Midnight blockchain.
  *
- * **Phase 4A:** Mock/stub implementation with test data
- * **Phase 4B:** Actual deserialization using ledger 7.0.0 WASM/FFI
- *
  * Represents a single event on the Midnight ledger (coinbase, transfer, shield, unshield, etc.)
  *
  * **Input Validation:**

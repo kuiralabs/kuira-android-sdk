@@ -670,7 +670,7 @@ class DustRepository @Inject constructor(
 
             for (i in 0 until utxoCount) {
                 // Create placeholder token with minimal info
-                // Use index as nullifier for now (will improve in Phase 2F)
+                // Use index as nullifier for now
                 val token = DustTokenEntity(
                     nullifier = "utxo_$i",  // Placeholder nullifier
                     address = address,

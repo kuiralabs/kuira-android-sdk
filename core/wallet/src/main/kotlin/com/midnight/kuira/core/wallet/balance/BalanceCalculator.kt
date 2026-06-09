@@ -8,9 +8,6 @@ import java.math.BigInteger
 /**
  * Calculates wallet balance from ledger events.
  *
- * **Phase 4A:** Works with mock deserialized events
- * **Phase 4B:** Works with real deserialized events from ledger 7.0.0
- *
  * **Algorithm:**
  * 1. Start with zero balance
  * 2. Process events chronologically (by ID)
@@ -47,7 +44,7 @@ class BalanceCalculator {
      * - Indicates double-spend attack or corrupted blockchain state
      * - Wallet MUST stop processing and alert user
      *
-     * **Future: UTXO Tracking (Phase 4B)**
+     * **Future: UTXO Tracking**
      * - Currently assumes account model (balance-based)
      * - Midnight uses UTXO model (output-based)
      * - Need to track spent/unspent outputs for proper validation
@@ -126,8 +123,8 @@ class BalanceCalculator {
                 }
 
                 EventType.CONTRACT_CALL, EventType.CONTRACT_DEPLOY -> {
-                    // Contract interactions may affect balance
-                    // TODO: Implement contract event handling
+                    // Contract interactions may affect balance.
+                    // Contract event handling is not yet implemented.
                 }
 
                 EventType.UNKNOWN -> {

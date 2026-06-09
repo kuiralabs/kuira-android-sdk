@@ -22,9 +22,6 @@ import java.math.BigInteger
  * - Create Intent with guaranteed offer
  * - Calculate change and create change outputs
  *
- * **Source:** Based on midnight-wallet transaction building
- * **File:** `midnight-wallet/packages/unshielded-wallet/src/v1/UnshieldedWallet.ts`
- *
  * **Usage:**
  * ```kotlin
  * val builder = UnshieldedTransactionBuilder(utxoManager)
@@ -39,7 +36,7 @@ import java.math.BigInteger
  * when (result) {
  *     is BuildResult.Success -> {
  *         val intent = result.intent
- *         // Proceed to Phase 2D: Sign the intent
+ *         // Proceed to sign the intent
  *     }
  *     is BuildResult.InsufficientFunds -> {
  *         // Show error to user
@@ -56,7 +53,7 @@ import java.math.BigInteger
  *       UtxoOutput(recipient),       // Payment output
  *       UtxoOutput(sender)?          // Change output (if any)
  *     ]
- *     signatures: []                 // Empty (added in Phase 2D)
+ *     signatures: []                 // Empty (added during signing)
  *   }
  *   ttl: currentTime + 30 minutes
  * }
@@ -66,7 +63,7 @@ import java.math.BigInteger
  * - UTXOs are LOCKED during selection (state = PENDING)
  * - If transaction fails, call `utxoManager.unlockUtxos()` to release
  * - Change output only created if change > 0
- * - Signatures added in Phase 2D (signing phase)
+ * - Signatures added during the signing phase
  *
  * @property utxoManager Manager for UTXO selection and locking
  */
@@ -173,7 +170,7 @@ class UnshieldedTransactionBuilder(
         val offer = UnshieldedOffer(
             inputs = inputs,
             outputs = outputs,
-            signatures = emptyList()  // Empty - signatures added in Phase 2D
+            signatures = emptyList()  // Empty - signatures added during signing
         )
 
         // Step 7: Calculate TTL (current time + ttlMinutes)
@@ -182,7 +179,7 @@ class UnshieldedTransactionBuilder(
         // Step 8: Create Intent
         val intent = Intent(
             guaranteedUnshieldedOffer = offer,
-            fallibleUnshieldedOffer = null,  // Not used in Phase 2
+            fallibleUnshieldedOffer = null,  // Not used for unshielded transfers
             ttl = ttl
         )
 
@@ -222,8 +219,7 @@ class UnshieldedTransactionBuilder(
         /**
          * Default TTL: 30 minutes.
          *
-         * Matches Midnight SDK default.
-         * Source: midnight-wallet Balancer.ts
+         * Matches the Midnight SDK default.
          */
         const val DEFAULT_TTL_MINUTES = 30
     }

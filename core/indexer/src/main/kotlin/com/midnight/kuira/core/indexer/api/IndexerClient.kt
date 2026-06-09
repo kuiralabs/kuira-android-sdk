@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.Flow
  * Provides access to ledger events, blocks, and network state for light wallet implementation.
  *
  * **Light Wallet Architecture:**
- * - Subscribe to transaction events via WebSocket (Phase 4B)
- * - Track UTXOs locally (Phase 4A sync engine)
+ * - Subscribe to transaction events via WebSocket
+ * - Track UTXOs locally
  * - Calculate balances from UTXO set
  * - No full node required
  *
@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.Flow
  */
 interface IndexerClient {
 
-    // ==================== UTXO TRACKING (Phase 4B) ====================
+    // ==================== UTXO TRACKING ====================
 
     /**
      * Subscribe to unshielded transactions for an address.
@@ -61,7 +61,7 @@ interface IndexerClient {
         transactionId: Int? = null
     ): Flow<UnshieldedTransactionUpdate>
 
-    // ==================== SYNC ENGINE (Phase 4A) ====================
+    // ==================== SYNC ENGINE ====================
 
     /**
      * Subscribe to zswap ledger events.
@@ -219,7 +219,7 @@ interface IndexerClient {
      */
     suspend fun queryZswapEvents(): String
 
-    // ==================== CONTRACT STATE (Phase 6J) ====================
+    // ==================== CONTRACT STATE ====================
 
     /**
      * Query the current on-chain state of a deployed contract.

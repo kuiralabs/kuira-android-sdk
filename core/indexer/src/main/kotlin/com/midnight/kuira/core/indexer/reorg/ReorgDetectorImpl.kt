@@ -18,9 +18,6 @@ import android.util.Log
  * 3. If mismatch, walk backwards to find common ancestor
  * 4. Emit ReorgEvent with old and new branches
  * 5. Update block history with new canonical blocks
- *
- * **Phase 4A:** Full implementation (no placeholders)
- * **Phase 4B:** Add persistence (store block history in Room database)
  */
 class ReorgDetectorImpl(
     private val config: ReorgConfig = ReorgConfig()

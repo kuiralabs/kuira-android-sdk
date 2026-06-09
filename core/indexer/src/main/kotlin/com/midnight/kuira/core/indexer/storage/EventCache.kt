@@ -5,18 +5,10 @@ import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 /**
  * Local cache for raw ledger events.
  *
- * **Phase 4A Purpose:**
+ * **Purpose:**
  * - Store raw hex events from indexer
  * - Support range queries for event replay
  * - Track sync progress
- *
- * **Phase 4B Enhancement:**
- * - Deserialize cached events when ledger 7.0.0 is available
- * - Calculate balances from cached events
- *
- * **Implementation:**
- * - Phase 4A: In-memory cache (simple Map)
- * - Future: Room database for persistence
  */
 interface EventCache {
 

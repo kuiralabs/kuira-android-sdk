@@ -170,7 +170,7 @@ class IndexerClientImpl(
         val variables: Map<String, String>? = null
     )
 
-    // ==================== UTXO TRACKING (Phase 4B) ====================
+    // ==================== UTXO TRACKING ====================
 
     override fun subscribeToUnshieldedTransactions(
         address: String,
@@ -258,7 +258,7 @@ class IndexerClientImpl(
         }
     }
 
-    // ==================== SYNC ENGINE (Phase 4A) ====================
+    // ==================== SYNC ENGINE ====================
 
     override fun subscribeToZswapEvents(fromId: Long?): Flow<RawLedgerEvent> {
         val variables = buildMap<String, Any> {
@@ -307,7 +307,6 @@ class IndexerClientImpl(
             }
         """.trimIndent()
 
-        // TODO: Implement WebSocket subscription
         error("WebSocket subscriptions not yet implemented - Phase 4A infrastructure only")
     }
 
@@ -577,7 +576,7 @@ class IndexerClientImpl(
         throw InvalidResponseException("Failed to query zswap events: ${e.message}", e)
     }
 
-    // ==================== CONTRACT STATE (Phase 6J) ====================
+    // ==================== CONTRACT STATE ====================
 
     override suspend fun queryContractState(address: String): String {
         require(address.length == 64 && address.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
