@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("com.midnight.kuira.contract") version "0.1.0-alpha02"
+    id("io.github.kuiralabs.contract") version "0.1.0-alpha02"
 }
 
 kuiraContract {

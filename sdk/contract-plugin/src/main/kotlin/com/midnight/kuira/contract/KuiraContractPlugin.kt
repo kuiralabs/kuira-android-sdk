@@ -7,7 +7,7 @@ import org.gradle.api.tasks.Copy
 import java.io.File
 
 /**
- * `com.midnight.kuira.contract` — wires a compiled Compact contract into
+ * `io.github.kuiralabs.contract` — wires a compiled Compact contract into
  * an Android app's `assets` directory using a declarative
  * `kuiraContract` block.
  *
@@ -161,7 +161,7 @@ class KuiraContractPlugin : Plugin<Project> {
             }
             val preBuild = project.tasks.findByName(ANDROID_PREBUILD_TASK)
                 ?: throw GradleException(
-                    "com.midnight.kuira.contract requires an Android plugin " +
+                    "io.github.kuiralabs.contract requires an Android plugin " +
                         "(com.android.application or com.android.library) to be applied. " +
                         "Apply one of those before configuring kuiraContract.",
                 )

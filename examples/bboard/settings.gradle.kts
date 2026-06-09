@@ -3,7 +3,7 @@ pluginManagement {
         // Kuira's contract plugin is published to mavenLocal by the parent
         // build (`./gradlew publishToMavenLocal`); its plugin marker isn't on
         // the Plugin Portal, so mavenLocal must be a plugin repo too — not only
-        // a dependency repo below. Without this the `com.midnight.kuira.contract`
+        // a dependency repo below. Without this the `io.github.kuiralabs.contract`
         // plugin can't resolve.
         mavenLocal()
         google()

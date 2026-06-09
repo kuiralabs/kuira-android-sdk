@@ -118,7 +118,7 @@ class KuiraContractPluginTest {
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
-                id("com.midnight.kuira.contract")
+                id("io.github.kuiralabs.contract")
             }
             tasks.register("preBuild")
             // kuiraContract block omitted on purpose.
@@ -583,7 +583,7 @@ class KuiraContractPluginTest {
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
-                id("com.midnight.kuira.contract")
+                id("io.github.kuiralabs.contract")
             }
 
             // The plugin needs a `preBuild` task to wire into — in a real
@@ -651,7 +651,7 @@ class KuiraContractPluginTest {
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
-                id("com.midnight.kuira.contract")
+                id("io.github.kuiralabs.contract")
             }
 
             repositories {

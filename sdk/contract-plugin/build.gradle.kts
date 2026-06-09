@@ -6,7 +6,7 @@
 // examples for the boilerplate this eliminates). Consumers apply:
 //
 //   plugins {
-//     id("com.midnight.kuira.contract") version "0.1.0-alphaXX"
+//     id("io.github.kuiralabs.contract") version "0.1.0-alphaXX"
 //   }
 //   kuiraContract {
 //     source.set("contract/src/managed/penalty")
@@ -50,7 +50,7 @@ dependencies {
 gradlePlugin {
     plugins {
         create("kuiraContract") {
-            id = "com.midnight.kuira.contract"
+            id = "io.github.kuiralabs.contract"
             implementationClass = "com.midnight.kuira.contract.KuiraContractPlugin"
             displayName = "Kuira Contract Plugin"
             description = "Syncs compiled Compact contract artifacts into an Android app's assets directory at build time."
