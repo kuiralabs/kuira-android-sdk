@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("com.midnight.kuira.contract") version "0.1.0-alpha01"
+    id("com.midnight.kuira.contract") version "0.1.0-alpha02"
 }
 
 kuiraContract {
@@ -41,7 +41,7 @@ dependencies {
     // SDK surface BBoard touches directly (compact-engine, identity, network,
     // wallet-runtime, wallet-seed, auth, crypto, ledger) so the types are on
     // BBoard's compile classpath transitively. No per-module redeclaration.
-    implementation("io.github.kuiralabs:dapp-ui:0.1.0-alpha01")
+    implementation("io.github.kuiralabs:dapp-ui:0.1.0-alpha02")
 
     // AndroidX directly used by BBoard (FragmentActivity host, Compose). Things
     // Kuira pulls in transitively (biometric, credentials, room, etc.) come
