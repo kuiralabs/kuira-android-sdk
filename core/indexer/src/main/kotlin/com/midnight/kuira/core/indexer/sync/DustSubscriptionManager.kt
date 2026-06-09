@@ -230,8 +230,11 @@ class DustSubscriptionManager @Inject constructor(
                 return
             }
 
-            // Save updated state
-            dustRepository.saveState(address, newState)
+            // Save updated state + its resume cursor atomically. Advancing the
+            // state without advancing the cursor (the old saveState-only call)
+            // left the persisted pair torn — a frontier ahead of the cursor that
+            // implies it — which delta resume rejects as NonLinearInsertion.
+            dustRepository.saveCheckpoint(address, newState, event.eventId)
 
             // Sync to database cache
             dustRepository.syncTokensToCache(address)

@@ -180,10 +180,8 @@ class DustSyncManagerTest {
 
     @Test
     fun `cloud source not consulted when a local checkpoint exists`() = runTest {
-        val localState = mock<DustLocalState>()
         val dustRepo = mock<DustRepository> {
-            onBlocking { loadState("test_addr") } doReturn localState
-            onBlocking { getLastAppliedEventId("test_addr") } doReturn 100L
+            onBlocking { hasCheckpoint("test_addr") } doReturn true
             onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
             on { getLastSyncedState() } doReturn dustState
         }
@@ -193,10 +191,10 @@ class DustSyncManagerTest {
         createManager(dustRepo = dustRepo, cloudSource = source).ensureSynced()
 
         assertFalse("cloud must not be consulted when a local checkpoint exists", fetched)
-        verify(dustRepo, never()).saveState(any(), any())
+        verify(dustRepo, never()).saveCheckpoint(any(), any(), any())
     }
 
-    // Note: the positive "fetch-hit → saveState/saveLastAppliedEventId" path runs
+    // Note: the positive "fetch-hit → saveCheckpoint" path runs
     // DustLocalState.deserialize (native), so it's covered by the instrumented
     // DustCheckpointResumeTest, not here. These JVM cases pin the robustness
     // branches that don't depend on deserialize succeeding.
@@ -204,8 +202,7 @@ class DustSyncManagerTest {
     @Test
     fun `cloud fetch returning null falls through to genesis without seeding`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { loadState("test_addr") } doReturn null
-            onBlocking { getLastAppliedEventId("test_addr") } doReturn null
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
             onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
             on { getLastSyncedState() } doReturn dustState
         }
@@ -214,14 +211,13 @@ class DustSyncManagerTest {
         val result = createManager(dustRepo = dustRepo, cloudSource = source).ensureSynced()
 
         assertEquals(dustState, result)
-        verify(dustRepo, never()).saveState(any(), any())
+        verify(dustRepo, never()).saveCheckpoint(any(), any(), any())
     }
 
     @Test
     fun `cloud fetch throwing degrades to genesis, never crashes`() = runTest {
         val dustRepo = mock<DustRepository> {
-            onBlocking { loadState("test_addr") } doReturn null
-            onBlocking { getLastAppliedEventId("test_addr") } doReturn null
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
             onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
             on { getLastSyncedState() } doReturn dustState
         }
@@ -230,7 +226,7 @@ class DustSyncManagerTest {
         val result = createManager(dustRepo = dustRepo, cloudSource = source).ensureSynced()
 
         assertEquals(dustState, result)
-        verify(dustRepo, never()).saveState(any(), any())
+        verify(dustRepo, never()).saveCheckpoint(any(), any(), any())
     }
 
     // ── Helpers ──

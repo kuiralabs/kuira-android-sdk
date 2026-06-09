@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -98,6 +99,45 @@ class DustCheckpointResumeTest {
         assertEquals("balance survives round-trip", balance, restored.getBalance(BALANCE_TS))
         assertEquals("utxo count survives round-trip", utxos, restored.getUtxoCount())
         restored.close()
+    }
+
+    /**
+     * The negative half of #1: a **torn** checkpoint — a state resumed at the
+     * wrong offset relative to the events fed to it — must be *rejected*, not
+     * silently accepted with a divergent root. Re-feeding already-applied events
+     * onto a fully-synced state makes the first commitment event land below the
+     * tree frontier, which the ledger rejects (`NonLinearInsertion`) so
+     * `replayEventsFromFile` returns null. That rejection is what makes
+     * `DustRepository`'s genesis fallback fire — the safety net behind the
+     * atomic `saveCheckpoint`/`loadCheckpoint` that keep a torn pair from ever
+     * being persisted or restored in the first place.
+     */
+    @Test
+    fun tornCheckpointResumeIsRejectedNotSilentlyWrong() {
+        val events = loadFixtureEvents() ?: return skip("events fixture")
+        val seed = loadFixtureSeed() ?: return skip("seed fixture")
+        assumeTrue("fixture needs at least 1 event", events.isNotEmpty())
+
+        // Fully sync, then serialize→deserialize (the real checkpoint path).
+        val full = replayAll(seed, events)
+        val serialized = full.serialize()
+        assertNotNull("checkpoint serializes", serialized)
+        full.close()
+        val restored = DustLocalState.deserialize(serialized!!)
+        assertNotNull("checkpoint deserializes", restored)
+
+        // Re-feed the whole event set onto a state that already consumed it: the
+        // first commitment event targets an index far below the frontier → the
+        // append is non-contiguous → replay must return null.
+        val file = File.createTempFile("dust_torn_events_", ".hex")
+        val result = try {
+            file.bufferedWriter().use { w -> events.forEach { w.write(it); w.newLine() } }
+            restored!!.replayEventsFromFile(seed, file.absolutePath)
+        } finally {
+            file.delete()
+        }
+        restored?.close()
+        assertNull("a torn/misaligned resume must be rejected, not silently wrong", result)
     }
 
     // ── helpers ───────────────────────────────────────────────────────────

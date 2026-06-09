@@ -553,8 +553,7 @@ class DustRepository @Inject constructor(
         val utxoCount = newState.getUtxoCount()
         syncTokensFromState(address, newState)
         try {
-            saveState(address, newState)
-            saveLastAppliedEventId(address, latestEventId)
+            saveCheckpoint(address, newState, latestEventId)
         } catch (e: Exception) {
             android.util.Log.w(TAG, "Checkpoint save failed (non-fatal): ${e.message}")
         }
@@ -812,6 +811,64 @@ class DustRepository @Inject constructor(
         dustStateDataStore.edit { prefs ->
             prefs[key] = eventId
         }
+    }
+
+    /**
+     * A dust checkpoint = the serialized [DustLocalState] plus the resume cursor
+     * ([lastEventId]) it was built up to. The two MUST describe the same chain
+     * point: the commitment-tree frontier carried inside the state has to equal
+     * the commitment index the event after [lastEventId] will try to insert at,
+     * or delta replay fails with `NonLinearInsertion`. [state] is owned by the
+     * caller and must be closed.
+     */
+    class DustCheckpoint(val state: DustLocalState, val lastEventId: Long)
+
+    /**
+     * Persist [state] and its resume cursor [lastEventId] as ONE atomic unit.
+     *
+     * The state and cursor live under two DataStore keys but are written in a
+     * single [edit] transaction, so a process kill or a concurrent reader can
+     * never observe (or back up to the cloud) a torn pair — a state at frontier
+     * F alongside a cursor that implies a different frontier. That torn pairing
+     * is what produced the `NonLinearInsertion` genesis-resync loop; saving the
+     * pair atomically is the cure. Prefer this over separate [saveState] +
+     * [saveLastAppliedEventId] calls everywhere a checkpoint is written.
+     */
+    suspend fun saveCheckpoint(address: String, state: DustLocalState, lastEventId: Long) {
+        val serialized = state.serialize()
+            ?: throw IllegalStateException("Failed to serialize dust state for $address")
+        android.util.Log.d(TAG, "Checkpoint saved: ${serialized.size} bytes, lastEventId=$lastEventId")
+        val hexString = bytesToHexString(serialized)
+        dustStateDataStore.edit { prefs ->
+            prefs[dustStateKey(address)] = hexString
+            prefs[lastEventIdKey(address)] = lastEventId
+        }
+    }
+
+    /**
+     * Load the checkpoint (state + cursor) as ONE consistent snapshot. Reads both
+     * keys from a single DataStore emission, so the returned pair can never be
+     * torn across a concurrent write. Returns null if EITHER half is missing or
+     * the state fails to deserialize — callers then fall back to genesis rather
+     * than resuming on a half-checkpoint. The returned [DustCheckpoint.state] is
+     * owned by the caller and must be closed.
+     */
+    suspend fun loadCheckpoint(address: String): DustCheckpoint? {
+        val prefs = dustStateDataStore.data.first()
+        val hexString = prefs[dustStateKey(address)] ?: return null
+        val lastEventId = prefs[lastEventIdKey(address)] ?: return null
+        val state = DustLocalState.deserialize(hexStringToBytes(hexString)) ?: return null
+        return DustCheckpoint(state, lastEventId)
+    }
+
+    /**
+     * True only when BOTH halves of a checkpoint are present — cheaper than
+     * [loadCheckpoint] (no deserialize) for a presence test. A half-written
+     * checkpoint reads as absent, forcing a clean genesis sync.
+     */
+    suspend fun hasCheckpoint(address: String): Boolean {
+        val prefs = dustStateDataStore.data.first()
+        return prefs[dustStateKey(address)] != null && prefs[lastEventIdKey(address)] != null
     }
 
     // ========== Utility Functions ==========

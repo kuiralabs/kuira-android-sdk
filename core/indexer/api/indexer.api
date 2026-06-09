@@ -1110,12 +1110,15 @@ public final class com/midnight/kuira/core/indexer/repository/DustRepository {
 	public final fun getLastSyncedState ()Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
 	public final fun getTokenCount (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun hasCachedState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun hasCheckpoint (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun initializeIfNeeded (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun loadCheckpoint (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun loadState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun markTokensAsAvailable (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun markTokensAsPending (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun markTokensAsSpent (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun observeBalance (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
+	public final fun saveCheckpoint (Ljava/lang/String;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun saveLastAppliedEventId (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun saveState (Ljava/lang/String;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun syncFromBlockchain (Ljava/lang/String;[BILkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -1124,6 +1127,12 @@ public final class com/midnight/kuira/core/indexer/repository/DustRepository {
 }
 
 public final class com/midnight/kuira/core/indexer/repository/DustRepository$Companion {
+}
+
+public final class com/midnight/kuira/core/indexer/repository/DustRepository$DustCheckpoint {
+	public fun <init> (Lcom/midnight/kuira/core/crypto/dust/DustLocalState;J)V
+	public final fun getLastEventId ()J
+	public final fun getState ()Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
 }
 
 public final class com/midnight/kuira/core/indexer/repository/DustRepository_Factory : dagger/internal/Factory {

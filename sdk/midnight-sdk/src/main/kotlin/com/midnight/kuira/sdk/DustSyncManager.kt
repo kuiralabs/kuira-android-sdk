@@ -106,17 +106,14 @@ class DustSyncManager(
             Log.i(TAG, "cloud-restore: no cloud source wired — skipping")
             return
         }
-        // Local checkpoint present → don't overwrite it with the cloud copy.
-        val haveLocalState = dustRepository.loadState(walletAddress) != null
-        val haveLocalEventId = dustRepository.getLastAppliedEventId(walletAddress) != null
-        if (haveLocalState && haveLocalEventId) {
+        // Local checkpoint present (BOTH halves) → don't overwrite it with the
+        // cloud copy. hasCheckpoint reads both keys from one snapshot, so a
+        // half-written local checkpoint counts as absent and we re-seed cleanly.
+        if (dustRepository.hasCheckpoint(walletAddress)) {
             Log.i(TAG, "cloud-restore: local checkpoint present — using it (no cloud fetch)")
             return
         }
-        Log.i(
-            TAG,
-            "cloud-restore: no local checkpoint (state=$haveLocalState, eventId=$haveLocalEventId) — trying cloud for $walletAddress",
-        )
+        Log.i(TAG, "cloud-restore: no local checkpoint — trying cloud for $walletAddress")
         val restored = runCatching { source.fetch(walletAddress) }
             .onFailure { Log.w(TAG, "cloud-restore: fetch failed: ${it.message}", it) }
             .getOrNull()
@@ -130,8 +127,9 @@ class DustSyncManager(
             return
         }
         try {
-            dustRepository.saveState(walletAddress, state)
-            dustRepository.saveLastAppliedEventId(walletAddress, restored.lastEventId)
+            // One atomic write — the seeded state and its cursor can never land
+            // torn (which would make the very first delta fail NonLinearInsertion).
+            dustRepository.saveCheckpoint(walletAddress, state, restored.lastEventId)
             Log.i(TAG, "cloud-restore: SEEDED from cloud, lastEventId=${restored.lastEventId} — next sync is a delta")
         } finally {
             state.close()

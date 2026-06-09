@@ -483,14 +483,19 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupDustToCloud() = withContext(Dispatchers.IO) {
         val backup = dustCloudBackup ?: return@withContext
-        val state = dustRepository.loadState(walletAddress) ?: return@withContext
+        // Read state + cursor as ONE consistent snapshot. The old two-read form
+        // (loadState then getLastAppliedEventId) could capture a state and a
+        // cursor from different chain points if a sync wrote between the reads,
+        // then upload that torn pair — poisoning every device that later restored
+        // it (frontier ≠ cursor → NonLinearInsertion → genesis-resync loop). With
+        // an atomic read, a clean local checkpoint always heals the cloud copy.
+        val checkpoint = dustRepository.loadCheckpoint(walletAddress) ?: return@withContext
         val bytes = try {
-            state.serialize()
+            checkpoint.state.serialize()
         } finally {
-            state.close()
+            checkpoint.state.close()
         } ?: return@withContext
-        val lastEventId = dustRepository.getLastAppliedEventId(walletAddress) ?: return@withContext
-        backup.upload(walletAddress, bytes, lastEventId)
+        backup.upload(walletAddress, bytes, checkpoint.lastEventId)
     }
 
     /** Node error 170 = InvalidDustSpendProof. Submit throws it as a
