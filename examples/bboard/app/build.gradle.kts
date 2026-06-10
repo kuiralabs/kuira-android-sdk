@@ -4,12 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("io.github.kuiralabs.contract") version "0.1.0-alpha02"
+    // Version resolved in settings.gradle.kts from -PkuiraVersion (the SDK
+    // version under test), so the acceptance build always tracks the release.
+    id("io.github.kuiralabs.contract")
 }
 
 kuiraContract {
     source.set("../contract/src/managed/bboard")
 }
+
+// SDK version under test — passed by the publish workflow as -PkuiraVersion
+// (from the monorepo's gradle.properties); literal fallback for local dev.
+val kuiraVersion: String = providers.gradleProperty("kuiraVersion").getOrElse("0.1.0-alpha03")
 
 android {
     namespace = "com.midnight.example.bboard"
@@ -41,7 +47,7 @@ dependencies {
     // SDK surface BBoard touches directly (compact-engine, identity, network,
     // wallet-runtime, wallet-seed, auth, crypto, ledger) so the types are on
     // BBoard's compile classpath transitively. No per-module redeclaration.
-    implementation("io.github.kuiralabs:dapp-ui:0.1.0-alpha02")
+    implementation("io.github.kuiralabs:dapp-ui:$kuiraVersion")
 
     // AndroidX directly used by BBoard (FragmentActivity host, Compose). Things
     // Kuira pulls in transitively (biometric, credentials, room, etc.) come

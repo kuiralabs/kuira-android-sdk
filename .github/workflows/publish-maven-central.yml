@@ -67,9 +67,16 @@ jobs:
       - name: Publish to mavenLocal (acceptance prereq)
         run: ./gradlew publishToMavenLocal --console=plain
 
-      - name: Acceptance — BBoard builds against the alpha as a third-party consumer
+      - name: Acceptance — BBoard builds against the just-published release
+        # Build the acceptance consumer against the EXACT version being released
+        # (read from gradle.properties, the single source of truth), resolved
+        # from the mavenLocal publish above. Passing the version this way means
+        # the test can never silently pass against a stale pin.
         working-directory: examples/bboard
-        run: ./gradlew :app:assembleDebug --console=plain
+        run: |
+          VERSION=$(grep '^version=' ../../gradle.properties | cut -d '=' -f2)
+          echo "Acceptance: building BBoard against kuira $VERSION"
+          ./gradlew :app:assembleDebug -PkuiraVersion="$VERSION" --console=plain
 
       - name: Publish to Maven Central staging
         env:
