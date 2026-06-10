@@ -494,6 +494,34 @@ class KuiraContractPluginTest {
         )
     }
 
+    // ── Configuration-cache compatibility ───────────────────────────
+
+    @Test
+    fun `validate + sync are configuration-cache compatible`() {
+        writeCanonicalContractTree("counter", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        writeBuildScript(source = "contract/src/managed/counter")
+
+        // First run stores the entry. A task action that captures the
+        // Gradle `Project` (the regression this guards) fails here with
+        // "cannot serialize object of type ... DefaultProject"; .build()
+        // would then throw and fail the test.
+        val first = runWithConfigCache("syncContractAssets")
+        assertEquals(TaskOutcome.SUCCESS, first.task(":syncContractAssets")?.outcome)
+        assertTrue(
+            "first run should store the configuration cache without problems: ${first.output}",
+            first.output.contains("Configuration cache entry stored"),
+        )
+
+        // Second run must reuse the stored entry — Gradle discards an
+        // entry that recorded problems, so reuse proves there were none.
+        val second = runWithConfigCache("syncContractAssets")
+        assertTrue(
+            "second run should reuse the configuration cache: ${second.output}",
+            second.output.contains("Reusing configuration cache"),
+        )
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────
 
     /**
@@ -746,6 +774,13 @@ class KuiraContractPluginTest {
             .withArguments(*args, "--stacktrace")
             .withPluginClasspath()
             .buildAndFail()
+
+    private fun runWithConfigCache(vararg args: String) =
+        GradleRunner.create()
+            .withProjectDir(projectDir)
+            .withArguments(*args, "--configuration-cache", "--stacktrace")
+            .withPluginClasspath()
+            .build()
 
     companion object {
         private const val CONTRACT_JS_STUB = "// stub contract\nexports.foo = 42;\n"

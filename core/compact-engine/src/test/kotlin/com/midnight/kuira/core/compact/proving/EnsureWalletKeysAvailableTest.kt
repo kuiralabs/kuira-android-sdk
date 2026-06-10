@@ -117,7 +117,11 @@ class EnsureWalletKeysAvailableTest {
         "zswap/sign.prover", "zswap/sign.verifier", "zswap/sign.bzkir",
         "dust/spend.prover", "dust/spend.verifier", "dust/spend.bzkir",
     )
-    private val blsNames = listOf("bls_midnight_2p13", "bls_midnight_2p14", "bls_midnight_2p15")
+    // Full BLS set a complete install needs: k=13/14/15 for the wallet,
+    // k=5..12 for small contract circuits (mirrors ProvingKeyManager's
+    // BLS_PARAM_FILES). A "complete" staging must include all of them, else
+    // hasWalletKeys() — which now requires the full set — reports incomplete.
+    private val blsNames = (5..15).map { "bls_midnight_2p$it" }
 
     /** Stage a complete, non-empty key set under `<localTmp>/{bboard_keys,wallet_keys}`. */
     private fun stageCompleteLocalTmp(localTmp: File) {

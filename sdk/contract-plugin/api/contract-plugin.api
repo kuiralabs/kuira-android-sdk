@@ -58,3 +58,15 @@ public final class com/midnight/kuira/contract/KuiraDoctorTask$Severity : java/l
 	public static fun values ()[Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
 }
 
+public abstract class com/midnight/kuira/contract/ValidateKuiraContractSourceTask : org/gradle/api/DefaultTask {
+	public static final field Companion Lcom/midnight/kuira/contract/ValidateKuiraContractSourceTask$Companion;
+	public fun <init> ()V
+	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
+	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
+	public abstract fun getSourceDirectory ()Lorg/gradle/api/file/DirectoryProperty;
+	public final fun validate ()V
+}
+
+public final class com/midnight/kuira/contract/ValidateKuiraContractSourceTask$Companion {
+}
+

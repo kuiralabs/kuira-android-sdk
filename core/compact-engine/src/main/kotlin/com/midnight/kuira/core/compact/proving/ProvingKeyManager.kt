@@ -591,8 +591,25 @@ class ProvingKeyManager(
             }
         }
 
-        /** BLS parameter files needed for any proving (wallet or contract). */
+        /**
+         * BLS parameter files needed for proving. k=13/14/15 cover the
+         * wallet's zswap/dust circuits; k=5..12 cover compiled **contract**
+         * circuits — the native prover loads the param sized to the circuit
+         * (a small counter circuit needs exactly `bls_midnight_2p5`). These
+         * are universal SRS params (not contract-specific), so the SDK
+         * provisions every size once at wallet-key setup and any dApp circuit
+         * finds the size it needs — no per-app BLS staging. Source of truth
+         * for [WALLET_KEY_FILES] and [WALLET_DOWNLOADS] below.
+         */
         private val BLS_PARAM_FILES = listOf(
+            "bls_midnight_2p5",
+            "bls_midnight_2p6",
+            "bls_midnight_2p7",
+            "bls_midnight_2p8",
+            "bls_midnight_2p9",
+            "bls_midnight_2p10",
+            "bls_midnight_2p11",
+            "bls_midnight_2p12",
             "bls_midnight_2p13",
             "bls_midnight_2p14",
             "bls_midnight_2p15",
@@ -601,7 +618,14 @@ class ProvingKeyManager(
         /** File extensions required per circuit. */
         private val CIRCUIT_KEY_EXTENSIONS = listOf("prover", "verifier", "bzkir")
 
-        /** All files needed for wallet transactions (zswap + dust). */
+        /**
+         * All files a complete install needs: the wallet's zswap + dust
+         * keys, plus the full [BLS_PARAM_FILES] set. Requiring the BLS set
+         * here means an existing install (provisioned before the smaller
+         * sizes were added) reports incomplete and re-provisions — and since
+         * [downloadWalletKeys] skips already-cached files, only the missing
+         * (small) BLS params actually download.
+         */
         private val WALLET_KEY_FILES = listOf(
             "zswap/spend.prover",
             "zswap/spend.verifier",
@@ -615,10 +639,7 @@ class ProvingKeyManager(
             "dust/spend.prover",
             "dust/spend.verifier",
             "dust/spend.bzkir",
-            "bls_midnight_2p13",
-            "bls_midnight_2p14",
-            "bls_midnight_2p15",
-        )
+        ) + BLS_PARAM_FILES
 
         /** S3 path → local path mapping for downloads. */
         private val WALLET_DOWNLOADS = listOf(
@@ -636,10 +657,9 @@ class ProvingKeyManager(
             "dust/$CURRENT_VERSION/spend.prover" to "dust/spend.prover",
             "dust/$CURRENT_VERSION/spend.verifier" to "dust/spend.verifier",
             "dust/$CURRENT_VERSION/spend.bzkir" to "dust/spend.bzkir",
-            // BLS parameters (k=13 for dust, k=14 for zswap output, k=15 for zswap spend)
-            "bls_midnight_2p13" to "bls_midnight_2p13",
-            "bls_midnight_2p14" to "bls_midnight_2p14",
-            "bls_midnight_2p15" to "bls_midnight_2p15",
-        )
+            // BLS params — version-independent universal SRS, stored top-level
+            // (not under a version dir). Every size in BLS_PARAM_FILES: k=13/14/15
+            // for the wallet, k=5..12 for small contract circuits.
+        ) + BLS_PARAM_FILES.map { it to it }
     }
 }

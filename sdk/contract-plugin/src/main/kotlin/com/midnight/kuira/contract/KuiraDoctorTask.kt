@@ -96,6 +96,18 @@ abstract class KuiraDoctorTask : DefaultTask() {
         // Diagnostic task — always run, never cached. Up-to-date would
         // hide a now-misconfigured rpId / assetlinks endpoint.
         outputs.upToDateWhen { false }
+        // kuiraDoctor inspects live, inherently-uncacheable state — it
+        // fetches the assetlinks endpoint over the network and walks the
+        // project's resolvable runtime classpaths to find the bundled
+        // compact-engine AAR — so it reads `project` at execution time.
+        // Opt it out of the configuration cache (the sanctioned API for
+        // tasks that can't be cached) so a consumer who enables the
+        // cache can still run `./gradlew :app:kuiraDoctor` — it runs
+        // uncached, with a warning, instead of failing the build.
+        notCompatibleWithConfigurationCache(
+            "kuiraDoctor performs live network and runtime-classpath diagnostics " +
+                "that are inherently uncacheable.",
+        )
     }
 
     @TaskAction
