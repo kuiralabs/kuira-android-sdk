@@ -13,9 +13,11 @@ kuiraContract {
     source.set("../contract/src/managed/bboard")
 }
 
-// SDK version under test — passed by the publish workflow as -PkuiraVersion
-// (from the monorepo's gradle.properties); literal fallback for local dev.
-val kuiraVersion: String = providers.gradleProperty("kuiraVersion").getOrElse("0.1.0-alpha03")
+// SDK version under test — from -PkuiraVersion (the publish workflow passes it),
+// otherwise the monorepo's gradle.properties, so nothing here pins a version.
+val kuiraVersion: String = providers.gradleProperty("kuiraVersion").orNull
+    ?: rootProject.file("../../gradle.properties").readLines()
+        .first { it.startsWith("version=") }.substringAfter('=').trim()
 
 android {
     namespace = "com.midnight.example.bboard"
