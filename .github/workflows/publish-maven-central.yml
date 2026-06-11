@@ -64,19 +64,12 @@ jobs:
         # regenerates the baseline; the diff lands in review).
         run: ./gradlew apiCheck --console=plain
 
-      - name: Publish to mavenLocal (acceptance prereq)
+      - name: Sanity — the full bundle assembles + publishes
         run: ./gradlew publishToMavenLocal --console=plain
 
-      - name: Acceptance — BBoard builds against the just-published release
-        # Build the acceptance consumer against the EXACT version being released
-        # (read from gradle.properties, the single source of truth), resolved
-        # from the mavenLocal publish above. Passing the version this way means
-        # the test can never silently pass against a stale pin.
-        working-directory: examples/bboard
-        run: |
-          VERSION=$(grep '^version=' ../../gradle.properties | cut -d '=' -f2)
-          echo "Acceptance: building BBoard against kuira $VERSION"
-          ./gradlew :app:assembleDebug -PkuiraVersion="$VERSION" --console=plain
+      # Consumer acceptance is covered post-publish by the example repos' own CI:
+      # kuira-starter-android and example-bboard-android build cold from Maven
+      # Central once their pins are bumped to the new version.
 
       - name: Publish to Maven Central staging
         env:
