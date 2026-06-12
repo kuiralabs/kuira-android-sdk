@@ -5,12 +5,14 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.SeedDeriver
+import com.midnight.kuira.core.identity.passkey.NoPasskeyCredentialException
 import com.midnight.kuira.core.identity.passkey.PasskeyException
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.sigil.SigilDerivation
 import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import kotlinx.coroutines.delay
+import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -166,18 +168,25 @@ class SigilSession @Inject constructor(
      * caller persists the sigil triple — the create returns the passkey's P-256
      * pubkey (for `KeyAuthorization`), which the caller surfaces + stores.
      *
-     * @param userName Display name for the passkey (host app label).
      * @throws BackupException if PRF is unavailable on either path.
      * @throws PasskeyException if the create ceremony fails (cancellation, etc.).
      */
-    suspend fun forge(activity: FragmentActivity, userName: String): ForgeResult {
+    suspend fun forge(activity: FragmentActivity): ForgeResult {
         // Step 1: create the passkey, evaluating BOTH salts in the same
         // ceremony (SIGIL_SALT → DID, SEED_SALT → wallet seed). One biometric.
-        val userId = ByteArray(USER_ID_BYTES).also { SecureRandom().nextBytes(it) }
+        //
+        // The user handle + display name are deterministic SDK constants, NOT
+        // per-app values: every Kuira app forges under the SAME (rpId, user.id),
+        // so GPM keys them to one passkey identity instead of minting a fresh
+        // random credential — and therefore a different seed/sigil — per app.
+        // That shared identity is what lets a cloud backup made in one app
+        // restore in another. (Reuse-vs-reforge is gated by the sign-in-if-
+        // exists guard; an existing credential is found via the GET path
+        // regardless of user.id, so this does not strand pre-existing sigils.)
         val create = passkeyManager.createPasskey(
             activity = activity,
-            userId = userId,
-            userName = userName,
+            userId = SIGIL_USER_HANDLE,
+            userName = SIGIL_DISPLAY_NAME,
             prfSalt = sigilIdentityProvider.prfSalt,
             prfSaltSecond = SeedDeriver.SEED_SALT,
         )
@@ -235,12 +244,68 @@ class SigilSession @Inject constructor(
         )
     }
 
+    /**
+     * Establish the sigil for the canonical rpId: **reuse an existing one if
+     * present, forge a new one only when none is.**
+     *
+     * Tries [signIn] first — a GET with no `allowCredentials`, so the platform
+     * satisfies it from ANY passkey for the rpId (e.g. one a sibling Kuira app
+     * already forged and GPM synced across the device's account). Only when the
+     * platform reports NO credential ([NoPasskeyCredentialException]) does it
+     * [forge] a new one.
+     *
+     * This is what stops a second Kuira app from minting a DUPLICATE sigil (a
+     * different seed) instead of converging on the shared identity. Any other
+     * failure (cancellation, RP-id mismatch) propagates unchanged — we never
+     * forge over a real error.
+     *
+     * On reuse, [signIn] has already persisted the sigil triple (publicKeyHex
+     * empty — a GET cannot return the P-256 pubkey). On forge, the caller
+     * persists the returned triple, exactly as it does for [forge].
+     */
+    suspend fun establishSigil(activity: FragmentActivity): EstablishResult =
+        try {
+            val derivation = signIn(activity)
+            Log.i(TAG, "Sigil reused via sign-in — DID: ${derivation.did}")
+            EstablishResult(
+                did = derivation.did,
+                credentialId = derivation.credentialId,
+                publicKeyHex = "",
+                reused = true,
+            )
+        } catch (e: NoPasskeyCredentialException) {
+            Log.i(TAG, "No existing sigil for this relying party — forging a new one")
+            val forged = forge(activity)
+            EstablishResult(
+                did = forged.did,
+                credentialId = forged.credentialId,
+                publicKeyHex = forged.publicKeyHex,
+                reused = false,
+            )
+        }
+
     private companion object {
         const val TAG = "SigilSession"
         const val CHALLENGE_SIZE = 32
         const val USER_ID_BYTES = 16
         /** Settle delay before the fallback GET, so a fresh credential is discoverable. */
         const val POST_CREATE_SETTLE_MS = 1_500L
+
+        /** Display name shown for the shared sigil in the passkey / GPM UI. */
+        const val SIGIL_DISPLAY_NAME = "Kuira Sigil"
+
+        /**
+         * Canonical Kuira sigil user handle (WebAuthn `user.id`): deterministic
+         * and identical across every Kuira app, so GPM keys the credential to one
+         * shared identity under the canonical rpId instead of a fresh random
+         * handle per forge. Opaque, non-PII, not secret. Derived from a versioned
+         * label so a future rotation can ship a v2 without colliding with v1
+         * credentials; truncated to [USER_ID_BYTES].
+         */
+        val SIGIL_USER_HANDLE: ByteArray =
+            MessageDigest.getInstance("SHA-256")
+                .digest("kuira:sigil:user-handle:v1".toByteArray(Charsets.UTF_8))
+                .copyOf(USER_ID_BYTES)
     }
 }
 
@@ -253,4 +318,17 @@ data class ForgeResult(
     val did: String,
     val credentialId: String,
     val publicKeyHex: String,
+)
+
+/**
+ * Result of [SigilSession.establishSigil]: the sigil's DID + credential ID, the
+ * passkey's P-256 public key hex (empty when an existing sigil was **reused** —
+ * a GET ceremony does not return the pubkey), and whether it was reused vs newly
+ * forged. The caller persists the triple via [SigilStateStore].
+ */
+data class EstablishResult(
+    val did: String,
+    val credentialId: String,
+    val publicKeyHex: String,
+    val reused: Boolean,
 )

@@ -8,6 +8,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
+import androidx.credentials.exceptions.NoCredentialException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -260,6 +261,11 @@ class PasskeyManager(
 
         val response = try {
             credentialManager.getCredential(activity, request)
+        } catch (e: NoCredentialException) {
+            // No passkey exists for this relying party — a distinct signal from a
+            // failed or user-cancelled ceremony, so a caller can choose to forge a
+            // new sigil instead of surfacing an error (sign-in-if-exists).
+            throw NoPasskeyCredentialException("No passkey credential for this relying party", e)
         } catch (e: Exception) {
             throw PasskeyException("PRF authentication failed: ${e.message}", e)
         }
@@ -441,7 +447,18 @@ class PrfAssertionResult(
     val hasPrfSecond: Boolean get() = prfOutputSecond != null && prfOutputSecond.size == 32
 }
 
-class PasskeyException(
+open class PasskeyException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * Thrown by a GET ceremony when the platform reports NO credential exists for
+ * the relying party — as opposed to a failed or user-cancelled ceremony. Lets
+ * callers implement sign-in-if-exists: reuse an existing sigil, and forge a new
+ * one only when none is present.
+ */
+class NoPasskeyCredentialException(
+    message: String,
+    cause: Throwable? = null,
+) : PasskeyException(message, cause)

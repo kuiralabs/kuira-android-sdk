@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.identity.backup.SeedDeriver
+import com.midnight.kuira.core.identity.passkey.NoPasskeyCredentialException
 import com.midnight.kuira.core.identity.passkey.P256PublicKey
+import com.midnight.kuira.core.identity.passkey.PasskeyException
 import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.passkey.PasskeyRegistrationResult
 import com.midnight.kuira.core.identity.passkey.PrfAssertionResult
@@ -18,6 +20,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -226,7 +230,7 @@ class SigilSessionTest {
         }
 
         val session = newSession()
-        val result = session.forge(activity, userName = "Test App")
+        val result = session.forge(activity)
 
         assertEquals(FIXED_DID, result.did)
         assertEquals(FIXED_CREDENTIAL_ID, result.credentialId)
@@ -266,7 +270,7 @@ class SigilSessionTest {
         } returns prfResult(prfOutput = ByteArray(32) { 0x33 }, prfOutputSecond = ByteArray(32) { 0x44 })
 
         val session = newSession()
-        val result = session.forge(activity, userName = "Test App")
+        val result = session.forge(activity)
 
         assertEquals(FIXED_DID, result.did)
         // Exactly one fallback GET fired.
@@ -279,6 +283,118 @@ class SigilSessionTest {
             )
         }
         coVerify(exactly = 1) { walletSeedSource.acceptPreDerivedSeed(activity, any()) }
+    }
+
+    @Test
+    fun `forge presents a deterministic shared user handle across forges`() = runTest {
+        // Lever 2 of cross-app convergence: every forge must present the SAME
+        // (user.id, user.name) so GPM keys all Kuira apps to ONE passkey identity
+        // under the canonical rpId — not a fresh random credential (→ a different
+        // seed, hence a different sigil) per app/forge.
+        val handles = mutableListOf<ByteArray>()
+        val names = mutableListOf<String>()
+        coEvery {
+            passkeyManager.createPasskey(
+                activity = activity,
+                userId = capture(handles),
+                userName = capture(names),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns createResult(prfOutput = ByteArray(32) { 0x11 }, prfOutputSecond = ByteArray(32) { 0x22 })
+
+        val session = newSession()
+        session.forge(activity)
+        session.forge(activity)
+
+        assertEquals(2, handles.size)
+        assertArrayEquals("handle must be identical across forges", handles[0], handles[1])
+        assertEquals("handle is 16 bytes (USER_ID_BYTES)", 16, handles[0].size)
+        assertFalse("handle must be a real derived value, not zeros", handles[0].all { it == 0.toByte() })
+        assertEquals("display name must be stable across forges", names[0], names[1])
+        assertEquals("Kuira Sigil", names[0])
+    }
+
+    @Test
+    fun `establishSigil reuses an existing sigil via sign-in without forging`() = runTest {
+        // Lever 3: a sigil already exists for this rpId → the GET succeeds, so
+        // establish must REUSE it and never call createPasskey (no duplicate).
+        coEvery {
+            passkeyManager.authenticateWithPrf(
+                activity = activity,
+                challenge = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns prfResult(prfOutput = ByteArray(32) { 0xAA.toByte() }, prfOutputSecond = ByteArray(32) { 0xBB.toByte() })
+
+        val result = newSession().establishSigil(activity)
+
+        assertTrue("an existing sigil must be reused", result.reused)
+        assertEquals(FIXED_DID, result.did)
+        coVerify(exactly = 0) { passkeyManager.createPasskey(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `establishSigil forges a new sigil only when no credential exists`() = runTest {
+        // The GET reports NO credential for the rpId → establish must forge.
+        coEvery {
+            passkeyManager.authenticateWithPrf(
+                activity = activity,
+                challenge = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } throws NoPasskeyCredentialException("no credential")
+        coEvery {
+            passkeyManager.createPasskey(
+                activity = activity,
+                userId = any(),
+                userName = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } returns createResult(prfOutput = ByteArray(32) { 0x11 }, prfOutputSecond = ByteArray(32) { 0x22 })
+
+        val result = newSession().establishSigil(activity)
+
+        assertFalse("a fresh sigil must report reused = false", result.reused)
+        assertEquals(FIXED_DID, result.did)
+        assertEquals(FIXED_PUBKEY_HEX, result.publicKeyHex)
+        coVerify(exactly = 1) {
+            passkeyManager.createPasskey(
+                activity = activity,
+                userId = any(),
+                userName = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        }
+    }
+
+    @Test
+    fun `establishSigil never forges over a non-no-credential failure`() = runTest {
+        // A cancelled / failed GET is NOT "no credential" — establish must
+        // propagate it and must NOT forge a sigil over a real error.
+        coEvery {
+            passkeyManager.authenticateWithPrf(
+                activity = activity,
+                challenge = any(),
+                prfSalt = SeedDeriver.SIGIL_SALT,
+                prfSaltSecond = SeedDeriver.SEED_SALT,
+            )
+        } throws PasskeyException("user cancelled")
+
+        var thrown: Throwable? = null
+        try {
+            newSession().establishSigil(activity)
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertTrue("the failure must propagate", thrown is PasskeyException)
+        assertFalse("must not be the no-credential subtype", thrown is NoPasskeyCredentialException)
+        coVerify(exactly = 0) { passkeyManager.createPasskey(any(), any(), any(), any(), any()) }
     }
 
     // ── Helpers ──

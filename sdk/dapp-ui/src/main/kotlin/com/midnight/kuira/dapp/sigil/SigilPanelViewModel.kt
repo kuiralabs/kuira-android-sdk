@@ -1,7 +1,6 @@
 package com.midnight.kuira.dapp.sigil
 
 import android.app.Activity
-import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
@@ -17,7 +16,6 @@ import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -52,7 +50,6 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SigilPanelViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val passkeyManager: PasskeyManager,
     private val sigilIdentityProvider: SigilIdentityProvider,
     private val sigilSession: SigilSession,
@@ -193,18 +190,18 @@ class SigilPanelViewModel @Inject constructor(
      */
     fun forgeSigil(activity: FragmentActivity) {
         viewModelScope.launch {
-            _status.value = SigilStatus.Creating("Creating passkey…")
+            _status.value = SigilStatus.Creating("Setting up sigil…")
             try {
-                // One ceremony: create the passkey AND derive the sigil DID +
-                // pre-warm the wallet seed via PRF-on-create (SigilSession.forge).
-                // Replaces the old create-then-separate-PRF-GET, which raced the
-                // just-created credential ("cannot find credential in local
-                // KeyStore") until a sync pass, and showed two biometric prompts.
-                // The P-256 pubkey is kept for KeyAuthorization (BBoard's
-                // authorize flow) and surfaced in the Forged pill.
-                val result = sigilSession.forge(activity, userName = hostAppLabel())
+                // Reuse-or-forge in one delegated ceremony: establishSigil signs
+                // in to an existing sigil for the canonical rpId if one exists
+                // (so a second Kuira app converges on the shared identity rather
+                // than minting a duplicate), and forges a NEW one only when the
+                // platform reports no credential. On forge the P-256 pubkey is
+                // kept for KeyAuthorization + the Forged pill; on reuse it's empty
+                // (a GET can't return it), matching the sign-in path.
+                val result = sigilSession.establishSigil(activity)
 
-                Log.i(TAG, "Sigil forged — DID: ${result.did}")
+                Log.i(TAG, "Sigil ${if (result.reused) "reused" else "forged"} — DID: ${result.did}")
                 Log.i(TAG, "  Credential ID: ${result.credentialId}")
                 persistSigil(
                     did = result.did,
@@ -218,7 +215,7 @@ class SigilPanelViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "forgeSigil failed", e)
-                _status.value = SigilStatus.Error(e.message ?: "Passkey creation failed")
+                _status.value = SigilStatus.Error(e.message ?: "Sigil setup failed")
             }
         }
     }
@@ -444,15 +441,6 @@ class SigilPanelViewModel @Inject constructor(
         // runs once per forge / restore, not on a hot path.
         sigilStateStore.persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)
     }
-
-    /**
-     * Label the passkey prompt shows for the credential — derived from the host
-     * app's manifest `android:label` so every dApp embedding this panel sees
-     * its own name (Kicks → "Midnight Kicks", BBoard → "BBoard", etc.) without
-     * any per-host wiring.
-     */
-    private fun hostAppLabel(): String =
-        context.packageManager.getApplicationLabel(context.applicationInfo).toString()
 
     companion object {
         private const val TAG = "SigilPanel"
