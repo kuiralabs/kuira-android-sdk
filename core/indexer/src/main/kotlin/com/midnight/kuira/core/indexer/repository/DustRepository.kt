@@ -369,11 +369,18 @@ class DustRepository @Inject constructor(
         android.util.Log.d(TAG, "Syncing dust from blockchain for $address")
 
         try {
-            // Try delta sync first: load existing state + last event ID
-            val existingState = loadState(address)
-            val lastEventId = getLastAppliedEventId(address)
+            // Try delta sync first: load the checkpoint (state + cursor) as ONE
+            // atomic snapshot. Reading the two halves with separate DataStore
+            // emissions could observe a torn pair — DustSubscriptionManager's
+            // atomic saveCheckpoint landing between the reads would pair an old
+            // state frontier with a new cursor, so the delta would insert at the
+            // wrong index and fail NonLinearInsertion. loadCheckpoint reads both
+            // keys from a single emission, so the pair is always self-consistent.
+            val checkpoint = loadCheckpoint(address)
 
-            if (existingState != null && lastEventId != null) {
+            if (checkpoint != null) {
+                val existingState = checkpoint.state
+                val lastEventId = checkpoint.lastEventId
                 // Reorg guard: if the chain's dust-event tip is now BELOW our
                 // checkpoint, the chain reset under us (deep reorg / localnet
                 // re-genesis). A delta resume from lastEventId+1 would then find no
@@ -404,8 +411,6 @@ class DustRepository @Inject constructor(
                     android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
                     deleteState(address)
                 }
-            } else {
-                existingState?.close()
             }
 
             // Full sync: stream all events, then replay in a single pass.
