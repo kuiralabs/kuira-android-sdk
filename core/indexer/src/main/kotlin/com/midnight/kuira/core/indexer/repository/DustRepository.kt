@@ -374,17 +374,36 @@ class DustRepository @Inject constructor(
             val lastEventId = getLastAppliedEventId(address)
 
             if (existingState != null && lastEventId != null) {
-                // Delta sync: replay only events after the checkpoint ON TOP of
-                // the loaded state (streamDustEvents takes ownership of it).
-                android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                val result = streamDustEvents(
-                    address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
-                )
-                if (result) return true
+                // Reorg guard: if the chain's dust-event tip is now BELOW our
+                // checkpoint, the chain reset under us (deep reorg / localnet
+                // re-genesis). A delta resume from lastEventId+1 would then find no
+                // events and silently keep the stale checkpoint — the bug behind a
+                // dust balance that survives a chain reset (mirrors the UTXO side's
+                // `serverMax < expected` reorg detection). `maxId` is the indexer's
+                // current dust tip; -1 means the chain has no dust events at all
+                // (so our checkpoint can't be valid). A timeout leaves `tip` null →
+                // fall through to the normal delta, behavior unchanged.
+                val tip = withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
+                    indexerClient.subscribeToDustEvents(fromId = null).firstOrNull()?.maxId ?: -1L
+                }
+                if (tip != null && tip < lastEventId) {
+                    android.util.Log.w(TAG, "Dust reorg detected: chain tip $tip < checkpoint $lastEventId — rebuilding from genesis")
+                    existingState.close()
+                    deleteState(address)
+                    // fall through to full sync below
+                } else {
+                    // Delta sync: replay only events after the checkpoint ON TOP of
+                    // the loaded state (streamDustEvents takes ownership of it).
+                    android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
+                    val result = streamDustEvents(
+                        address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
+                    )
+                    if (result) return true
 
-                // Resume failed — drop the checkpoint and rebuild from genesis.
-                android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
-                deleteState(address)
+                    // Resume failed — drop the checkpoint and rebuild from genesis.
+                    android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
+                    deleteState(address)
+                }
             } else {
                 existingState?.close()
             }
