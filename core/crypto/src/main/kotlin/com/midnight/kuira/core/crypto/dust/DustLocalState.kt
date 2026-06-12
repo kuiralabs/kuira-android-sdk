@@ -533,6 +533,25 @@ class DustLocalState private constructor(
     }
 
     /**
+     * Filter NIGHT UTXOs to those NOT yet generating dust (i.e. unregistered).
+     *
+     * Drives the per-UTXO dust-registration loop: a multi-UTXO wallet can only
+     * register ~one NIGHT input per transaction (the time-to-dismiss budget), so
+     * registration runs as one registration per UTXO. This returns exactly the
+     * UTXOs that still need it; an empty result means all NIGHT is generating.
+     *
+     * Matching happens natively against this state's generating backing-nights,
+     * so it's correct regardless of how the cache-layer DustTokens are populated.
+     *
+     * @param nightUtxosJson JSON array `[{value,intent_hash,output_no,ctime}]`
+     * @return JSON array of the not-yet-generating subset, or null on error
+     */
+    fun filterUnregisteredNight(nightUtxosJson: String): String? {
+        checkNotClosed()
+        return nativeFilterUnregisteredNight(nativePtr, nightUtxosJson)
+    }
+
+    /**
      * Gets all dust UTXOs in this wallet state.
      *
      * **Convenience Method:**
@@ -685,6 +704,8 @@ class DustLocalState private constructor(
      * @return Hex-encoded serialized UTXO, or null if out of bounds
      */
     private external fun nativeDustGetUtxoAt(statePtr: Long, index: Int): String?
+
+    private external fun nativeFilterUnregisteredNight(statePtr: Long, nightUtxosJson: String): String?
 
     /**
      * Replays blockchain events into DustLocalState via FFI.

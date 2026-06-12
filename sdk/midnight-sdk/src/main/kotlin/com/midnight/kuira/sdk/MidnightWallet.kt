@@ -102,6 +102,18 @@ class MidnightWallet internal constructor(
     }
 
     /**
+     * NIGHT UTXOs (from [nightUtxosJson]) that are NOT yet generating dust — i.e.
+     * still need a registration. Matched natively against the current synced dust
+     * state's backing-nights, so it's correct regardless of the cache-layer tokens.
+     * A null/absent dust state means nothing is registered yet, so all are returned.
+     * Drives [MidnightSdk.registerForDustGeneration]'s per-UTXO registration loop.
+     */
+    suspend fun unregisteredNightUtxos(nightUtxosJson: String): String = withContext(Dispatchers.IO) {
+        val state = dustRepository.getLastSyncedState() ?: return@withContext nightUtxosJson
+        runCatching { state.filterUnregisteredNight(nightUtxosJson) }.getOrNull() ?: nightUtxosJson
+    }
+
+    /**
      * Observable balance — emits a fresh [WalletBalance] whenever the wallet's
      * **unshielded OR shielded** NIGHT changes. Both are driven by background
      * indexer subscriptions, so **externally-received funds (an airdrop, an

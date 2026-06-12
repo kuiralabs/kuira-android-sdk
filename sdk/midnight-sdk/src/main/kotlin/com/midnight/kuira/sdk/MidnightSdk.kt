@@ -39,6 +39,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -145,18 +147,84 @@ class MidnightSdk private constructor(
      *   are available, or the FFI builder returned null.
      */
     suspend fun registerForDustGeneration(): SubmissionResult {
-        val nightUtxos = utxoManager.getUnspentUtxos(walletAddress)
+        val dustPublicKeyHex = DustKeyDeriver.derivePublicKey(dustSeed)
+            ?: return SubmissionResult.Failed(
+                txHash = null,
+                reason = "DustKeyDeriver returned null — native library not loaded?",
+            )
+
+        suspend fun currentNight() = utxoManager.getUnspentUtxos(walletAddress)
             .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
 
-        if (nightUtxos.isEmpty()) {
+        if (currentNight().isEmpty()) {
             return SubmissionResult.Failed(
                 txHash = null,
                 reason = "No NIGHT UTXOs at $walletAddress. Fund the wallet first.",
             )
         }
 
-        val utxosJson = JSONArray().apply {
-            nightUtxos.forEach { utxo ->
+        // A registration can carry only ~one NIGHT input before it exceeds the ledger's
+        // time-to-dismiss budget (rejected as Custom error 168 / FeeCalculation), so a
+        // multi-UTXO wallet registers one UTXO per transaction. Loop until every NIGHT
+        // UTXO is generating dust; the cap bounds the loop if sync ever stalls.
+        var lastResult: SubmissionResult? = null
+        val maxRegistrations = currentNight().size + 2
+
+        repeat(maxRegistrations) { iteration ->
+            runCatching { wallet.refresh() }.onFailure { Log.w(TAG, "pre-filter refresh failed: ${it.message}") }
+
+            val night = currentNight()
+            if (night.isEmpty()) {
+                return lastResult ?: SubmissionResult.Failed(txHash = null, reason = "No NIGHT UTXOs remaining.")
+            }
+
+            val unregisteredJson = wallet.unregisteredNightUtxos(nightUtxosToJson(night))
+            val unregisteredCount = JSONArray(unregisteredJson).length()
+            if (unregisteredCount == 0) {
+                Log.i(TAG, "Dust registration complete — all NIGHT generating after $iteration tx(s)")
+                return lastResult ?: SubmissionResult.Success(txHash = "", blockHeight = 0L)
+            }
+
+            // Chain-anchored time, NOT wall-clock (same reason as the Error 170 fix in
+            // MidnightWallet.tryBalance). The registration self-pays via allow_fee_payment,
+            // but ctime is still validated against chain block times.
+            val blockTimestamp = wallet.indexerBlockTimestampMs()
+            val unprovenHex = DustRegistrationBuilder.build(
+                nightPrivateKey = nightPrivateKey,
+                dustPublicKeyHex = dustPublicKeyHex,
+                utxosJson = unregisteredJson, // builder picks the highest-dust UTXO from this set
+                ttlMillis = blockTimestamp + REGISTRATION_TTL_MS,
+                networkId = networkId,
+                currentTimeMillis = blockTimestamp,
+            ) ?: return SubmissionResult.Failed(txHash = null, reason = "DustRegistrationBuilder.build returned null")
+
+            Log.i(TAG, "Registering dust: $unregisteredCount NIGHT UTXO(s) not yet generating (tx ${iteration + 1})")
+            val result = transactionSubmitter.submitPrebuiltTransaction(unprovenHex)
+            if (result !is SubmissionResult.Success && result !is SubmissionResult.Pending) {
+                return result
+            }
+            lastResult = result
+
+            // Wait for this registration's dust to surface before the next filter, so we
+            // don't re-register the freshly-created output (propagation lags finalization
+            // by ~1 block). Ends early once the unregistered set shrinks.
+            val deadline = System.currentTimeMillis() + DUST_PROPAGATION_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                delay(DUST_POLL_INTERVAL_MS)
+                runCatching { wallet.refresh() }
+                val stillUnregistered =
+                    JSONArray(wallet.unregisteredNightUtxos(nightUtxosToJson(currentNight()))).length()
+                if (stillUnregistered < unregisteredCount) break
+            }
+        }
+
+        return lastResult ?: SubmissionResult.Failed(txHash = null, reason = "Dust registration made no progress.")
+    }
+
+    /** Serialize NIGHT UTXOs to the JSON the FFI registration builder/filter expect. */
+    private fun nightUtxosToJson(utxos: List<UnshieldedUtxoEntity>): String =
+        JSONArray().apply {
+            utxos.forEach { utxo ->
                 put(
                     JSONObject().apply {
                         put("value", utxo.value)
@@ -167,34 +235,6 @@ class MidnightSdk private constructor(
                 )
             }
         }.toString()
-
-        val dustPublicKeyHex = DustKeyDeriver.derivePublicKey(dustSeed)
-            ?: return SubmissionResult.Failed(
-                txHash = null,
-                reason = "DustKeyDeriver returned null — native library not loaded?",
-            )
-
-        // Chain-anchored time, NOT wall-clock — same reason as the Error 170 fix
-        // in MidnightWallet.tryBalance (commit 868e0d9). The registration tx
-        // doesn't pay a dust fee but the ctime is still validated against
-        // chain block times.
-        val blockTimestamp = wallet.indexerBlockTimestampMs()
-
-        val unprovenHex = DustRegistrationBuilder.build(
-            nightPrivateKey = nightPrivateKey,
-            dustPublicKeyHex = dustPublicKeyHex,
-            utxosJson = utxosJson,
-            ttlMillis = blockTimestamp + REGISTRATION_TTL_MS,
-            networkId = networkId,
-            currentTimeMillis = blockTimestamp,
-        ) ?: return SubmissionResult.Failed(
-            txHash = null,
-            reason = "DustRegistrationBuilder.build returned null",
-        )
-
-        Log.i(TAG, "Submitting dust registration: ${nightUtxos.size} NIGHT UTXOs, ${unprovenHex.length} hex chars")
-        return transactionSubmitter.submitPrebuiltTransaction(unprovenHex)
-    }
 
     /** Release all resources. */
     fun close() {
@@ -470,6 +510,16 @@ class MidnightSdk private constructor(
          * short enough that a forgotten tx doesn't linger in the mempool.
          */
         private const val REGISTRATION_TTL_MS = 30L * 60L * 1_000L
+
+        /**
+         * Per-registration wait for the new dust generation to sync from the chain
+         * before the next UTXO is registered. Propagation lags finalization by ~1
+         * block; a generous ceiling keeps the loop from re-registering the output it
+         * just created. The loop exits this wait early as soon as the unregistered
+         * set shrinks, so this is a ceiling, not a fixed cost.
+         */
+        private const val DUST_PROPAGATION_TIMEOUT_MS = 120_000L
+        private const val DUST_POLL_INTERVAL_MS = 5_000L
 
         /** DataStore for SDK dust state (separate from Kuira app). */
         private val Context.sdkDustDataStore by preferencesDataStore(name = "sdk_dust_state")
