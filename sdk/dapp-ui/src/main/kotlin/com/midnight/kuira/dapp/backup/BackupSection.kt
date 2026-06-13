@@ -115,7 +115,7 @@ fun BackupSection(
         ) {
             Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors)
             Divider(colors)
-            Lane(icon = "⟳", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = onDustToggle)
+            Lane(icon = "✨", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = onDustToggle)
             state.appData?.let { appData ->
                 Divider(colors)
                 Lane(icon = "☁", title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)

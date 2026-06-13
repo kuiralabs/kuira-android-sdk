@@ -594,13 +594,17 @@ private fun ReadyBody(
     // refresh + Register affordances live inside the card; the runner shows real
     // progress digits when a resync is streaming.
     val b = status.balance
+    // The sheet has room for accuracy (the pill uses the abbreviated "6K"): show
+    // the grouped integer + 2 decimals, not the 15-decimal sprawl.
+    val dustFull = formatter.format(b.dust, "DUST", includeSymbol = false)
+    val dustExact = dustFull.substringBefore('.') +
+        dustFull.substringAfter('.', "").take(2).let { if (it.isNotEmpty()) ".$it" else "" }
     val balanceUi = WalletBalanceUi(
         nightTotal = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
         publicNight = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
         privateNight = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else null,
         statusLabel = if (syncProgress != null || status.busy != null) "Syncing…" else "Synced",
-        // Abbreviated so dust doesn't sprawl to 18 decimals (5,290.3839… → 5.29K).
-        dust = formatter.formatAbbreviated(b.dust, "DUST"),
+        dust = dustExact,
         dustRegistered = b.dustRegistered,
     )
     // Any busy state drives the branded runner (sync → real digits; other work
