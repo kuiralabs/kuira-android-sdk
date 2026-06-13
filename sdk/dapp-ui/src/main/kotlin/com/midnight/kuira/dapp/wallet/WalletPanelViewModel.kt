@@ -78,6 +78,14 @@ class WalletPanelViewModel @Inject constructor(
     val syncProgress: StateFlow<WalletSyncProgress?> = _syncProgress
 
     /**
+     * Optimistic "turning dust backup on" flag. Flipped true the instant the user
+     * taps the switch, BEFORE the Drive consent + sync round-trip (which is slow
+     * and network-bound) reports any status. Without it the controlled Switch
+     * snaps back to off and the action looks dead. Cleared when the flow resolves.
+     */
+    private val _dustEnabling = MutableStateFlow(false)
+
+    /**
      * Branded backup-section state for the pill — the real per-lane status from
      * the wallet ([com.midnight.kuira.sdk.MidnightWallet.backupStatus]) plus the
      * sigil-presence identity lane. Surfaces "needs consent"/syncing/up-to-date
@@ -87,11 +95,14 @@ class WalletPanelViewModel @Inject constructor(
     val backupSection: StateFlow<BackupSectionState> = combine(
         sdkProvider.sdk.flatMapLatest { it?.wallet?.backupStatus ?: flowOf(BackupStatusSnapshot()) },
         sigilStateStore.snapshotFlow,
-    ) { backup, sigil ->
+        _dustEnabling,
+    ) { backup, sigil, dustEnabling ->
         BackupSectionState(
             identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
             else BackupLaneState.Ok("Not set up"),
-            dust = backup.dust.toDustLane(),
+            // Optimistic pending wins until the real status arrives — immediate
+            // "switch flips on + spinner + disabled" feedback, no dead re-tap.
+            dust = if (dustEnabling) BackupLaneState.Toggle(on = true, busy = true) else backup.dust.toDustLane(),
             appData = backup.appData.toAppDataLane(),
         )
     }.stateIn(
@@ -430,18 +441,28 @@ class WalletPanelViewModel @Inject constructor(
      */
     fun enableCloudBackup(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
+            // Immediate optimistic feedback (switch flips on + spinner) before the
+            // slow Drive round-trip reports anything.
+            _dustEnabling.value = true
+            Log.i(TAG, "enableCloudBackup: requesting Drive authorize()…")
             try {
                 when (val outcome = driveAuth.authorize()) {
-                    is AuthorizeOutcome.Authorized -> cloudSyncNow(config, activity)
-                    is AuthorizeOutcome.NeedsConsent ->
-                        _consentRequests.emit(
-                            IntentSenderRequest.Builder(outcome.intentSender).build(),
-                        )
+                    is AuthorizeOutcome.Authorized -> {
+                        Log.i(TAG, "enableCloudBackup: Drive already authorized — syncing now")
+                        cloudSyncNow(config, activity)
+                        _dustEnabling.value = false
+                    }
+                    is AuthorizeOutcome.NeedsConsent -> {
+                        // Consent UI launches; stay "enabling" until onConsentResult.
+                        Log.i(TAG, "enableCloudBackup: Drive needs consent — launching grant UI")
+                        _consentRequests.emit(IntentSenderRequest.Builder(outcome.intentSender).build())
+                    }
                 }
             } catch (e: Exception) {
                 // The user-facing outcome surfaces on the dust lane via
                 // wallet.backupStatus (NeedsConsent / Failed); just log here.
                 Log.w(TAG, "enableCloudBackup failed", e)
+                _dustEnabling.value = false
             }
         }
     }
@@ -451,10 +472,14 @@ class WalletPanelViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Confirms the grant; throws if the user dismissed consent.
+                Log.i(TAG, "onConsentResult: confirming Drive grant…")
                 driveAuth.tokenFromConsent(data)
+                Log.i(TAG, "onConsentResult: grant confirmed — syncing to Drive")
                 cloudSyncNow(config, activity)
             } catch (e: Exception) {
                 Log.w(TAG, "Drive consent not completed", e)
+            } finally {
+                _dustEnabling.value = false
             }
         }
     }
@@ -468,8 +493,10 @@ class WalletPanelViewModel @Inject constructor(
      * doesn't.
      */
     private suspend fun cloudSyncNow(config: WalletConfig, activity: FragmentActivity) {
+        Log.i(TAG, "cloudSyncNow: syncing + uploading dust checkpoint to Drive…")
         val built = sdkProvider.ensureSdk(activity, config)
         built.wallet.refresh()
+        Log.i(TAG, "cloudSyncNow: Drive sync complete")
     }
 
     companion object {
