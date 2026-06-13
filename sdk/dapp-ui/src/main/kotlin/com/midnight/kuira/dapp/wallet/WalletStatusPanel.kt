@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +50,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.backup.BackupSection
 import com.midnight.kuira.dapp.backup.BackupSectionState
@@ -461,91 +465,94 @@ private fun WalletSheetContent(
     onReceive: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = PanelDimens.SheetMinHeight)
-            .padding(
-                horizontal = PanelDimens.SheetHorizontalPadding,
-                vertical = PanelDimens.SheetVerticalPadding,
-            ),
-    ) {
-        Text(
-            "wallet status",
-            color = colors.onSheetDim,
-            fontSize = PanelType.Body,
-            fontWeight = FontWeight.Medium,
+    val busy = status is WalletStatus.Loading ||
+        (status is WalletStatus.Ready && status.busy != null)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Ambient star field — the brand texture ("stars against void") behind
+        // the whole sheet, the same treatment the balance wireframe uses.
+        StarField(
+            modifier = Modifier.matchParentSize(),
+            color = colors.onSheet,
+            alpha = 0.5f,
+            starCount = 40,
         )
-        Spacer(modifier = Modifier.height(PanelDimens.SheetTitleGap))
-
-        when (status) {
-            is WalletStatus.None -> Text(
-                "Read balance to bootstrap the wallet. First press shows a biometric prompt to seal/load the seed via SeedVault. Then tap receive to see your addresses.",
-                color = colors.onSheetSubtle,
-                fontSize = PanelType.Body,
-            )
-            is WalletStatus.Loading -> Text(status.stage, color = colors.onSheetDim, fontSize = PanelType.LoadingText)
-            is WalletStatus.Ready -> ReadyBody(status, syncProgress, formatter, colors, onReceive)
-            is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
-            is WalletStatus.SigilRequired -> Text(
-                "Forge your sigil first — the wallet derives its seed from your passkey. " +
-                    "Open the sigil panel above, tap “forge sigil”, then come back and read balance.",
-                color = colors.onSheetSubtle,
-                fontSize = PanelType.Body,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-
-        // Config controls — network + proving mode. Picking any of these
-        // tears down the in-memory SDK and rebuilds for the new config.
-        NetworkChipRow(
-            selected = config.network,
-            colors = colors,
-            onSelect = onNetworkChange,
-        )
-        Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-        ProvingModeToggle(
-            selected = config.provingMode,
-            proofServerUrl = config.proofServerUrl,
-            colors = colors,
-            onSelect = onProvingModeChange,
-            onUrlChange = onProofServerUrlChange,
-        )
-
-        Spacer(modifier = Modifier.height(PanelDimens.SheetActionsTopGap))
-
-        val busy = status is WalletStatus.Loading ||
-            (status is WalletStatus.Ready && status.busy != null)
-        // Secondary utility actions: refresh balance + register for dust. Receive
-        // moved to the compact balance's quick action (and Send arrives there with
-        // #240), so it's no longer duplicated here. The previous "fund" button was
-        // removed once the Receive screen started showing the `mn airdrop` command
-        // directly — the SDK's subscription picks up the credit automatically.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = PanelDimens.SheetMinHeight)
+                .padding(
+                    horizontal = PanelDimens.SheetHorizontalPadding,
+                    vertical = PanelDimens.SheetVerticalPadding,
+                ),
         ) {
-            PanelButton("balance", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRefreshBalance)
-            PanelButton("register", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRegisterDust)
+            Text(
+                "wallet status",
+                color = colors.onSheetDim,
+                fontSize = PanelType.Body,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(modifier = Modifier.height(PanelDimens.SheetTitleGap))
+
+            // Every wallet state gets a branded treatment, never bare text:
+            // a shimmer skeleton while bootstrapping/loading, the compact balance
+            // when ready, a retry card on error, a forge prompt when the sigil
+            // is missing.
+            when (status) {
+                is WalletStatus.None,
+                is WalletStatus.Loading -> WalletBalanceLoading(colors)
+                is WalletStatus.Ready -> ReadyBody(
+                    status, syncProgress, formatter, colors, onReceive, onRefreshBalance, onRegisterDust, busy,
+                )
+                is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
+                is WalletStatus.SigilRequired -> SigilPrompt(colors)
+            }
+
+            Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
+
+            // Compact config — network + proving as dropdown selectors (one row
+            // instead of five chip-rows). Picking either rebuilds the SDK.
+            ConfigRow(
+                network = config.network,
+                provingMode = config.provingMode,
+                proofServerUrl = config.proofServerUrl,
+                colors = colors,
+                onNetworkChange = onNetworkChange,
+                onProvingModeChange = onProvingModeChange,
+                onProofServerUrlChange = onProofServerUrlChange,
+            )
+
+            Spacer(modifier = Modifier.height(PanelDimens.SheetActionsTopGap))
+
+            // Branded backup & recovery — per-lane status (identity / dust /
+            // app-data) from the wallet's real backupStatus.
+            BackupSection(
+                state = backupSection,
+                colors = colors,
+                onDustAction = onEnableCloudBackup,
+                // App-data backup is automatic; its only actionable state is a
+                // failed save, whose "Retry" re-runs a forced refresh.
+                onAppDataAction = onRefreshBalance,
+            )
+            Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
+            PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
+            Spacer(modifier = Modifier.height(PanelDimens.SheetBottomGap))
         }
-        Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
-        // Branded backup & recovery — per-lane status (identity / dust / app-data)
-        // from the wallet's real backupStatus. The dust "Enable" pill runs the
-        // existing Drive-consent flow; on consent the next refresh uploads and the
-        // lane flips to synced. Replaces the old single "cloud sync" button.
-        BackupSection(
-            state = backupSection,
-            colors = colors,
-            onDustAction = onEnableCloudBackup,
-            // App-data backup is automatic; the only actionable app-data state is
-            // a failed save, whose "Retry" re-runs a forced refresh (which re-
-            // attempts the app-state upload). The empty "None yet" state has no CTA.
-            onAppDataAction = onRefreshBalance,
+    }
+}
+
+/** Branded "sigil required" prompt — the wallet can't bootstrap without a passkey. */
+@Composable
+private fun SigilPrompt(colors: WalletPanelColors) {
+    GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        Text("SIGIL REQUIRED", color = colors.onSheetDim, fontSize = 11.sp, fontWeight = FontWeight.W400, letterSpacing = 3.sp)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            "Forge your sigil first — the wallet derives its seed from your passkey. " +
+                "Open the sigil panel above, tap “forge sigil”, then return.",
+            color = colors.onSheetSubtle,
+            fontSize = PanelType.Body,
+            lineHeight = 20.sp,
         )
-        Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
-        PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
-        Spacer(modifier = Modifier.height(PanelDimens.SheetBottomGap))
     }
 }
 
@@ -556,32 +563,35 @@ private fun ReadyBody(
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
     onReceive: () -> Unit,
+    onRefresh: () -> Unit,
+    onRegister: () -> Unit,
+    busy: Boolean,
 ) {
-    // Address + airdrop command live in [WalletReceiveScreen]; the sheet shows
-    // the branded compact balance ([WalletBalanceCompact]) — hero figure, the
-    // dust/shielded token card, and the Receive quick action. (Send arrives with
-    // #240.) The detail line reflects sync/working state; the runner shows the
-    // real progress digits when a resync is streaming.
+    // NIGHT is one asset, two pools: the hero is the total (public + private),
+    // with the shielded portion noted as a chip. DUST is its own row. The ⟳
+    // refresh + Register affordances live inside the card; the runner shows real
+    // progress digits when a resync is streaming.
+    val b = status.balance
     val ui = WalletBalanceUi(
-        nightPrimary = formatter.formatCompact(status.balance.unshieldedNight, "NIGHT", includeSymbol = false),
-        detail = when {
-            syncProgress != null -> "NIGHT · Syncing…"
-            status.busy != null -> "NIGHT · ${status.busy}"
-            else -> "NIGHT · Synced"
+        nightTotal = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
+        statusLabel = when {
+            syncProgress != null -> "Syncing…"
+            status.busy != null -> status.busy
+            else -> "Synced"
         },
-        dust = formatter.formatCompact(status.balance.dust, "DUST", includeSymbol = false),
-        dustRegistered = status.balance.dustRegistered,
-        shielded = if (status.balance.hasShielded) {
-            formatter.formatCompact(status.balance.shieldedNight, "NIGHT", includeSymbol = false)
-        } else {
-            null
-        },
+        privateNight = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else null,
+        dust = formatter.formatCompact(b.dust, "DUST", includeSymbol = false),
+        dustRegistered = b.dustRegistered,
     )
     WalletBalanceCompact(
         ui = ui,
         syncProgress = syncProgress,
         colors = colors,
         onReceive = onReceive,
+        onRefresh = onRefresh,
+        onRegister = onRegister,
+        busy = busy,
+        // onSend omitted → Send shown disabled ("soon") until #240.
     )
 
     if (status.message != null) {
@@ -605,77 +615,56 @@ private fun SectionLabel(text: String, colors: WalletPanelColors) {
 private const val MESSAGE_ALPHA = 0.8f
 
 /**
- * Three-way chip row for [MidnightNetwork]. Picking a chip propagates up
- * via [onSelect]; the panel's LaunchedEffect then re-fires with the new
- * config and the VM rebuilds the SDK for that network.
+ * Compact wallet config — network + proving as dropdown selectors in one row,
+ * plus the proof-server URL field when REMOTE proving is picked. Replaces the
+ * old full-width chip rows (5 rows → 1); picking either rebuilds the SDK via the
+ * panel's LaunchedEffect on `config`.
  */
 @Composable
-private fun NetworkChipRow(
-    selected: MidnightNetwork,
-    colors: WalletPanelColors,
-    onSelect: (MidnightNetwork) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        SectionLabel("network", colors)
-        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
-        ) {
-            MidnightNetwork.entries.forEach { network ->
-                ChipButton(
-                    text = network.pillName,
-                    selected = network == selected,
-                    colors = colors,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onSelect(network) },
-                )
-            }
-        }
-    }
-}
-
-/**
- * Two-way chip row for [ProvingMode] plus an optional URL field that
- * appears only when REMOTE is selected. URL is debounced on focus-loss /
- * blur (text edits propagate as typed; the LaunchedEffect on `config` will
- * rebuild the SDK each keystroke, so prefer settling on a value before
- * picking REMOTE).
- */
-@Composable
-private fun ProvingModeToggle(
-    selected: ProvingMode,
+private fun ConfigRow(
+    network: MidnightNetwork,
+    provingMode: ProvingMode,
     proofServerUrl: String?,
     colors: WalletPanelColors,
-    onSelect: (ProvingMode) -> Unit,
-    onUrlChange: (String?) -> Unit,
+    onNetworkChange: (MidnightNetwork) -> Unit,
+    onProvingModeChange: (ProvingMode) -> Unit,
+    onProofServerUrlChange: (String?) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        SectionLabel("proving", colors)
-        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
         ) {
-            ProvingMode.entries.forEach { mode ->
-                ChipButton(
-                    // "on-device" is clearer than "local" for where the proof runs.
-                    text = when (mode) {
+            PanelSelector(
+                label = "network",
+                selected = network,
+                options = MidnightNetwork.entries,
+                optionLabel = { it.pillName },
+                colors = colors,
+                modifier = Modifier.weight(1f),
+                onSelect = onNetworkChange,
+            )
+            PanelSelector(
+                label = "proving",
+                selected = provingMode,
+                options = ProvingMode.entries,
+                // "on-device" is clearer than "local" for where the proof runs.
+                optionLabel = { mode ->
+                    when (mode) {
                         ProvingMode.LOCAL -> "on-device"
                         ProvingMode.REMOTE -> "remote"
-                    },
-                    selected = mode == selected,
-                    colors = colors,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onSelect(mode) },
-                )
-            }
+                    }
+                },
+                colors = colors,
+                modifier = Modifier.weight(1f),
+                onSelect = onProvingModeChange,
+            )
         }
-        if (selected == ProvingMode.REMOTE) {
+        if (provingMode == ProvingMode.REMOTE) {
             Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
             OutlinedTextField(
                 value = proofServerUrl.orEmpty(),
-                onValueChange = { onUrlChange(it.ifBlank { null }) },
+                onValueChange = { onProofServerUrlChange(it.ifBlank { null }) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 placeholder = {
@@ -700,39 +689,71 @@ private fun ProvingModeToggle(
 }
 
 /**
- * Compact chip rendered as a filled button when selected, outlined when
- * not. Shared between [NetworkChipRow] and [ProvingModeToggle].
+ * Compact labelled dropdown selector — a chip showing the current [selected]
+ * value; tap opens a [DropdownMenu] of [options]. Generic so it drives both the
+ * network and proving pickers.
  */
 @Composable
-private fun ChipButton(
-    text: String,
-    selected: Boolean,
+private fun <T> PanelSelector(
+    label: String,
+    selected: T,
+    options: List<T>,
+    optionLabel: (T) -> String,
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit,
+    onSelect: (T) -> Unit,
 ) {
-    val bg = if (selected) colors.onSheet else colors.button
-    val fg = if (selected) colors.sheetBackground else colors.onSheetDim
-    val chipShape = RoundedCornerShape(PanelDimens.ButtonCornerRadius)
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .height(PanelDimens.ButtonHeight)
-            // dappPressable is the OUTER modifier so the whole chip scales on
-            // press and the state layer draws over the fill; the filled-vs-
-            // outlined bg/fg above remains the at-rest SELECTED style.
-            .dappPressable(shape = chipShape, selected = selected, onClick = onClick)
-            .clip(chipShape)
-            .background(bg),
-    ) {
-        Text(
-            text = text,
-            color = fg,
-            fontSize = PanelType.ButtonText,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    var expanded by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(PanelDimens.ButtonCornerRadius)
+    Column(modifier = modifier) {
+        SectionLabel(label, colors)
+        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
+        Box {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PanelDimens.ButtonHeight)
+                    .clip(shape)
+                    .background(colors.button)
+                    .border(1.dp, colors.pillBorder, shape)
+                    .dappPressable(shape = shape) { expanded = true }
+                    .padding(horizontal = 14.dp),
+            ) {
+                Text(
+                    optionLabel(selected),
+                    color = colors.onSheet,
+                    fontSize = PanelType.ButtonText,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("▾", color = colors.onSheetDim, fontSize = PanelType.ButtonText)
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(colors.sheetBackground),
+            ) {
+                options.forEach { opt ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                optionLabel(opt),
+                                color = if (opt == selected) colors.accent else colors.onSheet,
+                                fontSize = PanelType.ButtonText,
+                                fontWeight = if (opt == selected) FontWeight.Medium else FontWeight.Normal,
+                            )
+                        },
+                        onClick = {
+                            onSelect(opt)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
