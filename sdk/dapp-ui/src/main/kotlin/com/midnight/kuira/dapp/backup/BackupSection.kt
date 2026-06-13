@@ -52,7 +52,13 @@ sealed interface BackupLaneState {
     data class Ok(val label: String, val confirm: Boolean = false) : BackupLaneState
     /** [progress] 0f..1f → determinate (% + fill); null → indeterminate. */
     data class Syncing(val progress: Float?) : BackupLaneState
-    data class Action(val label: String, val cta: String, val danger: Boolean = false) : BackupLaneState
+    data class Action(
+        val label: String,
+        val cta: String,
+        val danger: Boolean = false,
+        /** Optional actionable detail shown under the lane (e.g. a setup hint). */
+        val detail: String? = null,
+    ) : BackupLaneState
 }
 
 /** [appData] null → the App data lane is omitted. */
@@ -127,6 +133,16 @@ private fun Lane(
                 progress = state.progress,
                 colors = colors,
                 modifier = Modifier.fillMaxWidth().padding(start = LaneIconGutter),
+            )
+        }
+        if (state is BackupLaneState.Action && state.detail != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                state.detail,
+                color = if (state.danger) colors.error else colors.onSheetDim,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                modifier = Modifier.padding(start = LaneIconGutter),
             )
         }
     }

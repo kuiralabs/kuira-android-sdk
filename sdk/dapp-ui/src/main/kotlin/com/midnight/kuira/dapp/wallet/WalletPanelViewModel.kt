@@ -431,16 +431,7 @@ class WalletPanelViewModel @Inject constructor(
      * console setup, not a user error — so we say so rather than echoing the raw
      * GMS code or a misleading "consent cancelled".
      */
-    private fun backupErrorMessage(e: Throwable): String {
-        val raw = e.message.orEmpty()
-        return when {
-            raw.contains("UNREGISTERED_ON_API_CONSOLE", ignoreCase = true) ->
-                "Drive not set up for this app — register its OAuth client (package + SHA-1) in Google Cloud Console."
-            raw.contains("cancel", ignoreCase = true) ->
-                "Cloud sync cancelled."
-            else -> raw.ifBlank { "Cloud sync failed" }
-        }
-    }
+    private fun backupErrorMessage(e: Throwable): String = friendlyBackupError(e.message)
 
     /**
      * Full bidirectional cloud sync, run once consent exists. [com.midnight.kuira.sdk.MidnightWallet.refresh]
@@ -486,7 +477,24 @@ private fun CloudBackupStatus.toBackupLane(): BackupLaneState = when (this) {
     CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
     is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("Up to date")
     CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
-    is CloudBackupStatus.Failed -> BackupLaneState.Action("Failed", "Retry", danger = true)
+    is CloudBackupStatus.Failed ->
+        BackupLaneState.Action("Failed", "Retry", danger = true, detail = friendlyBackupError(message))
+}
+
+/**
+ * Map a Drive/auth failure to an actionable message. The most common one in a
+ * fresh setup is the app's OAuth client not registered in a Google Cloud project
+ * (UNREGISTERED_ON_API_CONSOLE) — a one-time console setup, not a user error — so
+ * we say so rather than echoing the raw GMS code.
+ */
+private fun friendlyBackupError(raw: String?): String {
+    val msg = raw.orEmpty()
+    return when {
+        msg.contains("UNREGISTERED_ON_API_CONSOLE", ignoreCase = true) ->
+            "Drive not set up for this app — register its OAuth client (package + SHA-1) in Google Cloud Console."
+        msg.contains("cancel", ignoreCase = true) -> "Cloud sync cancelled."
+        else -> msg.ifBlank { "Cloud sync failed" }
+    }
 }
 
 /** App-data lane is hidden until there's something to back up (Idle → null). */
