@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,12 +78,15 @@ class MidnightWallet internal constructor(
      */
     val backupStatus: StateFlow<BackupStatusSnapshot> = _backupStatus.asStateFlow()
 
+    // Atomic update: dust + app-state backups can report concurrently (a host
+    // calling backupAppStateToCloud while refresh() runs backupDustToCloud), so a
+    // read-copy-write on .value could drop a lane's update.
     private fun updateDustBackup(status: CloudBackupStatus) {
-        _backupStatus.value = _backupStatus.value.copy(dust = status)
+        _backupStatus.update { it.copy(dust = status) }
     }
 
     private fun updateAppDataBackup(status: CloudBackupStatus) {
-        _backupStatus.value = _backupStatus.value.copy(appData = status)
+        _backupStatus.update { it.copy(appData = status) }
     }
 
     /**
