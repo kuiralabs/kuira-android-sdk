@@ -289,9 +289,10 @@ class WalletPanelViewModel @Inject constructor(
                         // a quick no-op; on a cold one it streams with progress.
                         built.wallet.syncDust { processed, total ->
                             _syncProgress.value = when {
-                                processed < 0 -> WalletSyncProgress(null, "Replaying $total events…")
-                                total > 0 && processed < total ->
-                                    WalletSyncProgress(processed.toFloat() / total, "Syncing dust")
+                                // Streaming done, Rust replaying — sit at a full bar
+                                // ("Finalizing"), not an indeterminate dash.
+                                processed < 0 -> WalletSyncProgress(1f, "Finalizing…")
+                                total > 0 -> WalletSyncProgress((processed.toFloat() / total).coerceIn(0f, 1f), "Syncing dust")
                                 else -> WalletSyncProgress(null, "Syncing dust")
                             }
                         }

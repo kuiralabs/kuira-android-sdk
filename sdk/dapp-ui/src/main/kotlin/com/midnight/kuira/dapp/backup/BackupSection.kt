@@ -1,17 +1,12 @@
 package com.midnight.kuira.dapp.backup
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +26,6 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,9 +90,9 @@ data class BackupSectionState(
     val appData: BackupLaneState?,
 )
 
-private val RunnerSize = 40.dp
+private val RunnerSize = 30.dp        // smaller — the previous 40dp read as oversized
 private val LaneIconGutter = 34.dp
-private val TrailLen = 56.dp
+private val TrailLen = 44.dp
 
 @Composable
 fun BackupSection(
@@ -252,39 +246,34 @@ private fun Trailing(state: BackupLaneState, colors: WalletPanelColors, onAction
 }
 
 /**
- * Branded progress track: the Rarámuri [LottieRunner] runs left→right kicking up
- * a [DustTrail] that doubles as the fill. [progress] null → indeterminate loop
- * (use only when the duration is genuinely unknown); 0f..1f → determinate (fill +
- * runner head at that fraction). Reused by the wallet sheet's sync indicator so
- * the whole sheet shares one progress language. Public — example apps can drop it
- * in directly (see also [WalletSyncIndicator] for the labelled variant).
+ * Branded progress: the Rarámuri [LottieRunner] runs along a track, the [DustTrail]
+ * kicking up behind it. **The runner's position is the progress** —
+ *  - [progress] 0f..1f → the runner advances to that point and a bright accent
+ *    fill highlights the distance covered.
+ *  - null → the runner runs **in place at the start** (legs still animate, but it
+ *    does NOT crawl across and reset) — we never fake motion we can't measure.
+ *
+ * Public; the labelled variant is [WalletSyncIndicator].
  */
 @Composable
 fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier = modifier.height(RunnerSize), contentAlignment = Alignment.CenterStart) {
+        // Faint full-width track.
         Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.Center).background(colors.onSheetSubtle))
 
-        val frac = if (progress != null) {
-            progress.coerceIn(0f, 1f)
-        } else {
-            val transition = rememberInfiniteTransition(label = "runner")
-            val animated by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(durationMillis = 2400), RepeatMode.Restart),
-                label = "runnerX",
-            )
-            animated
-        }
+        // Determinate → runner sits at the fraction; indeterminate → parked at the
+        // start (frac 0), running in place, no crawl/reset loop.
+        val frac = progress?.coerceIn(0f, 1f) ?: 0f
         val runnerX = (maxWidth - RunnerSize) * frac
 
         if (progress != null) {
+            // Bright accent fill = highlighted distance covered.
             Box(
                 Modifier
                     .width(runnerX + RunnerSize / 2)
                     .height(3.dp)
                     .align(Alignment.CenterStart)
-                    .background(colors.onSheet, RoundedCornerShape(2.dp)),
+                    .background(colors.accent, RoundedCornerShape(2.dp)),
             )
         }
 
@@ -292,8 +281,8 @@ fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Mo
         DustTrail(
             modifier = Modifier.width(TrailLen).height(RunnerSize).align(Alignment.CenterStart).offset(x = trailX),
             color = colors.onSheet,
-            particleCount = 14,
-            maxAlpha = 0.55f,
+            particleCount = 12,
+            maxAlpha = 0.5f,
         )
         LottieRunner(
             modifier = Modifier.size(RunnerSize).align(Alignment.CenterStart).offset(x = runnerX),

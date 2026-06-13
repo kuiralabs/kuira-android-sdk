@@ -106,9 +106,9 @@ fun WalletBalanceCompact(
             if (ui.privateNight != null) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    PoolAmount(label = "public", amount = ui.publicNight, colors = colors)
+                    PoolAmount(label = "unshielded", amount = ui.publicNight, colors = colors)
                     Spacer(Modifier.width(18.dp))
-                    PoolAmount(label = "private", amount = ui.privateNight, colors = colors, shielded = true)
+                    PoolAmount(label = "shielded", amount = ui.privateNight, colors = colors, shielded = true)
                 }
             }
             if (syncProgress != null) {
