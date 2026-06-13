@@ -293,18 +293,21 @@ class WalletPanelViewModel @Inject constructor(
                         // own % (localnet). The dust stream owns 0.10→0.55 (its true
                         // event-% mapped in when a real stream runs); the refresh
                         // (shielded + dust delta + backup) carries it 0.55→1.0.
-                        _syncProgress.value = WalletSyncProgress(0.10f, "Syncing dust…")
+                        _syncProgress.value = WalletSyncProgress(SYNC_DUST_START, "Syncing dust…")
                         built.wallet.syncDust { processed, total ->
                             _syncProgress.value = when {
-                                processed < 0 -> WalletSyncProgress(0.55f, "Finalizing dust…")
-                                total > 0 -> WalletSyncProgress(0.10f + (processed.toFloat() / total).coerceIn(0f, 1f) * 0.45f, "Syncing dust")
-                                else -> WalletSyncProgress(0.55f, "Syncing dust…")
+                                processed < 0 -> WalletSyncProgress(SYNC_DUST_END, "Finalizing dust…")
+                                total > 0 -> WalletSyncProgress(
+                                    SYNC_DUST_START + (processed.toFloat() / total).coerceIn(0f, 1f) * SYNC_DUST_SPAN,
+                                    "Syncing dust",
+                                )
+                                else -> WalletSyncProgress(SYNC_DUST_END, "Syncing dust…")
                             }
                         }
-                        _syncProgress.value = WalletSyncProgress(0.70f, "Refreshing balances…")
+                        _syncProgress.value = WalletSyncProgress(SYNC_REFRESH, "Refreshing balances…")
                         runCatching { built.wallet.refresh() }
                             .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
-                        _syncProgress.value = WalletSyncProgress(1f, "Up to date")
+                        _syncProgress.value = WalletSyncProgress(SYNC_COMPLETE, "Up to date")
                     } finally {
                         _syncProgress.value = null
                     }
@@ -482,6 +485,20 @@ class WalletPanelViewModel @Inject constructor(
          *  balanceFlow observer keeps the panel current, so the expensive resync
          *  only needs to run periodically (or on an explicit/forced refresh). */
         private const val FULL_REFRESH_INTERVAL_MS = 5 * 60_000L
+
+        // ── Sync progress milestones ──
+        // The runner's fraction at each real phase, so it always advances even
+        // when a step emits no sub-progress of its own.
+        /** Dust stream begins. */
+        private const val SYNC_DUST_START = 0.10f
+        /** Fraction the dust stream owns: it fills [SYNC_DUST_START] → [SYNC_DUST_END]. */
+        private const val SYNC_DUST_SPAN = 0.45f
+        /** Dust streaming done / finalizing. */
+        private const val SYNC_DUST_END = SYNC_DUST_START + SYNC_DUST_SPAN
+        /** During the refresh (shielded + dust-delta + backup). */
+        private const val SYNC_REFRESH = 0.70f
+        /** Fully synced. */
+        private const val SYNC_COMPLETE = 1f
     }
 }
 
