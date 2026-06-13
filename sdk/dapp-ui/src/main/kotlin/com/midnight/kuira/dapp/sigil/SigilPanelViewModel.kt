@@ -6,7 +6,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.dapp.BuildConfig
-import com.midnight.kuira.core.identity.backup.AppStateBackup
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.backup.SeedDeriver
@@ -14,6 +13,7 @@ import com.midnight.kuira.core.identity.passkey.PasskeyManager
 import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
+import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +27,7 @@ import javax.inject.Inject
 /**
  * Self-contained sigil-identity bookkeeper for [SigilStatusPanel].
  *
- * Owns three flows:
+ * Owns two flows:
  *  - **Forge** ([forgeSigil]): create a passkey via Credential Manager,
  *    then derive the sigil DID via [SigilIdentityProvider]
  *    (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
@@ -38,10 +38,13 @@ import javax.inject.Inject
  *    panel's first refresh after sign-in hits SeedVault cache
  *    instead of running its own PRF ceremony — no second prompt.
  *    Falls back to two biometrics on authenticators that don't
- *    support multi-salt PRF. Optionally restores host-app state
- *    via [AppStateBackup] after the sigil is forged.
- *  - **Backup** ([backupSeed]): write host-app state (not the seed)
- *    to Block Store via [AppStateBackup].
+ *    support multi-salt PRF. Host-app state is restored (best-effort)
+ *    via the wallet's silent seed-keyed [com.midnight.kuira.sdk.MidnightWallet.fetchAppState].
+ *
+ * Backup is no longer a manual action here — host app state is written
+ * automatically + silently by the wallet's seed-keyed path (#244). The
+ * old PRF `AppStateBackup` backup/restore was retired (it clobbered the
+ * same Block Store slot with a different key).
  *
  * **Held in BBoard's VM** (not migrated):
  *  - `authorizeAccessKey` — needs a `MidnightSdk` instance to derive
@@ -54,8 +57,14 @@ class SigilPanelViewModel @Inject constructor(
     private val sigilIdentityProvider: SigilIdentityProvider,
     private val sigilSession: SigilSession,
     private val sigilStateStore: SigilStateStore,
-    private val appStateBackup: AppStateBackup,
     private val blockStoreStorage: BlockStoreBackupStorage,
+    /**
+     * The shared wallet provider — sign-in's app-state restore now reads the
+     * silent **seed-keyed** Block Store blob via [com.midnight.kuira.sdk.MidnightWallet.fetchAppState]
+     * (no biometric), replacing the retired PRF `AppStateBackup` path that
+     * clobbered the same slot with a different key.
+     */
+    private val sdkProvider: MidnightSdkProvider,
     /**
      * Optional host-app hook for round-tripping additional state
      * (active matches, draft data, etc.) through sigil backup/restore.
@@ -282,61 +291,6 @@ class SigilPanelViewModel @Inject constructor(
     }
 
     /**
-     * Back up the current sigil identity + the locally-stored seed to Google
-     * Block Store. Pipeline: load seed via [seedVault] (biometric) →
-     * derive a PRF-encrypted AES key from the passkey →
-     * [sigilBackup.backup] uploads the encrypted blob.
-     *
-     * No-op if status isn't [SigilStatus.Forged] (without a sigil there's
-     * nothing to bind the encryption to). Errors log + leave status
-     * unchanged — backup is a side operation, doesn't transition state.
-     *
-     * `appMetadata` is sourced from the host-provided
-     * [AppDataBackupProvider] when one is bound. When no provider is
-     * bound (BBoard et al.), the field stays null and only the seed
-     * goes up.
-     */
-    fun backupSeed(activity: FragmentActivity) {
-        viewModelScope.launch {
-            val sigil = _status.value as? SigilStatus.Forged
-            if (sigil == null) {
-                Log.w(TAG, "backupSeed skipped — sigil status is ${_status.value::class.simpleName}, not Forged")
-                return@launch
-            }
-            try {
-                // Post-PRF the backup blob carries ONLY app-specific
-                // state — the seed and the sigil identity are both
-                // PRF-derived from the passkey and reconstructed
-                // locally on any device. So this flow is purely about
-                // round-tripping the host's appMetadata (Kicks's match
-                // state, future agent state, etc.).
-                Log.i(TAG, "Starting AppState backup for DID: ${sigil.did}")
-                val appMetadata: ByteArray? = appDataProvider.orElse(null)?.let { provider ->
-                    runCatching { provider.snapshot() }
-                        .onFailure { Log.w(TAG, "appDataProvider.snapshot failed; backup will store empty appMetadata", it) }
-                        .getOrNull()
-                }
-                if (appMetadata != null) {
-                    Log.i(TAG, "  App metadata: ${appMetadata.size}B from host-provided AppDataBackupProvider")
-                } else {
-                    Log.i(TAG, "  No app metadata — backup is a sigil-exists sentinel only")
-                }
-
-                appStateBackup.backup(activity = activity, appMetadata = appMetadata)
-                Log.i(
-                    TAG,
-                    "Backup SUCCESS — appState stored in Block Store " +
-                        "(${if (appMetadata != null) "${appMetadata.size}B appMetadata" else "no appMetadata"})",
-                )
-            } catch (e: BackupException) {
-                Log.e(TAG, "Backup failed: ${e.message}", e)
-            } catch (e: Exception) {
-                Log.e(TAG, "Backup failed", e)
-            }
-        }
-    }
-
-    /**
      * Sign in with an existing passkey — the post-PRF replacement for
      * the old "restore from cloud" flow.
      *
@@ -382,26 +336,25 @@ class SigilPanelViewModel @Inject constructor(
                     publicKeyHex = "",  // assertion doesn't return pubkey
                 )
 
-                // Step 2 — app-state restore (best-effort). Skipped
-                // when no provider bound or no recoverable blob.
+                // Step 2 — app-state restore (best-effort) via the wallet's
+                // silent **seed-keyed** path (replaces the retired PRF
+                // AppStateBackup). awaitSdk() waits for the wallet panel to build
+                // the SDK now that sign-in unblocked it — no extra biometric,
+                // SeedVault is already pre-warmed. Skipped when no provider is
+                // bound or there's no recoverable blob.
                 val provider = appDataProvider.orElse(null)
                 if (provider == null) {
                     Log.i(TAG, "  No AppDataBackupProvider bound — skipping app-state restore")
                     return@launch
                 }
-                val restored = try {
-                    appStateBackup.restore(activity)
-                } catch (e: BackupException) {
-                    Log.i(TAG, "  App-state restore unavailable: ${e.message}")
+                val appMetadata = sdkProvider.awaitSdk().wallet.fetchAppState()
+                if (appMetadata == null || appMetadata.isEmpty()) {
+                    Log.i(TAG, "  No recoverable app state — nothing to hand off")
                     return@launch
                 }
                 try {
-                    if (restored.appMetadata.isEmpty()) {
-                        Log.i(TAG, "  Backup contained no appMetadata — nothing to hand off")
-                        return@launch
-                    }
-                    Log.i(TAG, "  App metadata: ${restored.appMetadata.size}B — handing to AppDataBackupProvider")
-                    runCatching { provider.restore(restored.appMetadata) }
+                    Log.i(TAG, "  App metadata: ${appMetadata.size}B — handing to AppDataBackupProvider")
+                    runCatching { provider.restore(appMetadata) }
                         .onFailure {
                             Log.e(
                                 TAG,
@@ -411,7 +364,7 @@ class SigilPanelViewModel @Inject constructor(
                             )
                         }
                 } finally {
-                    restored.wipe()
+                    appMetadata.fill(0)
                 }
             } catch (e: BackupException) {
                 Log.e(TAG, "Sign-in failed: ${e.message}", e)

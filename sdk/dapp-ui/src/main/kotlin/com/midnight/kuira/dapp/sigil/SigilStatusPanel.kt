@@ -110,7 +110,6 @@ fun SigilStatusPanel(
                 status = status,
                 colors = colors,
                 onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
-                onBackup = { activity?.let { viewModel.backupSeed(it) } },
                 onRestore = { activity?.let { viewModel.restoreSeed(it) } },
                 onTestPrf = { activity?.let { viewModel.testPrf(it) } },
                 onProbeSeed = { activity?.let { viewModel.probePrfDeterminism(it) } },
@@ -363,7 +362,6 @@ private fun SigilSheetContent(
     status: SigilStatus,
     colors: SigilPanelColors,
     onForgeSigil: () -> Unit,
-    onBackup: () -> Unit,
     onRestore: () -> Unit,
     onTestPrf: () -> Unit,
     onProbeSeed: () -> Unit,
@@ -401,7 +399,6 @@ private fun SigilSheetContent(
             forged = status,
             colors = colors,
             onCopy = { clipboard.setText(AnnotatedString(it)) },
-            onBackup = onBackup,
             onRestore = onRestore,
             onTestPrf = onTestPrf,
             onProbeSeed = onProbeSeed,
@@ -485,7 +482,6 @@ private fun ForgedBody(
     forged: SigilStatus.Forged,
     colors: SigilPanelColors,
     onCopy: (String) -> Unit,
-    onBackup: () -> Unit,
     onRestore: () -> Unit,
     onTestPrf: () -> Unit,
     onProbeSeed: () -> Unit,
@@ -502,8 +498,9 @@ private fun ForgedBody(
         MonoField(label = "root key (P-256)", value = forged.publicKeyHex, colors = colors, onCopy = onCopy)
         Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
     }
-    SheetButton(text = "backup to cloud", enabled = true, colors = colors, onClick = onBackup, dimmed = true)
-    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    // Backup is automatic + silent now (seed-keyed, #244) — no manual "backup
+    // to cloud" button. "Restore from cloud" re-runs sign-in + the seed-keyed
+    // app-state restore.
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "test prf", enabled = true, colors = colors, onClick = onTestPrf, dimmed = true)
