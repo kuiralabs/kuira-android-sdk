@@ -61,9 +61,10 @@ fun WalletBalanceCompact(
     ui: WalletBalanceUi,
     syncProgress: WalletSyncProgress?,
     colors: WalletPanelColors,
-    onSend: () -> Unit,
     onReceive: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Null hides the Send action — used until #240 (Send NIGHT) ships. */
+    onSend: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
         // Hero card — the headline figure + status, lifted off the sheet.
@@ -120,7 +121,7 @@ fun WalletBalanceCompact(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(40.dp, Alignment.CenterHorizontally),
         ) {
-            QuickAction("↑", "Send", colors, onSend)
+            if (onSend != null) QuickAction("↑", "Send", colors, onSend)
             QuickAction("↓", "Receive", colors, onReceive)
         }
     }
@@ -171,11 +172,19 @@ private val SampleDefault = WalletBalanceUi(
 @Preview(name = "Balance compact · default", widthDp = 360, showBackground = true, backgroundColor = 0xFF111111)
 @Composable
 private fun PreviewBalanceDefault() =
-    Column(Modifier.padding(20.dp)) { WalletBalanceCompact(SampleDefault, null, WalletPanelColors.Default, {}, {}) }
+    Column(Modifier.padding(20.dp)) {
+        WalletBalanceCompact(SampleDefault, syncProgress = null, colors = WalletPanelColors.Default, onReceive = {}, onSend = {})
+    }
 
 @Preview(name = "Balance compact · syncing", widthDp = 360, showBackground = true, backgroundColor = 0xFF111111)
 @Composable
 private fun PreviewBalanceSyncing() =
     Column(Modifier.padding(20.dp)) {
-        WalletBalanceCompact(SampleDefault.copy(detail = "NIGHT · Syncing…"), WalletSyncProgress(0.68f, "Syncing dust"), WalletPanelColors.Default, {}, {})
+        WalletBalanceCompact(
+            SampleDefault.copy(detail = "NIGHT · Syncing…"),
+            syncProgress = WalletSyncProgress(0.68f, "Syncing dust"),
+            colors = WalletPanelColors.Default,
+            onReceive = {},
+            onSend = {},
+        )
     }

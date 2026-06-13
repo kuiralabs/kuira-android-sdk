@@ -88,8 +88,6 @@ private object PanelDimens {
     val SheetMessageGap = 6.dp         // Before status.message.
     val SheetBusyGap = 8.dp            // Before status.busy line.
     val SheetBottomGap = 8.dp
-    val BalanceRowGap = 4.dp           // Between rows in the 3-row balance breakdown.
-    val BalanceRowLabelWidth = 92.dp   // Aligns label column so values line up vertically.
 
     // Action buttons.
     val ButtonHeight = 48.dp
@@ -487,7 +485,7 @@ private fun WalletSheetContent(
                 fontSize = PanelType.Body,
             )
             is WalletStatus.Loading -> Text(status.stage, color = colors.onSheetDim, fontSize = PanelType.LoadingText)
-            is WalletStatus.Ready -> ReadyBody(status, syncProgress, formatter, colors)
+            is WalletStatus.Ready -> ReadyBody(status, syncProgress, formatter, colors, onReceive)
             is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
             is WalletStatus.SigilRequired -> Text(
                 "Forge your sigil first — the wallet derives its seed from your passkey. " +
@@ -519,25 +517,17 @@ private fun WalletSheetContent(
 
         val busy = status is WalletStatus.Loading ||
             (status is WalletStatus.Ready && status.busy != null)
-        val canReceive = status is WalletStatus.Ready
-        // Two-row button layout. Row 1 is the wallet actions (balance,
-        // register, receive); row 2 is the close affordance. The previous
-        // "fund" button (which called waitForFunding) was removed once the
-        // Receive screen started showing the `mn airdrop` command directly —
-        // the SDK's subscription picks up the credit automatically, so
-        // suspending in the foreground was redundant.
+        // Secondary utility actions: refresh balance + register for dust. Receive
+        // moved to the compact balance's quick action (and Send arrives there with
+        // #240), so it's no longer duplicated here. The previous "fund" button was
+        // removed once the Receive screen started showing the `mn airdrop` command
+        // directly — the SDK's subscription picks up the credit automatically.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
         ) {
             PanelButton("balance", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRefreshBalance)
             PanelButton("register", enabled = !busy, modifier = Modifier.weight(1f), colors = colors, onClick = onRegisterDust)
-            // Receive is enabled the moment the wallet is Ready, even during a
-            // background sync — the addresses are deterministic and available
-            // immediately after SDK build, so we don't gate them on the
-            // balance-syncing window. busy=true would needlessly block the
-            // user during the few seconds of PREPROD shielded replay.
-            PanelButton("receive", enabled = canReceive, modifier = Modifier.weight(1f), colors = colors, onClick = onReceive)
         }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
         // Branded backup & recovery — per-lane status (identity / dust / app-data)
@@ -565,53 +555,35 @@ private fun ReadyBody(
     syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
+    onReceive: () -> Unit,
 ) {
-    // Address + airdrop command moved to [WalletReceiveScreen]; the sheet is
-    // now focused on status + actions only.
-    //
-    // Balance breakdown — three rows so the pool split is legible at a glance.
-    // Always-3-rows (even when shielded is zero) is a deliberate canary choice:
-    // it confirms the SDK is tracking shielded even before any moves into the
-    // shielded pool. A production wallet UI would likely hide the shielded
-    // row when zero — see WalletPanelColors for theming pivots.
-    SectionLabel("balance", colors)
-    Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-    BalanceRow(
-        label = "unshielded",
-        value = formatter.formatCompact(status.balance.unshieldedNight, "NIGHT"),
-        colors = colors,
-    )
-    BalanceRow(
-        label = "shielded",
-        value = formatter.formatCompact(status.balance.shieldedNight, "NIGHT"),
-        valuePrefix = SHIELD_GLYPH.takeIf { status.balance.hasShielded },
-        colors = colors,
-    )
-    BalanceRow(
-        label = "dust",
-        value = buildString {
-            append(formatter.formatCompact(status.balance.dust, "DUST"))
-            if (status.balance.dustRegistered) append(" · ✓")
+    // Address + airdrop command live in [WalletReceiveScreen]; the sheet shows
+    // the branded compact balance ([WalletBalanceCompact]) — hero figure, the
+    // dust/shielded token card, and the Receive quick action. (Send arrives with
+    // #240.) The detail line reflects sync/working state; the runner shows the
+    // real progress digits when a resync is streaming.
+    val ui = WalletBalanceUi(
+        nightPrimary = formatter.formatCompact(status.balance.unshieldedNight, "NIGHT", includeSymbol = false),
+        detail = when {
+            syncProgress != null -> "NIGHT · Syncing…"
+            status.busy != null -> "NIGHT · ${status.busy}"
+            else -> "NIGHT · Synced"
         },
+        dust = formatter.formatCompact(status.balance.dust, "DUST", includeSymbol = false),
+        dustRegistered = status.balance.dustRegistered,
+        shielded = if (status.balance.hasShielded) {
+            formatter.formatCompact(status.balance.shieldedNight, "NIGHT", includeSymbol = false)
+        } else {
+            null
+        },
+    )
+    WalletBalanceCompact(
+        ui = ui,
+        syncProgress = syncProgress,
         colors = colors,
+        onReceive = onReceive,
     )
 
-    if (status.busy != null) {
-        Spacer(modifier = Modifier.height(PanelDimens.SheetBusyGap))
-        // Prefer the determinate sync indicator (real event counts from
-        // syncDust) when a resync is streaming; fall back to the plain busy
-        // label for non-sync busy states (e.g. dust registration polling).
-        if (syncProgress != null) {
-            WalletSyncIndicator(
-                progress = syncProgress.fraction,
-                label = syncProgress.label,
-                colors = colors,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            Text(status.busy, color = colors.accent, fontSize = PanelType.Caption)
-        }
-    }
     if (status.message != null) {
         Spacer(modifier = Modifier.height(PanelDimens.SheetMessageGap))
         Text(status.message, color = colors.accent.copy(alpha = MESSAGE_ALPHA), fontSize = PanelType.Caption)
@@ -627,48 +599,6 @@ private fun SectionLabel(text: String, colors: WalletPanelColors) {
         fontSize = PanelType.SectionLabel,
         fontWeight = FontWeight.Medium,
     )
-}
-
-/**
- * One row of the balance breakdown — label on the left, value on the right.
- * Label column has a fixed width so the three rows (unshielded / shielded /
- * dust) line up vertically without depending on the longest value.
- *
- * @param valuePrefix Optional glyph (e.g. shield) inserted before [value].
- *   Null means no prefix — that way the shielded row collapses cleanly when
- *   shielded NIGHT is zero.
- */
-@Composable
-private fun BalanceRow(
-    label: String,
-    value: String,
-    colors: WalletPanelColors,
-    valuePrefix: String? = null,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            color = colors.onSheetDim,
-            fontSize = PanelType.Caption,
-            modifier = Modifier.width(PanelDimens.BalanceRowLabelWidth),
-        )
-        if (valuePrefix != null) {
-            Text(
-                text = "$valuePrefix ",
-                color = colors.accent,
-                fontSize = PanelType.Body,
-            )
-        }
-        Text(
-            text = value,
-            color = colors.onSheet,
-            fontSize = PanelType.Body,
-        )
-    }
-    Spacer(modifier = Modifier.height(PanelDimens.BalanceRowGap))
 }
 
 /** Slight de-emphasis for the secondary message line (vs the busy line). */
