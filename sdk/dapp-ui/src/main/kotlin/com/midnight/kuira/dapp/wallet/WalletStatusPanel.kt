@@ -200,13 +200,19 @@ fun WalletStatusPanel(
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
 
+    // Light/dark mode is panel-local (rememberSaveable); the toggle lives in the
+    // sheet. The host-supplied [colors] is the dark base; light flips to the
+    // SDK's light dusk palette. Both pill and sheet render with the result.
+    var lightMode by rememberSaveable { mutableStateOf(false) }
+    val activeColors = if (lightMode) WalletPanelColors.Light else colors
+
     // The pill — always rendered. Tap opens the sheet. dappPressable gives it
     // the pressed/hover/focus state layer + press scale the rest of the app has.
     WalletPill(
         status = status,
         network = network,
         formatter = formatter,
-        colors = colors,
+        colors = activeColors,
         modifier = modifier.dappPressable(
             shape = RoundedCornerShape(PanelDimens.PillCornerRadius),
         ) { sheetOpen = true },
@@ -268,7 +274,7 @@ fun WalletStatusPanel(
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },
             sheetState = sheetState,
-            containerColor = colors.sheetBackground,
+            containerColor = activeColors.sheetBackground,
             dragHandle = null,
         ) {
             WalletSheetContent(
@@ -276,7 +282,9 @@ fun WalletStatusPanel(
                 syncProgress = syncProgress,
                 config = config,
                 formatter = formatter,
-                colors = colors,
+                colors = activeColors,
+                lightMode = lightMode,
+                onToggleLightMode = { lightMode = !lightMode },
                 onNetworkChange = {
                     network = it
                     onNetworkChange(it)
@@ -328,8 +336,13 @@ fun WalletStatusPanel(
                 unshieldedAddress = readyStatus.address,
                 shieldedAddress = readyStatus.shieldedAddress,
                 network = network,
-                colors = colors,
-                onBack = { receiveOpen = false },
+                colors = activeColors,
+                // Back returns to the sheet we came from (re-open it), instead of
+                // dropping all the way to the host content — the stack the user expects.
+                onBack = {
+                    receiveOpen = false
+                    sheetOpen = true
+                },
             )
         }
     }
@@ -455,6 +468,8 @@ private fun WalletSheetContent(
     config: WalletConfig,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
+    lightMode: Boolean,
+    onToggleLightMode: () -> Unit,
     onNetworkChange: (MidnightNetwork) -> Unit,
     onProvingModeChange: (ProvingMode) -> Unit,
     onProofServerUrlChange: (String?) -> Unit,
@@ -485,13 +500,20 @@ private fun WalletSheetContent(
                     vertical = PanelDimens.SheetVerticalPadding,
                 ),
         ) {
-            Text(
-                "wallet status",
-                color = colors.onSheetDim,
-                fontSize = PanelType.Body,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(modifier = Modifier.height(PanelDimens.SheetTitleGap))
+            // No title (redundant — the pill already names the wallet). Just the
+            // light/dark toggle, top-right; shows the icon for the mode you'd switch to.
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text(
+                    if (lightMode) "☾" else "☀",
+                    color = colors.onSheetDim,
+                    fontSize = 18.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(PanelDimens.PillCornerRadius))
+                        .dappPressable(shape = RoundedCornerShape(PanelDimens.PillCornerRadius)) { onToggleLightMode() }
+                        .padding(6.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Every wallet state gets a branded treatment, never bare text:
             // a shimmer skeleton while bootstrapping/loading, the compact balance
@@ -574,18 +596,19 @@ private fun ReadyBody(
     val b = status.balance
     val ui = WalletBalanceUi(
         nightTotal = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
-        statusLabel = when {
-            syncProgress != null -> "Syncing…"
-            status.busy != null -> status.busy
-            else -> "Synced"
-        },
+        publicNight = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
         privateNight = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else null,
-        dust = formatter.formatCompact(b.dust, "DUST", includeSymbol = false),
+        statusLabel = if (syncProgress != null || status.busy != null) "Syncing…" else "Synced",
+        // Abbreviated so dust doesn't sprawl to 18 decimals (5,290.3839… → 5.29K).
+        dust = formatter.formatAbbreviated(b.dust, "DUST"),
         dustRegistered = b.dustRegistered,
     )
+    // Any busy state drives the branded runner (sync → real digits; other work
+    // like dust-registration polling → indeterminate with its own label).
+    val working = syncProgress ?: status.busy?.let { WalletSyncProgress(null, it) }
     WalletBalanceCompact(
         ui = ui,
-        syncProgress = syncProgress,
+        syncProgress = working,
         colors = colors,
         onReceive = onReceive,
         onRefresh = onRefresh,
@@ -600,12 +623,13 @@ private fun ReadyBody(
     }
 }
 
-/** Small uppercase-style header text used above every section in the sheet. */
+/** Small uppercase-style header text used above every section in the sheet.
+ *  ~75% on-sheet so it's actually readable (the old 20% onSheetSubtle failed HIG). */
 @Composable
 private fun SectionLabel(text: String, colors: WalletPanelColors) {
     Text(
         text = text,
-        color = colors.onSheetSubtle,
+        color = colors.onSheet.copy(alpha = 0.75f),
         fontSize = PanelType.SectionLabel,
         fontWeight = FontWeight.Medium,
     )
@@ -828,6 +852,26 @@ data class WalletPanelColors(
             onButton = MidnightColors.Light,
             buttonDisabled = MidnightColors.LightBarely,
             onButtonDisabled = MidnightColors.LightFaint,
+        )
+
+        // Light "dusk" variant (mirrors DuskPalette.LightMode) — the panel's
+        // sun/moon toggle swaps to this. Black-on-off-white at varying alpha;
+        // semantic Error/Success darkened for contrast on a light surface.
+        val Light = WalletPanelColors(
+            pillBackground = Color(0xFFFFFFFF),
+            pillBorder = Color(0x33000000),
+            onPill = Color(0xCC000000),
+            onPillDim = Color(0x80000000),
+            sheetBackground = Color(0xFFF7F7F7),
+            onSheet = Color(0xFF000000),
+            onSheetDim = Color(0x80000000),
+            onSheetSubtle = Color(0x33000000),
+            accent = Color(0xFF2E7D32),
+            error = Color(0xFFCC0000),
+            button = Color(0xFFFFFFFF),
+            onButton = Color(0xFF000000),
+            buttonDisabled = Color(0x0A000000),
+            onButtonDisabled = Color(0x33000000),
         )
     }
 }

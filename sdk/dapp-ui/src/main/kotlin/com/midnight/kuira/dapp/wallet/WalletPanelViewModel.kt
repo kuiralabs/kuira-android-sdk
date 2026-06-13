@@ -66,10 +66,6 @@ class WalletPanelViewModel @Inject constructor(
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
 
-    /** UI feedback for the "enable cloud backup" affordance. */
-    private val _backupStatus = MutableStateFlow<DustBackupUiState>(DustBackupUiState.Idle)
-    val backupStatus: StateFlow<DustBackupUiState> = _backupStatus
-
     /**
      * Live dust-sync progress for the sheet's [WalletSyncIndicator]. Non-null
      * only while a heavy resync is streaming events; carries a 0..1 fraction
@@ -103,7 +99,7 @@ class WalletPanelViewModel @Inject constructor(
         SharingStarted.WhileSubscribed(5_000),
         BackupSectionState(
             identity = BackupLaneState.Ok("Protected", confirm = true),
-            dust = BackupLaneState.Action("Off", "Enable"),
+            dust = BackupLaneState.Toggle(on = false),
             appData = BackupLaneState.Ok("None yet"),
         ),
     )
@@ -423,7 +419,6 @@ class WalletPanelViewModel @Inject constructor(
      */
     fun enableCloudBackup(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
-            _backupStatus.value = DustBackupUiState.Working
             try {
                 when (val outcome = driveAuth.authorize()) {
                     is AuthorizeOutcome.Authorized -> cloudSyncNow(config, activity)
@@ -433,8 +428,9 @@ class WalletPanelViewModel @Inject constructor(
                         )
                 }
             } catch (e: Exception) {
+                // The user-facing outcome surfaces on the dust lane via
+                // wallet.backupStatus (NeedsConsent / Failed); just log here.
                 Log.w(TAG, "enableCloudBackup failed", e)
-                _backupStatus.value = DustBackupUiState.Failed(backupErrorMessage(e))
             }
         }
     }
@@ -448,19 +444,9 @@ class WalletPanelViewModel @Inject constructor(
                 cloudSyncNow(config, activity)
             } catch (e: Exception) {
                 Log.w(TAG, "Drive consent not completed", e)
-                _backupStatus.value = DustBackupUiState.Failed(backupErrorMessage(e))
             }
         }
     }
-
-    /**
-     * Map a Drive/auth failure to an actionable message. The most common one in
-     * a fresh setup is the app's OAuth client not being registered in a Google
-     * Cloud project (status UNREGISTERED_ON_API_CONSOLE) — which is a one-time
-     * console setup, not a user error — so we say so rather than echoing the raw
-     * GMS code or a misleading "consent cancelled".
-     */
-    private fun backupErrorMessage(e: Throwable): String = friendlyBackupError(e.message)
 
     /**
      * Full bidirectional cloud sync, run once consent exists. [com.midnight.kuira.sdk.MidnightWallet.refresh]
@@ -473,7 +459,6 @@ class WalletPanelViewModel @Inject constructor(
     private suspend fun cloudSyncNow(config: WalletConfig, activity: FragmentActivity) {
         val built = sdkProvider.ensureSdk(activity, config)
         built.wallet.refresh()
-        _backupStatus.value = DustBackupUiState.Enabled
     }
 
     companion object {
@@ -492,14 +477,6 @@ class WalletPanelViewModel @Inject constructor(
     }
 }
 
-/** UI state for the Dust cloud-backup affordance. */
-sealed interface DustBackupUiState {
-    data object Idle : DustBackupUiState
-    data object Working : DustBackupUiState
-    data object Enabled : DustBackupUiState
-    data class Failed(val message: String) : DustBackupUiState
-}
-
 /**
  * Wallet-sync progress for the sheet's [WalletSyncIndicator].
  * @param fraction 0f..1f when a count is known (determinate); null for the
@@ -516,12 +493,12 @@ data class WalletSyncProgress(val fraction: Float?, val label: String)
  * dash here read as "already on" — the exact confusion #243 removes.)
  */
 private fun CloudBackupStatus.toDustLane(): BackupLaneState = when (this) {
-    CloudBackupStatus.Idle -> BackupLaneState.Action("Off", "Enable")
-    CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
-    is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("On", confirm = true)
-    CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
-    is CloudBackupStatus.Failed ->
-        BackupLaneState.Action("Failed", "Retry", danger = true, detail = friendlyBackupError(message))
+    // Rendered as a Switch — unambiguous on/off (a label read as already-enabled).
+    CloudBackupStatus.Idle -> BackupLaneState.Toggle(on = false)
+    CloudBackupStatus.NeedsConsent -> BackupLaneState.Toggle(on = false)
+    CloudBackupStatus.Syncing -> BackupLaneState.Toggle(on = true, busy = true)
+    is CloudBackupStatus.UpToDate -> BackupLaneState.Toggle(on = true)
+    is CloudBackupStatus.Failed -> BackupLaneState.Toggle(on = false, detail = friendlyBackupError(message))
 }
 
 /**

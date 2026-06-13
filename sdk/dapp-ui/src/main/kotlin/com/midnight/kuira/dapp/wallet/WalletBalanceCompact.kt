@@ -31,39 +31,34 @@ import com.midnight.kuira.core.designsystem.effect.ShimmerBlock
 
 /**
  * Display model for [WalletBalanceCompact]. Pre-formatted strings keep the
- * component pure UI (no SDK types) so it previews and reuses freely; the panel
- * maps [com.midnight.kuira.dapp.wallet.WalletStatus] into this.
+ * component pure UI (no SDK types) so it previews and reuses freely.
  *
- * NIGHT is one asset with two pools, so it reads as a single figure: [nightTotal]
- * is the headline (public + private), [privateNight] notes the shielded portion
- * as a chip and is null when there's none. DUST — a separate token (gas) — gets
- * its own row.
+ * NIGHT is one asset with two pools, both important: [nightTotal] is the
+ * headline (public + private); [publicNight] and [privateNight] are shown as an
+ * equal-weight split beneath it (private is null when there's none). DUST — a
+ * separate gas token — gets its own row.
  *
- * @param nightTotal hero figure — formatted total NIGHT (public + private).
+ * @param nightTotal hero figure — formatted total NIGHT.
+ * @param publicNight formatted unshielded (public) NIGHT.
+ * @param privateNight formatted shielded (private) NIGHT, or null when there's none.
  * @param statusLabel short status under the hero, e.g. "Synced" / "Syncing…".
- * @param privateNight formatted shielded NIGHT for the "🛡 private" chip, or null
- *   when there is none (chip hidden — no dangling dash).
- * @param dust formatted dust, or null while first-loading.
+ * @param dust formatted (abbreviated) dust, or null while first-loading.
  * @param dustRegistered true → ✓ on the dust row; false → a Register affordance.
  */
 data class WalletBalanceUi(
     val nightTotal: String,
-    val statusLabel: String,
+    val publicNight: String,
     val privateNight: String?,
+    val statusLabel: String,
     val dust: String?,
     val dustRegistered: Boolean,
 )
 
 /**
  * Compact wallet balance — the SDK/example-app density of the Kuira balance
- * "flag" (`BalanceWireframe`), condensed for the pill's sheet:
- *  - a NIGHT hero card with an inline ⟳ refresh and the 🛡 private chip,
- *  - a slim DUST row that carries its own Register affordance,
- *  - Send / Receive quick actions.
- * The full-size variant for the Kuira experience app shares this style at scale.
- *
- * Stateless: values from [ui], live sync from [syncProgress] (the branded
- * [WalletSyncIndicator]), theme from [colors]; everything else is callbacks.
+ * "flag": a NIGHT hero card (headline total + an equal-weight public/private
+ * split + an elegant ⟳ refresh), a slim DUST row with its own Register
+ * affordance, and Send / Receive quick actions. Stateless + themeable.
  *
  * @param busy disables the refresh / register / send affordances mid-operation.
  * @param onSend null → Send is shown but disabled with a "soon" hint (until #240).
@@ -81,18 +76,18 @@ fun WalletBalanceCompact(
     onSend: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
-        // NIGHT hero — headline figure, inline refresh, private chip, live sync.
         GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Eyebrow("BALANCE", colors, modifier = Modifier.weight(1f))
+                // Elegant refresh — bare glyph, no container; bright + sized to read.
                 Text(
-                    "BALANCE",
-                    color = colors.onSheetDim,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.W400,
-                    letterSpacing = 3.sp,
-                    modifier = Modifier.weight(1f),
+                    "⟳",
+                    color = if (busy) colors.onSheetDim else colors.onSheet,
+                    fontSize = 24.sp,
+                    modifier = Modifier
+                        .then(if (busy) Modifier else Modifier.clickable { onRefresh() })
+                        .padding(4.dp),
                 )
-                IconCircle(glyph = "⟳", colors = colors, enabled = !busy, onClick = onRefresh)
             }
             Spacer(Modifier.height(12.dp))
             Text(
@@ -103,15 +98,16 @@ fun WalletBalanceCompact(
                 letterSpacing = (-1).sp,
                 lineHeight = 38.sp,
             )
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("NIGHT · ${ui.statusLabel}", color = colors.onSheetDim, fontSize = 13.sp)
-                if (ui.privateNight != null) {
-                    Text(
-                        "  ·  🛡 ${ui.privateNight} private",
-                        color = colors.onSheetDim,
-                        fontSize = 13.sp,
-                    )
+            Spacer(Modifier.height(2.dp))
+            Text("NIGHT · ${ui.statusLabel}", color = colors.onSheetDim, fontSize = 13.sp)
+            // Equal-weight public / private split — both are real balances, both
+            // rendered bright (private is NOT a dim afterthought).
+            if (ui.privateNight != null) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    PoolAmount(label = "public", amount = ui.publicNight, colors = colors)
+                    Spacer(Modifier.width(18.dp))
+                    PoolAmount(label = "private", amount = ui.privateNight, colors = colors, shielded = true)
                 }
             }
             if (syncProgress != null) {
@@ -127,7 +123,6 @@ fun WalletBalanceCompact(
 
         Spacer(Modifier.height(10.dp))
 
-        // DUST — separate token; carries its own Register affordance.
         GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -140,7 +135,7 @@ fun WalletBalanceCompact(
                 Text(
                     ui.dust ?: "—",
                     color = colors.onSheet,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.W300,
                     fontFamily = FontFamily.Monospace,
                 )
@@ -161,7 +156,6 @@ fun WalletBalanceCompact(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(40.dp, Alignment.CenterHorizontally),
         ) {
-            // Send is always shown; disabled with a "soon" hint until #240 wires it.
             QuickAction(
                 glyph = "↑",
                 label = "Send",
@@ -175,19 +169,31 @@ fun WalletBalanceCompact(
     }
 }
 
+/** One pool figure — small label, bright amount; private gets a shield. Equal weight to its sibling. */
 @Composable
-private fun IconCircle(glyph: String, colors: WalletPanelColors, enabled: Boolean, onClick: () -> Unit) {
-    val tint = if (enabled) colors.onSheet else colors.onSheetSubtle
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .border(1.dp, colors.onSheetSubtle, CircleShape)
-            .then(if (enabled) Modifier.clickable { onClick() } else Modifier),
-    ) {
-        Text(glyph, color = tint, fontSize = 16.sp)
+private fun PoolAmount(label: String, amount: String, colors: WalletPanelColors, shielded: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (shielded) {
+            Text("🛡", fontSize = 13.sp)
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(label, color = colors.onSheetDim, fontSize = 12.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(amount, color = colors.onSheet, fontSize = 15.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
     }
+}
+
+/** Readable eyebrow label (~75% on-sheet) — fixes the prior 20–50% HIG-fail dim labels. */
+@Composable
+internal fun Eyebrow(text: String, colors: WalletPanelColors, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        color = colors.onSheet.copy(alpha = 0.75f),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 2.sp,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -234,15 +240,12 @@ private fun QuickAction(
     }
 }
 
-/**
- * First-load skeleton — shimmer placeholders shaped like the real hero + dust
- * cards, so the layout doesn't jump when data lands. Used for None/Loading.
- */
+/** First-load skeleton — shimmer placeholders shaped like the real cards. */
 @Composable
 fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
         GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
-            Text("BALANCE", color = colors.onSheetDim, fontSize = 11.sp, fontWeight = FontWeight.W400, letterSpacing = 3.sp)
+            Eyebrow("BALANCE", colors)
             Spacer(Modifier.height(16.dp))
             ShimmerBlock(height = 40.dp, widthFraction = 0.6f)
             Spacer(Modifier.height(10.dp))
@@ -257,10 +260,7 @@ fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifie
     }
 }
 
-/**
- * Balance error — keeps the hero card frame but states the failure and offers a
- * Retry, mirroring the wireframe's ERROR treatment (never a bare red string).
- */
+/** Balance error — keeps the card frame, states the failure, offers Retry. */
 @Composable
 fun WalletBalanceError(
     message: String,
@@ -269,7 +269,7 @@ fun WalletBalanceError(
     modifier: Modifier = Modifier,
 ) {
     GlassPanel(tint = colors.button, border = colors.onSheetSubtle, modifier = modifier) {
-        Text("BALANCE", color = colors.onSheetDim, fontSize = 11.sp, fontWeight = FontWeight.W400, letterSpacing = 3.sp)
+        Eyebrow("BALANCE", colors)
         Spacer(Modifier.height(12.dp))
         Text("Couldn't load balance", color = colors.error, fontSize = 18.sp, fontWeight = FontWeight.W300)
         Spacer(Modifier.height(6.dp))
@@ -284,10 +284,11 @@ fun WalletBalanceError(
 // ── Previews ──
 
 private val SampleDefault = WalletBalanceUi(
-    nightTotal = "10,000",
+    nightTotal = "20,000",
+    publicNight = "10,000",
+    privateNight = "10,000",
     statusLabel = "Synced",
-    privateNight = "250",
-    dust = "5,195.065469",
+    dust = "5.33K",
     dustRegistered = true,
 )
 
@@ -296,6 +297,13 @@ private val SampleDefault = WalletBalanceUi(
 private fun PreviewBalanceDefault() =
     Column(Modifier.padding(20.dp)) {
         WalletBalanceCompact(SampleDefault, syncProgress = null, colors = WalletPanelColors.Default, onReceive = {}, onRefresh = {}, onRegister = {})
+    }
+
+@Preview(name = "Balance compact · light", widthDp = 360, showBackground = true, backgroundColor = 0xFFF7F7F7)
+@Composable
+private fun PreviewBalanceLight() =
+    Column(Modifier.padding(20.dp)) {
+        WalletBalanceCompact(SampleDefault, syncProgress = null, colors = WalletPanelColors.Light, onReceive = {}, onRefresh = {}, onRegister = {})
     }
 
 @Preview(name = "Balance compact · syncing + unregistered", widthDp = 360, showBackground = true, backgroundColor = 0xFF111111)

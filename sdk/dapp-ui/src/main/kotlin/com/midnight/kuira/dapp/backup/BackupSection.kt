@@ -21,9 +21,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.effect.DustTrail
 import com.midnight.kuira.core.designsystem.effect.LottieRunner
+import com.midnight.kuira.dapp.wallet.Eyebrow
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -54,6 +65,16 @@ sealed interface BackupLaneState {
     data class Ok(val label: String, val confirm: Boolean = false) : BackupLaneState
     /** [progress] 0f..1f → determinate (% + fill); null → indeterminate. */
     data class Syncing(val progress: Float?) : BackupLaneState
+    /**
+     * An on/off capability rendered as a Switch — unambiguous "this is off, flip
+     * it on" (vs a label that read as already-enabled). [on] reflects state,
+     * [busy] shows a spinner while turning on, [detail] surfaces an error.
+     */
+    data class Toggle(
+        val on: Boolean,
+        val busy: Boolean = false,
+        val detail: String? = null,
+    ) : BackupLaneState
     data class Action(
         val label: String,
         val cta: String,
@@ -88,13 +109,7 @@ fun BackupSection(
     onAppDataAction: () -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth()) {
-        Text(
-            "BACKUP & RECOVERY",
-            color = colors.onSheetSubtle,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.sp,
-        )
+        Eyebrow("BACKUP & RECOVERY", colors)
         Spacer(Modifier.height(12.dp))
         Column(
             Modifier
@@ -103,22 +118,31 @@ fun BackupSection(
                 .border(1.dp, colors.onSheetSubtle, RoundedCornerShape(14.dp))
                 .padding(vertical = 4.dp),
         ) {
-            Lane("🛡", "Wallet identity", "Passkey recovers your wallet on any device", state.identity, colors) {}
+            Lane("🛡", "Wallet identity", TIP_IDENTITY, state.identity, colors) {}
             Divider(colors)
-            Lane("⟳", "Dust · balance sync", "Restores your balance instantly on a new device", state.dust, colors, onDustAction)
+            Lane("⟳", "Dust · balance sync", TIP_DUST, state.dust, colors, onDustAction)
             state.appData?.let { appData ->
                 Divider(colors)
-                Lane("☁", "App data", "Restores your in-app data on a new device", appData, colors, onAppDataAction)
+                Lane("☁", "App data", TIP_APP_DATA, appData, colors, onAppDataAction)
             }
         }
     }
 }
 
+// One-line-per-lane keeps the section uncluttered; the "how it works" detail
+// lives behind the ⓘ tooltip instead of a permanent subtitle sentence.
+private const val TIP_IDENTITY =
+    "Your passkey recovers this wallet on any device — the only recovery, and it's always on."
+private const val TIP_DUST =
+    "Backs up your dust checkpoint so a new device restores your balance instantly instead of re-syncing from genesis."
+private const val TIP_APP_DATA =
+    "Backs up this app's in-app data so it restores on a new device. Saves automatically."
+
 @Composable
 private fun Lane(
     icon: String,
     title: String,
-    subtitle: String,
+    tooltip: String,
     state: BackupLaneState,
     colors: WalletPanelColors,
     onAction: () -> Unit,
@@ -127,11 +151,10 @@ private fun Lane(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(icon, fontSize = 15.sp, modifier = Modifier.width(22.dp))
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = colors.onSheet, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(subtitle, color = colors.onSheetDim, fontSize = 12.sp, lineHeight = 16.sp)
-            }
-            Spacer(Modifier.width(10.dp))
+            Text(title, color = colors.onSheet, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.width(6.dp))
+            InfoDot(tooltip, colors)
+            Spacer(Modifier.weight(1f))
             Trailing(state, colors, onAction)
         }
         if (state is BackupLaneState.Syncing) {
@@ -142,16 +165,36 @@ private fun Lane(
                 modifier = Modifier.fillMaxWidth().padding(start = LaneIconGutter),
             )
         }
-        if (state is BackupLaneState.Action && state.detail != null) {
+        val detail = (state as? BackupLaneState.Action)?.detail ?: (state as? BackupLaneState.Toggle)?.detail
+        if (detail != null) {
             Spacer(Modifier.height(6.dp))
             Text(
-                state.detail,
-                color = if (state.danger) colors.error else colors.onSheetDim,
+                detail,
+                color = colors.error,
                 fontSize = 11.sp,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(start = LaneIconGutter),
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InfoDot(text: String, colors: WalletPanelColors) {
+    val tooltipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(text) } },
+        state = tooltipState,
+    ) {
+        Text(
+            "ⓘ",
+            color = colors.onSheetDim,
+            fontSize = 14.sp,
+            modifier = Modifier.clickable { scope.launch { tooltipState.show() } },
+        )
     }
 }
 
@@ -172,6 +215,29 @@ private fun Trailing(state: BackupLaneState, colors: WalletPanelColors, onAction
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
+        is BackupLaneState.Toggle ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (state.busy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = colors.accent,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
+                Switch(
+                    checked = state.on,
+                    onCheckedChange = { want -> if (want && !state.on) onAction() },
+                    enabled = !state.busy,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colors.onButton,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.onSheetDim,
+                        uncheckedTrackColor = colors.button,
+                        uncheckedBorderColor = colors.onSheetSubtle,
+                    ),
+                )
+            }
         is BackupLaneState.Action ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
