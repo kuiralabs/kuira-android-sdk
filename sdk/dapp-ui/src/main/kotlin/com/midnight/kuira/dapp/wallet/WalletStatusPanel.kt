@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -82,7 +83,6 @@ private object PanelDimens {
     val PillSpinnerStroke = 2.dp
 
     // Sheet (expanded view on pill tap).
-    val SheetMinHeight = 420.dp        // Forces a real surface, not a sliver.
     val SheetHorizontalPadding = 24.dp
     val SheetVerticalPadding = 20.dp
     val SheetActionsTopGap = 28.dp     // Above the action-button row.
@@ -494,10 +494,14 @@ private fun WalletSheetContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = PanelDimens.SheetMinHeight)
+                // Scrollable so nothing (esp. the close button) is ever clipped,
+                // regardless of content height / device size.
+                .verticalScroll(rememberScrollState())
                 .padding(
-                    horizontal = PanelDimens.SheetHorizontalPadding,
-                    vertical = PanelDimens.SheetVerticalPadding,
+                    start = PanelDimens.SheetHorizontalPadding,
+                    end = PanelDimens.SheetHorizontalPadding,
+                    top = 4.dp,                          // tight top — was 20dp of dead space
+                    bottom = PanelDimens.SheetVerticalPadding,
                 ),
         ) {
             // No title (redundant — the pill already names the wallet). Just the
