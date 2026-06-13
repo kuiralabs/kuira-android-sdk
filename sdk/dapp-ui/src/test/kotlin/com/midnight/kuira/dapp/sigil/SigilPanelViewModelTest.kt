@@ -4,11 +4,7 @@ import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
-import com.midnight.kuira.core.identity.passkey.P256PublicKey
-import com.midnight.kuira.core.identity.passkey.PasskeyManager
-import com.midnight.kuira.core.identity.passkey.PasskeyRegistrationResult
 import com.midnight.kuira.core.identity.sigil.SigilDerivation
-import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
@@ -43,7 +39,7 @@ import java.util.Optional
  *    circuit.
  *  - **dismissBackup durability:** the flag must be `commit()`-written.
  *  - **forgeSigil:** create passkey → derive sigil DID via
- *    [SigilIdentityProvider] → persist triple → status = Forged.
+ *    `SigilIdentityProvider` → persist triple → status = Forged.
  *    Two ceremonies on forge.
  *  - **restoreSeed (sign-in):** derive sigil DID via SigilSession, then
  *    pull host app-state through the wallet's silent seed-keyed
@@ -57,8 +53,6 @@ class SigilPanelViewModelTest {
     @get:Rule
     val mainDispatcher = MainDispatcherRule()
 
-    private val passkeyManager: PasskeyManager = mockk(relaxed = true)
-    private val sigilIdentityProvider: SigilIdentityProvider = mockk(relaxed = true)
     private val sigilSession: SigilSession = mockk(relaxed = true)
     private val blockStoreStorage: BlockStoreBackupStorage = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
@@ -168,7 +162,6 @@ class SigilPanelViewModelTest {
 
         // Single delegated ceremony — no direct create/derive from the VM.
         coVerify(exactly = 1) { sigilSession.establishSigil(activity) }
-        coVerify(exactly = 0) { sigilIdentityProvider.deriveSigilDid(any(), any()) }
 
         // Triple is durably persisted (commit() inside SigilStateStore).
         val onDisk = freshPrefs()
@@ -207,7 +200,6 @@ class SigilPanelViewModelTest {
         // Session is the single entry point — no manual provider/store
         // calls from the VM anymore.
         coVerify(exactly = 1) { sigilSession.signIn(activity) }
-        coVerify(exactly = 0) { sigilIdentityProvider.deriveSigilDid(any(), any()) }
         // No provider bound → no app-state fetch attempt.
         coVerify(exactly = 0) { wallet.fetchAppState() }
     }
@@ -255,8 +247,6 @@ class SigilPanelViewModelTest {
     private fun newVm(
         appDataProvider: Optional<AppDataBackupProvider> = Optional.empty(),
     ): SigilPanelViewModel = SigilPanelViewModel(
-        passkeyManager = passkeyManager,
-        sigilIdentityProvider = sigilIdentityProvider,
         sigilSession = sigilSession,
         sigilStateStore = SigilStateStore(context),
         blockStoreStorage = blockStoreStorage,
@@ -273,26 +263,14 @@ class SigilPanelViewModelTest {
     )
 
     private object Fixtures {
-        private const val X_FILL: Byte = 0x11
-        private const val Y_FILL: Byte = 0x21
-
         const val CREDENTIAL_ID = "test-credential-id-deadbeef"
 
         /** A plausible Ed25519 did:key — the actual value comes from the mocked provider. */
         const val PRF_DID = "did:key:z6MkTestEd25519FromPrfSalt"
 
-        /** Compressed P-256 pubkey hex matching `P256PublicKey(X_FILL×32, Y_FILL×32)`. */
+        /** Compressed P-256 pubkey hex returned by the create ceremony on forge. */
         const val PUBLIC_KEY_HEX_EXPECTED =
             "031111111111111111111111111111111111111111111111111111111111111111"
-
-        fun passkeyRegistrationResult(): PasskeyRegistrationResult = PasskeyRegistrationResult(
-            publicKey = P256PublicKey(
-                x = ByteArray(32) { X_FILL },
-                y = ByteArray(32) { Y_FILL },
-            ),
-            credentialId = CREDENTIAL_ID,
-            registrationResponseJson = "{}",
-        )
 
         /** Non-empty Block Store blob — content doesn't matter, only size>0 for probe. */
         fun backupBlob(): ByteArray = ByteArray(64) { 0xAB.toByte() }

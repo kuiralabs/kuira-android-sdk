@@ -1,16 +1,11 @@
 package com.midnight.kuira.dapp.sigil
 
-import android.app.Activity
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.midnight.kuira.dapp.BuildConfig
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
-import com.midnight.kuira.core.identity.backup.SeedDeriver
-import com.midnight.kuira.core.identity.passkey.PasskeyManager
-import com.midnight.kuira.core.identity.sigil.SigilIdentityProvider
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
@@ -19,8 +14,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.util.Optional
 import javax.inject.Inject
 
@@ -29,7 +22,7 @@ import javax.inject.Inject
  *
  * Owns two flows:
  *  - **Forge** ([forgeSigil]): create a passkey via Credential Manager,
- *    then derive the sigil DID via [SigilIdentityProvider]
+ *    then derive the sigil DID via `SigilIdentityProvider`
  *    (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
  *    default impl). Two biometric prompts on first run.
  *  - **Sign in** ([restoreSeed]): one biometric covers BOTH the
@@ -53,8 +46,6 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SigilPanelViewModel @Inject constructor(
-    private val passkeyManager: PasskeyManager,
-    private val sigilIdentityProvider: SigilIdentityProvider,
     private val sigilSession: SigilSession,
     private val sigilStateStore: SigilStateStore,
     private val blockStoreStorage: BlockStoreBackupStorage,
@@ -155,39 +146,6 @@ class SigilPanelViewModel @Inject constructor(
     }
 
     /**
-     * Diagnostic — derive the SeedDeriver PRF output for the user's
-     * passkey and emit the 32-byte hex to logcat (tag `PrfProbe`).
-     * Used to verify that PRF is deterministic across Kuira ecosystem
-     * apps that share an RP via `assetlinks.json`, before relying on
-     * it as the wallet seed.
-     *
-     * Run on two installs of any Kuira app (Kicks + BBoard, two
-     * emulators sharing one Google account, etc.); identical outputs
-     * mean PRF-derived seed is viable.
-     *
-     * No-op outside debug builds. The action is gated by
-     * `BuildConfig.DEBUG` so production builds don't ship a passkey
-     * prompt that leaks 32 bytes of derived material to logcat.
-     */
-    fun probePrfDeterminism(activity: Activity) {
-        if (!BuildConfig.DEBUG) {
-            Log.w(TAG, "probePrfDeterminism: refusing to run outside debug builds")
-            return
-        }
-        viewModelScope.launch {
-            try {
-                val entropy = SeedDeriver.derivePrfEntropy(activity, passkeyManager)
-                val hex = entropy.joinToString("") { "%02x".format(it) }
-                Log.i("PrfProbe", "SEED_SALT PRF output (32 bytes): $hex")
-                Log.i("PrfProbe", "Compare this across devices/apps; identical = deterministic.")
-                entropy.fill(0)
-            } catch (e: Exception) {
-                Log.e("PrfProbe", "probe failed: ${e.message}", e)
-            }
-        }
-    }
-
-    /**
      * Create a passkey + derive its `did:key`. Triggers the platform's
      * Credential Manager UI on [activity]; the user picks an authenticator
      * (device biometric / hardware key / etc.) and authorizes the create.
@@ -230,67 +188,6 @@ class SigilPanelViewModel @Inject constructor(
     }
 
     /**
-     * Probe the passkey's PRF extension. Builds a deterministic salt from a
-     * versioned purpose string, runs an assertion twice with the same salt,
-     * and reports whether the outputs match — used during canary to confirm
-     * an authenticator supports CTAP2's hmac-secret extension before relying
-     * on it for backup.
-     *
-     * **Logging gates.** Two tiers:
-     *
-     *  - **Always-on (`Log.i`):** PASS / FAIL determinism verdict, plus the
-     *    salt (a SHA-256 of a public purpose string — not sensitive). Safe
-     *    for production.
-     *  - **Debug-only (`debugLog`):** the raw PRF output bytes in hex. These
-     *    ARE the key material the backup blob is encrypted under — combined
-     *    with the salt, anyone with logcat access can decrypt a captured
-     *    blob. Gated behind `BuildConfig.DEBUG`, which is `const val false`
-     *    in release builds; R8 dead-code-eliminates the whole conditional
-     *    including the `.toHex()` allocations.
-     */
-    fun testPrf(activity: Activity) {
-        viewModelScope.launch {
-            try {
-                val challenge = ByteArray(PRF_CHALLENGE_BYTES).also { SecureRandom().nextBytes(it) }
-                val salt = MessageDigest.getInstance("SHA-256")
-                    .digest(PRF_BACKUP_PURPOSE.toByteArray(Charsets.UTF_8))
-
-                Log.i(TAG, "Testing PRF with salt: ${salt.toHex()} (purpose=$PRF_BACKUP_PURPOSE)")
-                val first = passkeyManager.authenticateWithPrf(
-                    activity = activity, challenge = challenge, prfSalt = salt,
-                )
-                val firstOut = first.prfOutput
-                if (firstOut == null || firstOut.size != PRF_OUTPUT_BYTES) {
-                    Log.w(TAG, "PRF returned null/wrong size — extension not supported on this authenticator")
-                    debugLog(TAG) { "Full response: ${first.assertionResponseJson}" }
-                    return@launch
-                }
-                debugLog(TAG) { "PRF first output (${firstOut.size} bytes): ${firstOut.toHex()}" }
-
-                // Same salt second auth — same authenticator should produce
-                // the same output. CTAP2 hmac-secret is defined deterministic;
-                // any mismatch here is either an authenticator bug or a Credential
-                // Manager quirk we want to know about.
-                Log.i(TAG, "Testing PRF determinism (same salt, second auth)…")
-                val second = passkeyManager.authenticateWithPrf(
-                    activity = activity, challenge = challenge, prfSalt = salt,
-                )
-                val secondOut = second.prfOutput
-                if (secondOut == null) {
-                    Log.w(TAG, "PRF second authenticate returned null")
-                    return@launch
-                }
-                val deterministic = firstOut.contentEquals(secondOut)
-                Log.i(TAG, "PRF determinism: ${if (deterministic) "PASS (same output)" else "FAIL (different output)"}")
-                debugLog(TAG) { "  First:  ${firstOut.toHex()}" }
-                debugLog(TAG) { "  Second: ${secondOut.toHex()}" }
-            } catch (e: Exception) {
-                Log.e(TAG, "PRF test failed", e)
-            }
-        }
-    }
-
-    /**
      * Sign in with an existing passkey — the post-PRF replacement for
      * the old "restore from cloud" flow.
      *
@@ -304,7 +201,7 @@ class SigilPanelViewModel @Inject constructor(
      *   - The seed derives from `PRF(passkey, SEED_SALT)` — `WalletSeedSource`
      *     handles that on the next wallet action, no blob needed.
      *   - The sigil DID derives from `PRF(passkey, SIGIL_SALT)` via
-     *     [SigilIdentityProvider] — that's what step 1 below does.
+     *     `SigilIdentityProvider` — that's what step 1 below does.
      *   - The SDK lives on a stable PRF-derived seed regardless of how
      *     long ago the user last authenticated, so no SIGKILL needed.
      *
@@ -398,48 +295,9 @@ class SigilPanelViewModel @Inject constructor(
     companion object {
         private const val TAG = "SigilPanel"
 
-        /** Random challenge size used by [testPrf]. 32 bytes — the spec recommendation. */
-        private const val PRF_CHALLENGE_BYTES = 32
-
-        /** Expected PRF output size from CTAP2's hmac-secret extension. */
-        private const val PRF_OUTPUT_BYTES = 32
-
-        /**
-         * Purpose-bound salt source for the PRF probe + the backup pipeline.
-         * Versioned so a future rotation can ship `v2` and not collide with
-         * already-deployed encrypted blobs. Must match what `SigilBackup`
-         * uses internally — they're SHA-256'd into the same salt.
-         */
-        private const val PRF_BACKUP_PURPOSE = "kuira:backup:v1"
-
         // Pref schema (file name, key names) lives on
         // [com.midnight.kuira.core.identity.sigil.SigilStateStore]
         // since the same schema is consumed from non-UI modules
         // (e.g. WalletSeedSource).
     }
-}
-
-/**
- * `0x05ff…` style hex render for byte arrays. Kept local to the panel module
- * — only used for diagnostic logging. Lowercase to match the rest of the
- * Kuira tooling (CLI output, indexer dumps) so values grep cleanly across logs.
- */
-private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
-
-/**
- * Inline `Log.i` wrapper that's a no-op in release builds.
- *
- * `BuildConfig.DEBUG` is a `const val false` generated by AGP for release
- * variants, so the compiler folds `if (false) …` to nothing and R8 then
- * strips the whole conditional — including the lazy [message] lambda
- * (eliminated as unused) and any `.toHex()` / string-template work inside
- * it. Zero overhead, zero leakage in release APKs.
- *
- * Use this for log lines that carry sensitive intermediate values (raw
- * PRF outputs, derived key bytes, etc.) where a canary-grade trace is
- * valuable but production logging is not. For genuinely public info
- * (DID, credentialId, pubkey hex) just call `Log.i` directly.
- */
-private inline fun debugLog(tag: String, message: () -> String) {
-    if (BuildConfig.DEBUG) Log.i(tag, message())
 }

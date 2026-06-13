@@ -129,9 +129,9 @@ fun BackupSection(
 private const val TIP_IDENTITY =
     "Your passkey recovers this wallet on any device — the only recovery, and it's always on."
 private const val TIP_DUST =
-    "Backs up your dust checkpoint so a new device restores your balance instantly instead of re-syncing from genesis."
+    "Saves your balance to the cloud so a new device shows it instantly — without re-scanning the whole chain."
 private const val TIP_APP_DATA =
-    "Backs up this app's in-app data so it restores on a new device. Saves automatically."
+    "Saves this app's data to the cloud so it comes back on a new device. Happens automatically."
 
 @Composable
 private fun Lane(
