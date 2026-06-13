@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.compact.proving.ProvingMode
+import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -50,6 +51,10 @@ class WalletPanelViewModelTest {
 
     private val sdkProvider: MidnightSdkProvider = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
+    private val driveAuth: DriveAuthManager = mockk(relaxed = true)
+
+    private fun dustPrefs() =
+        context.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
 
     private lateinit var context: Context
 
@@ -62,6 +67,34 @@ class WalletPanelViewModelTest {
         // test).
         context.getSharedPreferences(SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().clear().commit()
+        // Same for the dust-backup opt-out prefs so each test starts opted-in.
+        dustPrefs().edit().clear().commit()
+        // Real (empty) SDK flow — the relaxed mock's .value returns an uncastable
+        // Object, which setDustBackup's `sdk.value?.wallet` would choke on.
+        every { sdkProvider.sdk } returns MutableStateFlow<MidnightSdk?>(null)
+    }
+
+    @Test
+    fun `disabling dust backup persists the opt-out and makes no Drive call`() = runTest {
+        val vm = newVm()
+
+        vm.setDustBackup(enabled = false, config = devConfig(), activity = activity)
+
+        // Persisted so the disable survives restarts / SDK rebuilds…
+        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        // …and turning it OFF is purely local — no Drive round-trip.
+        coVerify(exactly = 0) { driveAuth.authorize() }
+    }
+
+    @Test
+    fun `enabling dust backup clears the opt-out and starts the Drive consent flow`() = runTest {
+        dustPrefs().edit().putBoolean("dust_backup_opted_out", true).commit()
+        val vm = newVm()
+
+        vm.setDustBackup(enabled = true, config = devConfig(), activity = activity)
+
+        assertEquals(false, dustPrefs().getBoolean("dust_backup_opted_out", true))
+        coVerify { driveAuth.authorize() }
     }
 
     @Test
@@ -382,7 +415,7 @@ class WalletPanelViewModelTest {
     private fun newVmWithStore(store: SigilStateStore): WalletPanelViewModel = WalletPanelViewModel(
         sdkProvider = sdkProvider,
         sigilStateStore = store,
-        driveAuth = mockk(relaxed = true),
+        driveAuth = driveAuth,
         appContext = context,
         appDataProvider = java.util.Optional.empty(),
     )
