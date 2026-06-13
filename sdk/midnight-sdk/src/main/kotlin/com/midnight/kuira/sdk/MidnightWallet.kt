@@ -16,7 +16,11 @@ import com.midnight.kuira.core.ledger.api.NodeRpcException
 import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import com.midnight.kuira.core.identity.backup.DriveConsentRequiredException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -62,6 +66,24 @@ class MidnightWallet internal constructor(
      */
     @Volatile
     var appStateProvider: (suspend () -> ByteArray?)? = null
+
+    private val _backupStatus = MutableStateFlow(BackupStatusSnapshot())
+
+    /**
+     * Observable cloud-backup status (dust + app-state lanes), updated by the
+     * backup methods so the UI can show "syncing / up to date / needs consent /
+     * failed" instead of a silent log. Identity recovery (the passkey) is sourced
+     * separately at the app layer.
+     */
+    val backupStatus: StateFlow<BackupStatusSnapshot> = _backupStatus.asStateFlow()
+
+    private fun updateDustBackup(status: CloudBackupStatus) {
+        _backupStatus.value = _backupStatus.value.copy(dust = status)
+    }
+
+    private fun updateAppDataBackup(status: CloudBackupStatus) {
+        _backupStatus.value = _backupStatus.value.copy(appData = status)
+    }
 
     /**
      * Dust nullifiers captured during [balanceTransaction], keyed by the balanced
@@ -529,7 +551,17 @@ class MidnightWallet internal constructor(
         } finally {
             checkpoint.state.close()
         } ?: return@withContext
-        backup.upload(walletAddress, bytes, checkpoint.lastEventId)
+        updateDustBackup(CloudBackupStatus.Syncing)
+        try {
+            backup.upload(walletAddress, bytes, checkpoint.lastEventId)
+            updateDustBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis()))
+        } catch (e: DriveConsentRequiredException) {
+            // Surfaced (not silent) so the UI can offer "enable cloud backup".
+            updateDustBackup(CloudBackupStatus.NeedsConsent)
+        } catch (e: Exception) {
+            updateDustBackup(CloudBackupStatus.Failed(e.message ?: "backup failed"))
+            Log.w(TAG, "Dust cloud backup failed: ${e.message}")
+        }
     }
 
     /**
@@ -543,8 +575,13 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupAppStateToCloud(appMetadata: ByteArray? = null) = withContext(Dispatchers.IO) {
         val backup = appStateCloudBackup ?: return@withContext
+        updateAppDataBackup(CloudBackupStatus.Syncing)
         runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
-            .onFailure { Log.w(TAG, "App-state cloud backup failed: ${it.message}") }
+            .onSuccess { updateAppDataBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis())) }
+            .onFailure {
+                updateAppDataBackup(CloudBackupStatus.Failed(it.message ?: "backup failed"))
+                Log.w(TAG, "App-state cloud backup failed: ${it.message}")
+            }
         Unit
     }
 

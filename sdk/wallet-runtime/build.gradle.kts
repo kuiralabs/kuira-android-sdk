@@ -37,7 +37,9 @@ dependencies {
     // both the seed source (where it gets the BIP-39 seed) and the SDK (which
     // it constructs + holds for every consumer).
     implementation(project(":sdk:wallet-seed"))   // WalletSeedSource — seed bootstrap
-    implementation(project(":sdk:midnight-sdk"))   // MidnightSdk + Builder
+    // api, not implementation: MidnightSdkProvider.sdk exposes MidnightSdk (and
+    // its backupStatus) as public API, so consumers need it on their classpath.
+    api(project(":sdk:midnight-sdk"))   // MidnightSdk + Builder
 
     // WalletConfig (this module's public type) is expressed in these primitives.
     api(project(":core:network"))                  // MidnightNetwork

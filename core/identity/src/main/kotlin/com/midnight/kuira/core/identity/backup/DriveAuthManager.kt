@@ -59,9 +59,18 @@ interface DriveAuthManager {
 suspend fun DriveAuthManager.silentTokenOrThrow(): String =
     when (val outcome = authorize()) {
         is AuthorizeOutcome.Authorized -> outcome.auth.accessToken
-        is AuthorizeOutcome.NeedsConsent ->
-            throw IllegalStateException("Drive consent not granted — enable cloud backup first")
+        is AuthorizeOutcome.NeedsConsent -> throw DriveConsentRequiredException()
     }
+
+/**
+ * Thrown by [silentTokenOrThrow] when Drive backup hasn't been consented to yet
+ * — a distinct, catchable signal (vs a generic failure) so a headless backup can
+ * surface "needs consent" instead of a silent error. Extends
+ * [IllegalStateException] so existing best-effort `catch (Exception)` paths still
+ * behave as before.
+ */
+class DriveConsentRequiredException :
+    IllegalStateException("Drive consent not granted — enable cloud backup first")
 
 class PlayServicesDriveAuthManager(
     context: Context,
