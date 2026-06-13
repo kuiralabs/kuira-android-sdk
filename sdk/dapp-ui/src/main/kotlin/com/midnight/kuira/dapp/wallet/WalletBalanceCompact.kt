@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
@@ -77,7 +78,7 @@ fun WalletBalanceCompact(
     onSend: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
-        BalanceCard(colors) {
+        BalanceCard(colors, contentPadding = 14.dp) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Eyebrow("BALANCE", colors, modifier = Modifier.weight(1f))
                 // Elegant refresh — bare glyph, no container; bright + sized to read.
@@ -90,14 +91,14 @@ fun WalletBalanceCompact(
                         .padding(4.dp),
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 ui.nightTotal,
                 color = colors.onSheet,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.W200,
                 letterSpacing = (-1).sp,
-                lineHeight = 38.sp,
+                lineHeight = 36.sp,
             )
             Spacer(Modifier.height(2.dp))
             Text("NIGHT · ${ui.statusLabel}", color = colors.onSheetDim, fontSize = 13.sp)
@@ -175,8 +176,15 @@ fun WalletBalanceCompact(
 private fun BalanceCard(
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
+    contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
-) = GlassPanel(tint = colors.button, border = colors.onSheetSubtle, modifier = modifier, content = content)
+) = GlassPanel(
+    tint = colors.button,
+    border = colors.onSheetSubtle,
+    modifier = modifier,
+    contentPadding = contentPadding,
+    content = content,
+)
 
 /** One pool figure — small label, bright amount; private gets a shield. Equal weight to its sibling. */
 @Composable
