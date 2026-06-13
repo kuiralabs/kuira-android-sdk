@@ -3,6 +3,7 @@ package com.midnight.kuira.dapp.sigil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.midnight.kuira.dapp.DuskBrand
 import com.midnight.kuira.dapp.dappPressable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -648,21 +649,23 @@ data class SigilPanelColors(
     val onButton: Color,
 ) {
     companion object {
+        // On-brand "dusk" dark default — matches [WalletPanelColors.Default] so
+        // the two PanelBar pills read as one themed unit. See [com.midnight.kuira.dapp.DuskBrand].
         val Default = SigilPanelColors(
-            pillBackground = Color(0xFF111111),
-            pillBorder = Color.White.copy(alpha = 0.12f),
-            onPill = Color.White.copy(alpha = 0.85f),
-            onPillDim = Color.White.copy(alpha = 0.35f),
-            avatarPlaceholderBg = Color.White.copy(alpha = 0.08f),
-            sheetBackground = Color(0xFF111111),
-            onSheet = Color.White,
-            onSheetDim = Color.White.copy(alpha = 0.45f),
-            onSheetSubtle = Color.White.copy(alpha = 0.25f),
+            pillBackground = DuskBrand.VoidElevated,
+            pillBorder = DuskBrand.LightFaint,
+            onPill = DuskBrand.LightSoft,
+            onPillDim = DuskBrand.LightMuted,
+            avatarPlaceholderBg = DuskBrand.ConfirmSurface,
+            sheetBackground = DuskBrand.VoidElevated,
+            onSheet = DuskBrand.Light,
+            onSheetDim = DuskBrand.LightMuted,
+            onSheetSubtle = DuskBrand.LightFaint,
             scrim = Color.Black.copy(alpha = 0.55f),
-            accent = Color(0xFF64B5F6),
-            error = Color(0xFFFF6666),
-            button = Color(0xFF1A1A1A),
-            onButton = Color.White,
+            accent = DuskBrand.SuccessText,
+            error = DuskBrand.ErrorText,
+            button = DuskBrand.ButtonSurface,
+            onButton = DuskBrand.Light,
         )
     }
 }

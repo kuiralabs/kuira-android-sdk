@@ -61,7 +61,12 @@ sealed interface BackupLaneState {
     ) : BackupLaneState
 }
 
-/** [appData] null → the App data lane is omitted. */
+/**
+ * [appData] null → the App data lane is omitted. The wallet panel always
+ * provides a value (an informational "None yet" empty state when nothing has
+ * been saved) so users discover the capability; null stays available for hosts
+ * that genuinely have no app-data concept.
+ */
 data class BackupSectionState(
     val identity: BackupLaneState,
     val dust: BackupLaneState,
@@ -98,10 +103,10 @@ fun BackupSection(
         ) {
             Lane("🛡", "Wallet identity", "Passkey recovers your wallet on any device", state.identity, colors) {}
             Divider(colors)
-            Lane("⟳", "Dust · balance sync", "Your balance loads instantly", state.dust, colors, onDustAction)
+            Lane("⟳", "Dust · balance sync", "Restores your balance instantly on a new device", state.dust, colors, onDustAction)
             state.appData?.let { appData ->
                 Divider(colors)
-                Lane("☁", "App data", "Your in-app data", appData, colors, onAppDataAction)
+                Lane("☁", "App data", "Restores your in-app data on a new device", appData, colors, onAppDataAction)
             }
         }
     }
@@ -178,8 +183,16 @@ private fun Trailing(state: BackupLaneState, colors: WalletPanelColors, onAction
     }
 }
 
+/**
+ * Branded progress track: the Rarámuri [LottieRunner] runs left→right kicking up
+ * a [DustTrail] that doubles as the fill. [progress] null → indeterminate loop
+ * (use only when the duration is genuinely unknown); 0f..1f → determinate (fill +
+ * runner head at that fraction). Reused by the wallet sheet's sync indicator so
+ * the whole sheet shares one progress language. Public — example apps can drop it
+ * in directly (see also [WalletSyncIndicator] for the labelled variant).
+ */
 @Composable
-private fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Modifier = Modifier) {
+fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier = modifier.height(RunnerSize), contentAlignment = Alignment.CenterStart) {
         Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.Center).background(colors.onSheetSubtle))
 

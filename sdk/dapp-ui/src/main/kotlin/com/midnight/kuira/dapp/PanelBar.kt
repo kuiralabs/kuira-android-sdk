@@ -15,8 +15,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.midnight.kuira.dapp.sigil.SigilPanelColors
 import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.dapp.sigil.SigilStatusPanel
+import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.core.network.MidnightNetwork
 
@@ -64,6 +66,11 @@ import com.midnight.kuira.core.network.MidnightNetwork
  *   user to forge before they can use the dApp — mirror this into their
  *   own state. Default no-op.
  * @param modifier Modifier applied to the bar's outer Row.
+ * @param walletColors Palette for the wallet pill + sheet. Defaults to the
+ *   on-brand dusk theme ([WalletPanelColors.Default]); a host passes its own
+ *   to match its look (e.g. Kicks' World-Cup theme).
+ * @param sigilColors Palette for the sigil pill + sheet. Defaults to the
+ *   matching dusk theme ([SigilPanelColors.Default]).
  */
 @Composable
 fun PanelBar(
@@ -71,6 +78,8 @@ fun PanelBar(
     onNetworkChange: (MidnightNetwork) -> Unit = {},
     onSigilStatusChange: (SigilStatus) -> Unit = {},
     modifier: Modifier = Modifier,
+    walletColors: WalletPanelColors = WalletPanelColors.Default,
+    sigilColors: SigilPanelColors = SigilPanelColors.Default,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -100,6 +109,7 @@ fun PanelBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SigilStatusPanel(
+            colors = sigilColors,
             onStatusChange = {
                 currentSigilStatus = it
                 onSigilStatusChange(it)
@@ -107,6 +117,7 @@ fun PanelBar(
         )
         WalletStatusPanel(
             initialNetwork = network,
+            colors = walletColors,
             onNetworkChange = onNetworkChange,
             // Sealed-when so adding a new SigilStatus variant later
             // forces an explicit yes/no decision at compile time

@@ -48,6 +48,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.midnight.kuira.dapp.DuskBrand
 import com.midnight.kuira.dapp.backup.BackupSection
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -180,6 +181,7 @@ fun WalletStatusPanel(
     enabled: Boolean = true,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
     var receiveOpen by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -269,6 +271,7 @@ fun WalletStatusPanel(
         ) {
             WalletSheetContent(
                 status = status,
+                syncProgress = syncProgress,
                 config = config,
                 formatter = formatter,
                 colors = colors,
@@ -446,6 +449,7 @@ private const val SHIELD_GLYPH = "🛡"
 @Composable
 private fun WalletSheetContent(
     status: WalletStatus,
+    syncProgress: WalletSyncProgress?,
     config: WalletConfig,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
@@ -483,7 +487,7 @@ private fun WalletSheetContent(
                 fontSize = PanelType.Body,
             )
             is WalletStatus.Loading -> Text(status.stage, color = colors.onSheetDim, fontSize = PanelType.LoadingText)
-            is WalletStatus.Ready -> ReadyBody(status, formatter, colors)
+            is WalletStatus.Ready -> ReadyBody(status, syncProgress, formatter, colors)
             is WalletStatus.Error -> Text("error: ${status.message}", color = colors.error, fontSize = PanelType.ErrorText)
             is WalletStatus.SigilRequired -> Text(
                 "Forge your sigil first — the wallet derives its seed from your passkey. " +
@@ -544,6 +548,10 @@ private fun WalletSheetContent(
             state = backupSection,
             colors = colors,
             onDustAction = onEnableCloudBackup,
+            // App-data backup is automatic; the only actionable app-data state is
+            // a failed save, whose "Retry" re-runs a forced refresh (which re-
+            // attempts the app-state upload). The empty "None yet" state has no CTA.
+            onAppDataAction = onRefreshBalance,
         )
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
         PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
@@ -554,6 +562,7 @@ private fun WalletSheetContent(
 @Composable
 private fun ReadyBody(
     status: WalletStatus.Ready,
+    syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
 ) {
@@ -589,7 +598,19 @@ private fun ReadyBody(
 
     if (status.busy != null) {
         Spacer(modifier = Modifier.height(PanelDimens.SheetBusyGap))
-        Text(status.busy, color = colors.accent, fontSize = PanelType.Caption)
+        // Prefer the determinate sync indicator (real event counts from
+        // syncDust) when a resync is streaming; fall back to the plain busy
+        // label for non-sync busy states (e.g. dust registration polling).
+        if (syncProgress != null) {
+            WalletSyncIndicator(
+                progress = syncProgress.fraction,
+                label = syncProgress.label,
+                colors = colors,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Text(status.busy, color = colors.accent, fontSize = PanelType.Caption)
+        }
     }
     if (status.message != null) {
         Spacer(modifier = Modifier.height(PanelDimens.SheetMessageGap))
@@ -838,21 +859,24 @@ data class WalletPanelColors(
     val onButtonDisabled: Color,
 ) {
     companion object {
+        // On-brand "dusk" dark default (see [com.midnight.kuira.dapp.DuskBrand]).
+        // Replaces the prior off-brand blue accent (#64B5F6) with the brand's
+        // semantic SuccessText, and the ad-hoc red with ErrorText.
         val Default = WalletPanelColors(
-            pillBackground = Color(0xFF111111),
-            pillBorder = Color.White.copy(alpha = 0.12f),
-            onPill = Color.White.copy(alpha = 0.85f),
-            onPillDim = Color.White.copy(alpha = 0.35f),
-            sheetBackground = Color(0xFF111111),
-            onSheet = Color.White,
-            onSheetDim = Color.White.copy(alpha = 0.45f),
-            onSheetSubtle = Color.White.copy(alpha = 0.25f),
-            accent = Color(0xFF64B5F6),
-            error = Color(0xFFFF6666),
-            button = Color(0xFF1A1A1A),
-            onButton = Color.White,
-            buttonDisabled = Color.White.copy(alpha = 0.08f),
-            onButtonDisabled = Color.White.copy(alpha = 0.25f),
+            pillBackground = DuskBrand.VoidElevated,
+            pillBorder = DuskBrand.LightFaint,
+            onPill = DuskBrand.LightSoft,
+            onPillDim = DuskBrand.LightMuted,
+            sheetBackground = DuskBrand.VoidElevated,
+            onSheet = DuskBrand.Light,
+            onSheetDim = DuskBrand.LightMuted,
+            onSheetSubtle = DuskBrand.LightFaint,
+            accent = DuskBrand.SuccessText,
+            error = DuskBrand.ErrorText,
+            button = DuskBrand.ButtonSurface,
+            onButton = DuskBrand.Light,
+            buttonDisabled = DuskBrand.LightBarely,
+            onButtonDisabled = DuskBrand.LightFaint,
         )
     }
 }

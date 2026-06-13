@@ -71,6 +71,17 @@ class WalletPanelViewModel @Inject constructor(
     val backupStatus: StateFlow<DustBackupUiState> = _backupStatus
 
     /**
+     * Live dust-sync progress for the sheet's [WalletSyncIndicator]. Non-null
+     * only while a heavy resync is streaming events; carries a 0..1 fraction
+     * (determinate) or null fraction (the unmeasurable Rust-replay tail) plus a
+     * stage label. Cleared back to null when the resync finishes. The pill's own
+     * spinner still keys off [WalletStatus.Ready.busy]; this drives the richer
+     * in-sheet indicator with real digits instead of an endless loop.
+     */
+    private val _syncProgress = MutableStateFlow<WalletSyncProgress?>(null)
+    val syncProgress: StateFlow<WalletSyncProgress?> = _syncProgress
+
+    /**
      * Branded backup-section state for the pill — the real per-lane status from
      * the wallet ([com.midnight.kuira.sdk.MidnightWallet.backupStatus]) plus the
      * sigil-presence identity lane. Surfaces "needs consent"/syncing/up-to-date
@@ -84,16 +95,16 @@ class WalletPanelViewModel @Inject constructor(
         BackupSectionState(
             identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
             else BackupLaneState.Ok("Not set up"),
-            dust = backup.dust.toBackupLane(),
-            appData = backup.appData.toBackupLaneOrNull(),
+            dust = backup.dust.toDustLane(),
+            appData = backup.appData.toAppDataLane(),
         )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         BackupSectionState(
             identity = BackupLaneState.Ok("Protected", confirm = true),
-            dust = BackupLaneState.Ok("—"),
-            appData = null,
+            dust = BackupLaneState.Action("Off", "Enable"),
+            appData = BackupLaneState.Ok("None yet"),
         ),
     )
 
@@ -273,8 +284,26 @@ class WalletPanelViewModel @Inject constructor(
                     (_status.value as? WalletStatus.Ready)?.let {
                         _status.value = it.copy(busy = "Syncing balances…")
                     }
-                    runCatching { built.wallet.refresh() }
-                        .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
+                    try {
+                        // Drive the sheet's determinate indicator from the SDK's
+                        // real event counts (the same syncDust callback bboard
+                        // uses). Run it sequentially BEFORE refresh() — never
+                        // concurrently — so the two don't both touch the shared
+                        // DustLocalState (see #228). On a warm device syncDust is
+                        // a quick no-op; on a cold one it streams with progress.
+                        built.wallet.syncDust { processed, total ->
+                            _syncProgress.value = when {
+                                processed < 0 -> WalletSyncProgress(null, "Replaying $total events…")
+                                total > 0 && processed < total ->
+                                    WalletSyncProgress(processed.toFloat() / total, "Syncing dust")
+                                else -> WalletSyncProgress(null, "Syncing dust")
+                            }
+                        }
+                        runCatching { built.wallet.refresh() }
+                            .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
+                    } finally {
+                        _syncProgress.value = null
+                    }
                     lastFullRefreshAtMs = now
                     val fresh = built.wallet.balance()
                     _status.value = WalletStatus.Ready(
@@ -471,11 +500,43 @@ sealed interface DustBackupUiState {
     data class Failed(val message: String) : DustBackupUiState
 }
 
-/** Maps the SDK's [CloudBackupStatus] to the branded [BackupLaneState]. */
-private fun CloudBackupStatus.toBackupLane(): BackupLaneState = when (this) {
-    CloudBackupStatus.Idle -> BackupLaneState.Ok("—")
+/**
+ * Wallet-sync progress for the sheet's [WalletSyncIndicator].
+ * @param fraction 0f..1f when a count is known (determinate); null for the
+ *   unmeasurable tail (e.g. Rust replay) — render as indeterminate.
+ * @param label Stage / detail text, e.g. "Syncing dust".
+ */
+data class WalletSyncProgress(val fraction: Float?, val label: String)
+
+/**
+ * Maps the **dust** lane's [CloudBackupStatus]. Dust cloud sync is **opt-in** —
+ * it needs the one-time Drive `drive.appdata` grant — so the pre-setup default
+ * ([CloudBackupStatus.Idle]) and [CloudBackupStatus.NeedsConsent] both surface
+ * the same "Off · Enable" call-to-action, not a passive "done" label. (A neutral
+ * dash here read as "already on" — the exact confusion #243 removes.)
+ */
+private fun CloudBackupStatus.toDustLane(): BackupLaneState = when (this) {
+    CloudBackupStatus.Idle -> BackupLaneState.Action("Off", "Enable")
     CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
-    is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("Up to date")
+    is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("On", confirm = true)
+    CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
+    is CloudBackupStatus.Failed ->
+        BackupLaneState.Action("Failed", "Retry", danger = true, detail = friendlyBackupError(message))
+}
+
+/**
+ * Maps the **app-data** lane's [CloudBackupStatus]. App-data backup is
+ * **automatic** (Block Store, no consent), so there's nothing to "enable":
+ * [CloudBackupStatus.Idle] is an informational empty state ("None yet"), not a
+ * CTA. The lane is **always shown** — even empty — so users discover the
+ * capability instead of it silently appearing only after the first save.
+ */
+private fun CloudBackupStatus.toAppDataLane(): BackupLaneState = when (this) {
+    CloudBackupStatus.Idle -> BackupLaneState.Ok("None yet")
+    CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
+    is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("On", confirm = true)
+    // Block Store needs no consent — NeedsConsent shouldn't occur here, but map
+    // it defensively rather than crash on a future status.
     CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
     is CloudBackupStatus.Failed ->
         BackupLaneState.Action("Failed", "Retry", danger = true, detail = friendlyBackupError(message))
@@ -496,7 +557,3 @@ private fun friendlyBackupError(raw: String?): String {
         else -> msg.ifBlank { "Cloud sync failed" }
     }
 }
-
-/** App-data lane is hidden until there's something to back up (Idle → null). */
-private fun CloudBackupStatus.toBackupLaneOrNull(): BackupLaneState? =
-    if (this is CloudBackupStatus.Idle) null else toBackupLane()
