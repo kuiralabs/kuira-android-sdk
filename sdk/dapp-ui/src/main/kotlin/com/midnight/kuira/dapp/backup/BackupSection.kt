@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.effect.DustTrail
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import kotlin.math.roundToInt
 

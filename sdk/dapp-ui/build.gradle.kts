@@ -72,6 +72,11 @@ dependencies {
     api(project(":core:ledger"))    // BalanceFormatter + SubmissionResult
     api(project(":core:network"))   // MidnightNetwork
     api(project(":core:compact-engine"))  // ProvingKeyManager.installFromLocalTmp
+    // The Kuira "flag" design system — brand palette (MidnightColors) + the
+    // Rarámuri runner / dust-trail primitives + GlassPanel/StarField. Published
+    // as io.github.kuiralabs:designsystem, so example apps resolve it
+    // transitively. `api` so consuming apps can theme with the same tokens.
+    api(project(":core:designsystem"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.fragment.ktx)  // FragmentActivity hosts SeedVault biometric prompts
@@ -99,8 +104,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
-    // Lottie — the Rarámuri runner backup/progress indicator (ships in the SDK).
-    implementation(libs.lottie.compose)
+    // Lottie (the Rarámuri runner) now comes transitively from core:designsystem,
+    // which exposes it via `api` — no direct dependency needed here.
     // Compose preview tooling for the SDK's own pill UI (@Preview).
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)

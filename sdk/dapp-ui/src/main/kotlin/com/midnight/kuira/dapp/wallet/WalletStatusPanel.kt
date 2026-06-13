@@ -48,7 +48,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.midnight.kuira.dapp.DuskBrand
+import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.backup.BackupSection
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -859,24 +859,24 @@ data class WalletPanelColors(
     val onButtonDisabled: Color,
 ) {
     companion object {
-        // On-brand "dusk" dark default (see [com.midnight.kuira.dapp.DuskBrand]).
-        // Replaces the prior off-brand blue accent (#64B5F6) with the brand's
-        // semantic SuccessText, and the ad-hoc red with ErrorText.
+        // On-brand "dusk" dark default, sourced from the shared brand palette
+        // ([MidnightColors] in core:designsystem). Accent = semantic SuccessText
+        // (replaced the prior off-brand blue), error = semantic ErrorText.
         val Default = WalletPanelColors(
-            pillBackground = DuskBrand.VoidElevated,
-            pillBorder = DuskBrand.LightFaint,
-            onPill = DuskBrand.LightSoft,
-            onPillDim = DuskBrand.LightMuted,
-            sheetBackground = DuskBrand.VoidElevated,
-            onSheet = DuskBrand.Light,
-            onSheetDim = DuskBrand.LightMuted,
-            onSheetSubtle = DuskBrand.LightFaint,
-            accent = DuskBrand.SuccessText,
-            error = DuskBrand.ErrorText,
-            button = DuskBrand.ButtonSurface,
-            onButton = DuskBrand.Light,
-            buttonDisabled = DuskBrand.LightBarely,
-            onButtonDisabled = DuskBrand.LightFaint,
+            pillBackground = MidnightColors.VoidElevated,
+            pillBorder = MidnightColors.LightFaint,
+            onPill = MidnightColors.LightSoft,
+            onPillDim = MidnightColors.LightMuted,
+            sheetBackground = MidnightColors.VoidElevated,
+            onSheet = MidnightColors.Light,
+            onSheetDim = MidnightColors.LightMuted,
+            onSheetSubtle = MidnightColors.LightFaint,
+            accent = MidnightColors.SuccessText,
+            error = MidnightColors.ErrorText,
+            button = MidnightColors.ButtonSurface,
+            onButton = MidnightColors.Light,
+            buttonDisabled = MidnightColors.LightBarely,
+            onButtonDisabled = MidnightColors.LightFaint,
         )
     }
 }

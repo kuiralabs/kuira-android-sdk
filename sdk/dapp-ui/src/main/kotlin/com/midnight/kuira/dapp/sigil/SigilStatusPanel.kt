@@ -3,7 +3,7 @@ package com.midnight.kuira.dapp.sigil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import com.midnight.kuira.dapp.DuskBrand
+import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.dappPressable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -650,22 +650,23 @@ data class SigilPanelColors(
 ) {
     companion object {
         // On-brand "dusk" dark default — matches [WalletPanelColors.Default] so
-        // the two PanelBar pills read as one themed unit. See [com.midnight.kuira.dapp.DuskBrand].
+        // the two PanelBar pills read as one themed unit. Sourced from the shared
+        // brand palette ([MidnightColors] in core:designsystem).
         val Default = SigilPanelColors(
-            pillBackground = DuskBrand.VoidElevated,
-            pillBorder = DuskBrand.LightFaint,
-            onPill = DuskBrand.LightSoft,
-            onPillDim = DuskBrand.LightMuted,
-            avatarPlaceholderBg = DuskBrand.ConfirmSurface,
-            sheetBackground = DuskBrand.VoidElevated,
-            onSheet = DuskBrand.Light,
-            onSheetDim = DuskBrand.LightMuted,
-            onSheetSubtle = DuskBrand.LightFaint,
+            pillBackground = MidnightColors.VoidElevated,
+            pillBorder = MidnightColors.LightFaint,
+            onPill = MidnightColors.LightSoft,
+            onPillDim = MidnightColors.LightMuted,
+            avatarPlaceholderBg = MidnightColors.ConfirmSurface,
+            sheetBackground = MidnightColors.VoidElevated,
+            onSheet = MidnightColors.Light,
+            onSheetDim = MidnightColors.LightMuted,
+            onSheetSubtle = MidnightColors.LightFaint,
             scrim = Color.Black.copy(alpha = 0.55f),
-            accent = DuskBrand.SuccessText,
-            error = DuskBrand.ErrorText,
-            button = DuskBrand.ButtonSurface,
-            onButton = DuskBrand.Light,
+            accent = MidnightColors.SuccessText,
+            error = MidnightColors.ErrorText,
+            button = MidnightColors.ButtonSurface,
+            onButton = MidnightColors.Light,
         )
     }
 }
