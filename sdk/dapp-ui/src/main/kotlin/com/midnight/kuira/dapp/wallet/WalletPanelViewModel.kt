@@ -281,23 +281,30 @@ class WalletPanelViewModel @Inject constructor(
                         _status.value = it.copy(busy = "Syncing balances…")
                     }
                     try {
-                        // Drive the sheet's determinate indicator from the SDK's
-                        // real event counts (the same syncDust callback bboard
-                        // uses). Run it sequentially BEFORE refresh() — never
-                        // concurrently — so the two don't both touch the shared
-                        // DustLocalState (see #228). On a warm device syncDust is
-                        // a quick no-op; on a cold one it streams with progress.
+                        // Stage-based feedback: even when an individual step is too
+                        // fast to emit a percentage (e.g. localnet), the label moves
+                        // through the real phases so the user always sees it advance.
+                        // Determinate % comes from syncDust's event counts when a
+                        // cold/large stream actually happens. syncDust runs
+                        // sequentially BEFORE refresh() — never concurrently — so the
+                        // two don't both touch the shared DustLocalState (see #228).
+                        // Parameterise the bar off the REAL milestones so the runner
+                        // always advances — even when a step is too fast to emit its
+                        // own % (localnet). The dust stream owns 0.10→0.55 (its true
+                        // event-% mapped in when a real stream runs); the refresh
+                        // (shielded + dust delta + backup) carries it 0.55→1.0.
+                        _syncProgress.value = WalletSyncProgress(0.10f, "Syncing dust…")
                         built.wallet.syncDust { processed, total ->
                             _syncProgress.value = when {
-                                // Streaming done, Rust replaying — sit at a full bar
-                                // ("Finalizing"), not an indeterminate dash.
-                                processed < 0 -> WalletSyncProgress(1f, "Finalizing…")
-                                total > 0 -> WalletSyncProgress((processed.toFloat() / total).coerceIn(0f, 1f), "Syncing dust")
-                                else -> WalletSyncProgress(null, "Syncing dust")
+                                processed < 0 -> WalletSyncProgress(0.55f, "Finalizing dust…")
+                                total > 0 -> WalletSyncProgress(0.10f + (processed.toFloat() / total).coerceIn(0f, 1f) * 0.45f, "Syncing dust")
+                                else -> WalletSyncProgress(0.55f, "Syncing dust…")
                             }
                         }
+                        _syncProgress.value = WalletSyncProgress(0.70f, "Refreshing balances…")
                         runCatching { built.wallet.refresh() }
                             .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
+                        _syncProgress.value = WalletSyncProgress(1f, "Up to date")
                     } finally {
                         _syncProgress.value = null
                     }
