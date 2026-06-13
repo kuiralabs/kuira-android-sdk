@@ -245,6 +245,7 @@ class PasskeyManager(
         challenge: ByteArray,
         prfSalt: ByteArray,
         prfSaltSecond: ByteArray? = null,
+        preferImmediatelyAvailable: Boolean = false,
     ): PrfAssertionResult {
         val challengeB64 = encodeBase64Url(challenge)
         val saltB64 = encodeBase64Url(prfSalt)
@@ -257,7 +258,15 @@ class PasskeyManager(
             prfSaltSecondB64 = saltSecondB64,
         )
         val option = GetPublicKeyCredentialOption(requestJson)
-        val request = GetCredentialRequest(listOf(option))
+        // preferImmediatelyAvailable = true → no cross-device / "sign in another
+        // way" UI: if no local passkey exists the GET fails fast with
+        // NoCredentialException, which the sign-in-if-exists flow turns into a
+        // forge. Left false for an explicit restore, where hybrid sign-in (pull a
+        // passkey from another device) is exactly what the user wants.
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(option)
+            .setPreferImmediatelyAvailableCredentials(preferImmediatelyAvailable)
+            .build()
 
         val response = try {
             credentialManager.getCredential(activity, request)

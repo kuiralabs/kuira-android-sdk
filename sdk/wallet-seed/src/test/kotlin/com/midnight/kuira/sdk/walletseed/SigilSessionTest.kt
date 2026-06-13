@@ -325,6 +325,7 @@ class SigilSessionTest {
                 challenge = any(),
                 prfSalt = SeedDeriver.SIGIL_SALT,
                 prfSaltSecond = SeedDeriver.SEED_SALT,
+                preferImmediatelyAvailable = true,
             )
         } returns prfResult(prfOutput = ByteArray(32) { 0xAA.toByte() }, prfOutputSecond = ByteArray(32) { 0xBB.toByte() })
 
@@ -344,6 +345,7 @@ class SigilSessionTest {
                 challenge = any(),
                 prfSalt = SeedDeriver.SIGIL_SALT,
                 prfSaltSecond = SeedDeriver.SEED_SALT,
+                preferImmediatelyAvailable = true,
             )
         } throws NoPasskeyCredentialException("no credential")
         coEvery {
@@ -382,6 +384,7 @@ class SigilSessionTest {
                 challenge = any(),
                 prfSalt = SeedDeriver.SIGIL_SALT,
                 prfSaltSecond = SeedDeriver.SEED_SALT,
+                preferImmediatelyAvailable = true,
             )
         } throws PasskeyException("user cancelled")
 

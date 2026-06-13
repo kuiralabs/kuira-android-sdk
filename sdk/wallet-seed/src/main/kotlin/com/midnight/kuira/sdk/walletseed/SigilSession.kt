@@ -85,14 +85,21 @@ class SigilSession @Inject constructor(
      *   if the ceremony itself fails (cancellation, RP-id mismatch,
      *   missing credential).
      */
-    suspend fun signIn(activity: FragmentActivity): SigilDerivation {
-        // Step 1: single multi-salt PRF ceremony.
+    suspend fun signIn(
+        activity: FragmentActivity,
+        preferLocalOnly: Boolean = false,
+    ): SigilDerivation {
+        // Step 1: single multi-salt PRF ceremony. preferLocalOnly makes the GET
+        // fail fast (NoPasskeyCredentialException) when no local passkey exists,
+        // instead of offering a cross-device "sign in another way" selector — so
+        // the reuse-or-forge caller can forge rather than hang on that UI.
         val challenge = ByteArray(CHALLENGE_SIZE).also { SecureRandom().nextBytes(it) }
         val result = passkeyManager.authenticateWithPrf(
             activity = activity,
             challenge = challenge,
             prfSalt = sigilIdentityProvider.prfSalt,
             prfSaltSecond = SeedDeriver.SEED_SALT,
+            preferImmediatelyAvailable = preferLocalOnly,
         )
         val sigilPrf = result.prfOutput
             ?: throw BackupException("PRF not available — authenticator does not support PRF extension")
@@ -265,7 +272,9 @@ class SigilSession @Inject constructor(
      */
     suspend fun establishSigil(activity: FragmentActivity): EstablishResult =
         try {
-            val derivation = signIn(activity)
+            // Local-only probe: a no-credential result must fail fast so we can
+            // forge, not pop a cross-device "sign in another way" selector.
+            val derivation = signIn(activity, preferLocalOnly = true)
             Log.i(TAG, "Sigil reused via sign-in — DID: ${derivation.did}")
             EstablishResult(
                 did = derivation.did,
