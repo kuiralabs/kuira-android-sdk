@@ -59,7 +59,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
  *  - Tap opens a TOP sheet — visual mirror of the wallet panel's bottom
  *    sheet. The sheet renders state-dependent content: a "forge sigil"
  *    CTA when there's no identity yet, a spinner during the passkey
- *    ceremony, the DID + root key once forged, or an error + retry on
+ *    ceremony, the DID once forged, or an error + retry on
  *    failure.
  *  - Pill label: truncated DID (or "no sigil" / "forging…" / "sigil
  *    error" per state). Future: Midnames `.night` domain resolution.
@@ -393,7 +393,6 @@ private fun SigilSheetContent(
             forged = status,
             colors = colors,
             onCopy = { clipboard.setText(AnnotatedString(it)) },
-            onRestore = onRestore,
         )
         is SigilStatus.Error -> ErrorBody(
             message = status.message,
@@ -466,24 +465,12 @@ private fun ForgedBody(
     forged: SigilStatus.Forged,
     colors: SigilPanelColors,
     onCopy: (String) -> Unit,
-    onRestore: () -> Unit,
 ) {
+    // A signed-in sigil shows only its identity. Recovery is the passkey and
+    // it's automatic, so there's no manual backup/restore action here. The
+    // P-256 root key stays out of the UI (raw jargon); hosts that need it —
+    // e.g. BBoard's authorizeAccessKey — read it from SigilStatus.Forged.
     MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
-    Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    // Empty when the sigil was bound via the sign-in flow (an
-    // existing passkey on a second device) — the assertion ceremony
-    // doesn't return the passkey's pubkey, only the DID is recoverable.
-    // Hide the row in that case rather than render a label with an
-    // empty value. BBoard's `authorizeAccessKey` needs this pubkey;
-    // when it's missing the host should prompt re-forge on this device.
-    if (forged.publicKeyHex.isNotEmpty()) {
-        MonoField(label = "root key (P-256)", value = forged.publicKeyHex, colors = colors, onCopy = onCopy)
-        Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    }
-    // Backup is automatic + silent now (seed-keyed, #244) — no manual "backup
-    // to cloud" button. "Restore from cloud" re-runs sign-in + the seed-keyed
-    // app-state restore.
-    SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
 }
 
 /**
