@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -76,7 +77,7 @@ fun WalletBalanceCompact(
     onSend: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
-        GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        BalanceCard(colors) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Eyebrow("BALANCE", colors, modifier = Modifier.weight(1f))
                 // Elegant refresh — bare glyph, no container; bright + sized to read.
@@ -123,7 +124,7 @@ fun WalletBalanceCompact(
 
         Spacer(Modifier.height(10.dp))
 
-        GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        BalanceCard(colors) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
@@ -168,6 +169,14 @@ fun WalletBalanceCompact(
         }
     }
 }
+
+/** The standard balance-card frame — a GlassPanel with the panel's button-surface tint + hairline. */
+@Composable
+private fun BalanceCard(
+    colors: WalletPanelColors,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) = GlassPanel(tint = colors.button, border = colors.onSheetSubtle, modifier = modifier, content = content)
 
 /** One pool figure — small label, bright amount; private gets a shield. Equal weight to its sibling. */
 @Composable
@@ -244,7 +253,7 @@ private fun QuickAction(
 @Composable
 fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
-        GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        BalanceCard(colors) {
             Eyebrow("BALANCE", colors)
             Spacer(Modifier.height(16.dp))
             ShimmerBlock(height = 40.dp, widthFraction = 0.6f)
@@ -252,7 +261,7 @@ fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifie
             ShimmerBlock(height = 14.dp, widthFraction = 0.35f)
         }
         Spacer(Modifier.height(10.dp))
-        GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        BalanceCard(colors) {
             Box(Modifier.fillMaxWidth().heightIn(min = 40.dp), contentAlignment = Alignment.CenterStart) {
                 ShimmerBlock(height = 16.dp, widthFraction = 0.45f)
             }
@@ -268,7 +277,7 @@ fun WalletBalanceError(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(tint = colors.button, border = colors.onSheetSubtle, modifier = modifier) {
+    BalanceCard(colors, modifier = modifier) {
         Eyebrow("BALANCE", colors)
         Spacer(Modifier.height(12.dp))
         Text("Couldn't load balance", color = colors.error, fontSize = 18.sp, fontWeight = FontWeight.W300)

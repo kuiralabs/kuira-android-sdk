@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,7 +85,6 @@ private object PanelDimens {
     val SheetMinHeight = 420.dp        // Forces a real surface, not a sliver.
     val SheetHorizontalPadding = 24.dp
     val SheetVerticalPadding = 20.dp
-    val SheetTitleGap = 20.dp          // Below "wallet status" header.
     val SheetActionsTopGap = 28.dp     // Above the action-button row.
     val SheetButtonRowGap = 10.dp      // Between buttons + below the row.
     val SheetSectionGap = 14.dp        // Between address / airdrop / balance sections.
@@ -594,7 +594,7 @@ private fun ReadyBody(
     // refresh + Register affordances live inside the card; the runner shows real
     // progress digits when a resync is streaming.
     val b = status.balance
-    val ui = WalletBalanceUi(
+    val balanceUi = WalletBalanceUi(
         nightTotal = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
         publicNight = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
         privateNight = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else null,
@@ -607,7 +607,7 @@ private fun ReadyBody(
     // like dust-registration polling → indeterminate with its own label).
     val working = syncProgress ?: status.busy?.let { WalletSyncProgress(null, it) }
     WalletBalanceCompact(
-        ui = ui,
+        ui = balanceUi,
         syncProgress = working,
         colors = colors,
         onReceive = onReceive,
@@ -698,7 +698,7 @@ private fun ConfigRow(
                         fontSize = PanelType.AirdropCmd,
                     )
                 },
-                textStyle = androidx.compose.ui.text.TextStyle(
+                textStyle = TextStyle(
                     color = colors.onSheet,
                     fontSize = PanelType.AirdropCmd,
                 ),

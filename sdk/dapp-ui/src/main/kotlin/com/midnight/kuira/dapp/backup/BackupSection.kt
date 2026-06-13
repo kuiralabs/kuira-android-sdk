@@ -118,12 +118,12 @@ fun BackupSection(
                 .border(1.dp, colors.onSheetSubtle, RoundedCornerShape(14.dp))
                 .padding(vertical = 4.dp),
         ) {
-            Lane("🛡", "Wallet identity", TIP_IDENTITY, state.identity, colors) {}
+            Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors) {}
             Divider(colors)
-            Lane("⟳", "Dust · balance sync", TIP_DUST, state.dust, colors, onDustAction)
+            Lane(icon = "⟳", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onAction = onDustAction)
             state.appData?.let { appData ->
                 Divider(colors)
-                Lane("☁", "App data", TIP_APP_DATA, appData, colors, onAppDataAction)
+                Lane(icon = "☁", title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)
             }
         }
     }
