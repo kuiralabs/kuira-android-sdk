@@ -11,6 +11,10 @@ import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
+import com.midnight.kuira.dapp.backup.BackupLaneState
+import com.midnight.kuira.dapp.backup.BackupSectionState
+import com.midnight.kuira.sdk.BackupStatusSnapshot
+import com.midnight.kuira.sdk.CloudBackupStatus
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,7 +24,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.math.BigInteger
 import javax.inject.Inject
@@ -59,6 +69,33 @@ class WalletPanelViewModel @Inject constructor(
     /** UI feedback for the "enable cloud backup" affordance. */
     private val _backupStatus = MutableStateFlow<DustBackupUiState>(DustBackupUiState.Idle)
     val backupStatus: StateFlow<DustBackupUiState> = _backupStatus
+
+    /**
+     * Branded backup-section state for the pill — the real per-lane status from
+     * the wallet ([com.midnight.kuira.sdk.MidnightWallet.backupStatus]) plus the
+     * sigil-presence identity lane. Surfaces "needs consent"/syncing/up-to-date
+     * instead of the old silent "cloud sync" label.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val backupSection: StateFlow<BackupSectionState> = combine(
+        sdkProvider.sdk.flatMapLatest { it?.wallet?.backupStatus ?: flowOf(BackupStatusSnapshot()) },
+        sigilStateStore.snapshotFlow,
+    ) { backup, sigil ->
+        BackupSectionState(
+            identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
+            else BackupLaneState.Ok("Not set up"),
+            dust = backup.dust.toBackupLane(),
+            appData = backup.appData.toBackupLaneOrNull(),
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        BackupSectionState(
+            identity = BackupLaneState.Ok("Protected", confirm = true),
+            dust = BackupLaneState.Ok("—"),
+            appData = null,
+        ),
+    )
 
     /**
      * One-shot Drive consent requests. When enabling cloud backup needs the
@@ -442,3 +479,16 @@ sealed interface DustBackupUiState {
     data object Enabled : DustBackupUiState
     data class Failed(val message: String) : DustBackupUiState
 }
+
+/** Maps the SDK's [CloudBackupStatus] to the branded [BackupLaneState]. */
+private fun CloudBackupStatus.toBackupLane(): BackupLaneState = when (this) {
+    CloudBackupStatus.Idle -> BackupLaneState.Ok("—")
+    CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
+    is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("Up to date")
+    CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
+    is CloudBackupStatus.Failed -> BackupLaneState.Action("Failed", "Retry", danger = true)
+}
+
+/** App-data lane is hidden until there's something to back up (Idle → null). */
+private fun CloudBackupStatus.toBackupLaneOrNull(): BackupLaneState? =
+    if (this is CloudBackupStatus.Idle) null else toBackupLane()

@@ -48,6 +48,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.midnight.kuira.dapp.backup.BackupSection
+import com.midnight.kuira.dapp.backup.BackupSectionState
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.core.compact.proving.ProvingMode
@@ -248,7 +250,7 @@ fun WalletStatusPanel(
 
     // Drive consent: the VM emits an IntentSender when enabling cloud backup
     // needs the first-time grant; launch it and report the result back.
-    val backupStatus by viewModel.backupStatus.collectAsStateWithLifecycle()
+    val backupSection by viewModel.backupSection.collectAsStateWithLifecycle()
     val consentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
@@ -278,7 +280,7 @@ fun WalletStatusPanel(
                 onProofServerUrlChange = { proofServerUrl = it },
                 onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it, force = true) } },
                 onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
-                backupStatus = backupStatus,
+                backupSection = backupSection,
                 onEnableCloudBackup = { activity?.let { viewModel.enableCloudBackup(config, it) } },
                 onReceive = {
                     // Dismiss the sheet first, then open the Receive screen on
@@ -452,7 +454,7 @@ private fun WalletSheetContent(
     onProofServerUrlChange: (String?) -> Unit,
     onRefreshBalance: () -> Unit,
     onRegisterDust: () -> Unit,
-    backupStatus: DustBackupUiState,
+    backupSection: BackupSectionState,
     onEnableCloudBackup: () -> Unit,
     onReceive: () -> Unit,
     onClose: () -> Unit,
@@ -534,27 +536,15 @@ private fun WalletSheetContent(
             PanelButton("receive", enabled = canReceive, modifier = Modifier.weight(1f), colors = colors, onClick = onReceive)
         }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
-        // Cross-device Dust cloud sync — first tap runs the Drive consent flow,
-        // then does a bidirectional sync: restores the checkpoint from Drive if
-        // this device has none (delta instead of genesis), and uploads the
-        // latest. Only meaningful once the wallet is Ready.
-        val backupLabel = when (backupStatus) {
-            DustBackupUiState.Working -> "syncing…"
-            DustBackupUiState.Enabled -> "cloud synced ✓"
-            is DustBackupUiState.Failed -> "cloud sync failed — retry"
-            DustBackupUiState.Idle -> "cloud sync"
-        }
-        PanelButton(
-            backupLabel,
-            enabled = canReceive && backupStatus != DustBackupUiState.Working,
-            modifier = Modifier.fillMaxWidth(),
+        // Branded backup & recovery — per-lane status (identity / dust / app-data)
+        // from the wallet's real backupStatus. The dust "Enable" pill runs the
+        // existing Drive-consent flow; on consent the next refresh uploads and the
+        // lane flips to synced. Replaces the old single "cloud sync" button.
+        BackupSection(
+            state = backupSection,
             colors = colors,
-            onClick = onEnableCloudBackup,
+            onDustAction = onEnableCloudBackup,
         )
-        if (backupStatus is DustBackupUiState.Failed) {
-            Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-            Text(backupStatus.message, color = colors.error, fontSize = PanelType.ErrorText)
-        }
         Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
         PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
         Spacer(modifier = Modifier.height(PanelDimens.SheetBottomGap))
