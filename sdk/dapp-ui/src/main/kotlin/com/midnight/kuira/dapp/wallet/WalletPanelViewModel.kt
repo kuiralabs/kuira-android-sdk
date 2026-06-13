@@ -1,5 +1,6 @@
 package com.midnight.kuira.dapp.wallet
 
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.activity.result.IntentSenderRequest
@@ -18,6 +19,7 @@ import com.midnight.kuira.sdk.CloudBackupStatus
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -61,7 +63,14 @@ class WalletPanelViewModel @Inject constructor(
     private val sdkProvider: MidnightSdkProvider,
     private val sigilStateStore: SigilStateStore,
     private val driveAuth: DriveAuthManager,
+    @ApplicationContext appContext: Context,
 ) : ViewModel() {
+
+    /** Persists the dust-backup opt-out across launches + SDK rebuilds. */
+    private val backupPrefs = appContext.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
+
+    /** True → the user disabled dust cloud backup (we stop uploading). */
+    private val _dustOptedOut = MutableStateFlow(backupPrefs.getBoolean(KEY_DUST_OPTED_OUT, false))
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
@@ -96,13 +105,19 @@ class WalletPanelViewModel @Inject constructor(
         sdkProvider.sdk.flatMapLatest { it?.wallet?.backupStatus ?: flowOf(BackupStatusSnapshot()) },
         sigilStateStore.snapshotFlow,
         _dustEnabling,
-    ) { backup, sigil, dustEnabling ->
+        _dustOptedOut,
+    ) { backup, sigil, dustEnabling, optedOut ->
         BackupSectionState(
             identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
             else BackupLaneState.Ok("Not set up"),
-            // Optimistic pending wins until the real status arrives — immediate
-            // "switch flips on + spinner + disabled" feedback, no dead re-tap.
-            dust = if (dustEnabling) BackupLaneState.Toggle(on = true, busy = true) else backup.dust.toDustLane(),
+            // Opt-out wins (immediate "off"); else the optimistic pending wins
+            // until the real status arrives (switch on + spinner, no dead re-tap);
+            // else the wallet's real status.
+            dust = when {
+                optedOut -> BackupLaneState.Toggle(on = false)
+                dustEnabling -> BackupLaneState.Toggle(on = true, busy = true)
+                else -> backup.dust.toDustLane()
+            },
             appData = backup.appData.toAppDataLane(),
         )
     }.stateIn(
@@ -254,6 +269,10 @@ class WalletPanelViewModel @Inject constructor(
             }
             try {
                 val built = sdkProvider.ensureSdk(activity, config)
+                // Re-apply the persisted dust-backup opt-out to this (possibly
+                // freshly built) wallet so a disabled user never silently resumes
+                // uploading after a rebuild.
+                built.wallet.dustBackupEnabled = !_dustOptedOut.value
                 // A different wallet (first bootstrap / network switch) always
                 // re-arms the observer and forces a fresh resync.
                 val walletChanged = observedWalletAddress != built.walletAddress
@@ -430,6 +449,25 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
+     * Two-way dust-backup toggle from the pill's Switch.
+     *  - on  → clear the opt-out + enable on the live wallet, then run the Drive
+     *          consent + sync ([enableCloudBackup]).
+     *  - off → opt out (persisted): flip the live wallet so [com.midnight.kuira.sdk.MidnightWallet.refresh]
+     *          stops uploading, and reflect "off" immediately. "No longer uploading"
+     *          is the disable — no consent revoke.
+     */
+    fun setDustBackup(enabled: Boolean, config: WalletConfig, activity: FragmentActivity) {
+        _dustOptedOut.value = !enabled
+        backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, !enabled).apply()
+        sdkProvider.sdk.value?.wallet?.let { it.dustBackupEnabled = enabled }
+        if (enabled) {
+            enableCloudBackup(config, activity)
+        } else {
+            Log.i(TAG, "dust backup disabled (opted out — no further uploads)")
+        }
+    }
+
+    /**
      * Enable cross-device Dust cloud sync: obtain the Drive `drive.appdata`
      * grant, then run a full sync. This is **bidirectional** — once consent
      * exists, `wallet.refresh()` first restores from the cloud checkpoint if
@@ -495,12 +533,16 @@ class WalletPanelViewModel @Inject constructor(
     private suspend fun cloudSyncNow(config: WalletConfig, activity: FragmentActivity) {
         Log.i(TAG, "cloudSyncNow: syncing + uploading dust checkpoint to Drive…")
         val built = sdkProvider.ensureSdk(activity, config)
+        built.wallet.dustBackupEnabled = true  // enabling — make sure uploads are on
         built.wallet.refresh()
         Log.i(TAG, "cloudSyncNow: Drive sync complete")
     }
 
     companion object {
         private const val TAG = "WalletPanel"
+
+        /** Prefs key: true → user opted out of dust cloud backup. */
+        private const val KEY_DUST_OPTED_OUT = "dust_backup_opted_out"
 
         /** Upper bound on the post-registration Dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L

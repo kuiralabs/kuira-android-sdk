@@ -68,6 +68,15 @@ class MidnightWallet internal constructor(
     @Volatile
     var appStateProvider: (suspend () -> ByteArray?)? = null
 
+    /**
+     * User opt-out for dust cloud backup. When false, [backupDustToCloud] (and
+     * therefore [refresh]) **skip the Drive upload entirely** — that's the
+     * "disable" semantics: we simply stop uploading. The host persists the
+     * preference and re-applies it after each SDK (re)build. Default true.
+     */
+    @Volatile
+    var dustBackupEnabled: Boolean = true
+
     private val _backupStatus = MutableStateFlow(BackupStatusSnapshot())
 
     /**
@@ -543,6 +552,11 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupDustToCloud() = withContext(Dispatchers.IO) {
         val backup = dustCloudBackup ?: return@withContext
+        if (!dustBackupEnabled) {
+            // User opted out — never upload. Reflect "off" on the lane.
+            updateDustBackup(CloudBackupStatus.Idle)
+            return@withContext
+        }
         // Read state + cursor as ONE consistent snapshot. The old two-read form
         // (loadState then getLastAppliedEventId) could capture a state and a
         // cursor from different chain points if a sync wrote between the reads,

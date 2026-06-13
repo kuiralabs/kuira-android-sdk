@@ -99,7 +99,8 @@ fun BackupSection(
     state: BackupSectionState,
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
-    onDustAction: () -> Unit = {},
+    /** Two-way dust switch: true = turn on (enable), false = turn off (opt out). */
+    onDustToggle: (Boolean) -> Unit = {},
     onAppDataAction: () -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -112,9 +113,9 @@ fun BackupSection(
                 .border(1.dp, colors.onSheetSubtle, RoundedCornerShape(14.dp))
                 .padding(vertical = 4.dp),
         ) {
-            Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors) {}
+            Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors)
             Divider(colors)
-            Lane(icon = "⟳", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onAction = onDustAction)
+            Lane(icon = "⟳", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = onDustToggle)
             state.appData?.let { appData ->
                 Divider(colors)
                 Lane(icon = "☁", title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)
@@ -139,7 +140,8 @@ private fun Lane(
     tooltip: String,
     state: BackupLaneState,
     colors: WalletPanelColors,
-    onAction: () -> Unit,
+    onAction: () -> Unit = {},
+    onToggle: (Boolean) -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -149,7 +151,7 @@ private fun Lane(
             Spacer(Modifier.width(6.dp))
             InfoDot(tooltip, colors)
             Spacer(Modifier.weight(1f))
-            Trailing(state, colors, onAction)
+            Trailing(state, colors, onAction, onToggle)
         }
         if (state is BackupLaneState.Syncing) {
             Spacer(Modifier.height(12.dp))
@@ -193,7 +195,12 @@ private fun InfoDot(text: String, colors: WalletPanelColors) {
 }
 
 @Composable
-private fun Trailing(state: BackupLaneState, colors: WalletPanelColors, onAction: () -> Unit) {
+private fun Trailing(
+    state: BackupLaneState,
+    colors: WalletPanelColors,
+    onAction: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+) {
     when (state) {
         is BackupLaneState.Ok ->
             Text(
@@ -221,7 +228,7 @@ private fun Trailing(state: BackupLaneState, colors: WalletPanelColors, onAction
                 }
                 Switch(
                     checked = state.on,
-                    onCheckedChange = { want -> if (want && !state.on) onAction() },
+                    onCheckedChange = { want -> onToggle(want) },
                     enabled = !state.busy,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = colors.onButton,

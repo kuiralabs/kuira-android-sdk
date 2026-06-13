@@ -383,5 +383,6 @@ class WalletPanelViewModelTest {
         sdkProvider = sdkProvider,
         sigilStateStore = store,
         driveAuth = mockk(relaxed = true),
+        appContext = context,
     )
 }
