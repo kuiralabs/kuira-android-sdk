@@ -48,9 +48,20 @@ class MidnightWallet internal constructor(
     private val networkId: String,
     private val spentDustNullifierStore: SpentDustNullifierStore,
     private val dustCloudBackup: DustCloudBackup? = null,
+    private val appStateCloudBackup: AppStateCloudBackup? = null,
 ) : TransactionBalancer {
 
     private val balanceMutex = Mutex()
+
+    /**
+     * Host-registered snapshot of app state to back up automatically on each
+     * [refresh] (≤2 KB; e.g. Kicks match witnesses). The host sets this once
+     * after obtaining the wallet — the SDK can't inject it (the provider lives
+     * above this layer). The upload is silent (seed-keyed) + digest-guarded, so
+     * it's a no-op when the snapshot is unchanged. Null → nothing to back up.
+     */
+    @Volatile
+    var appStateProvider: (suspend () -> ByteArray?)? = null
 
     /**
      * Dust nullifiers captured during [balanceTransaction], keyed by the balanced
@@ -485,6 +496,17 @@ class MidnightWallet internal constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
         }
+        // Best-effort silent app-state backup of the host's CURRENT snapshot
+        // (digest-guarded → no-op when unchanged). Using the host-registered
+        // provider means we never clobber real state with an empty blob; absent
+        // a provider there's simply nothing to back up.
+        appStateProvider?.let { provider ->
+            try {
+                backupAppStateToCloud(provider.invoke())
+            } catch (e: Exception) {
+                Log.w(TAG, "App-state cloud backup failed during refresh(): ${e.message}")
+            }
+        }
     }
 
     /**
@@ -508,6 +530,31 @@ class MidnightWallet internal constructor(
             checkpoint.state.close()
         } ?: return@withContext
         backup.upload(walletAddress, bytes, checkpoint.lastEventId)
+    }
+
+    /**
+     * Back up host **app state** (≤2 KB; e.g. Kicks match witnesses) to the
+     * cloud, encrypted under a seed-derived key — no passkey/biometric, so it's
+     * safe to call automatically. No-op when no coordinator is wired. The
+     * coordinator hash-guards redundant uploads, so this is cheap to call after
+     * every meaningful state change. Never throws to the caller.
+     *
+     * Pass `null`/empty for a "sigil exists, no app state" sentinel.
+     */
+    suspend fun backupAppStateToCloud(appMetadata: ByteArray? = null) = withContext(Dispatchers.IO) {
+        val backup = appStateCloudBackup ?: return@withContext
+        runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
+            .onFailure { Log.w(TAG, "App-state cloud backup failed: ${it.message}") }
+        Unit
+    }
+
+    /**
+     * Fetch the previously backed-up host app state, or null if none / no
+     * coordinator / unavailable. Decryption is seed-derived (no biometric), so
+     * a freshly-signed-in device recovers its app state silently.
+     */
+    suspend fun fetchAppState(): ByteArray? = withContext(Dispatchers.IO) {
+        appStateCloudBackup?.let { runCatching { it.fetchAppState() }.getOrNull() }
     }
 
     /** Node error 170 = InvalidDustSpendProof. Submit throws it as a

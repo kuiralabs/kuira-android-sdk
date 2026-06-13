@@ -29,6 +29,21 @@ class DustBackupTest {
         assertFalse(a.contentEquals(b))
     }
 
+    @Test
+    fun `app-state key is deterministic, 32 bytes, and domain-separated from dust`() {
+        val ikm = ByteArray(32) { it.toByte() }
+        val k1 = SeedDerivedKeyDeriver.deriveAppStateBackupKey(ikm)
+        val k2 = SeedDerivedKeyDeriver.deriveAppStateBackupKey(ikm)
+        assertEquals(32, k1.size)
+        assertArrayEquals("same seed → same app-state key", k1, k2)
+        // Same seed must NOT yield the same key as the dust backup — domain
+        // separation, so a leak of one backup key can't decrypt the other.
+        assertFalse(
+            "app-state key must differ from dust key for the same seed",
+            k1.contentEquals(SeedDerivedKeyDeriver.deriveDustBackupKey(ikm)),
+        )
+    }
+
     // ── DustBackupEncryptor ──────────────────────────────────────────────────
 
     @Test

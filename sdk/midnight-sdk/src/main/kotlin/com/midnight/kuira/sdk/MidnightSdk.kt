@@ -262,6 +262,7 @@ class MidnightSdk private constructor(
         private var provingMode: ProvingMode = ProvingMode.DEFAULT
         private var proofServerUrl: String? = null
         private var dustCloudBackupFactory: ((address: String, dustSeed: ByteArray) -> DustCloudBackup)? = null
+        private var appStateBackupFactory: ((seed: ByteArray) -> AppStateCloudBackup)? = null
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
         fun network(network: MidnightNetwork) = apply { this.network = network }
@@ -304,6 +305,18 @@ class MidnightSdk private constructor(
         fun dustCloudBackupFactory(
             factory: (address: String, dustSeed: ByteArray) -> DustCloudBackup,
         ) = apply { this.dustCloudBackupFactory = factory }
+
+        /**
+         * Optional cross-device backup of host **app state** (≤2 KB). The factory
+         * is invoked once during [build] with the wallet seed (so the coordinator
+         * derives its seed-based encryption key — no per-backup biometric). The
+         * resulting [AppStateCloudBackup] is wired into the wallet for silent
+         * automatic backup/restore. Omit it (default) and app-state backup is
+         * absent. Sibling of [dustCloudBackupFactory].
+         */
+        fun appStateBackupFactory(
+            factory: (seed: ByteArray) -> AppStateCloudBackup,
+        ) = apply { this.appStateBackupFactory = factory }
 
         /**
          * Build the SDK. This is a blocking operation on first launch:
@@ -417,6 +430,10 @@ class MidnightSdk private constructor(
             // both the dust-sync cold-start (fetch/restore) and the wallet (upload).
             val dustCloudBackup = dustCloudBackupFactory?.invoke(keys.address, keys.dustSeed)
 
+            // Optional silent app-state backup, keyed off the master seed (which is
+            // reproducible from the passkey on any device → same key → decryptable).
+            val appStateCloudBackup = appStateBackupFactory?.invoke(seedBytes)
+
             val dustSyncManager = DustSyncManager(
                 dustRepository = dustRepository,
                 nodeRpcClient = nodeRpcClient,
@@ -438,6 +455,7 @@ class MidnightSdk private constructor(
                 networkId = net.rustNetworkId,
                 spentDustNullifierStore = spentDustNullifierStore,
                 dustCloudBackup = dustCloudBackup,
+                appStateCloudBackup = appStateCloudBackup,
             )
 
             // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──

@@ -1,6 +1,7 @@
 package com.midnight.kuira.sdk.walletruntime
 
 import android.content.Context
+import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.DriveBackupStorage
 import com.midnight.kuira.core.identity.backup.PlayServicesDriveAuthManager
@@ -58,6 +59,15 @@ object WalletRuntimeModule {
                     ),
                     encryptionKey = SeedDerivedKeyDeriver.deriveDustBackupKey(dustSeed),
                     digestStore = PrefsDustBackupDigestStore(context),
+                )
+            }
+            // Silent app-state backup (≤2 KB) over Block Store, keyed off the
+            // master seed (no per-backup biometric → safe to run automatically).
+            .appStateBackupFactory { seed ->
+                AppStateCloudBackupCoordinator(
+                    storage = BlockStoreBackupStorage(context),
+                    encryptionKey = SeedDerivedKeyDeriver.deriveAppStateBackupKey(seed),
+                    digestStore = PrefsAppStateBackupDigestStore(context),
                 )
             }
             .build()
