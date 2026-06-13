@@ -80,4 +80,21 @@ class AppStateCloudBackupCoordinatorTest {
         c.uploadAppState(byteArrayOf(7, 7, 7, 8)) // changed → stores
         assertEquals(2, storage.storeCount)
     }
+
+    @Test
+    fun `a key change forces re-upload despite unchanged metadata`() = runTest {
+        val storage = FakeStorage()
+        val digests = FakeDigestStore() // persists across the seed change
+        val metadata = byteArrayOf(5, 5, 5)
+
+        coordinator(storage, digests).uploadAppState(metadata)
+        assertEquals(1, storage.storeCount)
+
+        // Same metadata + same persisted digest store, but a NEW seed key (re-forge)
+        // → must re-upload, else the blob stays encrypted under the old key and is
+        // undecryptable under the new one.
+        val newKey = SeedDerivedKeyDeriver.deriveAppStateBackupKey(ByteArray(32) { 2 })
+        AppStateCloudBackupCoordinator(storage, newKey, digests).uploadAppState(metadata)
+        assertEquals("a key change must re-upload", 2, storage.storeCount)
+    }
 }

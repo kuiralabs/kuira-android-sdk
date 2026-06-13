@@ -35,6 +35,14 @@ class AppStateCloudBackupCoordinator(
     private val digestStore: AppStateBackupDigestStore,
 ) : AppStateCloudBackup {
 
+    // SHA-256 of the encryption key, mixed into the upload digest so a SEED/key
+    // change (e.g. a re-forge) forces a re-upload instead of a stale-skip — a
+    // blob from the old key would be undecryptable under the new one. One-way,
+    // so the persisted digest never exposes the key. (Dust gets this for free
+    // via its per-address digest; app state has no address, so it's explicit.)
+    private val keyFingerprint: ByteArray =
+        MessageDigest.getInstance("SHA-256").digest(encryptionKey)
+
     override suspend fun fetchAppState(): ByteArray? {
         val blob = storage.retrieve() ?: return null
         return runCatching {
@@ -54,8 +62,10 @@ class AppStateCloudBackupCoordinator(
         digestStore.put(digest)
     }
 
-    private fun digest(appMetadata: ByteArray): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(appMetadata)
-            .joinToString("") { "%02x".format(it) }
+    private fun digest(appMetadata: ByteArray): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(keyFingerprint) // key-aware: a seed change forces a re-upload
+        md.update(appMetadata)
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
 }
