@@ -8,6 +8,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.midnight.kuira.core.identity.backup.AuthorizeOutcome
+import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.math.BigInteger
+import java.util.Optional
 import javax.inject.Inject
 
 /**
@@ -64,7 +66,18 @@ class WalletPanelViewModel @Inject constructor(
     private val sigilStateStore: SigilStateStore,
     private val driveAuth: DriveAuthManager,
     @ApplicationContext appContext: Context,
+    /**
+     * Host-bound app-state source (empty when the host binds none, e.g. BBoard).
+     * Connected to [com.midnight.kuira.sdk.MidnightWallet.appStateProvider] so the
+     * pill's App-data lane actually backs up — #244's silent path wired its
+     * uploader but never its source.
+     */
+    private val appDataProvider: Optional<AppDataBackupProvider>,
 ) : ViewModel() {
+
+    /** Adapts the bound provider to the wallet's `appStateProvider` lambda type. */
+    private val appStateSnapshot: (suspend () -> ByteArray?)? =
+        appDataProvider.orElse(null)?.let { provider -> { provider.snapshot() } }
 
     /** Persists the dust-backup opt-out across launches + SDK rebuilds. */
     private val backupPrefs = appContext.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
@@ -273,6 +286,9 @@ class WalletPanelViewModel @Inject constructor(
                 // freshly built) wallet so a disabled user never silently resumes
                 // uploading after a rebuild.
                 built.wallet.dustBackupEnabled = !_dustOptedOut.value
+                // Connect the host's app-state source so refresh() actually backs
+                // it up (null host provider → lane stays "None yet", e.g. BBoard).
+                built.wallet.appStateProvider = appStateSnapshot
                 // A different wallet (first bootstrap / network switch) always
                 // re-arms the observer and forces a fresh resync.
                 val walletChanged = observedWalletAddress != built.walletAddress

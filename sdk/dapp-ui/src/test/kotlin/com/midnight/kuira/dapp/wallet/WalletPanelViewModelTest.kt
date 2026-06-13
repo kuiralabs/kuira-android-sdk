@@ -384,5 +384,6 @@ class WalletPanelViewModelTest {
         sigilStateStore = store,
         driveAuth = mockk(relaxed = true),
         appContext = context,
+        appDataProvider = java.util.Optional.empty(),
     )
 }
