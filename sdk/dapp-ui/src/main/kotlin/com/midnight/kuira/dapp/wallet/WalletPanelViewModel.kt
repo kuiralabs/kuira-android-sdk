@@ -18,6 +18,7 @@ import com.midnight.kuira.dapp.backup.BackupSectionState
 import com.midnight.kuira.sdk.BackupStatusSnapshot
 import com.midnight.kuira.sdk.CloudBackupStatus
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -65,6 +66,7 @@ class WalletPanelViewModel @Inject constructor(
     private val sdkProvider: MidnightSdkProvider,
     private val sigilStateStore: SigilStateStore,
     private val driveAuth: DriveAuthManager,
+    private val sessionLock: SessionLock,
     @ApplicationContext appContext: Context,
     /**
      * Host-bound app-state source (empty when the host binds none, e.g. BBoard).
@@ -207,6 +209,32 @@ class WalletPanelViewModel @Inject constructor(
 
     init {
         observeSigilForAutoRetry()
+        observeSessionLock()
+    }
+
+    /**
+     * Manually lock the session (the wallet sheet's "Lock now"). Drops the
+     * cached SDK; the balance hides and the next action re-authenticates.
+     */
+    fun lockNow() = sessionLock.lockNow()
+
+    /**
+     * Hide the balance the moment the session locks (idle / background /
+     * screen-off / manual). We reset to [WalletStatus.None] rather than read
+     * `sdk == null` directly, because that's also briefly true during a
+     * network-switch rebuild — [SessionLock.locked] fires only on a real lock.
+     */
+    private fun observeSessionLock() {
+        viewModelScope.launch {
+            sessionLock.locked.collect { locked ->
+                if (locked) {
+                    Log.i(TAG, "Session locked — hiding balance until re-auth")
+                    observeBalanceJob?.cancel()
+                    _syncProgress.value = null
+                    _status.value = WalletStatus.None
+                }
+            }
+        }
     }
 
     /**

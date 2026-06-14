@@ -17,6 +17,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,6 +65,16 @@ class SessionLock @Inject constructor(
      */
     internal var scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    private val _locked = MutableStateFlow(false)
+
+    /**
+     * True from the moment a lock fires until the SDK is rebuilt (i.e. the user
+     * re-authenticated). The wallet panel observes this to hide the balance while
+     * locked. Distinct from `provider.sdk == null`, which is also briefly true
+     * during a network-switch rebuild — that must NOT read as "locked".
+     */
+    val locked: StateFlow<Boolean> = _locked.asStateFlow()
+
     private var idleJob: Job? = null
     private var backgroundJob: Job? = null
     private var foregroundActivityCount = 0
@@ -96,6 +109,7 @@ class SessionLock @Inject constructor(
         idleJob?.cancel()
         backgroundJob?.cancel()
         Log.i(TAG, "Locking session ($reason) — dropping cached SDK; next action re-auths")
+        _locked.value = true
         provider.close()
     }
 
@@ -142,6 +156,17 @@ class SessionLock @Inject constructor(
             }
         }
         application.registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+
+        // Clear the locked flag once the SDK is rebuilt (the user re-authenticated).
+        // Started here, not in the constructor, so unit tests stay framework-free.
+        scope.launch {
+            provider.sdk.collect { sdk ->
+                if (sdk != null && _locked.value) {
+                    Log.i(TAG, "Session unlocked — SDK rebuilt after re-auth")
+                    _locked.value = false
+                }
+            }
+        }
         Log.i(TAG, "SessionLock installed (idle=${idleTimeoutMs}ms, bgGrace=${backgroundGraceMs}ms)")
     }
 

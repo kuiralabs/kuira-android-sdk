@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -306,6 +307,13 @@ fun WalletStatusPanel(
                         receiveOpen = true
                     }
                 },
+                onLockNow = {
+                    viewModel.lockNow()
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        sheetOpen = false
+                    }
+                },
                 onClose = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -478,6 +486,7 @@ private fun WalletSheetContent(
     backupSection: BackupSectionState,
     onDustToggle: (Boolean) -> Unit,
     onReceive: () -> Unit,
+    onLockNow: () -> Unit,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -560,6 +569,20 @@ private fun WalletSheetContent(
                 onAppDataAction = onRefreshBalance,
             )
             Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
+            // Manual session lock — only meaningful with a live (unlocked) wallet.
+            // Understated so it's not confused with the primary actions.
+            if (status is WalletStatus.Ready) {
+                Text(
+                    text = "lock now",
+                    color = colors.onSheetDim,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .clickable { onLockNow() }
+                        .padding(8.dp),
+                )
+                Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
+            }
             PanelButton("close", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onClose)
             Spacer(modifier = Modifier.height(PanelDimens.SheetBottomGap))
         }

@@ -13,6 +13,7 @@ import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.MidnightWallet
 import com.midnight.kuira.sdk.WalletBalance
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -52,6 +53,7 @@ class WalletPanelViewModelTest {
     private val sdkProvider: MidnightSdkProvider = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
     private val driveAuth: DriveAuthManager = mockk(relaxed = true)
+    private val sessionLock: SessionLock = mockk(relaxed = true)
 
     private fun dustPrefs() =
         context.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
@@ -72,6 +74,8 @@ class WalletPanelViewModelTest {
         // Real (empty) SDK flow — the relaxed mock's .value returns an uncastable
         // Object, which setDustBackup's `sdk.value?.wallet` would choke on.
         every { sdkProvider.sdk } returns MutableStateFlow<MidnightSdk?>(null)
+        // The VM collects sessionLock.locked in init; give it a real flow.
+        every { sessionLock.locked } returns MutableStateFlow(false)
     }
 
     @Test
@@ -416,6 +420,7 @@ class WalletPanelViewModelTest {
         sdkProvider = sdkProvider,
         sigilStateStore = store,
         driveAuth = driveAuth,
+        sessionLock = sessionLock,
         appContext = context,
         appDataProvider = java.util.Optional.empty(),
     )
