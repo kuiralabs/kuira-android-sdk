@@ -87,6 +87,10 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.7.0")
     testImplementation("io.mockk:mockk:1.13.8")  // MockK for Kotlin
     testImplementation("io.ktor:ktor-client-mock:2.3.7")
+    // In-memory WebSocket server for GraphQLWebSocketClient teardown tests
+    // (test-only; never shipped). Matches the runtime ktor version (2.3.13).
+    testImplementation("io.ktor:ktor-server-cio:2.3.13")
+    testImplementation("io.ktor:ktor-server-websockets:2.3.13")
     testImplementation(project(":core:testing"))
 
     // Robolectric for Room database tests
