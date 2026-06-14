@@ -45,7 +45,8 @@ import com.midnight.kuira.core.designsystem.effect.ShimmerBlock
  * @param privateNight formatted shielded (private) NIGHT, or null when there's none.
  * @param statusLabel short status under the hero, e.g. "Synced" / "Syncing…".
  * @param dust formatted (abbreviated) dust, or null while first-loading.
- * @param dustRegistered true → ✓ on the dust row; false → a Register affordance.
+ * @param dustRegistered true → ✓ on the dust row (only once a sync has settled, so
+ *   it never contradicts an in-flight "Syncing dust…"); false → a Register affordance.
  */
 data class WalletBalanceUi(
     val nightTotal: String,
@@ -142,11 +143,18 @@ fun WalletBalanceCompact(
                     fontFamily = FontFamily.Monospace,
                 )
                 if (ui.dust != null) {
-                    Spacer(Modifier.width(10.dp))
-                    if (ui.dustRegistered) {
-                        Text("✓", color = colors.accent, fontSize = 14.sp)
-                    } else {
-                        TextChip("Register", colors = colors, enabled = !busy, onClick = onRegister)
+                    when {
+                        // Mid-sync the figure is still provisional — don't assert a
+                        // settled ✓ while the hero card reads "Syncing dust…" (the two
+                        // contradict). The ✓ returns once the sync settles.
+                        ui.dustRegistered && syncProgress == null -> {
+                            Spacer(Modifier.width(10.dp))
+                            Text("✓", color = colors.accent, fontSize = 14.sp)
+                        }
+                        !ui.dustRegistered -> {
+                            Spacer(Modifier.width(10.dp))
+                            TextChip("Register", colors = colors, enabled = !busy, onClick = onRegister)
+                        }
                     }
                 }
             }
