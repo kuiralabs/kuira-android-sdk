@@ -185,14 +185,33 @@ class SubscriptionManager(
                         false
                     } else {
                         val delayMs = calculateRetryDelay(attempt)
-                        if (cause is ReorgDetectedException) {
-                            Log.i(
+                        when {
+                            cause is ReorgDetectedException -> Log.i(
                                 TAG,
                                 "Restarting subscription in ${delayMs}ms after reorg recovery " +
                                     "(attempt ${attempt + 1})"
                             )
-                        } else {
-                            Log.w(
+                            // Transient network blip — timeout, connection abort, host
+                            // unreachable; all IOException. Recoverable, and the indexer
+                            // can be down for minutes, so don't dump a stacktrace on
+                            // every retry: full trace ONCE on the first attempt for
+                            // diagnostics, concise one-liners after that.
+                            cause is IOException -> if (attempt == 0L) {
+                                Log.w(
+                                    TAG,
+                                    "Subscription network error (${cause.javaClass.simpleName}: " +
+                                        "${cause.message}) — retrying in ${delayMs}ms",
+                                    cause
+                                )
+                            } else {
+                                Log.w(
+                                    TAG,
+                                    "Subscription still unreachable (${cause.javaClass.simpleName}), " +
+                                        "retrying in ${delayMs}ms (attempt ${attempt + 1})"
+                                )
+                            }
+                            // Unexpected error — keep the stacktrace; this may be a real bug.
+                            else -> Log.w(
                                 TAG,
                                 "Subscription error (${cause.javaClass.simpleName}), " +
                                     "retrying in ${delayMs}ms (attempt ${attempt + 1})",
@@ -244,17 +263,12 @@ class SubscriptionManager(
                 address = address,
                 transactionId = lastId
             )
-                .onCompletion { error ->
-                    when (error) {
-                        null -> { /* normal completion, nothing to log */ }
-                        is ReorgDetectedException -> {
-                            // Expected recovery path — reorg/wipe detection already
-                            // logged the actionable message with the id comparison.
-                            // No stacktrace at E-level, that's for real bugs.
-                            Log.i(TAG, "Subscription ended to trigger reorg recovery: ${error.message}")
-                        }
-                        else -> Log.e(TAG, "Subscription error", error)
-                    }
+                .onCompletion {
+                    // Error logging is owned by retryWhen (the single retry-decision
+                    // site) so the same cause isn't logged twice per attempt. That
+                    // double-log — an E+stacktrace here AND a W+stacktrace in
+                    // retryWhen — was the SubscriptionManager logcat flood when the
+                    // indexer was unreachable. Here we only stop the auto-sync timeout.
                     syncTimeoutJob?.cancel()
                 }
                 .catch { error ->
