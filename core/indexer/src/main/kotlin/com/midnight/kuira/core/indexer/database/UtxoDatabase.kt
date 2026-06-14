@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.indexer.database
 
+import android.util.Log
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
@@ -53,7 +54,7 @@ abstract class UtxoDatabase : RoomDatabase() {
                 database.execSQL(
                     "ALTER TABLE unshielded_utxos ADD COLUMN spent_by_local_tx INTEGER NOT NULL DEFAULT 0"
                 )
-                android.util.Log.i("UtxoDatabase", "Migration 6->7: Added spent_by_local_tx column for self-healing")
+                Log.i("UtxoDatabase", "Migration 6->7: Added spent_by_local_tx column for self-healing")
             }
         }
 
@@ -85,7 +86,7 @@ abstract class UtxoDatabase : RoomDatabase() {
                         //
                         // This is done asynchronously via a coroutine since we can't
                         // call suspend functions directly from the callback.
-                        android.util.Log.w("UtxoDatabase", "Destructive migration detected - sync state needs to be cleared!")
+                        Log.w("UtxoDatabase", "Destructive migration detected - sync state needs to be cleared!")
                         // Note: SyncStateManager clearing must be done by the caller
                         // who has access to the Context for DataStore.
                         // Set a flag that the app can check on startup.

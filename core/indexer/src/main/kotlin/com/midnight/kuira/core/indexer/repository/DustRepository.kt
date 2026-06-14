@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.indexer.repository
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -297,7 +298,7 @@ class DustRepository @Inject constructor(
     suspend fun markTokensAsPending(nullifiers: List<String>) {
         if (nullifiers.isEmpty()) return
         dustDao.markAsPending(nullifiers)
-        android.util.Log.d(TAG, "Marked ${nullifiers.size} dust tokens as pending")
+        Log.d(TAG, "Marked ${nullifiers.size} dust tokens as pending")
     }
 
     /**
@@ -314,7 +315,7 @@ class DustRepository @Inject constructor(
     suspend fun markTokensAsSpent(nullifiers: List<String>) {
         if (nullifiers.isEmpty()) return
         dustDao.markAsSpent(nullifiers)
-        android.util.Log.d(TAG, "Marked ${nullifiers.size} dust tokens as spent")
+        Log.d(TAG, "Marked ${nullifiers.size} dust tokens as spent")
     }
 
     /**
@@ -332,7 +333,7 @@ class DustRepository @Inject constructor(
     suspend fun markTokensAsAvailable(nullifiers: List<String>) {
         if (nullifiers.isEmpty()) return
         dustDao.markAsAvailable(nullifiers)
-        android.util.Log.d(TAG, "Marked ${nullifiers.size} dust tokens as available")
+        Log.d(TAG, "Marked ${nullifiers.size} dust tokens as available")
     }
 
     // ========== Synchronization ==========
@@ -366,7 +367,7 @@ class DustRepository @Inject constructor(
         maxBlocks: Int = 100,
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): Boolean {
-        android.util.Log.d(TAG, "Syncing dust from blockchain for $address")
+        Log.d(TAG, "Syncing dust from blockchain for $address")
 
         try {
             // Try delta sync first: load the checkpoint (state + cursor) as ONE
@@ -394,21 +395,21 @@ class DustRepository @Inject constructor(
                     indexerClient.subscribeToDustEvents(fromId = null).firstOrNull()?.maxId ?: -1L
                 }
                 if (tip != null && tip < lastEventId) {
-                    android.util.Log.w(TAG, "Dust reorg detected: chain tip $tip < checkpoint $lastEventId — rebuilding from genesis")
+                    Log.w(TAG, "Dust reorg detected: chain tip $tip < checkpoint $lastEventId — rebuilding from genesis")
                     existingState.close()
                     deleteState(address)
                     // fall through to full sync below
                 } else {
                     // Delta sync: replay only events after the checkpoint ON TOP of
                     // the loaded state (streamDustEvents takes ownership of it).
-                    android.util.Log.d(TAG, "Delta sync: resuming from event $lastEventId")
+                    Log.d(TAG, "Delta sync: resuming from event $lastEventId")
                     val result = streamDustEvents(
                         address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
                     )
                     if (result) return true
 
                     // Resume failed — drop the checkpoint and rebuild from genesis.
-                    android.util.Log.w(TAG, "Delta sync returned no results, falling back to full sync")
+                    Log.w(TAG, "Delta sync returned no results, falling back to full sync")
                     deleteState(address)
                 }
             }
@@ -416,18 +417,18 @@ class DustRepository @Inject constructor(
             // Full sync: stream all events, then replay in a single pass.
             // Single-pass replay ensures Merkle tree collapses and rehash happen
             // exactly once, producing roots that match the node's root history.
-            android.util.Log.d(TAG, "Full sync from genesis")
+            Log.d(TAG, "Full sync from genesis")
 
             val result = streamDustEvents(address, dustSeed, fromId = null, onProgress = onProgress)
             if (!result) {
-                android.util.Log.d(TAG, "No dust events found, dust not registered yet")
+                Log.d(TAG, "No dust events found, dust not registered yet")
             }
             return result
 
         } catch (e: CancellationException) {
             throw e // Never swallow cancellation in suspend functions
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to sync dust from blockchain", e)
+            Log.e(TAG, "Failed to sync dust from blockchain", e)
             return false
         }
     }
@@ -502,7 +503,7 @@ class DustRepository @Inject constructor(
                                 totalEvents++
 
                                 if (totalEvents % 5000 == 0) {
-                                    android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
+                                    Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
                                     onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
                                 }
 
@@ -520,7 +521,7 @@ class DustRepository @Inject constructor(
                         totalEvents++
 
                         if (totalEvents % 5000 == 0) {
-                            android.util.Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                            Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
                             onProgress?.invoke(totalEvents, event.maxId.toInt())
                         }
 
@@ -556,12 +557,12 @@ class DustRepository @Inject constructor(
         val state = baseState ?: (DustLocalState.create()
             ?: run {
                 tempFile.delete()
-                android.util.Log.e(TAG, "Failed to create DustLocalState")
+                Log.e(TAG, "Failed to create DustLocalState")
                 return false
             })
 
         val replayKind = if (baseState != null) "delta onto checkpoint" else "full from genesis"
-        android.util.Log.d(TAG, "Replaying $totalEvents events ($replayKind, ${tempFile.length() / 1024}KB file)")
+        Log.d(TAG, "Replaying $totalEvents events ($replayKind, ${tempFile.length() / 1024}KB file)")
         val newState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             state.replayEventsFromFile(dustSeed, tempFile.absolutePath)
         }
@@ -569,7 +570,7 @@ class DustRepository @Inject constructor(
         tempFile.delete()
 
         if (newState == null) {
-            android.util.Log.e(TAG, "Dust replay failed after $totalEvents events")
+            Log.e(TAG, "Dust replay failed after $totalEvents events")
             return false
         }
 
@@ -579,9 +580,9 @@ class DustRepository @Inject constructor(
         try {
             saveCheckpoint(address, newState, latestEventId)
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "Checkpoint save failed (non-fatal): ${e.message}")
+            Log.w(TAG, "Checkpoint save failed (non-fatal): ${e.message}")
         }
-        android.util.Log.d(TAG, "Sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
+        Log.d(TAG, "Sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
 
         // Keep the live state so same-process callers skip a re-deserialize.
         // (Serialization is root-lossless — proven by the compact-engine
@@ -637,13 +638,13 @@ class DustRepository @Inject constructor(
      */
     suspend fun syncTokensToCache(address: String) {
         val serialized = getSerializedState(address) ?: run {
-            android.util.Log.d(TAG, "No dust state to sync for $address")
+            Log.d(TAG, "No dust state to sync for $address")
             return
         }
 
         // Deserialize DustLocalState
         val state = DustLocalState.deserialize(serialized) ?: run {
-            android.util.Log.e(TAG, "Failed to deserialize dust state for $address")
+            Log.e(TAG, "Failed to deserialize dust state for $address")
             return
         }
 
@@ -654,7 +655,7 @@ class DustRepository @Inject constructor(
             state.close()
         }
 
-        android.util.Log.d(TAG, "Synced dust tokens for $address")
+        Log.d(TAG, "Synced dust tokens for $address")
     }
 
     /**
@@ -680,10 +681,10 @@ class DustRepository @Inject constructor(
      */
     private suspend fun syncTokensFromState(address: String, state: DustLocalState) {
         val utxoCount = state.getUtxoCount()
-        android.util.Log.d(TAG, "Syncing $utxoCount UTXOs to database")
+        Log.d(TAG, "Syncing $utxoCount UTXOs to database")
 
         if (utxoCount == 0) {
-            android.util.Log.d(TAG, "No UTXOs to sync")
+            Log.d(TAG, "No UTXOs to sync")
             return
         }
 
@@ -714,11 +715,11 @@ class DustRepository @Inject constructor(
             dustDao.deleteTokensForAddress(address)
             dustDao.insertTokens(tokens)
 
-            android.util.Log.d(TAG, "✅ Synced $utxoCount placeholder tokens to database")
-            android.util.Log.d(TAG, "⚠️  Using simplified sync - actual values calculated from DustLocalState")
+            Log.d(TAG, "✅ Synced $utxoCount placeholder tokens to database")
+            Log.d(TAG, "⚠️  Using simplified sync - actual values calculated from DustLocalState")
 
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to sync tokens to database", e)
+            Log.e(TAG, "Failed to sync tokens to database", e)
         }
     }
 
@@ -755,7 +756,7 @@ class DustRepository @Inject constructor(
         // Size drives the cross-device backup transport choice (Block Store caps
         // at 4KB/entry; larger needs Drive/file). Logged so we can measure it at
         // real PREPROD scale before wiring backup.
-        android.util.Log.d(TAG, "Dust state serialized: ${serialized.size} bytes")
+        Log.d(TAG, "Dust state serialized: ${serialized.size} bytes")
         saveSerializedState(address, serialized)
     }
 
@@ -820,7 +821,7 @@ class DustRepository @Inject constructor(
             prefs.remove(eventKey)
         }
         dustDao.deleteTokensForAddress(address)
-        android.util.Log.d(TAG, "Deleted dust state + event ID for $address")
+        Log.d(TAG, "Deleted dust state + event ID for $address")
     }
 
     /** Get last applied dust event ID for delta sync resume. Null if never synced. */
@@ -861,7 +862,7 @@ class DustRepository @Inject constructor(
     suspend fun saveCheckpoint(address: String, state: DustLocalState, lastEventId: Long) {
         val serialized = state.serialize()
             ?: throw IllegalStateException("Failed to serialize dust state for $address")
-        android.util.Log.d(TAG, "Checkpoint saved: ${serialized.size} bytes, lastEventId=$lastEventId")
+        Log.d(TAG, "Checkpoint saved: ${serialized.size} bytes, lastEventId=$lastEventId")
         val hexString = bytesToHexString(serialized)
         dustStateDataStore.edit { prefs ->
             prefs[dustStateKey(address)] = hexString

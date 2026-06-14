@@ -4,6 +4,7 @@
 
 package com.midnight.kuira.core.indexer.sync
 
+import android.util.Log
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.DustEvent
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -144,11 +145,11 @@ class DustSubscriptionManager @Inject constructor(
         seed: ByteArray,
         fromEventId: Long? = null
     ): Flow<DustSyncState> {
-        android.util.Log.d(TAG, "Starting dust sync for $address from event ${fromEventId ?: "latest"}")
+        Log.d(TAG, "Starting dust sync for $address from event ${fromEventId ?: "latest"}")
 
         return indexerClient.subscribeToZswapEvents(fromEventId)
             .map { rawEvent ->
-                android.util.Log.d(TAG, "Received event ${rawEvent.id}, max=${rawEvent.maxId}")
+                Log.d(TAG, "Received event ${rawEvent.id}, max=${rawEvent.maxId}")
 
                 // Filter for dust events
                 if (DustEvent.isDustEvent(rawEvent)) {
@@ -162,9 +163,9 @@ class DustSubscriptionManager @Inject constructor(
                     // Replay event into DustLocalState
                     try {
                         replayEvent(address, seed, dustEvent)
-                        android.util.Log.d(TAG, "Replayed dust event ${dustEvent.eventId}")
+                        Log.d(TAG, "Replayed dust event ${dustEvent.eventId}")
                     } catch (e: Exception) {
-                        android.util.Log.e(TAG, "Failed to replay event ${dustEvent.eventId}", e)
+                        Log.e(TAG, "Failed to replay event ${dustEvent.eventId}", e)
                         throw e
                     }
                 }
@@ -188,7 +189,7 @@ class DustSubscriptionManager @Inject constructor(
                 }
             }
             .catch { error ->
-                android.util.Log.e(TAG, "Dust sync error", error)
+                Log.e(TAG, "Dust sync error", error)
                 emit(DustSyncState.Error(
                     message = "Failed to sync dust: ${error.message}",
                     cause = error
@@ -217,7 +218,7 @@ class DustSubscriptionManager @Inject constructor(
         // Load current state
         val state = dustRepository.loadState(address)
         if (state == null) {
-            android.util.Log.w(TAG, "No dust state found for $address, initializing")
+            Log.w(TAG, "No dust state found for $address, initializing")
             dustRepository.initializeIfNeeded(address)
             return
         }
@@ -226,7 +227,7 @@ class DustSubscriptionManager @Inject constructor(
             // Replay event
             val newState = state.replayEvents(seed, event.rawHex)
             if (newState == null) {
-                android.util.Log.e(TAG, "Failed to replay event ${event.eventId}")
+                Log.e(TAG, "Failed to replay event ${event.eventId}")
                 return
             }
 
@@ -244,7 +245,7 @@ class DustSubscriptionManager @Inject constructor(
             newState.close()
 
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Error replaying event ${event.eventId}", e)
+            Log.e(TAG, "Error replaying event ${event.eventId}", e)
             state.close()
             throw e
         }
@@ -258,6 +259,6 @@ class DustSubscriptionManager @Inject constructor(
      * Kotlin Flow handles cancellation automatically.
      */
     fun stopDustSync() {
-        android.util.Log.d(TAG, "Dust sync stopped (cancel flow collection)")
+        Log.d(TAG, "Dust sync stopped (cancel flow collection)")
     }
 }

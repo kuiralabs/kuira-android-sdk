@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk.walletruntime
 
+import android.util.Log
 import com.midnight.kuira.core.identity.backup.BackupStorage
 import com.midnight.kuira.core.identity.backup.DustBackupEncryptor
 import com.midnight.kuira.core.identity.backup.DustBackupEntry
@@ -40,17 +41,17 @@ class DustCloudBackupCoordinator(
     override suspend fun fetch(address: String): RestoredDustCheckpoint? {
         val blob = storage.retrieve()
         if (blob == null) {
-            android.util.Log.i(TAG, "fetch: nothing in cloud storage")
+            Log.i(TAG, "fetch: nothing in cloud storage")
             return null
         }
-        android.util.Log.i(TAG, "fetch: retrieved ${blob.size}-byte blob, decrypting…")
+        Log.i(TAG, "fetch: retrieved ${blob.size}-byte blob, decrypting…")
         val plaintext = DustBackupEncryptor.decrypt(encryptionKey, blob)
         val entry = DustCloudBundleCodec.entryFor(plaintext, address)
         if (entry == null) {
-            android.util.Log.w(TAG, "fetch: bundle has no entry for $address")
+            Log.w(TAG, "fetch: bundle has no entry for $address")
             return null
         }
-        android.util.Log.i(TAG, "fetch: found entry for $address, lastEventId=${entry.lastEventId}")
+        Log.i(TAG, "fetch: found entry for $address, lastEventId=${entry.lastEventId}")
         return RestoredDustCheckpoint(stateBytes = entry.stateBytes, lastEventId = entry.lastEventId)
     }
 

@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.indexer.utxo
 
+import android.util.Log
 import androidx.room.Transaction
 import com.midnight.kuira.core.indexer.database.UnshieldedUtxoDao
 import com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity
@@ -71,7 +72,7 @@ class UtxoManager(
         val createdUtxosWithTxHash = update.createdUtxos.map { it.withTransactionHash(txHash) }
 
         // Log transaction summary (reduced verbosity)
-        android.util.Log.d("UtxoManager", "Processing tx ${txHash.take(16)}... (id=${update.transaction.id}): +$createdCount -$spentCount ($status)")
+        Log.d("UtxoManager", "Processing tx ${txHash.take(16)}... (id=${update.transaction.id}): +$createdCount -$spentCount ($status)")
 
         // Handle based on transaction status
         when (status) {
@@ -92,10 +93,10 @@ class UtxoManager(
                 if (createdCount > 0) {
                     // Log RAW UTXO data from subscription for debugging
                     createdUtxosWithTxHash.forEach { utxo ->
-                        android.util.Log.d("UtxoManager", "[SYNC] Created UTXO from subscription:")
-                        android.util.Log.d("UtxoManager", "       intentHash=${utxo.intentHash} (len=${utxo.intentHash.length})")
-                        android.util.Log.d("UtxoManager", "       outputIndex=${utxo.outputIndex}, value=${utxo.value}")
-                        android.util.Log.d("UtxoManager", "       transactionHash=${utxo.transactionHash}")
+                        Log.d("UtxoManager", "[SYNC] Created UTXO from subscription:")
+                        Log.d("UtxoManager", "       intentHash=${utxo.intentHash} (len=${utxo.intentHash.length})")
+                        Log.d("UtxoManager", "       outputIndex=${utxo.outputIndex}, value=${utxo.value}")
+                        Log.d("UtxoManager", "       transactionHash=${utxo.transactionHash}")
                     }
 
                     // UTXO state handling during sync:
@@ -114,24 +115,24 @@ class UtxoManager(
 
                         when {
                             existing == null -> {
-                                android.util.Log.d("UtxoManager", "INSERT: New UTXO ${entity.id} value=${entity.value}")
+                                Log.d("UtxoManager", "INSERT: New UTXO ${entity.id} value=${entity.value}")
                                 entity // Insert new UTXO
                             }
                             existing.state == UtxoState.SPENT -> {
                                 // SPENT by indexer = confirmed spent by a later transaction
                                 // A later tx in the sync will mark this as spent, which is correct
-                                android.util.Log.d("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
+                                Log.d("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
                                 null // Keep SPENT - it was legitimately spent
                             }
                             existing.state == UtxoState.PENDING -> {
                                 // PENDING = our transaction is in flight
                                 // Don't overwrite - our tx might still confirm
-                                android.util.Log.d("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
+                                Log.d("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
                                 null // Keep PENDING - wait for our tx to confirm or fail
                             }
                             else -> {
                                 // AVAILABLE - update with latest data from indexer
-                                android.util.Log.d("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
+                                Log.d("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
                                 entity
                             }
                         }
@@ -154,7 +155,7 @@ class UtxoManager(
                         utxoDao.getUtxoByIntentHash(spentUtxo.intentHash, spentUtxo.outputIndex)?.id
                     }
                     if (utxoIds.isNotEmpty()) {
-                        android.util.Log.d("UtxoManager", "SPENT: Marking ${utxoIds.size} UTXOs as SPENT: ${utxoIds.take(3)}...")
+                        Log.d("UtxoManager", "SPENT: Marking ${utxoIds.size} UTXOs as SPENT: ${utxoIds.take(3)}...")
                         utxoDao.markAsSpent(utxoIds)
                     }
                 }
@@ -320,9 +321,9 @@ class UtxoManager(
      */
     suspend fun debugDumpAllUtxos(address: String, tag: String) {
         val allUtxos = utxoDao.getAllUtxosForAddress(address)
-        android.util.Log.d("UtxoManager", "[$tag] All UTXOs for address (${allUtxos.size} total):")
+        Log.d("UtxoManager", "[$tag] All UTXOs for address (${allUtxos.size} total):")
         allUtxos.forEach { utxo ->
-            android.util.Log.d("UtxoManager", "  [${utxo.state}] id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
+            Log.d("UtxoManager", "  [${utxo.state}] id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
         }
     }
 
@@ -342,7 +343,7 @@ class UtxoManager(
     suspend fun resetSpentUtxosForHealing(address: String): Int {
         val resetCount = utxoDao.resetSpentToAvailable(address)
         if (resetCount > 0) {
-            android.util.Log.i("UtxoManager", "🔄 HEALING: Reset ALL $resetCount SPENT UTXOs to AVAILABLE for full resync")
+            Log.i("UtxoManager", "🔄 HEALING: Reset ALL $resetCount SPENT UTXOs to AVAILABLE for full resync")
         }
         return resetCount
     }
@@ -417,9 +418,9 @@ class UtxoManager(
     ): UtxoSelector.SelectionResult {
         // Step 1: SELECT available UTXOs (sorted by value, smallest first)
         val availableUtxos = utxoDao.getUnspentUtxosForTokenSorted(address, tokenType)
-        android.util.Log.d("UtxoManager", "selectAndLockUtxos: ${availableUtxos.size} AVAILABLE UTXOs, total=${availableUtxos.sumOf { it.value.toBigInteger() }}")
+        Log.d("UtxoManager", "selectAndLockUtxos: ${availableUtxos.size} AVAILABLE UTXOs, total=${availableUtxos.sumOf { it.value.toBigInteger() }}")
         availableUtxos.forEach { utxo ->
-            android.util.Log.d("UtxoManager", "  AVAILABLE: id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
+            Log.d("UtxoManager", "  AVAILABLE: id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
         }
 
         // Step 2: Perform coin selection (smallest-first)
@@ -429,7 +430,7 @@ class UtxoManager(
         // Step 3: If successful, UPDATE selected UTXOs to PENDING
         if (selectionResult is UtxoSelector.SelectionResult.Success) {
             val utxoIds = selectionResult.selectedUtxos.map { it.id }
-            android.util.Log.d("UtxoManager", "Selected ${utxoIds.size} UTXOs for spend")
+            Log.d("UtxoManager", "Selected ${utxoIds.size} UTXOs for spend")
             utxoDao.markAsPending(utxoIds)
         }
 
@@ -550,10 +551,10 @@ class UtxoManager(
         val databaseIds = utxoIntentIds.mapNotNull { (intentHash, outputNo) ->
             val utxo = utxoDao.getUtxoByIntentHash(intentHash, outputNo)
             if (utxo != null) {
-                android.util.Log.d("UtxoManager", "Found UTXO for intentHash=$intentHash:$outputNo -> id=${utxo.id}, currentState=${utxo.state}")
+                Log.d("UtxoManager", "Found UTXO for intentHash=$intentHash:$outputNo -> id=${utxo.id}, currentState=${utxo.state}")
                 utxo.id
             } else {
-                android.util.Log.w("UtxoManager", "No UTXO found for intentHash=$intentHash:$outputNo")
+                Log.w("UtxoManager", "No UTXO found for intentHash=$intentHash:$outputNo")
                 null
             }
         }
@@ -562,14 +563,14 @@ class UtxoManager(
             if (spentByLocalTx) {
                 // Our transaction spent these - don't let healing restore them
                 utxoDao.markAsSpentByLocalTx(databaseIds)
-                android.util.Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (local tx): $databaseIds")
+                Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (local tx): $databaseIds")
             } else {
                 // External spend (e.g., error 115) - healing CAN restore if available
                 utxoDao.markAsSpent(databaseIds)
-                android.util.Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (external): $databaseIds")
+                Log.d("UtxoManager", "Marked ${databaseIds.size}/${utxoIntentIds.size} UTXOs as SPENT (external): $databaseIds")
             }
         } else {
-            android.util.Log.w("UtxoManager", "No UTXOs found for ${utxoIntentIds.size} intent IDs")
+            Log.w("UtxoManager", "No UTXOs found for ${utxoIntentIds.size} intent IDs")
         }
 
         return databaseIds.size

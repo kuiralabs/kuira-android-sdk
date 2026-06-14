@@ -4,6 +4,7 @@
 
 package com.midnight.kuira.core.ledger.fee
 
+import android.util.Log
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import java.math.BigInteger
@@ -117,13 +118,13 @@ class DustActionsBuilder @Inject constructor(
         )
 
         if (fee == null) {
-            android.util.Log.e(TAG, "Failed to calculate transaction fee")
+            Log.e(TAG, "Failed to calculate transaction fee")
             return null
         }
 
         // Step 2: Load DustLocalState
         val state = dustRepository.loadState(address) ?: run {
-            android.util.Log.e(TAG, "Failed to load dust state")
+            Log.e(TAG, "Failed to load dust state")
             return null
         }
 
@@ -132,7 +133,7 @@ class DustActionsBuilder @Inject constructor(
             val utxoCount = state.getUtxoCount()
 
             if (utxoCount == 0) {
-                android.util.Log.e(TAG, "No dust UTXOs available")
+                Log.e(TAG, "No dust UTXOs available")
                 return null
             }
 
@@ -141,7 +142,7 @@ class DustActionsBuilder @Inject constructor(
             val totalBalance = state.getBalance(System.currentTimeMillis())
 
             if (totalBalance < fee) {
-                android.util.Log.e(TAG, "Insufficient dust: $totalBalance < $fee Specks")
+                Log.e(TAG, "Insufficient dust: $totalBalance < $fee Specks")
                 return null
             }
 

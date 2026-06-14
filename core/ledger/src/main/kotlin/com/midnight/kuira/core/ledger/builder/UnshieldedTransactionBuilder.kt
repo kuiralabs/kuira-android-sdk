@@ -4,6 +4,7 @@
 
 package com.midnight.kuira.core.ledger.builder
 
+import android.util.Log
 import com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.indexer.utxo.UtxoSelector
@@ -138,10 +139,10 @@ class UnshieldedTransactionBuilder(
 
         // Step 3: Convert selected UTXOs to UtxoSpend inputs
         // Note: We use the derived public key from HD wallet, not from database
-        android.util.Log.d("TxBuilder", "Converting ${success.selectedUtxos.size} UTXOs to UtxoSpend inputs:")
+        Log.d("TxBuilder", "Converting ${success.selectedUtxos.size} UTXOs to UtxoSpend inputs:")
         val inputs = success.selectedUtxos.map { utxo ->
-            android.util.Log.d("TxBuilder", "  UTXO: intentHash=${utxo.intentHash}, outputIndex=${utxo.outputIndex}, value=${utxo.value}")
-            android.util.Log.d("TxBuilder", "        transactionHash=${utxo.transactionHash}, id=${utxo.id}")
+            Log.d("TxBuilder", "  UTXO: intentHash=${utxo.intentHash}, outputIndex=${utxo.outputIndex}, value=${utxo.value}")
+            Log.d("TxBuilder", "        transactionHash=${utxo.transactionHash}, id=${utxo.id}")
             utxo.toUtxoSpend(senderPublicKey)
         }
 
