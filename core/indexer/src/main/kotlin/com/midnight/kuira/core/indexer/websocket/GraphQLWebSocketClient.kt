@@ -349,11 +349,14 @@ class GraphQLWebSocketClient(
                 if (channel != null) {
                     channel.send(message.payload)
                 } else {
-                    // Benign: a `next` can arrive in the small window between us
-                    // sending Complete and the server processing it. Per
-                    // graphql-transport-ws the client just ignores it. Debug, not
-                    // warn, so it can't flood logcat.
-                    Log.d("GraphQLWebSocket", "Ignoring next for inactive subscription ${message.id}")
+                    // Benign + high-frequency: after we send Complete the server can
+                    // stream a backlog of in-flight `next` (one per buffered event)
+                    // before it processes the Complete. Per graphql-transport-ws the
+                    // client just ignores them. Off by default (no per-frame spam);
+                    // enable with: adb shell setprop log.tag.GraphQLWebSocket VERBOSE
+                    if (Log.isLoggable("GraphQLWebSocket", Log.VERBOSE)) {
+                        Log.v("GraphQLWebSocket", "Ignoring next for inactive subscription ${message.id}")
+                    }
                 }
             }
             is GraphQLWebSocketMessage.Error -> {
