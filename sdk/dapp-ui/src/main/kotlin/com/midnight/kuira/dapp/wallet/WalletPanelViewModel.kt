@@ -233,6 +233,14 @@ class WalletPanelViewModel @Inject constructor(
                     observeBalanceJob?.cancel()
                     _syncProgress.value = null
                     _status.value = WalletStatus.Locked
+                } else if (_status.value is WalletStatus.Locked) {
+                    // Unlocked: the SessionLockGate re-authenticated (the seed is
+                    // warm now). Clear Locked and ask the host to refresh so the
+                    // pill/sheet show the real balance — this reuses the open
+                    // Keystore window, so it does NOT prompt a second biometric.
+                    Log.i(TAG, "Session unlocked — clearing Locked and requesting a refresh")
+                    _status.value = WalletStatus.None
+                    lastRequestedConfig?.let { _retryRequests.emit(it) }
                 }
             }
         }

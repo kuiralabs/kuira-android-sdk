@@ -191,6 +191,17 @@ fun WalletStatusPanel(
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
 
+    // Whole-app session lock (#14): a ModalBottomSheet renders in its own window
+    // ABOVE the activity content, so if a lock fires while the sheet (or the
+    // receive dialog) is open it would float on top of the SessionLockGate. Close
+    // them on lock so the gate is the only surface the user sees.
+    LaunchedEffect(status) {
+        if (status is WalletStatus.Locked) {
+            sheetOpen = false
+            receiveOpen = false
+        }
+    }
+
     // Panel owns the full wallet config now (network + proving mode + proof
     // server URL). User picks any of these in the sheet, the LaunchedEffect
     // below re-fires with the new config and the VM rebuilds the SDK.

@@ -9,11 +9,13 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,9 +48,12 @@ import javax.inject.Singleton
  * registers the background (activity-count) + screen-off hooks. For foreground
  * idle, each `Activity` forwards `onUserInteraction()` → [onUserActivity].
  *
- * The UI reflects a lock by observing [MidnightSdkProvider.sdk] going null (the
- * wallet panel hides the balance + re-auths on the next action); this class owns
- * only the policy, not the UI.
+ * **The lock is whole-app, Chase-style.** The host wraps its Compose root in
+ * [com.midnight.kuira.dapp.lock.SessionLockGate], which observes [locked] and,
+ * while locked, covers the ENTIRE app with a re-auth screen (no content visible
+ * or tappable behind it) and marks the window `FLAG_SECURE` so nothing leaks to
+ * the recents thumbnail. [unlock] is the gate's biometric. This class owns the
+ * policy + the unlock teeth; the gate owns the full-screen presentation.
  */
 @Singleton
 class SessionLock @Inject constructor(
@@ -107,6 +112,39 @@ class SessionLock @Inject constructor(
 
     /** Manual "Lock now". */
     fun lockNow() = lock("manual")
+
+    /**
+     * Re-authenticate and lift the lock — the unlock half of the session lock,
+     * driven by the app-wide [com.midnight.kuira.dapp.lock.SessionLockGate].
+     *
+     * Runs the SAME biometric the wallet bootstrap uses:
+     * [WalletSeedSource.ensureSeedReady] prompts because [requireFreshAuthNext]
+     * armed it on [lock]. A successful prompt re-opens the Keystore auth window
+     * (so the next SDK build is silent), and we wipe the returned seed
+     * immediately — unlocking only needs to prove the user is present, not hold
+     * the seed. Then [locked] clears so the gate dismisses and the whole app is
+     * usable again.
+     *
+     * Returns true on success; false if the user cancelled or auth failed (the
+     * gate stays up). [CancellationException] is rethrown so structured
+     * concurrency keeps working.
+     */
+    suspend fun unlock(activity: FragmentActivity): Boolean {
+        return try {
+            val seed = walletSeedSource.ensureSeedReady(activity)
+            seed.fill(0)
+            _locked.value = false
+            Log.i(TAG, "Session unlocked — re-authenticated, lock lifted")
+            true
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            // Every failure mode here (biometric cancelled, no sigil, Keystore
+            // error) means the same thing: stay locked. Logged, not swallowed.
+            Log.w(TAG, "Unlock failed (${e.javaClass.simpleName}) — staying locked", e)
+            false
+        }
+    }
 
     private fun lock(reason: String) {
         idleJob?.cancel()

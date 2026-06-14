@@ -1,11 +1,16 @@
 package com.midnight.kuira.sdk.walletruntime
 
+import androidx.fragment.app.FragmentActivity
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -37,6 +42,38 @@ class SessionLockTest {
         // The security guarantee: lock must force the next unlock to re-auth,
         // not just drop the SDK (which the 30s Keystore window would undo).
         verify(exactly = 1) { walletSeedSource.requireFreshAuthNext() }
+    }
+
+    @Test
+    fun `unlock re-authenticates via the seed source and lifts the lock`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val activity = mockk<FragmentActivity>(relaxed = true)
+        // ensureSeedReady prompting biometric is the unlock's teeth; relaxed mock
+        // returns a seed without throwing → unlock succeeds.
+        coEvery { walletSeedSource.ensureSeedReady(activity) } returns ByteArray(64)
+
+        lock.lockNow()
+        assertTrue("precondition: locked after lockNow", lock.locked.value)
+
+        val ok = lock.unlock(activity)
+
+        assertTrue("unlock should report success", ok)
+        assertFalse("lock must be lifted after a successful re-auth", lock.locked.value)
+        coVerify(exactly = 1) { walletSeedSource.ensureSeedReady(activity) }
+    }
+
+    @Test
+    fun `unlock failure keeps the session locked`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val activity = mockk<FragmentActivity>(relaxed = true)
+        // Cancelled / failed biometric → ensureSeedReady throws.
+        coEvery { walletSeedSource.ensureSeedReady(activity) } throws RuntimeException("auth cancelled")
+
+        lock.lockNow()
+        val ok = lock.unlock(activity)
+
+        assertFalse("unlock should report failure", ok)
+        assertTrue("a failed re-auth must NOT lift the lock", lock.locked.value)
     }
 
     @Test
