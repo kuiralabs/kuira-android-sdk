@@ -88,6 +88,17 @@ class SessionLock @Inject constructor(
     private var foregroundActivityCount = 0
     private var installed = false
 
+    // Operation holds (#235 pivot fix). An auto-lock (idle/background/screen-off)
+    // MUST NOT drop the SDK while a value-bearing op is in flight — that's what
+    // killed an in-flight Kicks match commit ("SDK not ready"): during Unity
+    // gameplay the main process is backgrounded, the grace expired, and the lock
+    // closed the SDK out from under MatchManager. While ≥1 hold is active the auto
+    // path defers (records the reason); the deferred lock fires when the last hold
+    // releases. Manual lockNow() ignores holds (explicit user intent).
+    private val holdLock = Any()
+    private var holds = 0
+    private var pendingLockReason: String? = null
+
     /** Reset the idle countdown — call on any user interaction. */
     fun onUserActivity() = restartIdleTimer()
 
@@ -110,8 +121,57 @@ class SessionLock @Inject constructor(
     /** Device screen turned off — lock immediately. */
     fun onScreenOff() = lock("screen off")
 
-    /** Manual "Lock now". */
-    fun lockNow() = lock("manual")
+    /** Manual "Lock now" — explicit user intent; ignores operation holds. */
+    fun lockNow() {
+        idleJob?.cancel()
+        backgroundJob?.cancel()
+        synchronized(holdLock) { pendingLockReason = null } // a manual lock supersedes any deferred one
+        doLock("manual")
+    }
+
+    /**
+     * Hold off the AUTO-lock (idle / background / screen-off) for the duration of
+     * a value-bearing wallet operation, so a backgrounded transaction isn't torn
+     * down mid-flight (the SDK stays alive until the op finishes). If an auto-lock
+     * fired while the hold was active, it runs the moment the last hold releases.
+     * Manual [lockNow] is unaffected.
+     *
+     * Usage: `sessionLock.acquireHold().use { /* on-chain op */ }` or [withHold].
+     * Resolve via [SessionLockEntryPoint] in non-Hilt call sites (e.g. Kicks
+     * MatchManager around commit/reveal/join/claim).
+     */
+    fun acquireHold(): AutoCloseable {
+        synchronized(holdLock) { holds++ }
+        return object : AutoCloseable {
+            private var released = false
+            override fun close() {
+                var deferred: String? = null
+                synchronized(holdLock) {
+                    if (released) return
+                    released = true
+                    holds = (holds - 1).coerceAtLeast(0)
+                    if (holds == 0 && pendingLockReason != null) {
+                        deferred = pendingLockReason
+                        pendingLockReason = null
+                    }
+                }
+                deferred?.let {
+                    Log.i(TAG, "Last operation hold released — running deferred lock ($it)")
+                    doLock(it)
+                }
+            }
+        }
+    }
+
+    /** Suspend-friendly [acquireHold]: holds for the duration of [block]. */
+    suspend fun <T> withHold(block: suspend () -> T): T {
+        val hold = acquireHold()
+        return try {
+            block()
+        } finally {
+            hold.close()
+        }
+    }
 
     /**
      * Re-authenticate and lift the lock — the unlock half of the session lock,
@@ -146,9 +206,25 @@ class SessionLock @Inject constructor(
         }
     }
 
+    /** Auto-lock path (idle/background/screen-off): defers while an operation is held. */
     private fun lock(reason: String) {
         idleJob?.cancel()
         backgroundJob?.cancel()
+        val held = synchronized(holdLock) {
+            if (holds > 0) {
+                pendingLockReason = reason
+                holds
+            } else 0
+        }
+        if (held > 0) {
+            Log.i(TAG, "Lock ($reason) DEFERRED — $held operation(s) in flight; will lock when they finish")
+            return
+        }
+        doLock(reason)
+    }
+
+    /** The actual lock: drop the cached SDK + force re-auth. Bypasses holds. */
+    private fun doLock(reason: String) {
         Log.i(TAG, "Locking session ($reason) — dropping cached SDK + forcing re-auth")
         _locked.value = true
         // Two parts make a lock REAL: drop the in-memory SDK (its decrypted seed),

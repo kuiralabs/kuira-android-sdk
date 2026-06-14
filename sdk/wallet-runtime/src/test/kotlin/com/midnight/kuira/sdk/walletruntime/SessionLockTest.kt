@@ -128,4 +128,69 @@ class SessionLockTest {
         advanceTimeBy(200); runCurrent()
         verify(exactly = 1) { provider.close() }
     }
+
+    // ── Operation holds (#235 pivot: don't drop the SDK mid-transaction) ──
+
+    @Test
+    fun `auto-lock is deferred while an operation hold is active, then fires on release`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val hold = lock.acquireHold()
+
+        // Background grace expires while the op is in flight — must NOT close yet.
+        lock.onBackground()
+        advanceTimeBy(501); runCurrent()
+        verify(exactly = 0) { provider.close() }
+
+        // Releasing the last hold runs the deferred lock (the in-flight op finished).
+        hold.close()
+        verify(exactly = 1) { provider.close() }
+        verify(exactly = 1) { walletSeedSource.requireFreshAuthNext() }
+    }
+
+    @Test
+    fun `screen-off lock is deferred while held`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val hold = lock.acquireHold()
+
+        lock.onScreenOff()
+        verify(exactly = 0) { provider.close() }
+
+        hold.close()
+        verify(exactly = 1) { provider.close() }
+    }
+
+    @Test
+    fun `manual lockNow ignores holds and locks immediately`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        lock.acquireHold() // never released
+
+        lock.lockNow()
+
+        // Explicit user intent overrides the hold.
+        verify(exactly = 1) { provider.close() }
+    }
+
+    @Test
+    fun `releasing a hold with no pending lock does not lock`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val hold = lock.acquireHold()
+
+        hold.close() // no auto-lock fired while held → nothing to run
+
+        verify(exactly = 0) { provider.close() }
+    }
+
+    @Test
+    fun `nested holds defer until the LAST release`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val outer = lock.acquireHold()
+        val inner = lock.acquireHold()
+
+        lock.onScreenOff() // deferred
+        inner.close()
+        verify(exactly = 0) { provider.close() } // outer still holds
+
+        outer.close()
+        verify(exactly = 1) { provider.close() } // last release runs it
+    }
 }

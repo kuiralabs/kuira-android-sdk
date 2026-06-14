@@ -312,6 +312,11 @@ class WalletPanelViewModel @Inject constructor(
     fun refreshBalance(config: WalletConfig, activity: FragmentActivity, force: Boolean = false) {
         lastRequestedConfig = config
         viewModelScope.launch {
+            // Hold off the session auto-lock while bootstrapping/syncing so a
+            // backgrounded refresh isn't torn down mid-flight (#235 fix). The
+            // finally releases it on normal completion OR cancellation.
+            val hold = sessionLock.acquireHold()
+            try {
             // Don't overwrite the Ready state on a refresh — that would flash
             // the sheet through Loading and lose the in-screen address. Only
             // show Loading when we're truly bootstrapping from None / Error.
@@ -435,6 +440,9 @@ class WalletPanelViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Balance read failed")
+            }
+            } finally {
+                hold.close()
             }
         }
     }
