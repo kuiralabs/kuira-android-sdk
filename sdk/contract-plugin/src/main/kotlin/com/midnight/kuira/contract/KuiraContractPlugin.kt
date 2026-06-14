@@ -61,6 +61,11 @@ class KuiraContractPlugin : Plugin<Project> {
         // builds in CI set this to true to convert FAIL severities into
         // task failures.
         extension.requireDoctorPass.convention(false)
+        // Wallet-key bundling is opt-in (it adds ~24MB to the APK). When on, the
+        // version/source default to the SDK's pinned values.
+        extension.bundleWalletKeys.convention(false)
+        extension.walletKeysVersion.convention(DEFAULT_WALLET_KEYS_VERSION)
+        extension.walletKeysBaseUrl.convention(DEFAULT_WALLET_KEYS_BASE_URL)
 
         // Resolve source lazily so it picks up the consumer's
         // configuration even if it's set after these register calls.
@@ -109,6 +114,28 @@ class KuiraContractPlugin : Plugin<Project> {
             task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
         }
 
+        // provisionWalletKeys — downloads + stages the protocol wallet proving
+        // keys into assets when bundleWalletKeys is on (the offline-bundle path).
+        // gradleUserHomeDir is captured at configuration time so the action stays
+        // configuration-cache clean (no `project` access at execution).
+        val gradleUserHome = project.gradle.gradleUserHomeDir
+        val provisionWalletKeysTask = project.tasks.register(
+            ProvisionWalletKeysTask.TASK_NAME,
+            ProvisionWalletKeysTask::class.java,
+        ) { task ->
+            task.group = "build"
+            task.description =
+                "Download + stage protocol wallet proving keys into assets (offline bundle, #256)."
+            task.version.set(extension.walletKeysVersion)
+            task.baseUrl.set(extension.walletKeysBaseUrl)
+            task.cacheRoot.fileValue(gradleUserHome.resolve(WALLET_KEYS_CACHE_SUBPATH))
+            task.assetsDir.set(
+                project.layout.projectDirectory.dir("$ASSETS_DEST/$ASSETS_WALLET_KEYS_SUBDIR"),
+            )
+            // Skip entirely (no download, no staging) unless the consumer opted in.
+            task.onlyIf { extension.bundleWalletKeys.get() }
+        }
+
         // kuiraDoctor — standalone preflight task. NOT wired to preBuild.
         // Consumer invokes explicitly (`./gradlew :app:kuiraDoctor`) or
         // wires into a release-only lifecycle in their own build script.
@@ -150,6 +177,9 @@ class KuiraContractPlugin : Plugin<Project> {
                         "Apply one of those before configuring kuiraContract.",
                 )
             preBuild.dependsOn(syncTask)
+            // Always wired; the task's onlyIf skips it when bundleWalletKeys is off,
+            // so a consumer that doesn't opt in pays nothing.
+            preBuild.dependsOn(provisionWalletKeysTask)
         }
     }
 
@@ -171,6 +201,18 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val ASSETS_DEST = "src/main/assets"
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"
         internal const val ASSETS_KEYS_SUBDIR = "keys"
+
+        // Wallet-key offline bundle (#256). Subdir kept distinct from contract
+        // keys ("keys") so the two asset installers never collide. Matches the
+        // SDK's ProvingKeyManager.WALLET_ASSET_DIR.
+        internal const val ASSETS_WALLET_KEYS_SUBDIR = "wallet-keys"
+        // Default ledger-pinned version + key source (the SDK's CURRENT_VERSION
+        // and S3_BASE_URL). Overridable via the kuiraContract extension.
+        private const val DEFAULT_WALLET_KEYS_VERSION = 9
+        private const val DEFAULT_WALLET_KEYS_BASE_URL =
+            "https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com"
+        // Machine-shared download cache, relative to the Gradle user home.
+        private const val WALLET_KEYS_CACHE_SUBPATH = "caches/kuira-wallet-keys"
 
         // Consumer's app-module build script used for applicationId +
         // minSdk auto-discovery by the kuiraDoctor task.

@@ -76,15 +76,16 @@ class EnsureWalletKeysAvailableTest {
     }
 
     @Test
-    fun `production fallback — empty local tmp triggers S3 download`() = runTest {
+    fun `production fallback — no local tmp and no bundle triggers S3 download`() = runTest {
         val pkm = spyk(ProvingKeyManager(context))
         every { pkm.installFromLocalTmp() } returns false
-        // First call (the gate check) returns false → triggers download.
-        // Second call (the post-download log line interpolation) returns
-        // true → the download succeeded. Sequencing matters: a single
-        // `returns false` would log "hasWalletKeys=false" and mask a
-        // real failure.
-        every { pkm.hasWalletKeys() } returnsMany listOf(false, true)
+        // App didn't bundle wallet keys → the offline-bundle step is a no-op.
+        every { pkm.installWalletKeysFromAssets(any(), any()) } returns false
+        // Three hasWalletKeys() calls in order now: the bundle gate (false →
+        // try assets), the download gate (false → download), the post-download
+        // log interpolation (true → succeeded). A single `returns false` would
+        // log "hasWalletKeys=false" and mask a real failure.
+        every { pkm.hasWalletKeys() } returnsMany listOf(false, false, true)
         coEvery { pkm.downloadWalletKeys(any()) } returns Unit
         val log = mutableListOf<String>()
 
@@ -95,12 +96,32 @@ class EnsureWalletKeysAvailableTest {
         // the contract, not the exact prose, so wording can drift
         // without breaking the test.
         assertEquals(2, log.size)
-        assert(log[0].contains("missing")) {
-            "first log line should announce missing keys, got: ${log[0]}"
+        assert(log[0].contains("download")) {
+            "first log line should announce the download, got: ${log[0]}"
         }
         assert(log[1].contains("complete") && log[1].contains("hasWalletKeys=true")) {
             "second log line should report download complete + verify keys present, got: ${log[1]}"
         }
+    }
+
+    @Test
+    fun `bundle path — bundled keys satisfy the wallet and skip the download`() = runTest {
+        val pkm = spyk(ProvingKeyManager(context))
+        every { pkm.installFromLocalTmp() } returns false
+        // The offline bundle (APK assets) provisions everything…
+        every { pkm.installWalletKeysFromAssets(any(), any()) } returns true
+        // …so the gate after the bundle step reports complete and S3 is skipped.
+        every { pkm.hasWalletKeys() } returnsMany listOf(false, true)
+        val log = mutableListOf<String>()
+
+        pkm.ensureWalletKeysAvailable(logger = { log += it })
+
+        coVerify(exactly = 0) { pkm.downloadWalletKeys(any()) }
+        assertEquals(
+            "bundled keys are silent like the fast path — no S3 log lines",
+            emptyList<String>(),
+            log,
+        )
     }
 
     // ── Real file behaviour: 0-byte keys must read as missing + self-heal ──

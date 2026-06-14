@@ -104,4 +104,37 @@ abstract class KuiraContractExtension {
      * skipped checks) never fail the task regardless of this flag.
      */
     abstract val requireDoctorPass: Property<Boolean>
+
+    /**
+     * Whether to bundle the protocol-level **wallet** proving keys
+     * (zswap/dust/BLS, ~24MB) into the APK so the device never downloads
+     * them at runtime. Default `false`.
+     *
+     * When `true`, the `provisionWalletKeys` task downloads the version-pinned
+     * keys ONCE at build time (into a shared Gradle cache, so it's paid once
+     * per machine per version), then stages them into
+     * `assets/wallet-keys`. At runtime the SDK's `ProvingKeyManager` prefers
+     * this bundle over its S3 download — turning a flaky first-launch network
+     * dependency into a reproducible offline asset.
+     *
+     * Trade-off: ~24MB of APK size. Opt in for apps that must work on first
+     * launch without a reliable network (the common case); leave off to keep
+     * the APK lean and accept the one-time S3 download.
+     */
+    abstract val bundleWalletKeys: Property<Boolean>
+
+    /**
+     * Proving-key version to bundle when [bundleWalletKeys] is `true`. Must match
+     * the ledger version the SDK targets (the SDK's
+     * `ProvingKeyManager.CURRENT_VERSION`). Defaults to the version this plugin
+     * release was built against; override only during a deliberate ledger upgrade.
+     */
+    abstract val walletKeysVersion: Property<Int>
+
+    /**
+     * Base URL the wallet keys are fetched from at build time when
+     * [bundleWalletKeys] is `true`. Defaults to Midnight's published key store.
+     * Override to point at a mirror / your own CDN.
+     */
+    abstract val walletKeysBaseUrl: Property<String>
 }

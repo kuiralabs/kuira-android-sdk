@@ -12,10 +12,14 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Manages proving key download, caching, and version tracking for local ZK proving.
+ * Manages proving key provisioning, caching, and version tracking for local ZK proving.
  *
- * Proving keys are downloaded from Midnight's S3 once (~24MB total) and cached
- * in app internal storage. The phone can then prove transactions offline.
+ * The protocol-level **wallet** keys (~24MB total) are provisioned once into app
+ * internal storage; the phone can then prove transactions offline. Provisioning
+ * prefers the **APK bundle** ([installWalletKeysFromAssets], staged at build time
+ * by the contract Gradle plugin) so a fresh device never depends on the network,
+ * and falls back to an S3 [downloadWalletKeys] only when the app didn't bundle
+ * them. See [ensureWalletKeysAvailable] for the priority order.
  *
  * Key locations match the SDK's `WasmProver.makeDefaultKeyMaterialProvider()`:
  * - `zswap/{ver}/spend.prover` (10.5 MB)
@@ -112,9 +116,18 @@ class ProvingKeyManager(
         onDownloadProgress: (Float) -> Unit = {},
         logger: (String) -> Unit = {},
     ) {
+        // 1. Dev override: adb-pushed keys in /data/local/tmp (highest priority so a
+        //    dev can test freshly-staged keys without rebuilding the APK).
         installFromLocalTmp()
+        // 2. Offline bundle: keys shipped in the APK (the production path — no
+        //    network). Copying ~24MB is blocking I/O, so keep it off the caller's
+        //    thread even though file ops don't suspend.
         if (!hasWalletKeys()) {
-            logger("Wallet keys missing — downloading from S3 (~24MB, one-time)")
+            withContext(Dispatchers.IO) { installWalletKeysFromAssets() }
+        }
+        // 3. Last resort: download from S3 (only when the app didn't bundle keys).
+        if (!hasWalletKeys()) {
+            logger("Wallet keys not bundled — downloading from S3 (~24MB, one-time)")
             downloadWalletKeys(onDownloadProgress)
             logger("Wallet keys download complete (hasWalletKeys=${hasWalletKeys()})")
         }
@@ -511,6 +524,82 @@ class ProvingKeyManager(
     }
 
     /**
+     * Install the protocol-level **wallet** keys (zswap/dust/BLS) from the APK's
+     * bundled assets — the offline-bundle counterpart to the S3 [downloadWalletKeys].
+     *
+     * The wallet keys are version-pinned and shared across all dApps. Historically
+     * they were fetched from a dev S3 bucket at first launch, which blocked the
+     * wallet on flaky networks. When the dApp's build bundles them under
+     * `assets/[assetDir]` (the contract Gradle plugin stages them there), this
+     * copies them onto device storage once and the device never touches the
+     * network. [ensureWalletKeysAvailable] prefers this path and only falls back
+     * to S3 when the bundle is absent.
+     *
+     * Same content-aware machinery as [installCircuitKeysFromAssets]: the
+     * [apkStamp] gates a cheap hot path, and a stamp change re-verifies each key by
+     * SHA-256 so a recompiled/version-bumped key set is picked up.
+     *
+     * Layout under `assets/[assetDir]` mirrors [WALLET_KEY_FILES] — `zswap/…`,
+     * `dust/…`, and the flat `bls_midnight_2p*` params.
+     *
+     * @return true if the bundle was present and [hasWalletKeys] is now satisfied;
+     *   false if the keys aren't bundled (or the bundle is incomplete) — the
+     *   caller should then fall back to [downloadWalletKeys].
+     */
+    fun installWalletKeysFromAssets(assetDir: String = WALLET_ASSET_DIR, overwrite: Boolean = false): Boolean {
+        validatePathSegment(assetDir, "assetDir")
+        // Bundle absent → not an error, just "this app didn't ship wallet keys".
+        val bundled = runCatching { context.assets.list(assetDir)?.isNotEmpty() == true }.getOrDefault(false)
+        if (!bundled) return false
+
+        // Version guard: a bundle built for a different ledger version must NOT be
+        // installed — copying it then stamping version.txt with CURRENT_VERSION
+        // would falsely mark stale-version keys as current. Fall back to download
+        // the right version instead. Absent version.txt (older bundle) → best-effort.
+        val bundledVersion = runCatching {
+            context.assets.open("$assetDir/version.txt").bufferedReader().use { it.readText().trim() }
+        }.getOrNull()
+        if (bundledVersion != null && bundledVersion != CURRENT_VERSION.toString()) {
+            Log.w(TAG, "Bundled wallet keys are v$bundledVersion but SDK needs v$CURRENT_VERSION — ignoring bundle")
+            return false
+        }
+
+        keysDir.mkdirs()
+        File(keysDir, "zswap").mkdirs()
+        File(keysDir, "dust").mkdirs()
+
+        val stamp = apkStamp()
+        val stampFile = File(keysDir, ".$assetDir.apk_stamp")
+        val stampMatches = stamp != null &&
+            stampFile.takeIf { it.exists() }?.readText()?.trim() == stamp
+        // When the stamp can't be read (null), never trust presence alone — verify.
+        val verifyContent = overwrite || !stampMatches
+
+        try {
+            for (relative in WALLET_KEY_FILES) {
+                val assetPath = "$assetDir/$relative"
+                val dest = File(keysDir, relative)
+                dest.parentFile?.mkdirs()
+                // Hot path: complete prior install under the same APK — trust it.
+                if (dest.isPopulated() && !verifyContent) continue
+                // Verify path: re-copy only when the device key's bytes drifted.
+                if (dest.isPopulated() && destMatchesAsset(assetPath, dest)) continue
+                copyAssetAtomically(assetPath, dest) // throws if this file isn't bundled
+            }
+        } catch (e: IOException) {
+            // Incomplete bundle (a required key wasn't staged). Leave what copied
+            // (atomic, never partial) and let the S3 fallback fetch the rest.
+            Log.i(TAG, "Wallet-key bundle incomplete (${e.message}) — caller will fall back to download")
+            return false
+        }
+
+        File(keysDir, "version.txt").writeText(CURRENT_VERSION.toString())
+        // Stamp LAST so an interrupted refresh re-verifies next launch (self-healing).
+        if (stamp != null) stampFile.runCatching { writeText(stamp) }
+        return hasWalletKeys()
+    }
+
+    /**
      * Dev-only convenience: install proving keys from a local-tmp staging area
      * pushed via `adb push` (the convention used by Kicks's build script, the
      * SDK e2e test, and BBoard's canary). Looks at two well-known directories
@@ -575,6 +664,14 @@ class ProvingKeyManager(
     companion object {
         private const val TAG = "ProvingKeyManager"
         private const val KEYS_DIR_NAME = "proving_keys"
+
+        /**
+         * APK assets subdir the wallet keys are bundled under (staged by the
+         * contract Gradle plugin). Kept distinct from the contract keys' `keys/`
+         * dir so [installWalletKeysFromAssets] and [installCircuitKeysFromAssets]
+         * never tread on each other's files. Layout mirrors [WALLET_KEY_FILES].
+         */
+        const val WALLET_ASSET_DIR = "wallet-keys"
 
         /** Current proving key version (matches ledger version). */
         const val CURRENT_VERSION = 9
