@@ -1,7 +1,6 @@
 package com.midnight.kuira.contract
 
 import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.TaskAction
@@ -44,12 +43,15 @@ class KuiraLocalnetPlugin : Plugin<Project> {
                 "Forward localnet ports (8088, 9944, 6300) from each connected " +
                 "physical device to host via adb reverse."
         }
-        // Wire ahead of installDebug so deploying to a device sets up the tunnel
-        // as part of the same gradle invocation. configureEach: installDebug is
-        // registered by AGP, which may not have applied yet.
-        project.tasks.matching { it.name == "installDebug" }.configureEach {
-            it.dependsOn(reverse)
-        }
+        // Wire ahead of BOTH installDebug and assembleDebug. `installDebug` covers
+        // a CLI `./gradlew installDebug`, but Android Studio's Run/Deploy bypasses
+        // that task — it builds then installs the APK itself — so the only Gradle
+        // task it reliably runs first is the variant assemble (via "Gradle-aware
+        // Make"). Hooking assembleDebug means the tunnel is (re)established on every
+        // AS deploy too, not just CLI installs. The task is a no-op without a
+        // connected physical device, so it's cheap on ordinary builds.
+        project.tasks.matching { it.name == "installDebug" || it.name == "assembleDebug" }
+            .configureEach { it.dependsOn(reverse) }
     }
 }
 
@@ -64,16 +66,26 @@ abstract class AdbReverseLocalnetTask : DefaultTask() {
 
     @TaskAction
     fun forward() {
-        val sdkRoot = System.getenv("ANDROID_HOME")
-            ?: System.getenv("ANDROID_SDK_ROOT")
-            ?: throw GradleException("adbReverseLocalnet: set ANDROID_HOME (or ANDROID_SDK_ROOT)")
+        // Fail-safe throughout: this runs on every assembleDebug, so a missing
+        // SDK / adb / device must SKIP, never break the build.
+        val sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+        if (sdkRoot == null) {
+            logger.info("adbReverseLocalnet: ANDROID_HOME / ANDROID_SDK_ROOT not set — skipping")
+            return
+        }
         val adb = "$sdkRoot/platform-tools/adb"
         val ports = listOf(8088, 9944, 6300)
 
         val devicesOut = ByteArrayOutputStream()
-        execOps.exec {
-            it.commandLine(adb, "devices")
-            it.standardOutput = devicesOut
+        try {
+            execOps.exec {
+                it.commandLine(adb, "devices")
+                it.standardOutput = devicesOut
+                it.isIgnoreExitValue = true
+            }
+        } catch (e: Exception) {
+            logger.info("adbReverseLocalnet: could not run '$adb devices' — skipping: ${e.message}")
+            return
         }
         // `adb devices` lines look like: "<serial>\t<state>"; the first line is
         // a header. Keep only `device`-state serials that aren't emulators.
@@ -88,18 +100,24 @@ abstract class AdbReverseLocalnetTask : DefaultTask() {
             .toList()
 
         if (physicalDevices.isEmpty()) {
-            logger.lifecycle("adbReverseLocalnet: no physical devices connected — skipping (emulators use 10.0.2.2)")
+            logger.info("adbReverseLocalnet: no physical devices connected — skipping (emulators use 10.0.2.2)")
             return
         }
         physicalDevices.forEach { serial ->
-            logger.lifecycle("adbReverseLocalnet: forwarding ${ports.joinToString(",")} on $serial")
             ports.forEach { port ->
-                execOps.exec { it.commandLine(adb, "-s", serial, "reverse", "tcp:$port", "tcp:$port") }
+                try {
+                    execOps.exec {
+                        it.commandLine(adb, "-s", serial, "reverse", "tcp:$port", "tcp:$port")
+                        it.isIgnoreExitValue = true
+                    }
+                } catch (e: Exception) {
+                    logger.warn("adbReverseLocalnet: reverse tcp:$port failed on $serial — ${e.message}")
+                }
             }
+            logger.lifecycle(
+                "adbReverseLocalnet: forwarded ${ports.joinToString(",")} on $serial — " +
+                    "device localhost now reaches host localhost.",
+            )
         }
-        logger.lifecycle(
-            "Localnet ports forwarded on ${physicalDevices.size} device(s). " +
-                "Device localhost now reaches host localhost.",
-        )
     }
 }
