@@ -149,7 +149,12 @@ class DustSubscriptionManager @Inject constructor(
 
         return indexerClient.subscribeToZswapEvents(fromEventId)
             .map { rawEvent ->
-                Log.d(TAG, "Received event ${rawEvent.id}, max=${rawEvent.maxId}")
+                // Per-event trace — off by default (no logcat spam, no string
+                // built during a multi-thousand-event sync). Enable with:
+                //   adb shell setprop log.tag.DustSubscriptionManager VERBOSE
+                if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                    Log.v(TAG, "Received event ${rawEvent.id}, max=${rawEvent.maxId}")
+                }
 
                 // Filter for dust events
                 if (DustEvent.isDustEvent(rawEvent)) {
@@ -163,7 +168,9 @@ class DustSubscriptionManager @Inject constructor(
                     // Replay event into DustLocalState
                     try {
                         replayEvent(address, seed, dustEvent)
-                        Log.d(TAG, "Replayed dust event ${dustEvent.eventId}")
+                        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                            Log.v(TAG, "Replayed dust event ${dustEvent.eventId}")
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to replay event ${dustEvent.eventId}", e)
                         throw e

@@ -91,12 +91,12 @@ class UtxoManager(
                 // - TX 52 creates UTXO A → INSERT as AVAILABLE
                 // - TX 53 spends A, creates B → We mark A as SPENT (step 2), INSERT B as AVAILABLE
                 if (createdCount > 0) {
-                    // Log RAW UTXO data from subscription for debugging
-                    createdUtxosWithTxHash.forEach { utxo ->
-                        Log.d("UtxoManager", "[SYNC] Created UTXO from subscription:")
-                        Log.d("UtxoManager", "       intentHash=${utxo.intentHash} (len=${utxo.intentHash.length})")
-                        Log.d("UtxoManager", "       outputIndex=${utxo.outputIndex}, value=${utxo.value}")
-                        Log.d("UtxoManager", "       transactionHash=${utxo.transactionHash}")
+                    // Per-UTXO raw dump — off by default (no spam during a full
+                    // sync). Enable with: adb shell setprop log.tag.UtxoManager VERBOSE
+                    if (Log.isLoggable("UtxoManager", Log.VERBOSE)) {
+                        createdUtxosWithTxHash.forEach { utxo ->
+                            Log.v("UtxoManager", "[SYNC] Created UTXO intentHash=${utxo.intentHash} (len=${utxo.intentHash.length}) outputIndex=${utxo.outputIndex} value=${utxo.value} txHash=${utxo.transactionHash}")
+                        }
                     }
 
                     // UTXO state handling during sync:
@@ -113,26 +113,28 @@ class UtxoManager(
                         val entity = UnshieldedUtxoEntity.fromUtxo(utxo, state = UtxoState.AVAILABLE)
                         val existing = utxoDao.getUtxoById(entity.id)
 
+                        // Per-UTXO decision trace — off by default (see VERBOSE note above).
+                        val trace = Log.isLoggable("UtxoManager", Log.VERBOSE)
                         when {
                             existing == null -> {
-                                Log.d("UtxoManager", "INSERT: New UTXO ${entity.id} value=${entity.value}")
+                                if (trace) Log.v("UtxoManager", "INSERT: New UTXO ${entity.id} value=${entity.value}")
                                 entity // Insert new UTXO
                             }
                             existing.state == UtxoState.SPENT -> {
                                 // SPENT by indexer = confirmed spent by a later transaction
                                 // A later tx in the sync will mark this as spent, which is correct
-                                Log.d("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
+                                if (trace) Log.v("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
                                 null // Keep SPENT - it was legitimately spent
                             }
                             existing.state == UtxoState.PENDING -> {
                                 // PENDING = our transaction is in flight
                                 // Don't overwrite - our tx might still confirm
-                                Log.d("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
+                                if (trace) Log.v("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
                                 null // Keep PENDING - wait for our tx to confirm or fail
                             }
                             else -> {
                                 // AVAILABLE - update with latest data from indexer
-                                Log.d("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
+                                if (trace) Log.v("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
                                 entity
                             }
                         }
@@ -320,10 +322,13 @@ class UtxoManager(
      * Debug: Dump all UTXOs for an address to logs.
      */
     suspend fun debugDumpAllUtxos(address: String, tag: String) {
+        // Off by default — also skips the DB read. Enable with:
+        //   adb shell setprop log.tag.UtxoManager VERBOSE
+        if (!Log.isLoggable("UtxoManager", Log.VERBOSE)) return
         val allUtxos = utxoDao.getAllUtxosForAddress(address)
-        Log.d("UtxoManager", "[$tag] All UTXOs for address (${allUtxos.size} total):")
+        Log.v("UtxoManager", "[$tag] All UTXOs for address (${allUtxos.size} total):")
         allUtxos.forEach { utxo ->
-            Log.d("UtxoManager", "  [${utxo.state}] id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
+            Log.v("UtxoManager", "  [${utxo.state}] id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
         }
     }
 
@@ -419,8 +424,10 @@ class UtxoManager(
         // Step 1: SELECT available UTXOs (sorted by value, smallest first)
         val availableUtxos = utxoDao.getUnspentUtxosForTokenSorted(address, tokenType)
         Log.d("UtxoManager", "selectAndLockUtxos: ${availableUtxos.size} AVAILABLE UTXOs, total=${availableUtxos.sumOf { it.value.toBigInteger() }}")
-        availableUtxos.forEach { utxo ->
-            Log.d("UtxoManager", "  AVAILABLE: id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
+        if (Log.isLoggable("UtxoManager", Log.VERBOSE)) {
+            availableUtxos.forEach { utxo ->
+                Log.v("UtxoManager", "  AVAILABLE: id=${utxo.id}, intentHash=${utxo.intentHash}:${utxo.outputIndex}, value=${utxo.value}")
+            }
         }
 
         // Step 2: Perform coin selection (smallest-first)
@@ -551,7 +558,7 @@ class UtxoManager(
         val databaseIds = utxoIntentIds.mapNotNull { (intentHash, outputNo) ->
             val utxo = utxoDao.getUtxoByIntentHash(intentHash, outputNo)
             if (utxo != null) {
-                Log.d("UtxoManager", "Found UTXO for intentHash=$intentHash:$outputNo -> id=${utxo.id}, currentState=${utxo.state}")
+                if (Log.isLoggable("UtxoManager", Log.VERBOSE)) Log.v("UtxoManager", "Found UTXO for intentHash=$intentHash:$outputNo -> id=${utxo.id}, currentState=${utxo.state}")
                 utxo.id
             } else {
                 Log.w("UtxoManager", "No UTXO found for intentHash=$intentHash:$outputNo")
