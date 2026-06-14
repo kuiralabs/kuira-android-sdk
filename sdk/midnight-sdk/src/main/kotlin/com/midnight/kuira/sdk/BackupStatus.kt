@@ -21,7 +21,15 @@ sealed interface CloudBackupStatus {
     /** Drive consent hasn't been granted — the UI should offer "enable". Dust only. */
     data object NeedsConsent : CloudBackupStatus
 
-    /** Last upload failed; [message] is for logs/diagnostics, not necessarily UI. */
+    /**
+     * Couldn't reach the cloud due to a transient network/DNS blip (e.g. the
+     * device momentarily can't resolve `www.googleapis.com`). Distinct from
+     * [Failed]: the backup is enabled and healthy, just deferred — the next sync
+     * retries. The UI should NOT alarm (no red error); backup is best-effort.
+     */
+    data object Offline : CloudBackupStatus
+
+    /** Last upload failed for a real reason (auth/quota/corruption); [message] for logs/UI. */
     data class Failed(val message: String) : CloudBackupStatus
 }
 

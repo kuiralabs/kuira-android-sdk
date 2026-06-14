@@ -644,9 +644,39 @@ class MidnightWallet internal constructor(
             // Surfaced (not silent) so the UI can offer "enable cloud backup".
             updateDustBackup(CloudBackupStatus.NeedsConsent)
         } catch (e: Exception) {
-            updateDustBackup(CloudBackupStatus.Failed(e.message ?: "backup failed"))
-            Log.w(TAG, "Dust cloud backup failed: ${e.message}")
+            if (isTransientNetworkError(e)) {
+                // Best-effort backup, momentary connectivity/DNS blip — not a real
+                // failure. Don't alarm the user (no red); the next sync retries.
+                updateDustBackup(CloudBackupStatus.Offline)
+                Log.i(TAG, "Dust cloud backup deferred — offline: ${e.message}")
+            } else {
+                updateDustBackup(CloudBackupStatus.Failed(e.message ?: "backup failed"))
+                Log.w(TAG, "Dust cloud backup failed: ${e.message}")
+            }
         }
+    }
+
+    /**
+     * True when [t] (or a cause in its chain) is a transient connectivity/DNS
+     * error — so a best-effort cloud backup that hit one is shown as [Offline]
+     * (retry-when-online), not a red [Failed]. Covers UnknownHostException /
+     * SocketTimeout / connection failures, plus message-sniffing for wrapped cases.
+     */
+    private fun isTransientNetworkError(t: Throwable?): Boolean {
+        var e = t
+        repeat(6) {
+            val cur = e ?: return false
+            if (cur is java.io.IOException) return true
+            val m = cur.message?.lowercase().orEmpty()
+            if ("unable to resolve host" in m || "no address associated" in m ||
+                "failed to connect" in m || "network is unreachable" in m ||
+                "unable to resolve" in m || "timeout" in m
+            ) {
+                return true
+            }
+            e = cur.cause
+        }
+        return false
     }
 
     /**
@@ -664,8 +694,13 @@ class MidnightWallet internal constructor(
         runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
             .onSuccess { updateAppDataBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis())) }
             .onFailure {
-                updateAppDataBackup(CloudBackupStatus.Failed(it.message ?: "backup failed"))
-                Log.w(TAG, "App-state cloud backup failed: ${it.message}")
+                if (isTransientNetworkError(it)) {
+                    updateAppDataBackup(CloudBackupStatus.Offline)
+                    Log.i(TAG, "App-state cloud backup deferred — offline: ${it.message}")
+                } else {
+                    updateAppDataBackup(CloudBackupStatus.Failed(it.message ?: "backup failed"))
+                    Log.w(TAG, "App-state cloud backup failed: ${it.message}")
+                }
             }
         Unit
     }

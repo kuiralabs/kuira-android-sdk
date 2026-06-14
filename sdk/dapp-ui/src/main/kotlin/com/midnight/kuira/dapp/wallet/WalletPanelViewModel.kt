@@ -668,6 +668,9 @@ private fun CloudBackupStatus.toDustLane(): BackupLaneState = when (this) {
     CloudBackupStatus.NeedsConsent -> BackupLaneState.Toggle(on = false)
     CloudBackupStatus.Syncing -> BackupLaneState.Toggle(on = true, busy = true)
     is CloudBackupStatus.UpToDate -> BackupLaneState.Toggle(on = true)
+    // Offline = enabled + healthy, just a transient connectivity blip. Keep it ON
+    // with NO red error — the next sync retries when the network is back.
+    CloudBackupStatus.Offline -> BackupLaneState.Toggle(on = true)
     is CloudBackupStatus.Failed -> BackupLaneState.Toggle(on = false, detail = friendlyBackupError(message))
 }
 
@@ -682,6 +685,8 @@ private fun CloudBackupStatus.toAppDataLane(): BackupLaneState = when (this) {
     CloudBackupStatus.Idle -> BackupLaneState.Ok("None yet")
     CloudBackupStatus.Syncing -> BackupLaneState.Syncing(progress = null)
     is CloudBackupStatus.UpToDate -> BackupLaneState.Ok("On", confirm = true)
+    // Transient offline blip — keep the lane calm ("On"), no red; retries next sync.
+    CloudBackupStatus.Offline -> BackupLaneState.Ok("On", confirm = true)
     // Block Store needs no consent — NeedsConsent shouldn't occur here, but map
     // it defensively rather than crash on a future status.
     CloudBackupStatus.NeedsConsent -> BackupLaneState.Action("Off", "Enable")
@@ -700,6 +705,12 @@ private fun friendlyBackupError(raw: String?): String {
     return when {
         msg.contains("UNREGISTERED_ON_API_CONSOLE", ignoreCase = true) ->
             "Drive not set up for this app — register its OAuth client (package + SHA-1) in Google Cloud Console."
+        // Network/DNS should normally surface as CloudBackupStatus.Offline (no error),
+        // but translate it here too in case it reaches Failed via another path.
+        msg.contains("resolve host", ignoreCase = true) ||
+            msg.contains("No address associated", ignoreCase = true) ||
+            msg.contains("Unable to resolve", ignoreCase = true) ->
+            "Offline — will sync when you're back online."
         msg.contains("cancel", ignoreCase = true) -> "Cloud sync cancelled."
         else -> msg.ifBlank { "Cloud sync failed" }
     }
