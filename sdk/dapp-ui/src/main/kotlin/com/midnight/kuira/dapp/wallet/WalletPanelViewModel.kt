@@ -23,6 +23,7 @@ import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -425,6 +426,12 @@ class WalletPanelViewModel @Inject constructor(
                 // sheet stays actionable rather than red.
                 Log.i(TAG, "refreshBalance: biometric cancelled — ${if (sessionLock.locked.value) "staying Locked" else "back to None"}")
                 _status.value = if (sessionLock.locked.value) WalletStatus.Locked else WalletStatus.None
+            } catch (e: CancellationException) {
+                // Benign: this refresh was superseded — a network/config switch or
+                // session lock closed the SDK out from under it, cancelling its
+                // scope. The new config's refresh shows the real result, so DON'T
+                // paint "Job was cancelled" as an error; let cancellation propagate.
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Balance read failed")

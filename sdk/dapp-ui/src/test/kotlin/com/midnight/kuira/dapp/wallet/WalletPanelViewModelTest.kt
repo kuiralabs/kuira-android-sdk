@@ -24,7 +24,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.math.BigInteger
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -122,6 +124,23 @@ class WalletPanelViewModelTest {
             "Action handler must translate the exception, not let it surface as a generic Error",
             WalletStatus.SigilRequired,
             vm.status.value,
+        )
+    }
+
+    @Test
+    fun `refreshBalance treats cancellation as benign — never a generic Error`() = runTest {
+        // A superseding network/config switch or a session lock closes the SDK out
+        // from under an in-flight refresh, cancelling its scope → JobCancellationException.
+        // That must NOT surface as "Couldn't load balance / Job was cancelled" — the
+        // new refresh shows the real result. Regression for the localnet-switch report.
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws CancellationException("superseded")
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity)
+
+        assertTrue(
+            "cancellation must not become an Error state, got ${vm.status.value}",
+            vm.status.value !is WalletStatus.Error,
         )
     }
 
