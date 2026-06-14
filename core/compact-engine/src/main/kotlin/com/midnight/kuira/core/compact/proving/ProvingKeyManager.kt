@@ -596,7 +596,11 @@ class ProvingKeyManager(
         File(keysDir, "version.txt").writeText(CURRENT_VERSION.toString())
         // Stamp LAST so an interrupted refresh re-verifies next launch (self-healing).
         if (stamp != null) stampFile.runCatching { writeText(stamp) }
-        return hasWalletKeys()
+        val ready = hasWalletKeys()
+        // Positive signal for offline-bundle verification: this is the line that
+        // confirms the keys came from the APK and the S3 download was skipped.
+        if (ready) Log.i(TAG, "Wallet proving keys installed from APK bundle (offline) — S3 download skipped")
+        return ready
     }
 
     /**
