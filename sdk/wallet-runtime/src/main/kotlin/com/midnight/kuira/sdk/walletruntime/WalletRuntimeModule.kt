@@ -46,6 +46,11 @@ object WalletRuntimeModule {
             .network(config.network)
             .seed(seed)
             .provingMode(config.provingMode)
+            // #235: the embedded-wallet provider keeps dust pre-synced in the
+            // background (live tip-advance subscription) so a tx never waits on a
+            // cold sync. The SDK Builder default is off (for raw SDK consumers);
+            // every dapp-ui host opts in here. Surfaced via DustSyncService.
+            .proactiveDustSync(true)
             .also { builder -> config.proofServerUrl?.let { builder.proofServerUrl(it) } }
             // Cross-device dust backup: assemble the coordinator from the proven
             // pieces. Drive REST (DriveBackupStorage) gets a silent token; if

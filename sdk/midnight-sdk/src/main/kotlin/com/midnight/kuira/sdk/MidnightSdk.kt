@@ -116,6 +116,7 @@ class MidnightSdk private constructor(
     private val database: UtxoDatabase,
     private val indexerClient: IndexerClientImpl,
     private val shieldedTracker: ShieldedBalanceTracker,
+    private val dustTracker: DustBalanceTracker?,
 ) {
     /**
      * Register this wallet's NIGHT key to generate dust against its public dust key.
@@ -241,6 +242,7 @@ class MidnightSdk private constructor(
         subscriptionJob.cancel()
         subscriptionScope.cancel()
         shieldedTracker.close()
+        dustTracker?.close()
         wallet.close()
         indexerClient.close()
         database.close()
@@ -263,6 +265,17 @@ class MidnightSdk private constructor(
         private var proofServerUrl: String? = null
         private var dustCloudBackupFactory: ((address: String, dustSeed: ByteArray) -> DustCloudBackup)? = null
         private var appStateBackupFactory: ((seed: ByteArray) -> AppStateCloudBackup)? = null
+        private var proactiveDustSync: Boolean = false
+
+        /**
+         * Keep dust pre-synced in the background (#235). When enabled, the SDK
+         * runs a live tip-advance dust subscription so a transaction never waits
+         * on a cold sync; progress is observable via `MidnightWallet.dustSyncStatus`
+         * (and surfaced by the foreground-service Live-Update notification). Off by
+         * default — opt in for wallet-first apps. Delta only; the first cold sync is
+         * still O(chain) but now runs ahead of need.
+         */
+        fun proactiveDustSync(enabled: Boolean = true) = apply { this.proactiveDustSync = enabled }
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
         fun network(network: MidnightNetwork) = apply { this.network = network }
@@ -458,6 +471,22 @@ class MidnightSdk private constructor(
                 appStateCloudBackup = appStateCloudBackup,
             )
 
+            // ── Proactive dust tracker (#235) — opt-in ──
+            //
+            // Keeps dust current via a live tip-advance subscription so a tx never
+            // waits on a cold sync. OFF by default (existing hosts unchanged). The
+            // sync itself goes through the wallet's balanceMutex (proactiveDustResync,
+            // delta only — never a genesis wipe) and publishes to wallet.dustSyncStatus.
+            // Launched on subscriptionScope so close() cancels it.
+            val dustTracker = if (proactiveDustSync) {
+                DustBalanceTracker(
+                    indexerClient = indexerClient,
+                    onTipAdvance = wallet::proactiveDustResync,
+                ).also { it.start(subscriptionScope) }
+            } else {
+                null
+            }
+
             // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──
             //
             // [provingMode] picks where ZK proofs are generated:
@@ -502,6 +531,7 @@ class MidnightSdk private constructor(
                 walletAddress = keys.address,
                 shieldedWalletAddress = keys.shieldedAddress,
                 provingKeyManager = provingKeyManager,
+                dustTracker = dustTracker,
                 accessKeyPublicKey = keys.accessKeyPublicKey,
                 accessKeyPath = keys.accessKeyPath,
                 nightPrivateKey = keys.nightPrivateKey,

@@ -119,7 +119,21 @@ class MidnightWalletTest {
         val wallet = createWallet(dustSyncManager = syncManager)
         wallet.syncDust()
 
-        verify(syncManager).ensureSynced()
+        // syncDust now always supplies a progress callback — it publishes to
+        // dustSyncStatus (#235) in addition to forwarding the caller's onProgress.
+        verify(syncManager).ensureSynced(any())
+    }
+
+    @Test
+    fun `syncDust publishes Syncing then UpToDate to dustSyncStatus`() = runTest {
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced(any()) } doReturn mock()
+        }
+        val wallet = createWallet(dustSyncManager = syncManager)
+
+        assertEquals(DustSyncStatus.Idle, wallet.dustSyncStatus.value)
+        wallet.syncDust()
+        assertEquals(DustSyncStatus.UpToDate, wallet.dustSyncStatus.value)
     }
 
     // ── balanceTransaction error cases ──

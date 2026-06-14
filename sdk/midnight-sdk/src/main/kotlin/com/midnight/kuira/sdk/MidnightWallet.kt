@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import com.midnight.kuira.core.identity.backup.DriveConsentRequiredException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,6 +87,17 @@ class MidnightWallet internal constructor(
      * separately at the app layer.
      */
     val backupStatus: StateFlow<BackupStatusSnapshot> = _backupStatus.asStateFlow()
+
+    private val _dustSyncStatus = MutableStateFlow<DustSyncStatus>(DustSyncStatus.Idle)
+
+    /**
+     * Observable dust-sync status (#235). Every dust sync this wallet runs —
+     * [syncDust] and the proactive [proactiveDustResync] — publishes here, so a
+     * background observer (the foreground-service Live-Update notification) can
+     * render progress without driving the sync itself. The in-app
+     * `WalletSyncIndicator` can also collect this instead of the per-call lambda.
+     */
+    val dustSyncStatus: StateFlow<DustSyncStatus> = _dustSyncStatus.asStateFlow()
 
     // Atomic update: dust + app-state backups can report concurrently (a host
     // calling backupAppStateToCloud while refresh() runs backupDustToCloud), so a
@@ -261,8 +273,63 @@ class MidnightWallet internal constructor(
      */
     suspend fun syncDust(
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
+    ) = withContext(Dispatchers.IO) {
+        runTrackedDustSync("Syncing dust…") { publish ->
+            dustSyncManager.ensureSynced(onSyncProgress = { processed, total ->
+                onProgress?.invoke(processed, total) // external callback (back-compat)
+                publish(processed, total)            // observable dustSyncStatus
+            })
+        }
+    }
+
+    /**
+     * Proactive delta dust-sync for the live tip-advance path (#235). Runs the
+     * incremental refresh under [balanceMutex] — same discipline as [refresh] —
+     * so it can't close the shared `DustLocalState` mid-balance. Publishes to
+     * [dustSyncStatus]. Used by the background `DustBalanceTracker`; never does a
+     * genesis wipe.
+     */
+    internal suspend fun proactiveDustResync() = withContext(Dispatchers.IO) {
+        runTrackedDustSync("Updating dust…") { publish ->
+            balanceMutex.withLock { dustSyncManager.refreshIncremental(onSyncProgress = publish) }
+        }
+    }
+
+    /** Map a (processed, total) tick onto [dustSyncStatus]. -1 = replay tail (indeterminate). */
+    private fun publishDustProgress(eventsProcessed: Int, totalEvents: Int) {
+        _dustSyncStatus.value = when {
+            eventsProcessed < 0 ->
+                DustSyncStatus.Syncing(null, eventsProcessed, totalEvents, "Finalizing dust…")
+            totalEvents > 0 ->
+                DustSyncStatus.Syncing(
+                    (eventsProcessed.toFloat() / totalEvents).coerceIn(0f, 1f),
+                    eventsProcessed, totalEvents, "Syncing dust",
+                )
+            else ->
+                DustSyncStatus.Syncing(null, eventsProcessed, totalEvents, "Syncing dust…")
+        }
+    }
+
+    /**
+     * Run a dust sync while driving [dustSyncStatus]: Syncing → UpToDate on
+     * success, Failed on error, Idle on cancellation. Rethrows so callers keep
+     * their existing error/cancellation semantics.
+     */
+    private suspend fun runTrackedDustSync(
+        startLabel: String,
+        block: suspend (publish: suspend (Int, Int) -> Unit) -> Unit,
     ) {
-        withContext(Dispatchers.IO) { dustSyncManager.ensureSynced(onSyncProgress = onProgress) }
+        _dustSyncStatus.value = DustSyncStatus.Syncing(null, 0, 0, startLabel)
+        try {
+            block { processed, total -> publishDustProgress(processed, total) }
+            _dustSyncStatus.value = DustSyncStatus.UpToDate
+        } catch (ce: CancellationException) {
+            _dustSyncStatus.value = DustSyncStatus.Idle
+            throw ce
+        } catch (e: Exception) {
+            _dustSyncStatus.value = DustSyncStatus.Failed(e.message ?: "Dust sync failed")
+            throw e
+        }
     }
 
     override suspend fun balanceTransaction(provenTxHex: String): String = withContext(Dispatchers.IO) {

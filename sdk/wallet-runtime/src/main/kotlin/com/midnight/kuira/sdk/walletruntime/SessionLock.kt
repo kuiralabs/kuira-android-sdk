@@ -83,6 +83,17 @@ class SessionLock @Inject constructor(
      */
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
 
+    private val _inForeground = MutableStateFlow(false)
+
+    /**
+     * Whether the app is currently foregrounded (≥1 started Activity). Flipped by
+     * the activity-lifecycle callbacks. The dust-sync foreground service (#235)
+     * uses this to decide when a background notification is warranted — in-app the
+     * `WalletSyncIndicator` already shows progress, so the service only surfaces
+     * while backgrounded.
+     */
+    val inForeground: StateFlow<Boolean> = _inForeground.asStateFlow()
+
     private var idleJob: Job? = null
     private var backgroundJob: Job? = null
     private var foregroundActivityCount = 0
@@ -104,12 +115,14 @@ class SessionLock @Inject constructor(
 
     /** App returned to foreground: cancel the pending background lock, re-arm idle. */
     fun onForeground() {
+        _inForeground.value = true
         backgroundJob?.cancel()
         restartIdleTimer()
     }
 
     /** App left the foreground: lock after the grace period unless we come back. */
     fun onBackground() {
+        _inForeground.value = false
         idleJob?.cancel()
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
