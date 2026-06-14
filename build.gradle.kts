@@ -47,9 +47,13 @@ apiValidation {
 // of the same gradle invocation — no separate `./gradlew adbReverseLocalnet`
 // step needed.
 //
-// Lives at root scope rather than in `:app` because it's project-wide
-// infrastructure consumed by every deployable module (:app, :examples:bboard,
-// :examples:midnight-kicks). The SDK is a library and doesn't install.
+// Lives at root scope because it's consumed by this build's deployable module
+// (`:app`). This inline copy is only for the SDK's OWN app — it can't apply the
+// SDK's not-yet-published `io.github.kuiralabs.localnet` plugin to itself
+// (chicken-and-egg). The standalone example apps (Kicks, BBoard, starter)
+// instead apply that plugin — one line, the published source of truth for this
+// task (see sdk/contract-plugin/.../KuiraLocalnetPlugin.kt). The SDK is a
+// library and doesn't install.
 //
 // Ports tunneled (kept in sync with `NetworkConfig.LOCALNET_*_PORT`):
 //   - 8088: indexer GraphQL

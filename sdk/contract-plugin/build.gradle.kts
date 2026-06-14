@@ -56,6 +56,13 @@ gradlePlugin {
             description = "Syncs compiled Compact contract artifacts into an Android app's assets directory at build time."
             tags.set(listOf("kuira", "midnight", "compact", "android", "zk"))
         }
+        create("kuiraLocalnet") {
+            id = "io.github.kuiralabs.localnet"
+            implementationClass = "com.midnight.kuira.contract.KuiraLocalnetPlugin"
+            displayName = "Kuira Localnet adb-reverse Plugin"
+            description = "Auto-forwards Midnight localnet ports from a connected physical device to the host on installDebug (no manual adb reverse)."
+            tags.set(listOf("kuira", "midnight", "android", "localnet", "adb"))
+        }
     }
 }
 
