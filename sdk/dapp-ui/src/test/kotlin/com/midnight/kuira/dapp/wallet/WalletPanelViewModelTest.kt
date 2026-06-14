@@ -21,6 +21,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.math.BigInteger
 import org.junit.Assert.assertEquals
@@ -54,6 +55,7 @@ class WalletPanelViewModelTest {
     private val activity: FragmentActivity = mockk(relaxed = true)
     private val driveAuth: DriveAuthManager = mockk(relaxed = true)
     private val sessionLock: SessionLock = mockk(relaxed = true)
+    private val lockedFlow = MutableStateFlow(false)
 
     private fun dustPrefs() =
         context.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
@@ -74,8 +76,9 @@ class WalletPanelViewModelTest {
         // Real (empty) SDK flow — the relaxed mock's .value returns an uncastable
         // Object, which setDustBackup's `sdk.value?.wallet` would choke on.
         every { sdkProvider.sdk } returns MutableStateFlow<MidnightSdk?>(null)
-        // The VM collects sessionLock.locked in init; give it a real flow.
-        every { sessionLock.locked } returns MutableStateFlow(false)
+        // The VM collects sessionLock.locked in init; give it a controllable flow.
+        lockedFlow.value = false
+        every { sessionLock.locked } returns lockedFlow
     }
 
     @Test
@@ -407,6 +410,19 @@ class WalletPanelViewModelTest {
         network = MidnightNetwork.UNDEPLOYED,
         provingMode = ProvingMode.DEFAULT,
     )
+
+    @Test
+    fun `session lock drives status to Locked`() = runTest {
+        val vm = newVm()
+        advanceUntilIdle() // let observeSessionLock subscribe
+
+        lockedFlow.value = true
+        advanceUntilIdle()
+
+        // Locked is its own state (not None/Loading) so the sheet renders an
+        // explicit "tap to unlock" instead of an indefinite shimmer.
+        assertEquals(WalletStatus.Locked, vm.status.value)
+    }
 
     private fun newVm(): WalletPanelViewModel = newVmWithStore(SigilStateStore(context))
 

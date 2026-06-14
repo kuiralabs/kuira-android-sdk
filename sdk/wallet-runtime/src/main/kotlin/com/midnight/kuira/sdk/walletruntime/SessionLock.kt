@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
+import androidx.core.content.ContextCompat
+import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -51,6 +53,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionLock @Inject constructor(
     private val provider: MidnightSdkProvider,
+    private val walletSeedSource: WalletSeedSource,
 ) {
     /** Foreground idle timeout before locking. Mutable so hosts can tune it. */
     var idleTimeoutMs: Long = DEFAULT_IDLE_TIMEOUT_MS
@@ -108,8 +111,13 @@ class SessionLock @Inject constructor(
     private fun lock(reason: String) {
         idleJob?.cancel()
         backgroundJob?.cancel()
-        Log.i(TAG, "Locking session ($reason) — dropping cached SDK; next action re-auths")
+        Log.i(TAG, "Locking session ($reason) — dropping cached SDK + forcing re-auth")
         _locked.value = true
+        // Two parts make a lock REAL: drop the in-memory SDK (its decrypted seed),
+        // AND force the next seed load to prompt for biometric — otherwise the
+        // Keystore auth-validity window would let it silently re-decrypt within
+        // ~30s and the "lock" would be a no-op.
+        walletSeedSource.requireFreshAuthNext()
         provider.close()
     }
 
@@ -155,7 +163,14 @@ class SessionLock @Inject constructor(
                 if (intent?.action == Intent.ACTION_SCREEN_OFF) onScreenOff()
             }
         }
-        application.registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+        // ContextCompat applies the API 34+ RECEIVER_NOT_EXPORTED requirement;
+        // a bare registerReceiver silently fails to deliver on newer Android.
+        ContextCompat.registerReceiver(
+            application,
+            screenOffReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         // Clear the locked flag once the SDK is rebuilt (the user re-authenticated).
         // Started here, not in the constructor, so unit tests stay framework-free.

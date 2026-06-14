@@ -17,6 +17,7 @@ import com.midnight.kuira.dapp.backup.BackupLaneState
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import com.midnight.kuira.sdk.BackupStatusSnapshot
 import com.midnight.kuira.sdk.CloudBackupStatus
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
@@ -228,10 +229,10 @@ class WalletPanelViewModel @Inject constructor(
         viewModelScope.launch {
             sessionLock.locked.collect { locked ->
                 if (locked) {
-                    Log.i(TAG, "Session locked — hiding balance until re-auth")
+                    Log.i(TAG, "Session locked — showing Locked state until re-auth")
                     observeBalanceJob?.cancel()
                     _syncProgress.value = null
-                    _status.value = WalletStatus.None
+                    _status.value = WalletStatus.Locked
                 }
             }
         }
@@ -306,7 +307,8 @@ class WalletPanelViewModel @Inject constructor(
             // the sheet through Loading and lose the in-screen address. Only
             // show Loading when we're truly bootstrapping from None / Error.
             if (_status.value !is WalletStatus.Ready) {
-                _status.value = WalletStatus.Loading("Bootstrapping wallet…")
+                val label = if (_status.value is WalletStatus.Locked) "Unlocking…" else "Bootstrapping wallet…"
+                _status.value = WalletStatus.Loading(label)
             }
             try {
                 val built = sdkProvider.ensureSdk(activity, config)
@@ -408,6 +410,13 @@ class WalletPanelViewModel @Inject constructor(
                 // succeeds.
                 Log.i(TAG, "refreshBalance gated on sigil — emitting SigilRequired")
                 _status.value = WalletStatus.SigilRequired
+            } catch (e: AuthenticationCancelledException) {
+                // User dismissed the unlock biometric — stay Locked (the seed
+                // force-reauth flag is still set), not Error. If we weren't locked
+                // (e.g. a first bootstrap they cancelled), fall back to None so the
+                // sheet stays actionable rather than red.
+                Log.i(TAG, "refreshBalance: biometric cancelled — ${if (sessionLock.locked.value) "staying Locked" else "back to None"}")
+                _status.value = if (sessionLock.locked.value) WalletStatus.Locked else WalletStatus.None
             } catch (e: Exception) {
                 Log.e(TAG, "refreshBalance failed", e)
                 _status.value = WalletStatus.Error(e.message ?: "Balance read failed")

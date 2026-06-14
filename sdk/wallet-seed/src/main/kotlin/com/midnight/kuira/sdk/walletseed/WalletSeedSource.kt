@@ -72,6 +72,15 @@ class WalletSeedSource @Inject constructor(
     private val bootstrapMutex = Mutex()
 
     /**
+     * Session lock (#14): force the next [ensureSeedReady] to require a fresh
+     * biometric, even if the Keystore auth-validity window is still open.
+     * Delegates to [SeedVault.requireFreshAuthNext]; called by `SessionLock`
+     * on lock so the unlock genuinely re-authenticates rather than silently
+     * re-decrypting within the window.
+     */
+    fun requireFreshAuthNext() = seedVault.requireFreshAuthNext()
+
+    /**
      * Returns the wallet's BIP-39 seed, deriving it from the user's
      * passkey via PRF if not already cached. See class-level KDoc for
      * the full bootstrap contract.

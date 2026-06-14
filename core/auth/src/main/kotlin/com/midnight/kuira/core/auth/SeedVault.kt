@@ -119,6 +119,24 @@ class SeedVault(
     }
 
     /**
+     * Session-lock flag (#14). When set, the NEXT [loadSeed] skips the silent
+     * auth-validity-window fast path and forces a full biometric prompt — then
+     * clears the flag. This is what makes session lock real: dropping the cached
+     * SDK isn't enough, because within [AuthPolicy.VALIDITY_DURATION_SECONDS]
+     * Keystore would re-decrypt the seed with no prompt. Set on lock so the
+     * unlock genuinely re-authenticates. `@Volatile` — set from the lock trigger
+     * (any thread), read on the seed-load coroutine.
+     */
+    @Volatile
+    private var requireFreshAuth = false
+
+    /** Force the next [loadSeed] to prompt for biometric (called by session lock). */
+    fun requireFreshAuthNext() {
+        requireFreshAuth = true
+        Log.i(TAG, "Session locked — next seed load will require a fresh biometric")
+    }
+
+    /**
      * Encrypts and stores the wallet seed material.
      *
      * Shows a biometric prompt to unlock the Keystore master key, encrypts
@@ -240,23 +258,36 @@ class SeedVault(
         // is enforced in secure hardware, so this can't bypass auth: if
         // the window's expired the call returns null and we fall through
         // to the full prompt path below.
-        val silentPlaintext = biometricGate.tryDecryptWithinAuthWindow(iv, ciphertext)
+        // Session lock forces a full prompt: skip the silent window so the
+        // unlock genuinely re-authenticates (see [requireFreshAuthNext]).
+        val silentPlaintext =
+            if (requireFreshAuth) {
+                Log.i(TAG, "loadSeed: fresh-auth required (session locked) — skipping silent window")
+                null
+            } else {
+                biometricGate.tryDecryptWithinAuthWindow(iv, ciphertext)
+            }
         val plaintext = if (silentPlaintext != null) {
             Log.i(TAG, "loadSeed: silent (auth-validity window OPEN)")
             silentPlaintext
         } else {
-            Log.i(TAG, "loadSeed: prompting (auth-validity window EXPIRED or unavailable)")
+            Log.i(TAG, "loadSeed: prompting (auth-validity window EXPIRED, unavailable, or session-locked)")
             val authenticated = biometricGate.authenticateForDecrypt(
                 activity = activity,
                 iv = iv,
                 title = "Unlock wallet",
                 subtitle = "Authenticate to access your wallet keys"
             )
-            try {
+            val decrypted = try {
                 authenticated.cipher.doFinal(ciphertext)
             } catch (e: javax.crypto.AEADBadTagException) {
                 throw CorruptedSeedException("Seed decryption failed: invalid auth tag")
             }
+            // A fresh biometric just succeeded — the lock is satisfied. Cleared
+            // only on this path (not the silent one), so a lock always costs
+            // exactly one prompt. Cancellation throws above and leaves it set.
+            requireFreshAuth = false
+            decrypted
         }
 
         try {

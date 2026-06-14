@@ -447,6 +447,7 @@ internal fun pillLabel(
     }
     is WalletStatus.Error -> "${network.pillName} · error"
     is WalletStatus.SigilRequired -> "${network.pillName} · sigil required"
+    is WalletStatus.Locked -> "${network.pillName} · 🔒 locked"
 }
 
 /**
@@ -540,6 +541,7 @@ private fun WalletSheetContent(
                 )
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
                 is WalletStatus.SigilRequired -> SigilPrompt(colors)
+                is WalletStatus.Locked -> WalletLocked(colors, onUnlock = onRefreshBalance)
             }
 
             Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
@@ -602,6 +604,24 @@ private fun SigilPrompt(colors: WalletPanelColors) {
             fontSize = PanelType.Body,
             lineHeight = 20.sp,
         )
+    }
+}
+
+/** Branded "session locked" body (#14) — explicit, actionable; not a shimmer. */
+@Composable
+private fun WalletLocked(colors: WalletPanelColors, onUnlock: () -> Unit) {
+    GlassPanel(tint = colors.button, border = colors.onSheetSubtle) {
+        Text("🔒 LOCKED", color = colors.onSheetDim, fontSize = 11.sp, fontWeight = FontWeight.W400, letterSpacing = 3.sp)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            "Your session is locked. Unlock with your device biometric to see your " +
+                "balance and act. Your identity stays signed in.",
+            color = colors.onSheetSubtle,
+            fontSize = PanelType.Body,
+            lineHeight = 20.sp,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        PanelButton("unlock", enabled = true, modifier = Modifier.fillMaxWidth(), colors = colors, onClick = onUnlock)
     }
 }
 

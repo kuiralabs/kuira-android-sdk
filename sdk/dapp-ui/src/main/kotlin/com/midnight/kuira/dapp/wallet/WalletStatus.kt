@@ -40,6 +40,15 @@ sealed class WalletStatus {
     data class Error(val message: String) : WalletStatus()
 
     /**
+     * Session locked (#14) — the cached wallet was dropped and the next access
+     * requires a fresh biometric. Distinct from [None]/[Loading] so the sheet
+     * can render an explicit "Locked — tap to unlock" affordance instead of an
+     * indefinite shimmer. The sigil stays Forged (lock ≠ sign out); unlocking is
+     * a normal refresh that re-authenticates.
+     */
+    data object Locked : WalletStatus()
+
+    /**
      * No sigil forged yet — wallet bootstrap can't proceed because
      * the BIP-39 seed is derived from the passkey PRF. The host
      * should render a "forge your sigil to continue" affordance and

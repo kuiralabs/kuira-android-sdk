@@ -22,17 +22,21 @@ import org.robolectric.RobolectricTestRunner
 class SessionLockTest {
 
     private val provider = mockk<MidnightSdkProvider>(relaxed = true)
+    private val walletSeedSource = mockk<com.midnight.kuira.sdk.walletseed.WalletSeedSource>(relaxed = true)
 
-    private fun newLock() = SessionLock(provider).apply {
+    private fun newLock() = SessionLock(provider, walletSeedSource).apply {
         idleTimeoutMs = 1_000
         backgroundGraceMs = 500
     }
 
     @Test
-    fun `lockNow closes the SDK immediately`() = runTest {
+    fun `lockNow closes the SDK AND forces fresh auth on next seed load`() = runTest {
         val lock = newLock().also { it.scope = this }
         lock.lockNow()
         verify(exactly = 1) { provider.close() }
+        // The security guarantee: lock must force the next unlock to re-auth,
+        // not just drop the SDK (which the 30s Keystore window would undo).
+        verify(exactly = 1) { walletSeedSource.requireFreshAuthNext() }
     }
 
     @Test

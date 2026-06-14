@@ -96,6 +96,14 @@ class PillLabelTest {
         assertEquals("preprod · sigil required", label)
     }
 
+    @Test
+    fun `locked shows a lock marker`() {
+        // Session-locked (#14): distinct from None so the user sees the wallet
+        // is locked (tap to unlock), not just "no wallet yet".
+        val label = pillLabel(WalletStatus.Locked, MidnightNetwork.PREPROD, formatter)
+        assertEquals("preprod · 🔒 locked", label)
+    }
+
     // ── Ready: unshielded-only ──
 
     @Test
