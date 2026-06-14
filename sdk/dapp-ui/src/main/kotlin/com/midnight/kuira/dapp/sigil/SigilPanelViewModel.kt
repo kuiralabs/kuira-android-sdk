@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
+import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.identity.backup.BackupException
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
@@ -49,6 +51,8 @@ class SigilPanelViewModel @Inject constructor(
     private val sigilSession: SigilSession,
     private val sigilStateStore: SigilStateStore,
     private val blockStoreStorage: BlockStoreBackupStorage,
+    /** Presence-only biometric gate for sign-out (confirms "it's you"). */
+    private val biometricGate: BiometricGate,
     /**
      * The shared wallet provider — sign-in's app-state restore now reads the
      * silent **seed-keyed** Block Store blob via [com.midnight.kuira.sdk.MidnightWallet.fetchAppState]
@@ -182,7 +186,7 @@ class SigilPanelViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "forgeSigil failed", e)
-                _status.value = SigilStatus.Error(e.message ?: "Sigil setup failed")
+                _status.value = errorOrRevertToForged(e.message ?: "Sigil setup failed")
             }
         }
     }
@@ -265,13 +269,56 @@ class SigilPanelViewModel @Inject constructor(
                 }
             } catch (e: BackupException) {
                 Log.e(TAG, "Sign-in failed: ${e.message}", e)
-                _status.value = SigilStatus.Error(e.message ?: "Sign-in failed")
+                _status.value = errorOrRevertToForged(e.message ?: "Sign-in failed")
             } catch (e: Exception) {
                 Log.e(TAG, "Sign-in failed", e)
-                _status.value = SigilStatus.Error(e.message ?: "Sign-in failed")
+                _status.value = errorOrRevertToForged(e.message ?: "Sign-in failed")
             }
         }
     }
+
+    /**
+     * Sign out — biometric-gated. Clears the LOCAL sigil pointer and drops the
+     * cached SDK ([MidnightSdkProvider.close]), returning the panel to
+     * [SigilStatus.None]. Fully recoverable: the passkey stays in GPM, so the
+     * user signs back in (forge reuses it, or restore from cloud) to return to
+     * the SAME identity. The cloud backup is untouched. On biometric cancel or
+     * failure nothing changes — the sigil stays [SigilStatus.Forged].
+     */
+    fun signOut(activity: FragmentActivity) {
+        viewModelScope.launch {
+            try {
+                biometricGate.authenticatePresence(
+                    activity = activity,
+                    title = "Sign out",
+                    subtitle = "Confirm it's you",
+                )
+            } catch (e: AuthenticationCancelledException) {
+                Log.i(TAG, "Sign-out cancelled — staying signed in")
+                return@launch
+            } catch (e: Exception) {
+                // Lockout / hardware error / no enrollment — fail safe: stay in.
+                Log.w(TAG, "Sign-out biometric failed — staying signed in: ${e.message}")
+                return@launch
+            }
+            sigilStateStore.clear()
+            sdkProvider.close()
+            _status.value = SigilStatus.None
+            Log.i(TAG, "Signed out — local sigil cleared, SDK closed")
+        }
+    }
+
+    /**
+     * On a forge/sign-in failure, never strand a still-valid identity behind an
+     * Error screen whose forge button could overwrite it (#15): if a sigil is
+     * persisted, return to it; only surface [SigilStatus.Error] when there is
+     * genuinely no identity to fall back to.
+     */
+    private fun errorOrRevertToForged(message: String): SigilStatus =
+        sigilStateStore.snapshot()?.let {
+            Log.i(TAG, "Failure with a live sigil persisted — reverting to Forged, not Error")
+            SigilStatus.Forged(it.did, it.credentialId, it.publicKeyHex)
+        } ?: SigilStatus.Error(message)
 
     // ── Persistence ──
 

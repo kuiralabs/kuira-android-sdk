@@ -3,8 +3,11 @@ package com.midnight.kuira.dapp.sigil
 import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
+import com.midnight.kuira.core.auth.BiometricGate
 import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.sigil.SigilDerivation
+import com.midnight.kuira.core.identity.sigil.SigilOverwriteException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.testing.MainDispatcherRule
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
@@ -17,6 +20,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -55,6 +59,7 @@ class SigilPanelViewModelTest {
 
     private val sigilSession: SigilSession = mockk(relaxed = true)
     private val blockStoreStorage: BlockStoreBackupStorage = mockk(relaxed = true)
+    private val biometricGate: BiometricGate = mockk(relaxed = true)
     private val activity: FragmentActivity = mockk(relaxed = true)
 
     // The wallet behind the provider — sign-in's app-state restore reads
@@ -242,6 +247,78 @@ class SigilPanelViewModelTest {
         coVerify(exactly = 1) { provider.restore(any()) }
     }
 
+    // ── persistSigil overwrite guard (#250) ──
+
+    @Test
+    fun `persistSigil refuses to overwrite a different sigil unless replace is set`() {
+        val store = SigilStateStore(context)
+        store.persistSigil(did = "did:a", credentialId = "cred-A", publicKeyHex = "")
+
+        // Same identity → idempotent re-persist is always allowed (sign-in / reuse).
+        store.persistSigil(did = "did:a", credentialId = "cred-A", publicKeyHex = "aa")
+        assertEquals("cred-A", freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null))
+
+        // Different identity, replace=false → refused; the original survives.
+        var threw = false
+        try {
+            store.persistSigil(did = "did:b", credentialId = "cred-B", publicKeyHex = "")
+        } catch (e: SigilOverwriteException) {
+            threw = true
+        }
+        assertTrue("expected SigilOverwriteException on a different-identity overwrite", threw)
+        assertEquals("cred-A", freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null))
+
+        // Explicit replace=true → the intentional "start fresh" path is allowed.
+        store.persistSigil(did = "did:b", credentialId = "cred-B", publicKeyHex = "", replace = true)
+        assertEquals("cred-B", freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null))
+    }
+
+    // ── signOut (#250) ──
+
+    @Test
+    fun `signOut clears the local sigil and closes the SDK on biometric success`() = runTest {
+        // Persist a sigil first → the VM loads it on init and starts Forged.
+        SigilStateStore(context).persistSigil(
+            did = Fixtures.PRF_DID,
+            credentialId = Fixtures.CREDENTIAL_ID,
+            publicKeyHex = "",
+        )
+        coEvery { biometricGate.authenticatePresence(any(), any(), any()) } returns Unit
+        val vm = newVm()
+        assertTrue("expected Forged start, got ${vm.status.value}", vm.status.value is SigilStatus.Forged)
+
+        vm.signOut(activity)
+
+        assertEquals(SigilStatus.None, vm.status.value)
+        assertEquals(
+            "local sigil pointer must be cleared",
+            null,
+            freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null),
+        )
+        verify(exactly = 1) { sdkProvider.close() }
+    }
+
+    @Test
+    fun `signOut cancelled keeps the sigil and does not close the SDK`() = runTest {
+        SigilStateStore(context).persistSigil(
+            did = Fixtures.PRF_DID,
+            credentialId = Fixtures.CREDENTIAL_ID,
+            publicKeyHex = "",
+        )
+        coEvery { biometricGate.authenticatePresence(any(), any(), any()) } throws
+            AuthenticationCancelledException("user cancelled")
+        val vm = newVm()
+
+        vm.signOut(activity)
+
+        assertTrue("sigil must survive a cancelled sign-out", vm.status.value is SigilStatus.Forged)
+        assertEquals(
+            Fixtures.CREDENTIAL_ID,
+            freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null),
+        )
+        verify(exactly = 0) { sdkProvider.close() }
+    }
+
     // ── Helpers ──
 
     private fun newVm(
@@ -250,6 +327,7 @@ class SigilPanelViewModelTest {
         sigilSession = sigilSession,
         sigilStateStore = SigilStateStore(context),
         blockStoreStorage = blockStoreStorage,
+        biometricGate = biometricGate,
         sdkProvider = sdkProvider,
         appDataProvider = appDataProvider,
     )

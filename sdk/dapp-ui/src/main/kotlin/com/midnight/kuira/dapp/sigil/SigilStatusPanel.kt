@@ -20,10 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -111,6 +113,7 @@ fun SigilStatusPanel(
                 colors = colors,
                 onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                 onRestore = { activity?.let { viewModel.restoreSeed(it) } },
+                onSignOut = { activity?.let { viewModel.signOut(it) } },
                 onStartFresh = {
                     viewModel.dismissBackup()
                     sheetOpen = false
@@ -361,6 +364,7 @@ private fun SigilSheetContent(
     colors: SigilPanelColors,
     onForgeSigil: () -> Unit,
     onRestore: () -> Unit,
+    onSignOut: () -> Unit = {},
     onStartFresh: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
@@ -393,6 +397,7 @@ private fun SigilSheetContent(
             forged = status,
             colors = colors,
             onCopy = { clipboard.setText(AnnotatedString(it)) },
+            onSignOut = onSignOut,
         )
         is SigilStatus.Error -> ErrorBody(
             message = status.message,
@@ -465,12 +470,49 @@ private fun ForgedBody(
     forged: SigilStatus.Forged,
     colors: SigilPanelColors,
     onCopy: (String) -> Unit,
+    onSignOut: () -> Unit,
 ) {
     // A signed-in sigil shows only its identity. Recovery is the passkey and
     // it's automatic, so there's no manual backup/restore action here. The
     // P-256 root key stays out of the UI (raw jargon); hosts that need it —
     // e.g. BBoard's authorizeAccessKey — read it from SigilStatus.Forged.
     MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
+
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+    // Danger zone — deliberately understated (not a primary SheetButton) so it's
+    // discoverable but not a mis-tap magnet. The confirm + biometric (in the VM)
+    // are the real guards.
+    Text(
+        text = "sign out",
+        color = colors.error,
+        fontSize = SigilType.Body,
+        modifier = Modifier
+            .clickable { showSignOutConfirm = true }
+            .padding(vertical = SigilDimens.SheetSmallGap),
+    )
+
+    if (showSignOutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirm = false },
+            title = { Text("Sign out?") },
+            text = {
+                Text(
+                    "You'll need your passkey to sign back in. Your wallet and " +
+                        "cloud backup are not deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignOutConfirm = false
+                    onSignOut()
+                }) { Text("Sign out", color = colors.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 /**

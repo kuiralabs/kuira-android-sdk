@@ -146,8 +146,32 @@ class SigilStateStore @Inject constructor(
      * Updates [snapshotFlow] after the on-disk commit so every
      * observer (e.g. [WalletPanelViewModel] auto-retry) sees the new
      * identity as soon as the next coroutine continuation runs.
+     *
+     * **Overwrite guard (#15).** Writing a triple for a DIFFERENT
+     * [credentialId] over an existing one is refused unless [replace] is
+     * explicitly true — a guard against a forge/restore path silently
+     * clobbering a live sigil (one wrong tap = sigil gone). Re-persisting
+     * the SAME credential is always allowed (idempotent), so legitimate
+     * re-establish flows — sign-in, the reuse branch of `establishSigil` —
+     * never trip the guard. The only intentional replacement today is
+     * "start fresh", which passes `replace = true`.
+     *
+     * @throws SigilOverwriteException when a different sigil already exists
+     *   and [replace] is false.
      */
-    fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
+    fun persistSigil(
+        did: String,
+        credentialId: String,
+        publicKeyHex: String,
+        replace: Boolean = false,
+    ) {
+        val existing = prefs.getString(KEY_CREDENTIAL_ID, null)
+        if (!replace && existing != null && existing != credentialId) {
+            throw SigilOverwriteException(
+                "Refusing to overwrite the existing sigil with a different credential " +
+                    "(replace=false). Sign out first to forge or restore a new identity.",
+            )
+        }
         prefs.edit()
             .putString(KEY_DID, did)
             .putString(KEY_CREDENTIAL_ID, credentialId)
@@ -212,3 +236,10 @@ data class SigilSnapshot(
     val credentialId: String,
     val publicKeyHex: String,
 )
+
+/**
+ * Thrown by [SigilStateStore.persistSigil] when a write would replace an
+ * existing sigil with a DIFFERENT credential and `replace` was not set — the
+ * data-layer backstop against silently clobbering a live identity.
+ */
+class SigilOverwriteException(message: String) : Exception(message)

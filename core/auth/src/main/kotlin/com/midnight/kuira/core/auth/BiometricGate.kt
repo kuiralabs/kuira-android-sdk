@@ -173,6 +173,54 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         }
     }
 
+    /**
+     * Presence-only authentication — shows the system biometric / device-credential
+     * prompt purely to confirm "it's you", with NO [BiometricPrompt.CryptoObject]
+     * and no crypto operation. For gating recoverable, non-secret actions (e.g.
+     * sign-out) where a TEE-bound CryptoObject would be overkill and would couple
+     * the action to the master key existing.
+     *
+     * Returns normally on success; throws the same exception types as
+     * [authenticateForEncrypt] on cancel / lockout / failure so callers can treat
+     * cancellation as "abort the action, change nothing".
+     */
+    suspend fun authenticatePresence(
+        activity: FragmentActivity,
+        title: String = "Confirm it's you",
+        subtitle: String? = null,
+    ): Unit = suspendCancellableCoroutine { cont ->
+        val executor = ContextCompat.getMainExecutor(activity)
+
+        val callback = object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                if (cont.isActive) cont.resume(Unit)
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (!cont.isActive) return
+                cont.resumeWithException(authErrorFor(errorCode, errString))
+            }
+
+            override fun onAuthenticationFailed() {
+                // Single failed attempt — system shows retry / falls back to PIN.
+            }
+        }
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .build()
+
+        val biometricPrompt = BiometricPrompt(activity, executor, callback)
+        biometricPrompt.authenticate(promptInfo) // no CryptoObject — presence only
+
+        cont.invokeOnCancellation { biometricPrompt.cancelAuthentication() }
+    }
+
     private suspend fun authenticate(
         activity: FragmentActivity,
         cipher: Cipher,
@@ -197,28 +245,7 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 if (!cont.isActive) return
-                val exception = when (errorCode) {
-                    // User-initiated cancellation. ERROR_NEGATIVE_BUTTON typically
-                    // won't fire in our config (DEVICE_CREDENTIAL is allowed, so
-                    // there's no negative button) but we handle it defensively.
-                    BiometricPrompt.ERROR_USER_CANCELED,
-                    BiometricPrompt.ERROR_NEGATIVE_BUTTON,
-                    BiometricPrompt.ERROR_CANCELED ->
-                        AuthenticationCancelledException(errString.toString())
-
-                    // Temporarily locked out after too many failed attempts.
-                    // Typically unlocks after 30 seconds.
-                    BiometricPrompt.ERROR_LOCKOUT ->
-                        AuthenticationLockedOutException(errString.toString())
-
-                    // Permanently locked out — requires device credential to reset.
-                    BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
-                        AuthenticationPermanentlyLockedOutException(errString.toString())
-
-                    else ->
-                        AuthenticationFailedException("[$errorCode] $errString")
-                }
-                cont.resumeWithException(exception)
+                cont.resumeWithException(authErrorFor(errorCode, errString))
             }
 
             override fun onAuthenticationFailed() {
@@ -246,6 +273,28 @@ class BiometricGate(private val keyManager: WalletKeyManager) {
         cont.invokeOnCancellation {
             biometricPrompt.cancelAuthentication()
         }
+    }
+
+    /** Maps a [BiometricPrompt] error code to the typed exception callers expect. */
+    private fun authErrorFor(errorCode: Int, errString: CharSequence): Exception = when (errorCode) {
+        // User-initiated cancellation. ERROR_NEGATIVE_BUTTON typically won't fire in
+        // our config (DEVICE_CREDENTIAL is allowed, so there's no negative button)
+        // but we handle it defensively.
+        BiometricPrompt.ERROR_USER_CANCELED,
+        BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+        BiometricPrompt.ERROR_CANCELED ->
+            AuthenticationCancelledException(errString.toString())
+
+        // Temporarily locked out after too many failed attempts (~30s).
+        BiometricPrompt.ERROR_LOCKOUT ->
+            AuthenticationLockedOutException(errString.toString())
+
+        // Permanently locked out — requires device credential to reset.
+        BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
+            AuthenticationPermanentlyLockedOutException(errString.toString())
+
+        else ->
+            AuthenticationFailedException("[$errorCode] $errString")
     }
 
     private companion object {
