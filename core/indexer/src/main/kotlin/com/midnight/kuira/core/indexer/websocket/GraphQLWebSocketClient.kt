@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.indexer.websocket
 
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
@@ -15,6 +16,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -51,7 +53,11 @@ class GraphQLWebSocketClient(
     private var session: DefaultClientWebSocketSession? = null
     private val connected = AtomicBoolean(false)
     private val operationIdCounter = AtomicInteger(0)
-    private val activeSubscriptions = mutableMapOf<String, Channel<JsonElement>>()
+    // Concurrent: mutated from the subscribe() flow's collector coroutine, the
+    // message-processing loop (Dispatchers.IO), and close() — potentially on
+    // different threads. A plain mutableMapOf would race (lost puts / CME / a
+    // spurious "subscription not found" miss).
+    private val activeSubscriptions = ConcurrentHashMap<String, Channel<JsonElement>>()
 
     /**
      * Guards [connect] and [close] against concurrent callers.
@@ -193,7 +199,7 @@ class GraphQLWebSocketClient(
         val operationId = generateOperationId()
         val channel = Channel<JsonElement>(SUBSCRIPTION_CHANNEL_CAPACITY)
         activeSubscriptions[operationId] = channel
-        android.util.Log.d("GraphQLWebSocket", "Starting subscription $operationId, active subs: ${activeSubscriptions.keys}")
+        Log.d("GraphQLWebSocket", "Starting subscription $operationId, active subs: ${activeSubscriptions.keys}")
 
         try {
             // Send subscribe message
@@ -222,9 +228,18 @@ class GraphQLWebSocketClient(
                 emit(result)
             }
         } finally {
-            android.util.Log.d("GraphQLWebSocket", "Subscription $operationId Flow ended, cleaning up")
             activeSubscriptions.remove(operationId)
-            sendMessage(GraphQLWebSocketMessage.Complete(id = operationId))
+            // This finally is normally reached via cancellation — transformWhile
+            // stops collection when id >= maxId, or the tracker is cancelled on a
+            // network switch. A suspend send in a cancelled coroutine throws at the
+            // first suspension point before doing any work, so without NonCancellable
+            // the Complete never reaches the server and it keeps streaming `next` for
+            // this now-dead id (the "No active subscription found" flood + wasted
+            // bandwidth). runCatching: the session may already be gone, in which case
+            // there's nothing left to tell the server.
+            withContext(NonCancellable) {
+                runCatching { sendMessage(GraphQLWebSocketMessage.Complete(id = operationId)) }
+            }
         }
     }
 
@@ -269,13 +284,10 @@ class GraphQLWebSocketClient(
             is GraphQLWebSocketMessage.Pong -> json.encodeToString(message)
             else -> throw IllegalArgumentException("Cannot send message type: ${message.type}")
         }
-        // Verbose logging removed - enable for debugging: Log.d("GraphQLWebSocket", "⬆️ Sending: ${json.take(200)}")
         session?.send(Frame.Text(json))
     }
 
     private fun parseMessage(text: String): GraphQLWebSocketMessage {
-        // Verbose logging removed - enable for debugging: Log.d("GraphQLWebSocket", "⬇️ Received: ${text.take(200)}")
-
         // Parse type field first
         val jsonElement = json.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject
         val type = jsonElement["type"]?.toString()?.trim('"') ?: throw IllegalArgumentException("Missing type field")
@@ -337,7 +349,11 @@ class GraphQLWebSocketClient(
                 if (channel != null) {
                     channel.send(message.payload)
                 } else {
-                    android.util.Log.w("GraphQLWebSocket", "No active subscription found for ${message.id}")
+                    // Benign: a `next` can arrive in the small window between us
+                    // sending Complete and the server processing it. Per
+                    // graphql-transport-ws the client just ignores it. Debug, not
+                    // warn, so it can't flood logcat.
+                    Log.d("GraphQLWebSocket", "Ignoring next for inactive subscription ${message.id}")
                 }
             }
             is GraphQLWebSocketMessage.Error -> {
@@ -349,7 +365,7 @@ class GraphQLWebSocketClient(
                 activeSubscriptions.remove(message.id)
             }
             is GraphQLWebSocketMessage.Complete -> {
-                android.util.Log.d("GraphQLWebSocket", "Subscription ${message.id} completed by server, active subs: ${activeSubscriptions.keys}")
+                Log.d("GraphQLWebSocket", "Subscription ${message.id} completed by server, active subs: ${activeSubscriptions.keys}")
                 activeSubscriptions[message.id]?.close()
                 activeSubscriptions.remove(message.id)
             }

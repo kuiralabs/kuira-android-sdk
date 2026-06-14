@@ -15,6 +15,7 @@ import com.midnight.kuira.core.network.NetworkConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -53,16 +55,17 @@ class ShieldedRepository @Inject constructor(
         .replace("http://", "ws://")
         .replace("https://", "wss://") + "/graphql/ws"
 
-    private fun createFreshWsClient(): GraphQLWebSocketClient {
-        val httpClient = HttpClient(OkHttp) {
-            install(io.ktor.client.plugins.websocket.WebSockets)
-            // Keep the shielded-events subscription alive. Ktor's plugin-level
-            // pingInterval is a no-op on the OkHttp engine (KTOR-4752), so set
-            // OkHttp's own ping: without it this socket is dropped at the ~60s
-            // idle timeout and flaps (subscribe → error → reconnect) every minute.
-            engine { config { pingInterval(20, TimeUnit.SECONDS) } }
-        }
-        return GraphQLWebSocketClient(url = wsEndpoint, httpClient = httpClient)
+    // Returns the engine so the caller can close it on teardown — the
+    // GraphQLWebSocketClient does NOT own the injected httpClient's lifecycle, so
+    // without an explicit httpClient.close() the OkHttp engine (dispatcher threads
+    // + connection pool) leaks one instance per sync.
+    private fun createFreshHttpClient(): HttpClient = HttpClient(OkHttp) {
+        install(io.ktor.client.plugins.websocket.WebSockets)
+        // Keep the shielded-events subscription alive. Ktor's plugin-level
+        // pingInterval is a no-op on the OkHttp engine (KTOR-4752), so set
+        // OkHttp's own ping: without it this socket is dropped at the ~60s
+        // idle timeout and flaps (subscribe → error → reconnect) every minute.
+        engine { config { pingInterval(20, TimeUnit.SECONDS) } }
     }
 
     /**
@@ -166,7 +169,8 @@ class ShieldedRepository @Inject constructor(
             // and floods logcat with `ConnectException` from the previous
             // network's host. Symptom: switching networks leaves "phantom"
             // shielded subscriptions hammering the old endpoint forever.
-            val client = createFreshWsClient()
+            val httpClient = createFreshHttpClient()
+            val client = GraphQLWebSocketClient(url = wsEndpoint, httpClient = httpClient)
             try {
                 client.connect()
                 client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)
@@ -187,11 +191,19 @@ class ShieldedRepository @Inject constructor(
                         emit(RawLedgerEvent(id = id, rawHex = rawHex, maxId = maxId))
                     }
             } finally {
-                // close() is suspend; runCatching isn't suspend-aware, so a plain
-                // try/catch keeps the suspension context. Swallow failures —
-                // we're tearing down, double-faulting in the cleanup path would
-                // mask the real exception from the body.
-                try { client.close() } catch (_: Throwable) { }
+                // Teardown runs under cancellation (transformWhile stops collection
+                // on id >= maxId, or ShieldedBalanceTracker.close() on a network
+                // switch). client.close() and httpClient.close() MUST actually run —
+                // a suspend call in a cancelled coroutine throws at the first
+                // suspension point, so without NonCancellable the socket, its
+                // keepalive + message-loop scope, AND the OkHttp engine all leak,
+                // accumulating one live client per sync. Both wrapped so a cleanup
+                // fault never masks the body's real exception, and httpClient is
+                // closed even if client.close() threw.
+                withContext(NonCancellable) {
+                    runCatching { client.close() }
+                    runCatching { httpClient.close() }
+                }
             }
         }
     }
