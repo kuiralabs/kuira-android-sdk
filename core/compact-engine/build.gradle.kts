@@ -121,17 +121,35 @@ val bboardSetup by tasks.registering {
             Thread.sleep(10_000) // Wait for sync
         }
 
-        // 6. Deploy fresh bboard contract
-        logger.lifecycle("Deploying bboard contract...")
-        val deploy = ProcessBuilder("mn", "contract", "deploy", "--network", network, "--json")
-            .directory(bboardDir)
-            .redirectErrorStream(true)
-            .start()
-        val deployOutput = deploy.inputStream.bufferedReader().readText().trim()
-        val deployExit = deploy.waitFor()
-        val contractAddress = jsonField(deployOutput, "address")
-            ?: throw GradleException("Deploy failed (exit $deployExit): $deployOutput")
-        logger.lifecycle("Deployed bboard at: $contractAddress")
+        // 6. Deploy fresh bboard contracts — one per board-touching test.
+        //    The bboard `post` circuit requires a VACANT board, so two posts to
+        //    the same contract conflict. A dedicated contract per test also keeps
+        //    every test to exactly ONE mn-serve connector submit (the connector
+        //    can't balance+submit twice in rapid succession). Deploys run through
+        //    the `mn` CLI, which finalizes each before returning, so they don't
+        //    contend with each other.
+        fun deployFreshContract(label: String): String {
+            logger.lifecycle("Deploying bboard contract ($label)...")
+            val deploy = ProcessBuilder("mn", "contract", "deploy", "--network", network, "--json")
+                .directory(bboardDir)
+                .redirectErrorStream(true)
+                .start()
+            val output = deploy.inputStream.bufferedReader().readText().trim()
+            val exit = deploy.waitFor()
+            val address = jsonField(output, "address")
+                ?: throw GradleException("Deploy ($label) failed (exit $exit): $output")
+            logger.lifecycle("Deployed bboard ($label) at: $address")
+            return address
+        }
+
+        // device filename  ->  the test that consumes it
+        val contractFiles = listOf(
+            "contract_address.txt" to "onlinePipeline",            // BboardEndToEndTest
+            "contract_address_post1.txt" to "callPost_oneLiner",   // MidnightContractTest
+            "contract_address_post2.txt" to "callPost_withProgress",
+            "contract_address_prepare.txt" to "prepare_offlineMode",
+        )
+        val deployedContracts = contractFiles.map { (file, label) -> file to deployFreshContract(label) }
 
         // 7. Push config to device via temp files (avoids shell quoting issues)
         logger.lifecycle("Pushing config to device...")
@@ -143,7 +161,7 @@ val bboardSetup by tasks.registering {
             adb("push", tmp.absolutePath, "/data/local/tmp/bboard_keys/$filename")
             tmp.delete()
         }
-        pushConfig("contract_address.txt", contractAddress)
+        deployedContracts.forEach { (file, address) -> pushConfig(file, address) }
         // Read the indexer API path from NetworkConfig.kt so this gradle file
         // doesn't have to be edited on a version bump. The Kotlin sibling and
         // this task push the same string into /data/local/tmp/.

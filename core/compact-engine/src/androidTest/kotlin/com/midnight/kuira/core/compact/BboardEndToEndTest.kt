@@ -48,35 +48,19 @@ class BboardEndToEndTest {
 
     @Before
     fun installKeysFromTempIfAvailable() {
-        // Copy bboard keys + BLS params from /data/local/tmp/bboard_keys/
-        // (pushed via adb) to the app's proving_keys directory
+        // Provision bboard proving keys from the adb-pushed staging dir using the
+        // SDK's own (content-aware) provisioners: circuit keys (post/takeDown)
+        // plus the FULL BLS parameter set that ProvingKeyManager.hasBLSParams
+        // requires (2p5–2p15) — copying only a subset makes the proving tests skip.
         val tempKeysDir = File("/data/local/tmp/bboard_keys")
         if (!tempKeysDir.exists()) return
 
-        val keysDir = provingKeyManager.keysDir
-        keysDir.mkdirs()
-
-        // Circuit keys
-        val extensions = listOf("prover", "verifier", "bzkir")
-        for (circuit in bboardCircuits) {
-            for (ext in extensions) {
-                val src = File(tempKeysDir, "$circuit.$ext")
-                val dst = File(keysDir, "$circuit.$ext")
-                if (src.exists() && !dst.exists()) {
-                    src.copyTo(dst)
-                }
-            }
-        }
-
-        // BLS parameters (shared between wallet and contract proving)
-        for (k in listOf(13, 14, 15)) {
-            val name = "bls_midnight_2p$k"
-            val src = File(tempKeysDir, name)
-            val dst = File(keysDir, name)
-            if (src.exists() && !dst.exists()) {
-                src.copyTo(dst)
-            }
-        }
+        provingKeyManager.installCircuitKeysForProving(
+            circuitNames = bboardCircuits,
+            keysSourceDir = tempKeysDir,
+            zkirSourceDir = tempKeysDir,
+        )
+        provingKeyManager.installFromLocalTmp()
     }
 
     private fun bboardWitnesses() = mapOf(
