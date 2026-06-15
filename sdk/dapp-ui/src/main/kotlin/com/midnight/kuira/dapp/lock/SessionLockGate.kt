@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.withTimeoutOrNull
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
@@ -124,7 +125,13 @@ private fun SessionLockScreen(
         unlocking = true
         failed = false
         scope.launch {
-            val ok = sessionLock.unlock(act) // clears `locked` on success → gate dismisses
+            // Bound the attempt: if the biometric never resolves (prompt failed to
+            // show, contention, etc.) the spinner must NOT trap the user — fall back
+            // to the retry button. withTimeoutOrNull cancels the stuck unlock, which
+            // cancels the underlying BiometricPrompt cleanly.
+            val ok = withTimeoutOrNull(UNLOCK_TIMEOUT_MS) {
+                sessionLock.unlock(act) // clears `locked` on success → gate dismisses
+            } ?: false
             unlocking = false
             failed = !ok
         }
@@ -226,6 +233,7 @@ private fun SessionLockScreen(
 // ── Lock-screen dimensions ──
 // Self-contained one-off screen, so the tokens live here rather than in the
 // panel's shared PanelDimens/PanelType (which are scoped to the wallet panel).
+private const val UNLOCK_TIMEOUT_MS = 60_000L // biometric can take a while; cap so the spinner never traps
 private val LOCK_PANEL_MAX_WIDTH = 360.dp   // keep readable on tablets / landscape
 private val LOCK_SCREEN_HPADDING = 28.dp
 private val LOCK_ICON_SIZE = 44.sp

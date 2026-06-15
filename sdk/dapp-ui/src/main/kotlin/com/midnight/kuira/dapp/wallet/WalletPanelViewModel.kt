@@ -312,6 +312,14 @@ class WalletPanelViewModel @Inject constructor(
     fun refreshBalance(config: WalletConfig, activity: FragmentActivity, force: Boolean = false) {
         lastRequestedConfig = config
         viewModelScope.launch {
+            // While the session is locked, the SessionLockGate owns re-auth — it
+            // runs the single biometric (ensureSeedReady). Don't ALSO bootstrap
+            // here: a second concurrent ensureSeedReady contends with the gate's on
+            // bootstrapMutex and neither biometric shows (the gate spinner hangs).
+            // After unlock, observeSessionLock emits a retry that re-runs this with
+            // the auth window already open (silent). Status stays Locked meanwhile.
+            if (sessionLock.locked.value) return@launch
+
             // Hold off the session auto-lock while bootstrapping/syncing so a
             // backgrounded refresh isn't torn down mid-flight (#235 fix). The
             // finally releases it on normal completion OR cancellation.

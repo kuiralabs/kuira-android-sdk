@@ -264,6 +264,14 @@ class SessionLock @Inject constructor(
         if (installed) return
         installed = true
 
+        // Cold start = a brand-new session. The in-memory `_locked` and the
+        // SeedVault `requireFreshAuth` flag both died with the previous process, and
+        // the Keystore's ~30s auth-validity window would otherwise let a quick
+        // kill+relaunch silently re-decrypt the seed — bypassing the lock. Arm a
+        // fresh biometric for the FIRST seed load this process, so every launch
+        // re-authenticates before the wallet is usable.
+        walletSeedSource.requireFreshAuthNext()
+
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 if (foregroundActivityCount++ == 0) onForeground()
