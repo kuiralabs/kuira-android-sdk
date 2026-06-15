@@ -274,21 +274,9 @@ class MidnightSdk private constructor(
         amount: BigInteger,
         onProgress: ((SendProgress) -> Unit)? = null,
     ): SendResult {
-        if (amount <= BigInteger.ZERO) {
-            return SendResult.Failed("Amount must be positive, got: $amount")
-        }
-
-        // Validate the recipient: well-formed Bech32m AND the same network (HRP) as
-        // the sender. Comparing against the sender's own HRP rejects wrong-network
-        // and shielded (`mn_shield-addr_*`) addresses without hardcoding any prefix.
-        val senderHrp = runCatching { Bech32m.decode(walletAddress).first }.getOrNull()
-        val recipientHrp = runCatching { Bech32m.decode(toAddress).first }.getOrNull()
-            ?: return SendResult.InvalidAddress("Recipient address is not a valid Bech32m address.")
-        if (senderHrp != null && recipientHrp != senderHrp) {
-            return SendResult.InvalidAddress(
-                "Recipient is a $recipientHrp address; this wallet sends $senderHrp NIGHT.",
-            )
-        }
+        // Chain-independent request validation (positive amount, well-formed
+        // same-network recipient) — pure + unit-tested in [validateSendRequest].
+        validateSendRequest(amount, toAddress, walletAddress)?.let { return it }
 
         // buildTransfer needs the sender's BIP-340 x-only public key (64 hex chars).
         val senderPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)
@@ -795,6 +783,33 @@ class MidnightSdk private constructor(
          * coins to stay at/under this before submitting.
          */
         private const val MAX_TRANSFER_INPUTS = 2
+
+        /**
+         * Chain-independent validation for a [sendNight] request: a positive amount and
+         * a recipient that's a well-formed Bech32m address on the SAME network (HRP) as
+         * the sender — comparing against the sender's own HRP rejects wrong-network and
+         * shielded (`mn_shield-addr_*`) addresses without hardcoding any prefix. Returns
+         * the failing [SendResult], or null when the request is valid. Pure (no I/O) so
+         * it's unit-testable; balance/dust checks stay in [sendNight].
+         */
+        internal fun validateSendRequest(
+            amount: BigInteger,
+            toAddress: String,
+            senderAddress: String,
+        ): SendResult? {
+            if (amount <= BigInteger.ZERO) {
+                return SendResult.Failed("Amount must be positive, got: $amount")
+            }
+            val senderHrp = runCatching { Bech32m.decode(senderAddress).first }.getOrNull()
+            val recipientHrp = runCatching { Bech32m.decode(toAddress).first }.getOrNull()
+                ?: return SendResult.InvalidAddress("Recipient address is not a valid Bech32m address.")
+            if (senderHrp != null && recipientHrp != senderHrp) {
+                return SendResult.InvalidAddress(
+                    "Recipient is a $recipientHrp address; this wallet sends $senderHrp NIGHT.",
+                )
+            }
+            return null
+        }
 
         /**
          * TTL for the dust registration transaction. 30 minutes mirrors the SDK's
