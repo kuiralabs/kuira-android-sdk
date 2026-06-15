@@ -104,15 +104,11 @@ class SdkSendNightConsolidationE2ETest {
             )
 
             // #265: the send creates a fresh change UTXO with no dust backing, and
-            // sendNight must auto-register it (REGISTERING stage) so the wallet keeps
-            // generating dust without a manual tap. Assert the wallet reads as fully
-            // registered again (accurate per-UTXO signal — every current NIGHT UTXO
-            // is generating). Poll briefly: registration propagation lags finalization
-            // by ~1 block.
-            assertTrue(
-                "Auto-register must have run after the send (REGISTERING stage): $stages",
-                stages.contains(MidnightSdk.SendProgress.REGISTERING),
-            )
+            // sendNight must auto-register it (in the background, so the result returns
+            // promptly) so the wallet keeps generating dust without a manual tap. Assert
+            // the wallet reads as fully registered again (accurate per-UTXO signal —
+            // every current NIGHT UTXO is generating). Poll: the background registration
+            // + its propagation lag finalization by ~1 block.
             var allRegistered = false
             val deadline = System.currentTimeMillis() + POST_SEND_REGISTER_TIMEOUT_MS
             while (System.currentTimeMillis() < deadline) {

@@ -642,21 +642,21 @@ private fun sanitizeNightAmount(input: String): String {
     val dot = filtered.indexOf('.')
     if (dot < 0) return filtered
     val whole = filtered.substring(0, dot)
-    val frac = filtered.substring(dot + 1).replace(".", "").take(NIGHT_DECIMAL_PLACES)
+    val frac = filtered.substring(dot + 1).replace(".", "").take(NIGHT_DECIMALS)
     return "$whole.$frac"
 }
 
 /** Parse decimal NIGHT → base units, or null if not a positive number. Sub-unit digits truncate. */
 private fun parseNightToBaseUnits(input: String): BigInteger? = runCatching {
     val value = BigDecimal(input.trim())
-    if (value <= BigDecimal.ZERO) null else value.movePointRight(NIGHT_DECIMAL_PLACES).toBigInteger()
+    if (value <= BigDecimal.ZERO) null else value.movePointRight(NIGHT_DECIMALS).toBigInteger()
 }.getOrNull()
 
 /** Format base units → a plain NIGHT string (e.g. 1500000 → "1.5"). */
 private fun baseUnitsToNight(base: BigInteger): String =
-    base.toBigDecimal().movePointLeft(NIGHT_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
+    base.toBigDecimal().movePointLeft(NIGHT_DECIMALS).stripTrailingZeros().toPlainString()
 
-private const val NIGHT_DECIMAL_PLACES = 6
+// `NIGHT_DECIMALS` is the package-level constant shared with WalletPanelViewModel.
 
 // ── Address helpers ──
 

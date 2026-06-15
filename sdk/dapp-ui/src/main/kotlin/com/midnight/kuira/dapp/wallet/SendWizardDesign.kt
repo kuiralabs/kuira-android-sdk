@@ -62,8 +62,6 @@ internal object SendDimens {
     /** Inset for a tappable glyph so the touch target reaches the 48dp floor. */
     val GlyphHit: Dp = 8.dp
     val FieldVerticalPadding: Dp = 12.dp
-    val SpinnerSize: Dp = 18.dp
-    val SpinnerStroke: Dp = 2.dp
     val DividerThickness: Dp = 1.dp
     val BorderWidth: Dp = 1.dp
 }

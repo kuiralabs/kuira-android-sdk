@@ -342,14 +342,20 @@ class MidnightSdk private constructor(
         }
         // Spending NIGHT creates a fresh CHANGE UTXO with no dust backing, so the
         // wallet would otherwise stop generating dust until the user manually
-        // re-registers (#265). Re-register here so dust "just works" after a send.
+        // re-registers (#265). Re-register it in the BACKGROUND so dust "just works"
+        // without holding up the result: the transfer has already succeeded, and
+        // registerForDustGeneration polls for ~1 block of dust propagation — awaiting
+        // it would strand the user on a progress spinner after the send is done.
         // Registration self-pays (allow_fee_payment), so it works even though this
-        // transfer just consumed the prior backing. Best-effort: the transfer has
-        // already succeeded, so a registration hiccup must not flip it to Failed.
+        // transfer just consumed the prior backing. Runs on the SDK's subscriptionScope
+        // (best-effort, cancelled with the SDK; #263 moves it under the in-flight-
+        // operation foreground service). The accurate dustRegistered signal flips back
+        // to true on the next balance read once registration lands.
         if (result is SubmissionResult.Success || result is SubmissionResult.Pending) {
-            onProgress?.invoke(SendProgress.REGISTERING)
-            runCatching { registerForDustGeneration() }
-                .onFailure { Log.w(TAG, "post-send dust re-registration failed: ${it.message}") }
+            subscriptionScope.launch {
+                runCatching { registerForDustGeneration() }
+                    .onFailure { Log.w(TAG, "post-send dust re-registration failed: ${it.message}") }
+            }
         }
         return result.toSendResult()
     }
@@ -453,9 +459,6 @@ class MidnightSdk private constructor(
 
         /** Signing inputs, paying dust fees, submitting, and awaiting finalization. */
         SUBMITTING,
-
-        /** Registering the freshly-created change UTXO so it keeps generating dust. */
-        REGISTERING,
     }
 
     /** Outcome of [sendNight] — a typed result so callers can render distinct UX. */

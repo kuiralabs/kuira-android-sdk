@@ -160,7 +160,7 @@ class WalletPanelViewModel @Inject constructor(
         )
     }.stateIn(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
+        SharingStarted.WhileSubscribed(SYNC_SUBSCRIBE_TIMEOUT_MS),
         BackupSectionState(
             identity = BackupLaneState.Ok("Protected", confirm = true),
             dust = BackupLaneState.Toggle(on = false),
@@ -553,7 +553,6 @@ class WalletPanelViewModel @Inject constructor(
                         when (stage) {
                             MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
                             MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
-                            MidnightSdk.SendProgress.REGISTERING -> "Setting up dust…"
                         },
                     )
                 }
@@ -707,11 +706,15 @@ class WalletPanelViewModel @Inject constructor(
          *  collector leaves (config change / sheet close), so a sync in flight
          *  isn't dropped and re-collected. */
         private const val SYNC_SUBSCRIBE_TIMEOUT_MS = 5_000L
-
-        /** NIGHT has 6 decimals (1 NIGHT = 1,000,000 base units). */
-        private const val NIGHT_DECIMALS = 6
     }
 }
+
+/**
+ * NIGHT has 6 decimals (1 NIGHT = 1,000,000 base units). Shared across the wallet
+ * package — the VM (shortfall formatting) and the Send screen (amount parsing) both
+ * reference it, so it lives top-level rather than being redeclared per file.
+ */
+internal const val NIGHT_DECIMALS = 6
 
 /**
  * Send-flow UI state for the Send screen (#240).

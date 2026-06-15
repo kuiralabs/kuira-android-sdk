@@ -112,7 +112,6 @@ internal fun QrScannerScreen(
 private fun CameraDecoder(onDecoded: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val executor = remember { Executors.newSingleThreadExecutor() }
     val mainExecutor = remember { ContextCompat.getMainExecutor(context) }
     // LifecycleCameraController wraps the provider future + binding, so we avoid
     // ProcessCameraProvider's Guava ListenableFuture (not on the compile path).
@@ -125,6 +124,10 @@ private fun CameraDecoder(onDecoded: (String) -> Unit) {
     }
 
     DisposableEffect(lifecycleOwner) {
+        // Owned by this effect, not remember()-cached: a re-bind must get a fresh
+        // executor, since onDispose shuts the previous one down (reusing a shut-down
+        // executor on the next analyzer set throws RejectedExecutionException).
+        val executor = Executors.newSingleThreadExecutor()
         controller.cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
         controller.setImageAnalysisBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
         controller.setImageAnalysisAnalyzer(executor, QrAnalyzer { text -> mainExecutor.execute { onDecoded(text) } })
