@@ -41,6 +41,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -202,27 +203,32 @@ class SendNightTransferE2ETest {
         if (::indexerClient.isInitialized) indexerClient.close()
         if (::dataStoreScope.isInitialized) dataStoreScope.cancel()
         if (::dataStoreDir.isInitialized) dataStoreDir.deleteRecursively()
-        if (::database.isInitialized) database.close()
+        // NOTE: do NOT close `database` here — UtxoDatabase.getInstance() is a
+        // process-wide singleton. Closing it in a per-test teardown bricks every
+        // subsequent test in the run (the next test inherits the closed instance and
+        // dies with a JobCancellationException). The singleton is torn down with the
+        // test process; an individual test must not close it.
     }
 
     /**
-     * Measures the ledger's NIGHT-input ceiling for a fee-paying transfer (#240).
+     * The ledger's NIGHT-input ceiling for a fee-paying transfer (#240): the node's
+     * time-to-dismiss cost check (run BEFORE signature verification) rejects a
+     * transfer carrying more than two NIGHT inputs with Custom error 168
+     * (`OutsideTimeToDismiss`). This ceiling is exactly why `sendNight` selects
+     * largest-first and auto-consolidates.
      *
-     * Error 168 (`OutsideTimeToDismiss`) is a cost check the node runs BEFORE
-     * signature verification, so this measurement is valid even with the current
-     * (binding-reuse-unfixed) native lib: a binding bug would only surface AFTER a
-     * tx clears 168. For each N = 1,2,3,… it forces an N-input transfer (sends the
-     * exact sum of the N smallest UTXOs → zero change → exactly N inputs), submits,
-     * and records whether the node accepts it. The first N that fails is the ceiling+1.
+     * Asserts the boundary on-chain: a 3-input transfer is REJECTED and a 2-input
+     * transfer is ACCEPTED — on the SAME wallet + dust, so the contrast isolates the
+     * input count as the cause (a funding/dust problem would fail the 2-input case too).
+     * The 3-input (rejected) case runs FIRST because a rejection mutates no wallet
+     * state (no dust `deleteState`), so the 2-input send that follows starts from a
+     * clean, still-synced wallet — avoiding the delete-then-resync churn that made the
+     * old measurement loop fragile.
      *
-     * Run after funding the wallet with several small NIGHT UTXOs
-     * (`scripts/e2e/fund-send-test.sh` airdrops a couple; airdrop more for a higher
-     * ceiling). The measured ceiling decides the #240 coin-selection strategy:
-     * ceiling 1 → single-coin sends only; ceiling ≥2 → multi-input (needs the
-     * binding round-trip fix) is worth enabling.
+     * Needs ≥3 small NIGHT UTXOs + registered dust (`scripts/e2e/fund-send-test.sh`).
      */
     @Test
-    fun measureInputCeiling() = runBlocking {
+    fun nightInputCeiling_threeRejected_twoAccepted() = runBlocking {
         val utxoManager = UtxoManager(database.unshieldedUtxoDao())
         val senderPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)!!.toHex()
         val submitter = TransactionSubmitter(
@@ -236,46 +242,30 @@ class SendNightTransferE2ETest {
             provingMode = ProvingMode.REMOTE,
         )
 
-        val maxN = 5
-        var ceiling = 0
-        for (n in 1..maxN) {
-            // Re-sync UTXOs (prior successful sends consumed some) and take the N smallest.
+        // Force an exact-sum transfer over the [n] smallest NIGHT UTXOs (zero change →
+        // exactly n inputs) and submit it. Returns null when n distinct coins can't be
+        // forced (caller skips); releases the UTXO locks on any non-accepted outcome.
+        suspend fun submitExactInputs(n: Int): SubmissionResult? {
             syncUnshieldedUtxos()
-            // Re-sync dust too: a successful submitWithFees deletes the dust cache to force a
-            // fresh sync before the next tx, so without this the next iteration fails to LOAD
-            // dust ("Insufficient dust... required null") before it can reach the ledger's
-            // input-count check — which would mask the real 168 ceiling.
             dustRepository.syncFromBlockchain(FUNDED_ADDRESS, dustSeed, maxBlocks = 100)
-            val night = UtxoManager(database.unshieldedUtxoDao())
-                .getUnspentUtxos(FUNDED_ADDRESS)
+            val night = utxoManager.getUnspentUtxos(FUNDED_ADDRESS)
                 .filter { it.tokenType == NATIVE_TOKEN }
                 .sortedBy { BigInteger(it.value) }
-            if (night.size < n) {
-                android.util.Log.w("CeilingMeasure", "N=$n: only ${night.size} NIGHT UTXOs left — stop")
-                break
-            }
-
-            // Send the EXACT sum of the N smallest → zero change → exactly N inputs selected.
+            if (night.size < n) return null
             val amount = night.take(n).fold(BigInteger.ZERO) { acc, u -> acc + BigInteger(u.value) }
-            val build = UnshieldedTransactionBuilder(utxoManager).buildTransfer(
+            val built = UnshieldedTransactionBuilder(utxoManager).buildTransfer(
                 from = FUNDED_ADDRESS,
                 to = recipientAddress,
                 amount = amount,
                 tokenType = NATIVE_TOKEN,
                 senderPublicKey = senderPublicKey,
-            )
-            val built = build as? UnshieldedTransactionBuilder.BuildResult.Success
-                ?: return@runBlocking fail("N=$n: buildTransfer failed: $build")
-            val inputCount = built.intent.guaranteedUnshieldedOffer!!.inputs.size
-            if (inputCount != n) {
-                // A single large UTXO covered it, etc. — release + stop (can't force N here).
+            ) as? UnshieldedTransactionBuilder.BuildResult.Success ?: return null
+            if (built.intent.guaranteedUnshieldedOffer!!.inputs.size != n) {
                 utxoManager.unlockUtxos(built.lockedUtxos.map { it.id })
-                android.util.Log.w("CeilingMeasure", "N=$n: selected $inputCount inputs (couldn't force N) — stop")
-                break
+                return null
             }
-
             val ledgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
-                ?: return@runBlocking fail("Indexer returned no ledger parameters")
+                ?: error("Indexer returned no ledger parameters")
             val result = submitter.signAndSubmitTransfer(
                 intent = built.intent,
                 nightPrivateKey = nightPrivateKey,
@@ -283,20 +273,31 @@ class SendNightTransferE2ETest {
                 fromAddress = FUNDED_ADDRESS,
                 dustSeed = dustSeed,
             )
-            val accepted = result is SubmissionResult.Success || result is SubmissionResult.Pending
-            android.util.Log.i("CeilingMeasure", "N=$n inputs -> ${if (accepted) "ACCEPTED" else "REJECTED"}: $result")
-            if (accepted) {
-                ceiling = n
-            } else {
+            if (result !is SubmissionResult.Success && result !is SubmissionResult.Pending) {
                 utxoManager.unlockUtxos(built.lockedUtxos.map { it.id })
-                break
             }
+            return result
         }
 
-        android.util.Log.i("CeilingMeasure", "MEASURED_INPUT_CEILING=$ceiling")
+        // 3 inputs — over the ceiling → REJECTED. Run first: a rejection is a no-op.
+        val three = submitExactInputs(3)
+        assumeTrue(
+            "needs ≥3 small NIGHT UTXOs to force a 3-input tx — fund via scripts/e2e/fund-send-test.sh",
+            three != null,
+        )
+        android.util.Log.i("CeilingMeasure", "3-input -> $three")
         assertTrue(
-            "Single-input transfer must work (ceiling >= 1); measured $ceiling. Check localnet funding/dust.",
-            ceiling >= 1,
+            "A 3-input fee-paying transfer must be REJECTED by the ledger's time-to-dismiss ceiling (#240): $three",
+            three !is SubmissionResult.Success && three !is SubmissionResult.Pending,
+        )
+
+        // 2 inputs — at the ceiling → ACCEPTED.
+        val two = submitExactInputs(2)
+        assumeTrue("needs ≥2 small NIGHT UTXOs to force a 2-input tx", two != null)
+        android.util.Log.i("CeilingMeasure", "2-input -> $two")
+        assertTrue(
+            "A 2-input fee-paying transfer must be ACCEPTED (#240 ceiling = 2): $two",
+            two is SubmissionResult.Success || two is SubmissionResult.Pending,
         )
     }
 

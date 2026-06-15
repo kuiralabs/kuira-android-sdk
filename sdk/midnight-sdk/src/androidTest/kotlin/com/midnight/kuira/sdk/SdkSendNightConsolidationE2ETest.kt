@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertTrue
@@ -101,6 +102,28 @@ class SdkSendNightConsolidationE2ETest {
                 "Consolidated send must finalize (or pend): $result",
                 result is MidnightSdk.SendResult.Success || result is MidnightSdk.SendResult.Pending,
             )
+
+            // #265: the send creates a fresh change UTXO with no dust backing, and
+            // sendNight must auto-register it (REGISTERING stage) so the wallet keeps
+            // generating dust without a manual tap. Assert the wallet reads as fully
+            // registered again (accurate per-UTXO signal — every current NIGHT UTXO
+            // is generating). Poll briefly: registration propagation lags finalization
+            // by ~1 block.
+            assertTrue(
+                "Auto-register must have run after the send (REGISTERING stage): $stages",
+                stages.contains(MidnightSdk.SendProgress.REGISTERING),
+            )
+            var allRegistered = false
+            val deadline = System.currentTimeMillis() + POST_SEND_REGISTER_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                runCatching { sdk.wallet.refresh() }
+                if (sdk.wallet.balance().dustRegistered) { allRegistered = true; break }
+                delay(POST_SEND_REGISTER_POLL_MS)
+            }
+            assertTrue(
+                "After a send, the change UTXO must be auto-registered (#265) — dustRegistered should return to true",
+                allRegistered,
+            )
         } finally {
             sdk.close()
         }
@@ -166,6 +189,10 @@ class SdkSendNightConsolidationE2ETest {
 
         /** Wait budget for the unshielded subscription to surface the wallet's coins. */
         private const val FUNDING_TIMEOUT_MS = 90_000L
+
+        /** Budget for the post-send change-UTXO auto-registration to propagate (#265). */
+        private const val POST_SEND_REGISTER_TIMEOUT_MS = 45_000L
+        private const val POST_SEND_REGISTER_POLL_MS = 3_000L
 
         private fun hexToBytes(hex: String): ByteArray =
             ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
