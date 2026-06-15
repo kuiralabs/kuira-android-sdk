@@ -28,7 +28,13 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
 import com.midnight.kuira.core.ledger.api.ProofServerClientImpl
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter.SubmissionResult
+import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
+import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import java.math.BigInteger
 import com.midnight.kuira.core.ledger.dust.DustRegistrationBuilder
+import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
+import com.midnight.kuira.core.ledger.fee.DustSpendCreator
+import com.midnight.kuira.core.ledger.fee.FeeCalculator
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
@@ -236,6 +242,229 @@ class MidnightSdk private constructor(
                 )
             }
         }.toString()
+
+    /**
+     * Send unshielded NIGHT from this wallet to [toAddress] (#240 — Send from the
+     * wallet pill).
+     *
+     * Fee-bearing transfer: the NIGHT inputs are signed (BIP-340), and dust fees
+     * are built and paid automatically from the wallet's registered dust — the
+     * same `submitWithFees` path contract calls use. The wallet must have:
+     *  - enough NIGHT to cover [amount] (else [SendResult.InsufficientFunds]), and
+     *  - registered dust to pay the fee (call [registerForDustGeneration] once on a
+     *    fresh wallet); a missing/empty dust balance surfaces as [SendResult.Failed].
+     *
+     * Inputs come from the SDK's already-derived state: NIGHT private key for the
+     * per-input signatures, dust seed for the fee, the live [utxoManager] for the
+     * spendable NIGHT UTXOs (kept current by the build-time subscription). On any
+     * failure after UTXOs are locked, the locks are released so the balance isn't
+     * stuck PENDING. On success/pending the wallet is refreshed so the pill reflects
+     * the new balance immediately.
+     *
+     * @param toAddress Recipient's unshielded Bech32m address; must be the same
+     *   network (HRP) as this wallet.
+     * @param amount NIGHT to send, in the smallest unit (must be positive).
+     * @param onProgress Optional coarse progress callback for driving a UI spinner.
+     * @return a typed [SendResult] — never throws for an expected failure (invalid
+     *   address, insufficient funds, chain rejection); unexpected errors map to
+     *   [SendResult.Failed].
+     */
+    suspend fun sendNight(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)? = null,
+    ): SendResult {
+        if (amount <= BigInteger.ZERO) {
+            return SendResult.Failed("Amount must be positive, got: $amount")
+        }
+
+        // Validate the recipient: well-formed Bech32m AND the same network (HRP) as
+        // the sender. Comparing against the sender's own HRP rejects wrong-network
+        // and shielded (`mn_shield-addr_*`) addresses without hardcoding any prefix.
+        val senderHrp = runCatching { Bech32m.decode(walletAddress).first }.getOrNull()
+        val recipientHrp = runCatching { Bech32m.decode(toAddress).first }.getOrNull()
+            ?: return SendResult.InvalidAddress("Recipient address is not a valid Bech32m address.")
+        if (senderHrp != null && recipientHrp != senderHrp) {
+            return SendResult.InvalidAddress(
+                "Recipient is a $recipientHrp address; this wallet sends $senderHrp NIGHT.",
+            )
+        }
+
+        // buildTransfer needs the sender's BIP-340 x-only public key (64 hex chars).
+        val senderPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)
+            ?.joinToString("") { "%02x".format(it) }
+            ?: return SendResult.Failed("Failed to derive sender public key (native library not loaded?).")
+
+        suspend fun nightDescending(): List<UnshieldedUtxoEntity> =
+            utxoManager.getUnspentUtxos(walletAddress)
+                .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
+                .sortedByDescending { BigInteger(it.value) }
+        fun topSum(utxos: List<UnshieldedUtxoEntity>, k: Int): BigInteger =
+            utxos.take(k).fold(BigInteger.ZERO) { acc, u -> acc + BigInteger(u.value) }
+
+        var night = nightDescending()
+        val total = night.fold(BigInteger.ZERO) { acc, u -> acc + BigInteger(u.value) }
+        if (total < amount) {
+            return SendResult.InsufficientFunds(amount, total, amount - total)
+        }
+
+        // A fee-paying transfer can carry at most [MAX_TRANSFER_INPUTS] NIGHT inputs
+        // (ledger time-to-dismiss ceiling). If the amount needs more coins than that,
+        // consolidate first: merge the largest coins (a self-send, MAX inputs → one
+        // output) until the top [MAX_TRANSFER_INPUTS] coins alone cover the amount.
+        // Each merge drops the coin count by (MAX_TRANSFER_INPUTS - 1), so this
+        // converges; the counter bounds it against any sync hiccup.
+        var mergesRemaining = night.size
+        while (topSum(night, MAX_TRANSFER_INPUTS) < amount &&
+            night.size > MAX_TRANSFER_INPUTS &&
+            mergesRemaining-- > 0
+        ) {
+            onProgress?.invoke(SendProgress.CONSOLIDATING)
+            val mergeAmount = topSum(night, MAX_TRANSFER_INPUTS)
+            val merge = submitTransfer(walletAddress, mergeAmount, senderPublicKey)
+            if (merge !is SubmissionResult.Success && merge !is SubmissionResult.Pending) {
+                return merge.toSendResult()
+            }
+            // Wait for the merged coin to surface (refresh also re-syncs the dust the
+            // successful merge consumed, readying the fee for the next tx).
+            night = awaitMergedCoin(mergeAmount) ?: return SendResult.Failed(
+                "Coin consolidation did not settle in time — please retry shortly.",
+            )
+        }
+
+        onProgress?.invoke(SendProgress.SUBMITTING)
+        val result = submitTransfer(toAddress, amount, senderPublicKey)
+        when (result) {
+            is SubmissionResult.Success, is SubmissionResult.Pending, is SubmissionResult.StaleUtxo ->
+                runCatching { wallet.refresh() }
+                    .onFailure { Log.w(TAG, "post-send refresh failed: ${it.message}") }
+            else -> {}
+        }
+        return result.toSendResult()
+    }
+
+    /**
+     * Build (largest-first, fewest inputs) + sign + dust-pay + submit one NIGHT
+     * transfer. Releases the UTXO locks on any non-accepted outcome so the balance
+     * isn't stuck PENDING. Guards the [MAX_TRANSFER_INPUTS] ceiling defensively.
+     */
+    private suspend fun submitTransfer(
+        toAddress: String,
+        amount: BigInteger,
+        senderPublicKey: String,
+    ): SubmissionResult {
+        val built = when (
+            val build = UnshieldedTransactionBuilder(utxoManager).buildTransfer(
+                from = walletAddress,
+                to = toAddress,
+                amount = amount,
+                tokenType = UtxoSpend.NATIVE_TOKEN_TYPE,
+                senderPublicKey = senderPublicKey,
+                largestFirst = true,
+            )
+        ) {
+            is UnshieldedTransactionBuilder.BuildResult.InsufficientFunds ->
+                return SubmissionResult.Failed(
+                    txHash = null,
+                    reason = "Insufficient NIGHT to build transfer (need ${build.required}, have ${build.available}).",
+                )
+            is UnshieldedTransactionBuilder.BuildResult.Success -> build
+        }
+
+        suspend fun releaseLocks() =
+            runCatching { utxoManager.unlockUtxos(built.lockedUtxos.map { it.id }) }
+                .onFailure { Log.w(TAG, "failed to release UTXO locks: ${it.message}") }
+
+        val inputCount = built.intent.guaranteedUnshieldedOffer?.inputs?.size ?: 0
+        if (inputCount > MAX_TRANSFER_INPUTS) {
+            // Should not happen — the caller consolidates first — but never submit a
+            // tx the ledger will reject for too many inputs.
+            releaseLocks()
+            return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Transfer needs $inputCount inputs, over the $MAX_TRANSFER_INPUTS-input ledger limit.",
+            )
+        }
+
+        return try {
+            val ledgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
+                ?: run {
+                    releaseLocks()
+                    return SubmissionResult.Failed(txHash = null, reason = "Indexer returned no ledger parameters.")
+                }
+            val submission = transactionSubmitter.signAndSubmitTransfer(
+                intent = built.intent,
+                nightPrivateKey = nightPrivateKey,
+                ledgerParamsHex = ledgerParamsHex,
+                fromAddress = walletAddress,
+                dustSeed = dustSeed,
+            )
+            if (submission !is SubmissionResult.Success && submission !is SubmissionResult.Pending) {
+                releaseLocks()
+            }
+            submission
+        } catch (e: Exception) {
+            releaseLocks()
+            SubmissionResult.Failed(txHash = null, reason = "Send failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Poll until the just-created merged coin (value == [mergeAmount]) surfaces in the
+     * live UTXO set, re-syncing dust each tick (a successful tx deletes the dust cache,
+     * and the next tx needs it). Returns the fresh descending NIGHT UTXO list, or null
+     * on timeout. The merge's change is zero, so the merged coin is the unique output.
+     */
+    private suspend fun awaitMergedCoin(mergeAmount: BigInteger): List<UnshieldedUtxoEntity>? {
+        val deadline = System.currentTimeMillis() + DUST_PROPAGATION_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            delay(DUST_POLL_INTERVAL_MS)
+            runCatching { wallet.refresh() }.onFailure { Log.w(TAG, "consolidation refresh failed: ${it.message}") }
+            val night = utxoManager.getUnspentUtxos(walletAddress)
+                .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
+                .sortedByDescending { BigInteger(it.value) }
+            if (night.any { BigInteger(it.value) == mergeAmount }) return night
+        }
+        return null
+    }
+
+    private fun SubmissionResult.toSendResult(): SendResult = when (this) {
+        is SubmissionResult.Success -> SendResult.Success(txHash, blockHeight)
+        is SubmissionResult.Pending -> SendResult.Pending(txHash, reason)
+        is SubmissionResult.Failed -> SendResult.Failed(reason, txHash)
+        is SubmissionResult.StaleUtxo -> SendResult.Failed(reason)
+    }
+
+    /** Coarse progress stages for [sendNight], for driving a UI spinner/status. */
+    enum class SendProgress {
+        /** Merging coins so the transfer fits under the ledger's input ceiling. */
+        CONSOLIDATING,
+
+        /** Signing inputs, paying dust fees, submitting, and awaiting finalization. */
+        SUBMITTING,
+    }
+
+    /** Outcome of [sendNight] — a typed result so callers can render distinct UX. */
+    sealed class SendResult {
+        /** Transfer finalized on chain. */
+        data class Success(val txHash: String, val blockHeight: Long) : SendResult()
+
+        /** Not enough NIGHT to cover [required]; carries the [shortfall] for the UI. */
+        data class InsufficientFunds(
+            val required: BigInteger,
+            val available: BigInteger,
+            val shortfall: BigInteger,
+        ) : SendResult()
+
+        /** Recipient address was malformed or on the wrong network. */
+        data class InvalidAddress(val reason: String) : SendResult()
+
+        /** Submitted but finalization timed out — likely confirms shortly after. */
+        data class Pending(val txHash: String, val reason: String) : SendResult()
+
+        /** Any other failure (proving, dust fee, node rejection, unexpected error). */
+        data class Failed(val reason: String, val txHash: String? = null) : SendResult()
+    }
 
     /** Release all resources. */
     fun close() {
@@ -506,12 +735,19 @@ class MidnightSdk private constructor(
                 proofServerUrl = effectiveProofServerUrl,
                 developmentMode = networkConfig.developmentMode,
             )
+            // Dust-fee payment wiring (#240): submitWithFees / signAndSubmitTransfer
+            // need a DustActionsBuilder + the shared dustRepository, otherwise they
+            // throw "DustActionsBuilder required". FeeCalculator / DustSpendCreator
+            // are stateless singletons.
+            val dustActionsBuilder = DustActionsBuilder(dustRepository, FeeCalculator, DustSpendCreator)
             val transactionSubmitter = TransactionSubmitter(
                 nodeRpcClient = nodeRpcClient,
                 proofServerClient = proofServerClient,
                 indexerClient = indexerClient,
                 serializer = serializer,
                 utxoManager = utxoManager,
+                dustActionsBuilder = dustActionsBuilder,
+                dustRepository = dustRepository,
                 provingKeyManager = provingKeyManager,
                 provingMode = provingMode,
             )
@@ -550,6 +786,15 @@ class MidnightSdk private constructor(
 
     companion object {
         private const val TAG = "MidnightSdk"
+
+        /**
+         * Max NIGHT inputs a single fee-paying transfer can carry. The ledger's
+         * time-to-dismiss budget — dominated by the dust-fee ZK proof verification —
+         * rejects a transfer with more inputs (Custom error 168, `OutsideTimeToDismiss`).
+         * Measured on-chain: 2 inputs accepted, 3 rejected. [sendNight] consolidates
+         * coins to stay at/under this before submitting.
+         */
+        private const val MAX_TRANSFER_INPUTS = 2
 
         /**
          * TTL for the dust registration transaction. 30 minutes mirrors the SDK's

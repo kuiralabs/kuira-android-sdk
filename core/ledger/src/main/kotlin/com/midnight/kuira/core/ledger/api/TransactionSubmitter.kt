@@ -10,6 +10,8 @@ import com.midnight.kuira.core.crypto.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.model.Intent
+import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import io.ktor.util.hex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
@@ -361,6 +363,86 @@ class TransactionSubmitter(
                 reason = "Transaction not found in indexer stream"
             )
         }
+    }
+
+    /**
+     * Sign every input of an unsigned unshielded-transfer [intent], then submit it
+     * with dust fees (#240 — Send NIGHT from the wallet pill).
+     *
+     * **Why the sign loop lives here, not in the caller:**
+     * BIP-340 signing of an unshielded input needs a per-input *signing message*
+     * from [FfiTransactionSerializer.getSigningMessageForInput], and that call
+     * stores binding randomness on the serializer instance which the later
+     * [submitWithFees] -> `serialize` reuses. Producing the message on a
+     * caller-side serializer and submitting through this one would decouple that
+     * randomness and the node would reject the binding. So the loop runs against
+     * *this submitter's own* [serializer] — the same instance that serializes for
+     * submission — keeping the coupling intact. Multi-UTXO transfers are handled:
+     * one signature per input, in input order.
+     *
+     * @param intent Unsigned transfer Intent (from `UnshieldedTransactionBuilder.buildTransfer`)
+     * @param nightPrivateKey 32-byte secp256k1 private key for the sender's NIGHT external role
+     * @param ledgerParamsHex SCALE-serialized ledger parameters (hex)
+     * @param fromAddress Sender's address (dust payer)
+     * @param dustSeed 32-byte seed for deriving the DustSecretKey
+     * @param timeoutMs Maximum time to wait for finalization (default 60s)
+     */
+    suspend fun signAndSubmitTransfer(
+        intent: Intent,
+        nightPrivateKey: ByteArray,
+        ledgerParamsHex: String,
+        fromAddress: String,
+        dustSeed: ByteArray,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+    ): SubmissionResult {
+        val ffiSerializer = serializer as? FfiTransactionSerializer
+            ?: return SubmissionResult.Failed(
+                txHash = null,
+                reason = "FFI serializer required for transfer signing",
+            )
+        val offer = intent.guaranteedUnshieldedOffer
+            ?: return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Transfer intent has no guaranteed unshielded offer to sign",
+            )
+
+        val signatures = ArrayList<ByteArray>(offer.inputs.size)
+        // The first input samples a fresh binding (bindingHex = null); every later
+        // input MUST reuse that same binding so all signatures cover the one binding
+        // commitment the final serialization embeds. Unshielded inputs all sign the
+        // SAME data (unlike Bitcoin), so a per-input fresh binding would make every
+        // input but the last fail verification on a multi-UTXO transfer.
+        var sharedBindingHex: String? = null
+        for (index in offer.inputs.indices) {
+            val messageHex = ffiSerializer.getSigningMessageForInput(
+                inputs = offer.inputs,
+                outputs = offer.outputs,
+                inputIndex = index,
+                ttl = intent.ttl,
+                bindingHex = sharedBindingHex,
+            ) ?: return SubmissionResult.Failed(
+                txHash = null,
+                reason = "Failed to build signing message for input $index",
+            )
+            if (sharedBindingHex == null) {
+                sharedBindingHex = ffiSerializer.bindingCommitmentHex
+                    ?: return SubmissionResult.Failed(
+                        txHash = null,
+                        reason = "Binding commitment missing after signing input 0",
+                    )
+            }
+            val signature = TransactionSigner.signData(nightPrivateKey, hex(messageHex))
+                ?: return SubmissionResult.Failed(
+                    txHash = null,
+                    reason = "Failed to sign input $index",
+                )
+            signatures += signature
+        }
+
+        val signedIntent = intent.copy(
+            guaranteedUnshieldedOffer = offer.copy(signatures = signatures),
+        )
+        return submitWithFees(signedIntent, ledgerParamsHex, fromAddress, dustSeed, timeoutMs)
     }
 
     /**

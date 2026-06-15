@@ -108,7 +108,8 @@ class UnshieldedTransactionBuilder(
         amount: BigInteger,
         tokenType: String,
         senderPublicKey: String,
-        ttlMinutes: Int = DEFAULT_TTL_MINUTES
+        ttlMinutes: Int = DEFAULT_TTL_MINUTES,
+        largestFirst: Boolean = false
     ): BuildResult {
         // Step 1: Validate inputs
         require(from.isNotBlank()) { "Sender address cannot be blank" }
@@ -123,7 +124,8 @@ class UnshieldedTransactionBuilder(
         val selectionResult = utxoManager.selectAndLockUtxos(
             address = from,
             tokenType = tokenType,
-            requiredAmount = amount
+            requiredAmount = amount,
+            largestFirst = largestFirst
         )
 
         // Handle insufficient funds

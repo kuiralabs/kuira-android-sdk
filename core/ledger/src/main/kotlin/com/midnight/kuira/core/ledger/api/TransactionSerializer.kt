@@ -76,6 +76,14 @@ class FfiTransactionSerializer(
      */
     private var bindingCommitment: String? = null
 
+    /**
+     * The binding commitment captured by the last [getSigningMessageForInput] call,
+     * or null if none yet. A multi-input signer reads this after the first input and
+     * feeds it back as `bindingHex` for the remaining inputs so all signatures cover
+     * one shared binding.
+     */
+    val bindingCommitmentHex: String? get() = bindingCommitment
+
     override fun serialize(intent: Intent): String {
         // Validate intent structure
         require(intent.guaranteedUnshieldedOffer != null) {
@@ -374,7 +382,8 @@ class FfiTransactionSerializer(
         inputsJson: String,
         outputsJson: String,
         inputIndex: Int,
-        ttl: Long
+        ttl: Long,
+        bindingCommitmentHex: String?
     ): String?
 
     /**
@@ -395,7 +404,8 @@ class FfiTransactionSerializer(
         inputs: List<UtxoSpend>,
         outputs: List<UtxoOutput>,
         inputIndex: Int,
-        ttl: Long
+        ttl: Long,
+        bindingHex: String? = null
     ): String? {
         require(inputIndex >= 0 && inputIndex < inputs.size) {
             "inputIndex $inputIndex out of bounds (have ${inputs.size} inputs)"
@@ -404,8 +414,11 @@ class FfiTransactionSerializer(
         val inputsJson = serializeInputsToJson(inputs)
         val outputsJson = serializeOutputsToJson(outputs)
 
-        // Get JSON response: {"signing_message": "hex", "binding_commitment": "hex"}
-        val jsonResponse = nativeGetSigningMessageForInput(inputsJson, outputsJson, inputIndex, ttl)
+        // Get JSON response: {"signing_message": "hex", "binding_randomness": "hex"}.
+        // [bindingHex] null → native samples a fresh binding (single-input / first
+        // input of a batch); non-null → native reuses it so every input of a
+        // multi-input transaction signs the SAME binding commitment.
+        val jsonResponse = nativeGetSigningMessageForInput(inputsJson, outputsJson, inputIndex, ttl, bindingHex)
             ?: return null
 
         // Parse JSON response

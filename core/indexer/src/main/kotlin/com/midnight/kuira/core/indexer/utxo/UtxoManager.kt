@@ -419,10 +419,15 @@ class UtxoManager(
     suspend fun selectAndLockUtxos(
         address: String,
         tokenType: String,
-        requiredAmount: BigInteger
+        requiredAmount: BigInteger,
+        largestFirst: Boolean = false
     ): UtxoSelector.SelectionResult {
-        // Step 1: SELECT available UTXOs (sorted by value, smallest first)
+        // Step 1: SELECT available UTXOs. Default is smallest-first (privacy). NIGHT
+        // transfers pass largestFirst=true to minimize the input count — the ledger's
+        // time-to-dismiss budget caps a fee-paying transfer at a small number of inputs,
+        // so fewest-inputs (largest coins first) is what keeps a send under that ceiling.
         val availableUtxos = utxoDao.getUnspentUtxosForTokenSorted(address, tokenType)
+            .let { if (largestFirst) it.reversed() else it }
         Log.d("UtxoManager", "selectAndLockUtxos: ${availableUtxos.size} AVAILABLE UTXOs, total=${availableUtxos.sumOf { it.value.toBigInteger() }}")
         if (Log.isLoggable("UtxoManager", Log.VERBOSE)) {
             availableUtxos.forEach { utxo ->
