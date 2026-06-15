@@ -1,5 +1,5 @@
 // compact-runtime loaded as global __compactRuntime
-__compactRuntime.checkRuntimeVersion('0.15.0');
+__compactRuntime.checkRuntimeVersion('0.16.0');
 
 var State;
 (function (State) {
