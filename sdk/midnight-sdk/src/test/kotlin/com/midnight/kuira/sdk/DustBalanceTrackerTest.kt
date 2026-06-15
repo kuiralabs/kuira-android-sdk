@@ -50,6 +50,30 @@ class DustBalanceTrackerTest {
     }
 
     @Test
+    fun `a re-delivered SAME tip does NOT resync again (no loop)`() = runTest {
+        // Two events at the SAME tip (id == maxId == 10). Only the first is a
+        // genuine advance (0 -> 10); the second must NOT re-fire — otherwise a
+        // quiet/undeployed chain (or a reconnect re-delivering the tip) loops the
+        // proactive sync forever, pinning the sync notification on.
+        val tip = RawLedgerEvent(id = 10, rawHex = "6d69646e69676874", maxId = 10)
+        val client = mock<IndexerClient> {
+            on { subscribeToDustEvents(any()) } doReturn flow { emit(tip); emit(tip); awaitCancellation() }
+        }
+        val calls = AtomicInteger(0)
+        val tracker = DustBalanceTracker(
+            indexerClient = client,
+            onTipAdvance = { calls.incrementAndGet() },
+            dispatcher = UnconfinedTestDispatcher(testScheduler),
+        )
+
+        tracker.start(backgroundScope)
+        advanceUntilIdle()
+
+        // 1 initial + 1 for the first tip advance; the duplicate tip adds nothing.
+        assertEquals(2, calls.get())
+    }
+
+    @Test
     fun `a non-tip event does NOT resync (only the initial sync runs)`() = runTest {
         // id < maxId → still behind the tip → no resync on this event.
         val behind = RawLedgerEvent(id = 5, rawHex = "6d69646e69676874", maxId = 10)

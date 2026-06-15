@@ -68,7 +68,14 @@ internal class DustBalanceTracker(
                             }
                             val previousMax = lastMaxId
                             lastMaxId = maxOf(lastMaxId, event.id)
-                            if (event.id >= event.maxId && event.maxId > previousMax - 1) {
+                            // Resync ONLY on a STRICT tip advance. A `>= previousMax`
+                            // test (the old `> previousMax - 1`) re-fired on every
+                            // caught-up event at the SAME tip — and on each 30s
+                            // subscription reconnect re-delivering that tip — so a
+                            // quiet/undeployed chain looped proactiveDustResync
+                            // forever, pinning the sync notification on. The tip must
+                            // genuinely move past what we last synced.
+                            if (event.id >= event.maxId && event.maxId > previousMax) {
                                 onTipAdvance()
                             }
                         }

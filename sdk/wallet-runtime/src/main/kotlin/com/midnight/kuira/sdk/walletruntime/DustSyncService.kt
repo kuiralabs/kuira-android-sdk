@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
-/** What the foreground service should do for a given (status, locked, foreground) state. */
+/** What the foreground service should do for a given (status, locked) state. */
 internal enum class SyncServiceAction { Start, Update, Stop, None }
 
 /**
@@ -41,19 +41,19 @@ internal enum class SyncServiceAction { Start, Update, Stop, None }
  *  1. **Locked → tear down.** A locked session already had `provider.close()`
  *     cancel the SDK; a lingering "syncing" notification would be stale + a
  *     privacy leak. (Stop if running, else nothing to do.)
- *  2. Surface a notification only while **syncing AND backgrounded** — in the
- *     foreground the in-app `WalletSyncIndicator` already shows progress, so a
- *     notification would be redundant.
+ *  2. Surface the Live-Update notification whenever **syncing** — foreground AND
+ *     background — so it appears the moment a sync starts and follows every phase
+ *     from the start (the iOS-Live-Activity model). The in-app `WalletSyncIndicator`
+ *     coexists in the foreground.
  *  3. Otherwise: stop if running; nothing if not.
  */
 internal fun decideSyncService(
     status: SyncStatus,
     locked: Boolean,
-    inForeground: Boolean,
     running: Boolean,
 ): SyncServiceAction {
     if (locked) return if (running) SyncServiceAction.Stop else SyncServiceAction.None
-    val shouldShow = status is SyncStatus.Syncing && !inForeground
+    val shouldShow = status is SyncStatus.Syncing
     return when {
         shouldShow && !running -> SyncServiceAction.Start
         shouldShow && running -> SyncServiceAction.Update
@@ -110,11 +110,10 @@ class DustSyncService : Service() {
             combine(
                 sdkProvider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
                 sessionLock.locked,
-                sessionLock.inForeground,
-            ) { status, locked, fg -> Triple(status, locked, fg) }
+            ) { status, locked -> status to locked }
                 .distinctUntilChanged()
-                .collect { (status, locked, fg) ->
-                    when (decideSyncService(status, locked, fg, running = true)) {
+                .collect { (status, locked) ->
+                    when (decideSyncService(status, locked, running = true)) {
                         SyncServiceAction.Update -> {
                             pendingStop?.cancel(); pendingStop = null
                             if (status is SyncStatus.Syncing) updateNotification(notifier.build(status))
@@ -186,10 +185,10 @@ class DustSyncService : Service() {
 
         /**
          * Install the start observer. Call once from `Application.onCreate` (next to
-         * `SessionLock.attach`). Watches (syncStatus, locked, inForeground) and
-         * starts the FGS when a sync is in flight while backgrounded; the service
-         * self-stops on foreground / completion / lock. No-op if not called — hosts
-         * that don't opt in get no background sync notification.
+         * `SessionLock.attach`). Watches (syncStatus, locked) and starts the FGS
+         * whenever a sync is in flight (foreground or background); the service
+         * self-stops on completion / lock. No-op if not called — hosts that don't
+         * opt in get no sync notification.
          */
         @OptIn(ExperimentalCoroutinesApi::class)
         fun attach(application: Application) {
@@ -202,11 +201,10 @@ class DustSyncService : Service() {
                 combine(
                     provider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
                     sessionLock.locked,
-                    sessionLock.inForeground,
-                ) { status, locked, fg -> Triple(status, locked, fg) }
+                ) { status, locked -> status to locked }
                     .distinctUntilChanged()
-                    .collect { (status, locked, fg) ->
-                        if (decideSyncService(status, locked, fg, running.get()) == SyncServiceAction.Start) {
+                    .collect { (status, locked) ->
+                        if (decideSyncService(status, locked, running.get()) == SyncServiceAction.Start) {
                             runCatching {
                                 androidx.core.content.ContextCompat.startForegroundService(
                                     application,

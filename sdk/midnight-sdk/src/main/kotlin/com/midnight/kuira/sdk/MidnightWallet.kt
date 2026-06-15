@@ -589,6 +589,14 @@ class MidnightWallet internal constructor(
         // too (not just the dust sync above it). Each leg keeps its own best-effort
         // try/catch (partial freshness beats none); the tracked block doesn't
         // rethrow, so syncStatus settles on UpToDate either way.
+        // The WHOLE refresh — shielded resync, dust delta, AND the cloud backups —
+        // is one tracked span. The backups are the tail of a refresh, so keeping
+        // them inside keeps syncStatus on Syncing until refresh() truly finishes:
+        // otherwise the notification/chip vanished the instant the sync legs
+        // completed while the UI still showed "Refreshing balances…" through the
+        // (network-bound) backup tail. Each leg keeps its own best-effort try/catch
+        // (partial freshness beats none); the tracked block never rethrows, so
+        // syncStatus settles on UpToDate either way.
         runTrackedSync(SyncPhase.ShieldedRefresh) { publish ->
             try {
                 shieldedTracker.resync()
@@ -610,24 +618,23 @@ class MidnightWallet internal constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
             }
-        }
-        // Best-effort cloud backup of the freshly-synced checkpoint (no-op when
-        // unconfigured; the coordinator's hash guard skips an unchanged blob).
-        // Never let a backup failure surface to the caller.
-        try {
-            backupDustToCloud()
-        } catch (e: Exception) {
-            Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
-        }
-        // Best-effort silent app-state backup of the host's CURRENT snapshot
-        // (digest-guarded → no-op when unchanged). Using the host-registered
-        // provider means we never clobber real state with an empty blob; absent
-        // a provider there's simply nothing to back up.
-        appStateProvider?.let { provider ->
+            // Best-effort cloud backup of the freshly-synced checkpoint (no-op when
+            // unconfigured; the coordinator's hash guard skips an unchanged blob).
             try {
-                backupAppStateToCloud(provider.invoke())
+                backupDustToCloud()
             } catch (e: Exception) {
-                Log.w(TAG, "App-state cloud backup failed during refresh(): ${e.message}")
+                Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
+            }
+            // Best-effort silent app-state backup of the host's CURRENT snapshot
+            // (digest-guarded → no-op when unchanged). Using the host-registered
+            // provider means we never clobber real state with an empty blob; absent
+            // a provider there's simply nothing to back up.
+            appStateProvider?.let { provider ->
+                try {
+                    backupAppStateToCloud(provider.invoke())
+                } catch (e: Exception) {
+                    Log.w(TAG, "App-state cloud backup failed during refresh(): ${e.message}")
+                }
             }
         }
     }

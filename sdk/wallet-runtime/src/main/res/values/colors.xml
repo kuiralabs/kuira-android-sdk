@@ -1,0 +1,9 @@
+<resources>
+    <!-- Sync notification accent (#235). Matches MidnightColors.SuccessText — the
+         app's progress/success green (the unlock spinner uses it) — so the
+         notification + Live-Update chip read as part of the Kuira theme. -->
+    <color name="kuira_sync_accent">#FF4CAF50</color>
+    <!-- Milestone dots on the Live-Update progress bar — soft white ticks that
+         read on both the filled (green) and unfilled track. -->
+    <color name="kuira_sync_point">#CCFFFFFF</color>
+</resources>

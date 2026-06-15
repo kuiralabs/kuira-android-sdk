@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.sdk.SyncStatus
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -18,12 +19,17 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -219,6 +225,44 @@ class SessionLock @Inject constructor(
         }
     }
 
+    /**
+     * Hold off the auto-lock while a wallet sync is in flight, so a backgrounded
+     * sync isn't cut mid-stream by the background grace (#235): the SDK stays
+     * alive until the sync settles, so the whole sequence — and every phase it
+     * publishes to the notification — completes. A foreground `refreshBalance`
+     * already holds across its own chain; this extends the same protection to
+     * SDK-internal syncs (the proactive `DustBalanceTracker`) that have no caller
+     * to hold for them.
+     *
+     * Bounded, NOT a perpetual defer: the hold releases shortly after `syncStatus`
+     * leaves `Syncing`, so once the wallet stops syncing the deferred lock fires
+     * (security intact). The short linger bridges chained sub-syncs (dust →
+     * shielded → genesis) that briefly settle between phases, so the lock doesn't
+     * slip in through the gap.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun bindSyncHold() {
+        scope.launch {
+            var hold: AutoCloseable? = null
+            var releaseJob: Job? = null
+            provider.sdk
+                .flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) }
+                .map { it is SyncStatus.Syncing }
+                .distinctUntilChanged()
+                .collect { syncing ->
+                    if (syncing) {
+                        releaseJob?.cancel(); releaseJob = null
+                        if (hold == null) hold = acquireHold()
+                    } else if (hold != null && releaseJob == null) {
+                        releaseJob = scope.launch {
+                            delay(SYNC_HOLD_LINGER_MS)
+                            hold?.close(); hold = null; releaseJob = null
+                        }
+                    }
+                }
+        }
+    }
+
     /** Auto-lock path (idle/background/screen-off): defers while an operation is held. */
     private fun lock(reason: String) {
         idleJob?.cancel()
@@ -271,6 +315,8 @@ class SessionLock @Inject constructor(
         // fresh biometric for the FIRST seed load this process, so every launch
         // re-authenticates before the wallet is usable.
         walletSeedSource.requireFreshAuthNext()
+
+        bindSyncHold()
 
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
@@ -334,6 +380,13 @@ class SessionLock @Inject constructor(
 
         /** 30s grace after backgrounding (survives brief app-switches). */
         const val DEFAULT_BACKGROUND_GRACE_MS = 30 * 1000L
+
+        /**
+         * Linger after a sync settles before releasing the [bindSyncHold] hold —
+         * bridges chained sub-syncs (dust → shielded → genesis) that briefly leave
+         * `Syncing` between phases, so the deferred lock doesn't fire in the gap.
+         */
+        private const val SYNC_HOLD_LINGER_MS = 2 * 1000L
 
         /**
          * Resolve the singleton [SessionLock] and register its app-level hooks.

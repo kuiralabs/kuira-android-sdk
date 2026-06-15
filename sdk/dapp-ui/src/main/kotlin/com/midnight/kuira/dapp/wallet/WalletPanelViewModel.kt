@@ -18,9 +18,11 @@ import com.midnight.kuira.dapp.backup.BackupSectionState
 import com.midnight.kuira.sdk.BackupStatusSnapshot
 import com.midnight.kuira.sdk.CloudBackupStatus
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
+import com.midnight.kuira.sdk.SyncStatus
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
+import com.midnight.kuira.sdk.walletruntime.labelRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.math.BigInteger
@@ -69,7 +72,7 @@ class WalletPanelViewModel @Inject constructor(
     private val sigilStateStore: SigilStateStore,
     private val driveAuth: DriveAuthManager,
     private val sessionLock: SessionLock,
-    @ApplicationContext appContext: Context,
+    @ApplicationContext private val appContext: Context,
     /**
      * Host-bound app-state source (empty when the host binds none, e.g. BBoard).
      * Connected to [com.midnight.kuira.sdk.MidnightWallet.appStateProvider] so the
@@ -93,15 +96,23 @@ class WalletPanelViewModel @Inject constructor(
     val status: StateFlow<WalletStatus> = _status
 
     /**
-     * Live dust-sync progress for the sheet's [WalletSyncIndicator]. Non-null
-     * only while a heavy resync is streaming events; carries a 0..1 fraction
-     * (determinate) or null fraction (the unmeasurable Rust-replay tail) plus a
-     * stage label. Cleared back to null when the resync finishes. The pill's own
-     * spinner still keys off [WalletStatus.Ready.busy]; this drives the richer
-     * in-sheet indicator with real digits instead of an endless loop.
+     * Live sync progress for the sheet's [WalletSyncIndicator] — derived from the
+     * SDK's [com.midnight.kuira.sdk.MidnightWallet.syncStatus], the SAME signal the
+     * background Live-Update notification uses (#259). So the in-app pill and the
+     * notification are always consistent: it shows for EVERY sync (foreground
+     * refresh, proactive background tracker, genesis), with the fraction + the
+     * phase label resolved through the one shared [labelRes] mapping. Non-null only
+     * while [SyncStatus.Syncing]; null otherwise (the indicator hides).
      */
-    private val _syncProgress = MutableStateFlow<WalletSyncProgress?>(null)
-    val syncProgress: StateFlow<WalletSyncProgress?> = _syncProgress
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val syncProgress: StateFlow<WalletSyncProgress?> = sdkProvider.sdk
+        .flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) }
+        .map { status ->
+            (status as? SyncStatus.Syncing)?.let {
+                WalletSyncProgress(it.fraction, appContext.getString(it.phase.labelRes()))
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SYNC_SUBSCRIBE_TIMEOUT_MS), null)
 
     /**
      * Optimistic "turning dust backup on" flag. Flipped true the instant the user
@@ -232,7 +243,8 @@ class WalletPanelViewModel @Inject constructor(
                 if (locked) {
                     Log.i(TAG, "Session locked — showing Locked state until re-auth")
                     observeBalanceJob?.cancel()
-                    _syncProgress.value = null
+                    // syncProgress is derived from the SDK's syncStatus; the lock
+                    // drops the SDK (provider.sdk → null) so it falls to null on its own.
                     _status.value = WalletStatus.Locked
                 } else if (_status.value is WalletStatus.Locked) {
                     // Unlocked: the SessionLockGate re-authenticated (the seed is
@@ -375,40 +387,16 @@ class WalletPanelViewModel @Inject constructor(
                 // per FULL_REFRESH_INTERVAL_MS — not on every menu visit.
                 val now = System.currentTimeMillis()
                 if (force || walletChanged || now - lastFullRefreshAtMs >= FULL_REFRESH_INTERVAL_MS) {
-                    (_status.value as? WalletStatus.Ready)?.let {
-                        _status.value = it.copy(busy = "Syncing balances…")
-                    }
-                    try {
-                        // Stage-based feedback: even when an individual step is too
-                        // fast to emit a percentage (e.g. localnet), the label moves
-                        // through the real phases so the user always sees it advance.
-                        // Determinate % comes from syncDust's event counts when a
-                        // cold/large stream actually happens. syncDust runs
-                        // sequentially BEFORE refresh() — never concurrently — so the
-                        // two don't both touch the shared DustLocalState (see #228).
-                        // Parameterise the bar off the REAL milestones so the runner
-                        // always advances — even when a step is too fast to emit its
-                        // own % (localnet). The dust stream owns 0.10→0.55 (its true
-                        // event-% mapped in when a real stream runs); the refresh
-                        // (shielded + dust delta + backup) carries it 0.55→1.0.
-                        _syncProgress.value = WalletSyncProgress(SYNC_DUST_START, "Syncing dust…")
-                        built.wallet.syncDust { processed, total ->
-                            _syncProgress.value = when {
-                                processed < 0 -> WalletSyncProgress(SYNC_DUST_END, "Finalizing dust…")
-                                total > 0 -> WalletSyncProgress(
-                                    SYNC_DUST_START + (processed.toFloat() / total).coerceIn(0f, 1f) * SYNC_DUST_SPAN,
-                                    "Syncing dust",
-                                )
-                                else -> WalletSyncProgress(SYNC_DUST_END, "Syncing dust…")
-                            }
-                        }
-                        _syncProgress.value = WalletSyncProgress(SYNC_REFRESH, "Refreshing balances…")
-                        runCatching { built.wallet.refresh() }
-                            .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
-                        _syncProgress.value = WalletSyncProgress(SYNC_COMPLETE, "Up to date")
-                    } finally {
-                        _syncProgress.value = null
-                    }
+                    // The in-sheet indicator is driven reactively by [syncProgress]
+                    // (← wallet.syncStatus), so this no longer choreographs progress
+                    // labels by hand — syncDust() and refresh() publish their own
+                    // phases (dust → shielded → genesis) to syncStatus, which both
+                    // this pill and the background notification render identically.
+                    // They run sequentially (never concurrently) so they don't both
+                    // touch the shared DustLocalState (see #228).
+                    built.wallet.syncDust()
+                    runCatching { built.wallet.refresh() }
+                        .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
                     lastFullRefreshAtMs = now
                     val fresh = built.wallet.balance()
                     _status.value = WalletStatus.Ready(
@@ -639,19 +627,10 @@ class WalletPanelViewModel @Inject constructor(
          *  only needs to run periodically (or on an explicit/forced refresh). */
         private const val FULL_REFRESH_INTERVAL_MS = 5 * 60_000L
 
-        // ── Sync progress milestones ──
-        // The runner's fraction at each real phase, so it always advances even
-        // when a step emits no sub-progress of its own.
-        /** Dust stream begins. */
-        private const val SYNC_DUST_START = 0.10f
-        /** Fraction the dust stream owns: it fills [SYNC_DUST_START] → [SYNC_DUST_END]. */
-        private const val SYNC_DUST_SPAN = 0.45f
-        /** Dust streaming done / finalizing. */
-        private const val SYNC_DUST_END = SYNC_DUST_START + SYNC_DUST_SPAN
-        /** During the refresh (shielded + dust-delta + backup). */
-        private const val SYNC_REFRESH = 0.70f
-        /** Fully synced. */
-        private const val SYNC_COMPLETE = 1f
+        /** Keep the derived [syncProgress] flow warm briefly after the last
+         *  collector leaves (config change / sheet close), so a sync in flight
+         *  isn't dropped and re-collected. */
+        private const val SYNC_SUBSCRIBE_TIMEOUT_MS = 5_000L
     }
 }
 

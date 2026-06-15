@@ -1,0 +1,15 @@
+<!--
+  ProgressStyle tracker (#235) — the Kuira RUNNER that rides the sync bar. The
+  platform moves it along the bar as setProgress advances, so it "runs" across
+  the track while dust syncs (the notification's only real motion). White for
+  contrast on the green-filled track; ties to the in-app RunnerDustProgress.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M13.5,5.5 C14.6,5.5 15.5,4.6 15.5,3.5 C15.5,2.4 14.6,1.5 13.5,1.5 C12.4,1.5 11.5,2.4 11.5,3.5 C11.5,4.6 12.4,5.5 13.5,5.5 Z M9.8,8.9 L7,23 L9.1,23 L10.9,15 L13,17 L13,23 L15,23 L15,15.5 L12.9,13.5 L13.5,10.5 C15,12 17,13 19,13 L19,11 C17.3,11 15.9,10.1 15.1,8.8 L14.1,7.2 C13.7,6.6 13.1,6.2 12.4,6.2 C12.1,6.2 11.9,6.3 11.6,6.3 L6,8.3 L6,13 L8,13 L8,9.6 L9.8,8.9 Z" />
+</vector>
