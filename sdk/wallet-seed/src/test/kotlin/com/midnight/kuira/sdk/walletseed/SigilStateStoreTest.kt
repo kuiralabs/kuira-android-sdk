@@ -202,7 +202,11 @@ class SigilStateStoreTest {
         store.persistSigil("did:key:z6MkA", "cred-a", "")
         assertEquals("did:key:z6MkA", store.snapshotFlow.value?.did)
 
-        store.persistSigil("did:key:z6MkB", "cred-b", "0214")
+        // A subsequent write with a DIFFERENT credential is a legitimate identity
+        // replacement (the "start fresh" / restore path), so it passes replace=true
+        // — the #250 overwrite guard rejects a silent overwrite otherwise. The seam
+        // under test is that the flow tracks the latest write either way.
+        store.persistSigil("did:key:z6MkB", "cred-b", "0214", replace = true)
         assertEquals(
             "Subsequent writes must update the flow, not stay pinned on the first",
             "did:key:z6MkB",
