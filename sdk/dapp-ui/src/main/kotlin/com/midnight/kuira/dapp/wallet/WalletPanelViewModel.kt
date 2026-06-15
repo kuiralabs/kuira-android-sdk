@@ -553,6 +553,7 @@ class WalletPanelViewModel @Inject constructor(
                         when (stage) {
                             MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
                             MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
+                            MidnightSdk.SendProgress.REGISTERING -> "Setting up dust…"
                         },
                     )
                 }

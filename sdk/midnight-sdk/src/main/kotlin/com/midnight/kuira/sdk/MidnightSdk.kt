@@ -124,6 +124,18 @@ class MidnightSdk private constructor(
     private val shieldedTracker: ShieldedBalanceTracker,
     private val dustTracker: DustBalanceTracker?,
 ) {
+    init {
+        // Feed the wallet the live NIGHT-UTXO list so its `dustRegistered` signal
+        // reflects true per-UTXO registration ("are all NIGHT UTXOs generating?")
+        // rather than the dust>0 heuristic (#265).
+        wallet.nightUtxoJsonProvider = {
+            nightUtxosToJson(
+                utxoManager.getUnspentUtxos(walletAddress)
+                    .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE },
+            )
+        }
+    }
+
     /**
      * Register this wallet's NIGHT key to generate dust against its public dust key.
      *
@@ -328,6 +340,17 @@ class MidnightSdk private constructor(
                     .onFailure { Log.w(TAG, "post-send refresh failed: ${it.message}") }
             else -> {}
         }
+        // Spending NIGHT creates a fresh CHANGE UTXO with no dust backing, so the
+        // wallet would otherwise stop generating dust until the user manually
+        // re-registers (#265). Re-register here so dust "just works" after a send.
+        // Registration self-pays (allow_fee_payment), so it works even though this
+        // transfer just consumed the prior backing. Best-effort: the transfer has
+        // already succeeded, so a registration hiccup must not flip it to Failed.
+        if (result is SubmissionResult.Success || result is SubmissionResult.Pending) {
+            onProgress?.invoke(SendProgress.REGISTERING)
+            runCatching { registerForDustGeneration() }
+                .onFailure { Log.w(TAG, "post-send dust re-registration failed: ${it.message}") }
+        }
         return result.toSendResult()
     }
 
@@ -430,6 +453,9 @@ class MidnightSdk private constructor(
 
         /** Signing inputs, paying dust fees, submitting, and awaiting finalization. */
         SUBMITTING,
+
+        /** Registering the freshly-created change UTXO so it keeps generating dust. */
+        REGISTERING,
     }
 
     /** Outcome of [sendNight] — a typed result so callers can render distinct UX. */

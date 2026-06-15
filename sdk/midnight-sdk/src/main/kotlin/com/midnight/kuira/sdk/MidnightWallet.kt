@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import java.math.BigInteger
 
 /**
@@ -77,6 +78,16 @@ class MidnightWallet internal constructor(
      */
     @Volatile
     var dustBackupEnabled: Boolean = true
+
+    /**
+     * Live NIGHT-UTXO list (as the registration-filter JSON) wired by [MidnightSdk].
+     * Lets [balance]/[balanceFlow] compute `dustRegistered` from true per-UTXO
+     * registration state — "are all current NIGHT UTXOs generating dust?" — instead
+     * of the dust>0 heuristic (#265). Null → fall back to the heuristic (e.g. before
+     * the SDK wires it).
+     */
+    @Volatile
+    var nightUtxoJsonProvider: (suspend () -> String)? = null
 
     private val _backupStatus = MutableStateFlow(BackupStatusSnapshot())
 
@@ -157,7 +168,7 @@ class MidnightWallet internal constructor(
             unshieldedNight = unshielded,
             shieldedNight = shielded,
             dust = dust,
-            dustRegistered = dust > BigInteger.ZERO,
+            dustRegistered = computeDustRegistered(dust),
         )
     }
 
@@ -171,6 +182,32 @@ class MidnightWallet internal constructor(
     suspend fun unregisteredNightUtxos(nightUtxosJson: String): String = withContext(Dispatchers.IO) {
         val state = dustRepository.getLastSyncedState() ?: return@withContext nightUtxosJson
         runCatching { state.filterUnregisteredNight(nightUtxosJson) }.getOrNull() ?: nightUtxosJson
+    }
+
+    /**
+     * Truthful `dustRegistered`: are ALL current NIGHT UTXOs generating dust? Runs
+     * the same per-UTXO registration filter [MidnightSdk.registerForDustGeneration]
+     * loops on, against the live NIGHT-UTXO list from [nightUtxoJsonProvider]. This
+     * is why a fresh CHANGE UTXO (created by a send) reads as "needs registration"
+     * even while older dust lingers — unlike the old dust>0 proxy.
+     *
+     * Falls back to the dust>0 heuristic when the UTXO list or synced dust state
+     * isn't available yet, so a cold start doesn't flash a false "needs registration".
+     */
+    private suspend fun computeDustRegistered(dust: BigInteger): Boolean {
+        // Fast path: no provider wired yet (cold start / unit tests) → heuristic,
+        // and crucially NO dispatcher hop, so flow-collection tests stay
+        // deterministic. Only the real per-UTXO work offloads to IO.
+        val provider = nightUtxoJsonProvider ?: return dust > BigInteger.ZERO
+        return withContext(Dispatchers.IO) {
+            val nightJson = runCatching { provider() }.getOrNull() ?: return@withContext dust > BigInteger.ZERO
+            val nightCount = runCatching { JSONArray(nightJson).length() }.getOrDefault(0)
+            if (nightCount == 0) return@withContext false // no NIGHT → nothing is generating dust
+            val state = dustRepository.getLastSyncedState() ?: return@withContext dust > BigInteger.ZERO
+            val unregistered = runCatching { JSONArray(state.filterUnregisteredNight(nightJson)).length() }
+                .getOrNull() ?: return@withContext dust > BigInteger.ZERO
+            unregistered == 0
+        }
     }
 
     /**
@@ -201,7 +238,7 @@ class MidnightWallet internal constructor(
                 unshieldedNight = unshielded,
                 shieldedNight = shieldedNight,
                 dust = dust,
-                dustRegistered = dust > BigInteger.ZERO,
+                dustRegistered = computeDustRegistered(dust),
             )
         }
 
@@ -253,7 +290,7 @@ class MidnightWallet internal constructor(
             // call [refresh] after waitForFunding returns.
             shieldedNight = shieldedTracker.currentNight(),
             dust = dust,
-            dustRegistered = dust > BigInteger.ZERO,
+            dustRegistered = computeDustRegistered(dust),
         )
     }
 
