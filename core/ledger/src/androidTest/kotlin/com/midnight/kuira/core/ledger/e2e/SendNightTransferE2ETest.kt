@@ -299,4 +299,63 @@ class SendNightTransferE2ETest {
             ceiling >= 1,
         )
     }
+
+    /**
+     * Diagnostic for #240: does a SELF-send (to == from) fail signature verification
+     * (node error 175) where the same wallet's send to a DIFFERENT recipient passes?
+     * Consolidation merges are self-sends, so this isolates whether self-send is the
+     * blocker. Sends the sum of the two smallest coins back to FUNDED_ADDRESS itself.
+     */
+    @Test
+    fun selfSend_twoInputs_diagnostic() = runBlocking {
+        syncUnshieldedUtxos()
+        dustRepository.syncFromBlockchain(FUNDED_ADDRESS, dustSeed, maxBlocks = 100)
+        val utxoManager = UtxoManager(database.unshieldedUtxoDao())
+        val night = utxoManager.getUnspentUtxos(FUNDED_ADDRESS)
+            .filter { it.tokenType == NATIVE_TOKEN }
+            .sortedBy { BigInteger(it.value) }
+        assertTrue("need >= 2 NIGHT coins for a 2-input self-send", night.size >= 2)
+
+        // Sum of the two smallest → smallest-first picks exactly those two (big coin untouched).
+        val amount = BigInteger(night[0].value) + BigInteger(night[1].value)
+        val senderPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)!!.toHex()
+        val build = UnshieldedTransactionBuilder(utxoManager).buildTransfer(
+            from = FUNDED_ADDRESS,
+            to = FUNDED_ADDRESS, // SELF
+            amount = amount,
+            tokenType = NATIVE_TOKEN,
+            senderPublicKey = senderPublicKey,
+        )
+        val built = build as? UnshieldedTransactionBuilder.BuildResult.Success
+            ?: return@runBlocking fail("buildTransfer failed: $build")
+        val inputCount = built.intent.guaranteedUnshieldedOffer!!.inputs.size
+
+        val submitter = TransactionSubmitter(
+            nodeRpcClient = NodeRpcClientImpl(NODE_URL),
+            proofServerClient = ProofServerClientImpl(PROOF_SERVER_URL, developmentMode = true),
+            indexerClient = indexerClient,
+            serializer = FfiTransactionSerializer(networkId = "undeployed"),
+            utxoManager = utxoManager,
+            dustActionsBuilder = DustActionsBuilder(dustRepository, FeeCalculator, DustSpendCreator),
+            dustRepository = dustRepository,
+            provingMode = ProvingMode.REMOTE,
+        )
+        val ledgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
+            ?: return@runBlocking fail("no ledger parameters")
+        val result = submitter.signAndSubmitTransfer(
+            intent = built.intent,
+            nightPrivateKey = nightPrivateKey,
+            ledgerParamsHex = ledgerParamsHex,
+            fromAddress = FUNDED_ADDRESS,
+            dustSeed = dustSeed,
+        )
+        android.util.Log.i("SelfSendDiag", "SELF-send $inputCount-input result=$result")
+        if (result !is SubmissionResult.Success && result !is SubmissionResult.Pending) {
+            utxoManager.unlockUtxos(built.lockedUtxos.map { it.id })
+        }
+        assertTrue(
+            "SELF-send ($inputCount inputs) should finalize like an other-recipient send does: $result",
+            result is SubmissionResult.Success || result is SubmissionResult.Pending,
+        )
+    }
 }
