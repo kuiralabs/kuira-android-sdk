@@ -314,6 +314,33 @@ class UtxoManagerTest {
     }
 
     @Test
+    fun `given largestFirst selectAndLockUtxos picks fewest largest coins, default stays smallest-first`() = runBlocking {
+        // #240: a fee-paying NIGHT transfer must minimize its input count (ledger
+        // time-to-dismiss ceiling ~2 inputs), so sendNight selects largest-first.
+        val address = "mn_addr"
+        val token = "NIGHT"
+        // getUnspentUtxosForTokenSorted returns ascending (smallest-first) by contract.
+        val ascending = listOf(
+            createUtxoEntity(id = "a:0", intentHash = "a", owner = address, tokenType = token, value = "10"),
+            createUtxoEntity(id = "b:0", intentHash = "b", owner = address, tokenType = token, value = "20"),
+            createUtxoEntity(id = "c:0", intentHash = "c", owner = address, tokenType = token, value = "100"),
+        )
+        whenever(mockDao.getUnspentUtxosForTokenSorted(address, token)).thenReturn(ascending)
+
+        // largest-first: the single 100 coin covers 50 → 1 input.
+        val largest = utxoManager.selectAndLockUtxos(address, token, BigInteger("50"), largestFirst = true)
+        assertTrue(largest is UtxoSelector.SelectionResult.Success)
+        val lf = largest as UtxoSelector.SelectionResult.Success
+        assertEquals(1, lf.selectedUtxos.size)
+        assertEquals("c:0", lf.selectedUtxos[0].id)
+
+        // default (smallest-first): 10 + 20 + 100 → 3 inputs (the behavior that would trip the ceiling).
+        val smallest = utxoManager.selectAndLockUtxos(address, token, BigInteger("50"))
+        assertTrue(smallest is UtxoSelector.SelectionResult.Success)
+        assertEquals(3, (smallest as UtxoSelector.SelectionResult.Success).selectedUtxos.size)
+    }
+
+    @Test
     fun `given address when clearUtxos then calls DAO deleteUtxosForAddress`() = runBlocking {
         // Given
         val address = "mn_addr_testnet1abc"

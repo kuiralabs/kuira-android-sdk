@@ -227,6 +227,38 @@ class UnshieldedTransactionBuilderTest {
     }
 
     @Test
+    fun `given largestFirst when building transfer then selects via largest-first (fewest inputs)`() = runTest {
+        // #240: NIGHT transfers pass largestFirst=true to minimize the input count
+        // (the ledger time-to-dismiss budget caps a fee-paying transfer at ~2 inputs).
+        // The builder must forward the flag to the selector; default stays smallest-first.
+        val selectedUtxo = createUtxo(150)
+        coEvery {
+            utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"), largestFirst = true)
+        } returns UtxoSelector.SelectionResult.Success(
+            selectedUtxos = listOf(selectedUtxo),
+            totalSelected = BigInteger("150"),
+            change = BigInteger("50"),
+        )
+
+        val result = builder.buildTransfer(
+            from = senderAddress,
+            to = recipientAddress,
+            amount = BigInteger("100"),
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey,
+            largestFirst = true,
+        )
+
+        assertTrue(result is UnshieldedTransactionBuilder.BuildResult.Success)
+        coVerify(exactly = 1) {
+            utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"), largestFirst = true)
+        }
+        coVerify(exactly = 0) {
+            utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"), largestFirst = false)
+        }
+    }
+
+    @Test
     fun `given insufficient funds when building transfer then returns InsufficientFunds`() = runTest {
         // Given
         coEvery {
