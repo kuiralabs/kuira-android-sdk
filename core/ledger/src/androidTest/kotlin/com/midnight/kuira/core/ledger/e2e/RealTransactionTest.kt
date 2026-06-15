@@ -243,7 +243,10 @@ class RealTransactionTest {
         privateKey.fill(0)
         seed.fill(0)
         dustState?.close()
-        database.close()
+        // Do NOT close `database` — UtxoDatabase.getInstance() is a process-wide
+        // singleton; closing it in a per-test teardown bricks the next test in the
+        // module run (it inherits the closed instance → JobCancellationException).
+        // The singleton is torn down with the test process.
     }
 
     @Test
