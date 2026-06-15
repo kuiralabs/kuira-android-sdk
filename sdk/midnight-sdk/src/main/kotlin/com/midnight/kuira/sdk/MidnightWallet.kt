@@ -88,16 +88,18 @@ class MidnightWallet internal constructor(
      */
     val backupStatus: StateFlow<BackupStatusSnapshot> = _backupStatus.asStateFlow()
 
-    private val _dustSyncStatus = MutableStateFlow<DustSyncStatus>(DustSyncStatus.Idle)
+    private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
 
     /**
-     * Observable dust-sync status (#235). Every dust sync this wallet runs —
-     * [syncDust] and the proactive [proactiveDustResync] — publishes here, so a
+     * Observable wallet-sync status (#235). EVERY heavy sync this wallet runs
+     * publishes here — [syncDust], the proactive [proactiveDustResync], the
+     * shielded + dust [refresh], and the [forceFullSync] genesis rebuild — so a
      * background observer (the foreground-service Live-Update notification) can
-     * render progress without driving the sync itself. The in-app
-     * `WalletSyncIndicator` can also collect this instead of the per-call lambda.
+     * render progress for whichever phase is in flight without driving the sync
+     * itself. The in-app `WalletSyncIndicator` can also collect this instead of
+     * the per-call lambda.
      */
-    val dustSyncStatus: StateFlow<DustSyncStatus> = _dustSyncStatus.asStateFlow()
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
     // Atomic update: dust + app-state backups can report concurrently (a host
     // calling backupAppStateToCloud while refresh() runs backupDustToCloud), so a
@@ -274,10 +276,10 @@ class MidnightWallet internal constructor(
     suspend fun syncDust(
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ) = withContext(Dispatchers.IO) {
-        runTrackedDustSync("Syncing dust…") { publish ->
+        runTrackedSync(SyncPhase.DustFull) { publish ->
             dustSyncManager.ensureSynced(onSyncProgress = { processed, total ->
                 onProgress?.invoke(processed, total) // external callback (back-compat)
-                publish(processed, total)            // observable dustSyncStatus
+                publish(processed, total)            // observable syncStatus
             })
         }
     }
@@ -286,48 +288,58 @@ class MidnightWallet internal constructor(
      * Proactive delta dust-sync for the live tip-advance path (#235). Runs the
      * incremental refresh under [balanceMutex] — same discipline as [refresh] —
      * so it can't close the shared `DustLocalState` mid-balance. Publishes to
-     * [dustSyncStatus]. Used by the background `DustBalanceTracker`; never does a
+     * [syncStatus]. Used by the background `DustBalanceTracker`; never does a
      * genesis wipe.
      */
     internal suspend fun proactiveDustResync() = withContext(Dispatchers.IO) {
-        runTrackedDustSync("Updating dust…") { publish ->
+        runTrackedSync(SyncPhase.DustDelta) { publish ->
             balanceMutex.withLock { dustSyncManager.refreshIncremental(onSyncProgress = publish) }
         }
     }
 
-    /** Map a (processed, total) tick onto [dustSyncStatus]. -1 = replay tail (indeterminate). */
-    private fun publishDustProgress(eventsProcessed: Int, totalEvents: Int) {
-        _dustSyncStatus.value = when {
+    /**
+     * Map a (processed, total) tick onto [syncStatus] under the running
+     * [basePhase]. The -1 replay-tail sentinel flips to [SyncPhase.Finalizing]
+     * (indeterminate); everything else keeps the base phase.
+     */
+    private fun publishSyncProgress(basePhase: SyncPhase, eventsProcessed: Int, totalEvents: Int) {
+        _syncStatus.value = when {
             eventsProcessed < 0 ->
-                DustSyncStatus.Syncing(null, eventsProcessed, totalEvents, "Finalizing dust…")
+                SyncStatus.Syncing(null, eventsProcessed, totalEvents, SyncPhase.Finalizing)
             totalEvents > 0 ->
-                DustSyncStatus.Syncing(
+                SyncStatus.Syncing(
                     (eventsProcessed.toFloat() / totalEvents).coerceIn(0f, 1f),
-                    eventsProcessed, totalEvents, "Syncing dust",
+                    eventsProcessed, totalEvents, basePhase,
                 )
             else ->
-                DustSyncStatus.Syncing(null, eventsProcessed, totalEvents, "Syncing dust…")
+                SyncStatus.Syncing(null, eventsProcessed, totalEvents, basePhase)
         }
     }
 
     /**
-     * Run a dust sync while driving [dustSyncStatus]: Syncing → UpToDate on
-     * success, Failed on error, Idle on cancellation. Rethrows so callers keep
-     * their existing error/cancellation semantics.
+     * Run a sync phase while driving [syncStatus]: Syncing([phase]) → UpToDate on
+     * success, Failed on error, Idle on cancellation. The [block]'s `publish`
+     * callback carries determinate progress (mapped via [publishSyncProgress]
+     * under the same phase). Rethrows so callers keep their existing error/
+     * cancellation semantics.
+     *
+     * Used by every heavy sync — dust, shielded refresh, genesis rebuild — so the
+     * single [syncStatus] observer (the background notification) reflects all of
+     * them, not just dust.
      */
-    private suspend fun runTrackedDustSync(
-        startLabel: String,
+    private suspend fun runTrackedSync(
+        phase: SyncPhase,
         block: suspend (publish: suspend (Int, Int) -> Unit) -> Unit,
     ) {
-        _dustSyncStatus.value = DustSyncStatus.Syncing(null, 0, 0, startLabel)
+        _syncStatus.value = SyncStatus.Syncing(null, 0, 0, phase)
         try {
-            block { processed, total -> publishDustProgress(processed, total) }
-            _dustSyncStatus.value = DustSyncStatus.UpToDate
+            block { processed, total -> publishSyncProgress(phase, processed, total) }
+            _syncStatus.value = SyncStatus.UpToDate
         } catch (ce: CancellationException) {
-            _dustSyncStatus.value = DustSyncStatus.Idle
+            _syncStatus.value = SyncStatus.Idle
             throw ce
         } catch (e: Exception) {
-            _dustSyncStatus.value = DustSyncStatus.Failed(e.message ?: "Dust sync failed")
+            _syncStatus.value = SyncStatus.Failed(e.message ?: "Sync failed")
             throw e
         }
     }
@@ -547,8 +559,10 @@ class MidnightWallet internal constructor(
     }
 
     private suspend fun forceFullSync() {
-        dustSyncManager.forceResync()
-        dustSyncManager.ensureSynced()
+        runTrackedSync(SyncPhase.GenesisRebuild) { publish ->
+            dustSyncManager.forceResync()
+            dustSyncManager.ensureSynced(onSyncProgress = publish)
+        }
     }
 
     /**
@@ -570,25 +584,32 @@ class MidnightWallet internal constructor(
      * partial freshness is better than no freshness.
      */
     suspend fun refresh() = withContext(Dispatchers.IO) {
-        try {
-            shieldedTracker.resync()
-        } catch (e: Exception) {
-            Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
-        }
-        try {
-            // Routine refresh = incremental delta on the persisted checkpoint,
-            // NOT a genesis wipe. forceFullSync (forceResync) is only for
-            // error-170 recovery where stale roots demand a clean rebuild.
-            //
-            // Under balanceMutex: refreshIncremental closes the shared
-            // DustLocalState, which must not happen while a balance is mid-flight
-            // (it holds the same state) — otherwise the balance resumes onto a
-            // closed state and fails with "DustLocalState has been closed".
-            balanceMutex.withLock {
-                dustSyncManager.refreshIncremental()
+        // Shielded resync + dust delta are the user-visible ShieldedRefresh work —
+        // track them on syncStatus so the background notification covers this phase
+        // too (not just the dust sync above it). Each leg keeps its own best-effort
+        // try/catch (partial freshness beats none); the tracked block doesn't
+        // rethrow, so syncStatus settles on UpToDate either way.
+        runTrackedSync(SyncPhase.ShieldedRefresh) { publish ->
+            try {
+                shieldedTracker.resync()
+            } catch (e: Exception) {
+                Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
+            try {
+                // Routine refresh = incremental delta on the persisted checkpoint,
+                // NOT a genesis wipe. forceFullSync (forceResync) is only for
+                // error-170 recovery where stale roots demand a clean rebuild.
+                //
+                // Under balanceMutex: refreshIncremental closes the shared
+                // DustLocalState, which must not happen while a balance is mid-flight
+                // (it holds the same state) — otherwise the balance resumes onto a
+                // closed state and fails with "DustLocalState has been closed".
+                balanceMutex.withLock {
+                    dustSyncManager.refreshIncremental(onSyncProgress = publish)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
+            }
         }
         // Best-effort cloud backup of the freshly-synced checkpoint (no-op when
         // unconfigured; the coordinator's hash guard skips an unchanged blob).

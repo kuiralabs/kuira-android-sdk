@@ -9,7 +9,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
-import com.midnight.kuira.sdk.DustSyncStatus
+import com.midnight.kuira.sdk.SyncStatus
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
@@ -18,8 +18,10 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -45,13 +47,13 @@ internal enum class SyncServiceAction { Start, Update, Stop, None }
  *  3. Otherwise: stop if running; nothing if not.
  */
 internal fun decideSyncService(
-    status: DustSyncStatus,
+    status: SyncStatus,
     locked: Boolean,
     inForeground: Boolean,
     running: Boolean,
 ): SyncServiceAction {
     if (locked) return if (running) SyncServiceAction.Stop else SyncServiceAction.None
-    val shouldShow = status is DustSyncStatus.Syncing && !inForeground
+    val shouldShow = status is SyncStatus.Syncing && !inForeground
     return when {
         shouldShow && !running -> SyncServiceAction.Start
         shouldShow && running -> SyncServiceAction.Update
@@ -93,23 +95,40 @@ class DustSyncService : Service() {
 
         // Must call startForeground promptly. Seed with the current status (or an
         // indeterminate placeholder) so we satisfy the FGS contract immediately.
-        val initial = (currentStatus() as? DustSyncStatus.Syncing)
-            ?: DustSyncStatus.Syncing(null, 0, 0, "Syncing wallet…")
-        startInForeground(notifier.build(initial))
+        val seed = (currentStatus() as? SyncStatus.Syncing)
+        startInForeground(if (seed != null) notifier.build(seed) else notifier.buildIndeterminate())
 
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope = it }
         s.launch {
+            // A chained refresh runs as several SDK calls back to back (syncDust →
+            // refresh → genesis), each ending UpToDate before the next re-enters
+            // Syncing. Without a linger the FGS would tear down + restart on every
+            // gap. So a completion-triggered Stop is DEFERRED briefly; a follow-up
+            // Syncing cancels it and keeps the same notification. A lock-triggered
+            // Stop is immediate (privacy — no lingering "syncing" while locked).
+            var pendingStop: Job? = null
             combine(
-                sdkProvider.sdk.flatMapLatest { it?.wallet?.dustSyncStatus ?: flowOf(DustSyncStatus.Idle) },
+                sdkProvider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
                 sessionLock.locked,
                 sessionLock.inForeground,
             ) { status, locked, fg -> Triple(status, locked, fg) }
                 .distinctUntilChanged()
                 .collect { (status, locked, fg) ->
                     when (decideSyncService(status, locked, fg, running = true)) {
-                        SyncServiceAction.Update ->
-                            if (status is DustSyncStatus.Syncing) updateNotification(notifier.build(status))
-                        SyncServiceAction.Stop -> stopServiceNow()
+                        SyncServiceAction.Update -> {
+                            pendingStop?.cancel(); pendingStop = null
+                            if (status is SyncStatus.Syncing) updateNotification(notifier.build(status))
+                        }
+                        SyncServiceAction.Stop ->
+                            if (locked) {
+                                pendingStop?.cancel(); pendingStop = null
+                                stopServiceNow()
+                            } else if (pendingStop == null) {
+                                pendingStop = s.launch {
+                                    delay(STOP_LINGER_MS)
+                                    stopServiceNow()
+                                }
+                            }
                         else -> { /* Start/None can't occur while running */ }
                     }
                 }
@@ -117,8 +136,8 @@ class DustSyncService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun currentStatus(): DustSyncStatus =
-        sdkProvider.sdk.value?.wallet?.dustSyncStatus?.value ?: DustSyncStatus.Idle
+    private fun currentStatus(): SyncStatus =
+        sdkProvider.sdk.value?.wallet?.syncStatus?.value ?: SyncStatus.Idle
 
     private fun startInForeground(notification: android.app.Notification) {
         runCatching {
@@ -153,6 +172,13 @@ class DustSyncService : Service() {
     companion object {
         private const val TAG = "DustSyncService"
 
+        /**
+         * Grace before a completion-triggered Stop actually tears down the FGS, so a
+         * chained sync (dust → refresh → genesis) that re-enters Syncing within the
+         * window keeps the same notification instead of restarting the service.
+         */
+        private const val STOP_LINGER_MS = 2_000L
+
         /** True while the service is foregrounded — gates [attach]'s Start decision. */
         private val running = AtomicBoolean(false)
 
@@ -160,7 +186,7 @@ class DustSyncService : Service() {
 
         /**
          * Install the start observer. Call once from `Application.onCreate` (next to
-         * `SessionLock.attach`). Watches (dustSyncStatus, locked, inForeground) and
+         * `SessionLock.attach`). Watches (syncStatus, locked, inForeground) and
          * starts the FGS when a sync is in flight while backgrounded; the service
          * self-stops on foreground / completion / lock. No-op if not called — hosts
          * that don't opt in get no background sync notification.
@@ -174,7 +200,7 @@ class DustSyncService : Service() {
             val sessionLock = ep.sessionLock()
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
                 combine(
-                    provider.sdk.flatMapLatest { it?.wallet?.dustSyncStatus ?: flowOf(DustSyncStatus.Idle) },
+                    provider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
                     sessionLock.locked,
                     sessionLock.inForeground,
                 ) { status, locked, fg -> Triple(status, locked, fg) }

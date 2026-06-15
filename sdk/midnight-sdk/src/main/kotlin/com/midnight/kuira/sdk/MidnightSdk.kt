@@ -270,7 +270,7 @@ class MidnightSdk private constructor(
         /**
          * Keep dust pre-synced in the background (#235). When enabled, the SDK
          * runs a live tip-advance dust subscription so a transaction never waits
-         * on a cold sync; progress is observable via `MidnightWallet.dustSyncStatus`
+         * on a cold sync; progress is observable via `MidnightWallet.syncStatus`
          * (and surfaced by the foreground-service Live-Update notification). Off by
          * default — opt in for wallet-first apps. Delta only; the first cold sync is
          * still O(chain) but now runs ahead of need.
@@ -476,7 +476,7 @@ class MidnightSdk private constructor(
             // Keeps dust current via a live tip-advance subscription so a tx never
             // waits on a cold sync. OFF by default (existing hosts unchanged). The
             // sync itself goes through the wallet's balanceMutex (proactiveDustResync,
-            // delta only — never a genesis wipe) and publishes to wallet.dustSyncStatus.
+            // delta only — never a genesis wipe) and publishes to wallet.syncStatus.
             // Launched on subscriptionScope so close() cancels it.
             val dustTracker = if (proactiveDustSync) {
                 DustBalanceTracker(

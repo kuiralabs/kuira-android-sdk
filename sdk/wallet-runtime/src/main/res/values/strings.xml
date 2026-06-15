@@ -1,0 +1,12 @@
+<resources>
+    <!-- Wallet sync phase labels (#235/#259). One source for the background
+         notification and (later) the in-app indicator. Prefixed kuira_ so they
+         don't collide when merged into a host app's resources. -->
+    <string name="kuira_sync_dust">Syncing dust…</string>
+    <string name="kuira_sync_dust_delta">Updating dust…</string>
+    <string name="kuira_sync_shielded">Refreshing balances…</string>
+    <string name="kuira_sync_genesis">Rebuilding from genesis…</string>
+    <string name="kuira_sync_finalizing">Finalizing…</string>
+    <string name="kuira_sync_generic">Syncing wallet…</string>
+    <string name="kuira_sync_title">Syncing wallet</string>
+</resources>

@@ -1,6 +1,7 @@
 package com.midnight.kuira.sdk.walletruntime
 
-import com.midnight.kuira.sdk.DustSyncStatus
+import com.midnight.kuira.sdk.SyncPhase
+import com.midnight.kuira.sdk.SyncStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -11,9 +12,9 @@ import org.junit.Test
  */
 class DustSyncServiceStartPolicyTest {
 
-    private val syncing: DustSyncStatus = DustSyncStatus.Syncing(0.5f, 5, 10, "Syncing dust")
-    private val idle: DustSyncStatus = DustSyncStatus.Idle
-    private val done: DustSyncStatus = DustSyncStatus.UpToDate
+    private val syncing: SyncStatus = SyncStatus.Syncing(0.5f, 5, 10, SyncPhase.DustFull)
+    private val idle: SyncStatus = SyncStatus.Idle
+    private val done: SyncStatus = SyncStatus.UpToDate
 
     @Test
     fun `syncing while backgrounded starts the service`() {
@@ -54,7 +55,7 @@ class DustSyncServiceStartPolicyTest {
 
     @Test
     fun `failed status while running stops the service`() {
-        val failed: DustSyncStatus = DustSyncStatus.Failed("boom")
+        val failed: SyncStatus = SyncStatus.Failed("boom")
         assertEquals(SyncServiceAction.Stop, decideSyncService(failed, locked = false, inForeground = false, running = true))
         assertEquals(SyncServiceAction.None, decideSyncService(failed, locked = false, inForeground = false, running = false))
     }

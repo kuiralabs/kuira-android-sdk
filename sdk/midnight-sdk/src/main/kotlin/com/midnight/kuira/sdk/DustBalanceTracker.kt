@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
  * **Delegates the actual sync to the wallet** ([onTipAdvance] =
  * `MidnightWallet::proactiveDustResync`) so it runs under the wallet's
  * `balanceMutex` (never closing the shared `DustLocalState` mid-balance) and
- * publishes to `MidnightWallet.dustSyncStatus`. This tracker only owns the
+ * publishes to `MidnightWallet.syncStatus`. This tracker only owns the
  * *when* (the live subscription + tip detection + backoff), not the *how*.
  *
  * **Lifecycle:** started by `MidnightSdk.Builder.build()` when

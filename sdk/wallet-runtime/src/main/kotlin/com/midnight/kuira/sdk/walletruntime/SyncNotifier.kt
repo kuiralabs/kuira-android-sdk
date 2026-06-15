@@ -7,13 +7,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.midnight.kuira.sdk.DustSyncStatus
+import com.midnight.kuira.sdk.SyncStatus
 
 /**
- * Builds the dust-sync "Live Update" notification (#235) — the background
+ * Builds the wallet-sync "Live Update" notification (#235) — the background
  * counterpart to the in-app `WalletSyncIndicator`. An ongoing, silent progress
  * notification with a determinate bar + percentage (or indeterminate for the
- * replay tail), visible in the shade and on the lock screen.
+ * replay tail), visible in the shade and on the lock screen. The phase label
+ * (dust / shielded refresh / genesis) is resolved from [SyncStatus.Syncing.phase].
  *
  * Pure builder (no service/lifecycle deps) so the text/percentage seam is
  * unit-testable. Note: Android notifications are templated — the branded
@@ -27,20 +28,30 @@ class SyncNotifier(private val context: Context) {
         if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
             mgr.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Wallet dust balance sync progress"
+                    description = "Wallet balance sync progress"
                     setShowBadge(false)
                 },
             )
         }
     }
 
-    /** Build the ongoing progress notification for a [DustSyncStatus.Syncing] tick. */
-    fun build(status: DustSyncStatus.Syncing): Notification {
+    /** Build the ongoing progress notification for a [SyncStatus.Syncing] tick. */
+    fun build(status: SyncStatus.Syncing): Notification =
+        build(label = context.getString(status.phase.labelRes()), fraction = status.fraction)
+
+    /**
+     * Indeterminate placeholder for the brief FGS-start window before the first
+     * real status tick arrives (generic label, no progress bar count).
+     */
+    fun buildIndeterminate(): Notification =
+        build(label = context.getString(R.string.kuira_sync_generic), fraction = null)
+
+    private fun build(label: String, fraction: Float?): Notification {
         ensureChannel()
-        val (text, percent) = status.toNotificationText()
+        val (text, percent) = syncNotificationText(label, fraction)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle(TITLE)
+            .setContentTitle(context.getString(R.string.kuira_sync_title))
             .setContentText(text)
             .setOngoing(true)          // can't be swiped away while syncing
             .setSilent(true)           // no sound/vibration
@@ -71,16 +82,15 @@ class SyncNotifier(private val context: Context) {
         const val CHANNEL_ID = "kuira_dust_sync"
         const val NOTIFICATION_ID = 0xD057 // arbitrary stable id for the sync notification
         private const val CHANNEL_NAME = "Wallet sync"
-        private const val TITLE = "Syncing wallet"
         private const val PROGRESS_MAX = 100
     }
 }
 
 /**
- * Pure seam (unit-tested): a [DustSyncStatus.Syncing] → (content text, percent-or-null).
+ * Pure seam (unit-tested): a resolved label + fraction → (content text, percent-or-null).
  * Determinate fraction → "<label> · NN%" + the int percent; indeterminate → just the label.
  */
-internal fun DustSyncStatus.Syncing.toNotificationText(): Pair<String, Int?> {
+internal fun syncNotificationText(label: String, fraction: Float?): Pair<String, Int?> {
     val percent = fraction?.let { (it.coerceIn(0f, 1f) * 100).toInt() }
     val text = if (percent != null) "$label · $percent%" else label
     return text to percent
