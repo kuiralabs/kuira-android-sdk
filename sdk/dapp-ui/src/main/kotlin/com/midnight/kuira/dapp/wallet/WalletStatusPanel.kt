@@ -185,8 +185,10 @@ fun WalletStatusPanel(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
+    val sendState by viewModel.sendState.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
     var receiveOpen by rememberSaveable { mutableStateOf(false) }
+    var sendOpen by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
@@ -199,6 +201,7 @@ fun WalletStatusPanel(
         if (status is WalletStatus.Locked) {
             sheetOpen = false
             receiveOpen = false
+            sendOpen = false
         }
     }
 
@@ -318,6 +321,16 @@ fun WalletStatusPanel(
                         receiveOpen = true
                     }
                 },
+                onSend = {
+                    // Same sheet→screen handoff as Receive. Start the flow clean
+                    // (clear any prior success/failure) so the form opens fresh.
+                    viewModel.resetSendState()
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        sheetOpen = false
+                        sendOpen = true
+                    }
+                },
                 onLockNow = {
                     viewModel.lockNow()
                     coroutineScope.launch {
@@ -360,6 +373,32 @@ fun WalletStatusPanel(
                 // dropping all the way to the host content — the stack the user expects.
                 onBack = {
                     receiveOpen = false
+                    sheetOpen = true
+                },
+            )
+        }
+    }
+
+    // Send screen — same full-screen-overlay pattern as Receive (#240). Only
+    // available when Ready (we need the sender address + spendable balance); the
+    // sheet's Send button is disabled otherwise so this branch shouldn't fire.
+    if (sendOpen && readyStatus != null) {
+        Popup(
+            alignment = Alignment.TopStart,
+            onDismissRequest = { sendOpen = false },
+            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
+        ) {
+            WalletSendScreen(
+                senderAddress = readyStatus.address,
+                // sendNight spends UNSHIELDED NIGHT, so cap the form at that pool.
+                spendableNightRaw = readyStatus.balance.unshieldedNight,
+                network = network,
+                sendState = sendState,
+                colors = activeColors,
+                onSubmit = { to, amount -> activity?.let { viewModel.sendNight(config, it, to, amount) } },
+                onResetState = { viewModel.resetSendState() },
+                onBack = {
+                    sendOpen = false
                     sheetOpen = true
                 },
             )
@@ -498,6 +537,7 @@ private fun WalletSheetContent(
     backupSection: BackupSectionState,
     onDustToggle: (Boolean) -> Unit,
     onReceive: () -> Unit,
+    onSend: () -> Unit,
     onLockNow: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -548,7 +588,7 @@ private fun WalletSheetContent(
                 is WalletStatus.None,
                 is WalletStatus.Loading -> WalletBalanceLoading(colors)
                 is WalletStatus.Ready -> ReadyBody(
-                    status, syncProgress, formatter, colors, onReceive, onRefreshBalance, onRegisterDust, busy,
+                    status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust, busy,
                 )
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
                 is WalletStatus.SigilRequired -> SigilPrompt(colors)
@@ -643,6 +683,7 @@ private fun ReadyBody(
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
     onReceive: () -> Unit,
+    onSend: () -> Unit,
     onRefresh: () -> Unit,
     onRegister: () -> Unit,
     busy: Boolean,
@@ -676,7 +717,7 @@ private fun ReadyBody(
         onRefresh = onRefresh,
         onRegister = onRegister,
         busy = busy,
-        // onSend omitted → Send shown disabled ("soon") until #240.
+        onSend = onSend,
     )
 
     if (status.message != null) {

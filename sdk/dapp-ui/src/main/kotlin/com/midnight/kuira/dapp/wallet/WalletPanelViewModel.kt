@@ -17,6 +17,7 @@ import com.midnight.kuira.dapp.backup.BackupLaneState
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import com.midnight.kuira.sdk.BackupStatusSnapshot
 import com.midnight.kuira.sdk.CloudBackupStatus
+import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.sdk.SyncStatus
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
@@ -94,6 +95,15 @@ class WalletPanelViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
+
+    /**
+     * Send-flow state for the Send screen (#240). Idle until the user submits;
+     * then Sending (with the coarse [MidnightSdk.SendProgress] stage as a label),
+     * resolving to Success (tx hash) or Failure (a user-facing reason). Reset to
+     * Idle when the Send screen closes.
+     */
+    private val _sendState = MutableStateFlow<SendUiState>(SendUiState.Idle)
+    val sendState: StateFlow<SendUiState> = _sendState
 
     /**
      * Live sync progress for the sheet's [WalletSyncIndicator] — derived from the
@@ -521,6 +531,71 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
+     * Send unshielded NIGHT to [toAddress] (#240). Bootstraps/reuses the shared SDK,
+     * then calls [MidnightSdk.sendNight], which validates, selects fewest coins,
+     * auto-consolidates when needed, signs, pays dust fees, and submits. Surfaces
+     * coarse progress (consolidating / submitting) and the typed outcome through
+     * [sendState]; the live balance observer + a post-send refresh update the pill.
+     *
+     * @param amount NIGHT in the smallest unit (1 NIGHT = 1,000,000); the Send
+     *   screen parses the user's decimal NIGHT into this.
+     */
+    fun sendNight(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) {
+        lastRequestedConfig = config
+        viewModelScope.launch {
+            // Keep the session unlocked while the (possibly multi-tx) send is in flight.
+            val hold = sessionLock.acquireHold()
+            try {
+                _sendState.value = SendUiState.Sending("Preparing…")
+                val built = sdkProvider.ensureSdk(activity, config)
+                val result = built.sendNight(toAddress, amount) { stage ->
+                    _sendState.value = SendUiState.Sending(
+                        when (stage) {
+                            MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
+                            MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
+                        },
+                    )
+                }
+                Log.i(TAG, "sendNight result: $result")
+                _sendState.value = when (result) {
+                    is MidnightSdk.SendResult.Success -> SendUiState.Success(result.txHash)
+                    // Submitted; finalization confirmation timed out — treat as sent.
+                    is MidnightSdk.SendResult.Pending -> SendUiState.Success(result.txHash)
+                    is MidnightSdk.SendResult.InvalidAddress -> SendUiState.Failure(result.reason)
+                    is MidnightSdk.SendResult.InsufficientFunds -> {
+                        val short = result.shortfall.toBigDecimal().movePointLeft(NIGHT_DECIMALS)
+                            .stripTrailingZeros().toPlainString()
+                        SendUiState.Failure("Not enough NIGHT — you're short $short.")
+                    }
+                    is MidnightSdk.SendResult.Failed -> SendUiState.Failure(result.reason)
+                }
+                // The send spent coins (+ change); nudge a resync so the pill reflects it.
+                if (_sendState.value is SendUiState.Success) {
+                    runCatching { built.wallet.refresh() }
+                        .onFailure { Log.w(TAG, "post-send refresh failed: ${it.message}") }
+                }
+            } catch (e: SigilRequiredException) {
+                _sendState.value = SendUiState.Failure("Sign in to your sigil first, then try again.")
+            } catch (e: AuthenticationCancelledException) {
+                // User dismissed the unlock biometric — drop back to the form.
+                _sendState.value = SendUiState.Idle
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "sendNight failed", e)
+                _sendState.value = SendUiState.Failure(e.message ?: "Send failed")
+            } finally {
+                hold.close()
+            }
+        }
+    }
+
+    /** Reset the send flow to Idle (on Send-screen close, or to re-edit after a failure). */
+    fun resetSendState() {
+        _sendState.value = SendUiState.Idle
+    }
+
+    /**
      * Two-way dust-backup toggle from the pill's Switch.
      *  - on  → clear the opt-out + enable on the live wallet, then run the Drive
      *          consent + sync ([enableCloudBackup]).
@@ -631,7 +706,27 @@ class WalletPanelViewModel @Inject constructor(
          *  collector leaves (config change / sheet close), so a sync in flight
          *  isn't dropped and re-collected. */
         private const val SYNC_SUBSCRIBE_TIMEOUT_MS = 5_000L
+
+        /** NIGHT has 6 decimals (1 NIGHT = 1,000,000 base units). */
+        private const val NIGHT_DECIMALS = 6
     }
+}
+
+/**
+ * Send-flow UI state for the Send screen (#240).
+ */
+sealed interface SendUiState {
+    /** No send in progress — the recipient/amount form is editable. */
+    data object Idle : SendUiState
+
+    /** A send is running; [stage] is the coarse step (e.g. "Submitting transaction…"). */
+    data class Sending(val stage: String) : SendUiState
+
+    /** The transfer finalized (or was accepted and is finalizing); [txHash] may be empty. */
+    data class Success(val txHash: String) : SendUiState
+
+    /** The send failed; [message] is a user-facing reason. */
+    data class Failure(val message: String) : SendUiState
 }
 
 /**
