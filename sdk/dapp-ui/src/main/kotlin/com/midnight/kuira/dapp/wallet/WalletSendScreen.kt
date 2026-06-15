@@ -1,9 +1,7 @@
 package com.midnight.kuira.dapp.wallet
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,14 +15,14 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,44 +31,45 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.effect.RunnerWithDust
+import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.network.MidnightNetwork
 import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
- * Full-screen send surface (#240) — enter a recipient + amount and send unshielded
- * NIGHT. Reached from [WalletStatusPanel]'s sheet via the "send" action; mirrors
- * [WalletReceiveScreen]'s full-screen treatment (Lace/Phantom-style flow rather than
- * a cramped sheet section).
+ * Full-screen Send wizard (#240) — the dapp-ui port of the design-sprint Send
+ * wireframe ([com.midnight.kuira.dev.wireframes.send]), which lives in the app
+ * module and so can't be reached from the published SDK. Reskins the pill's
+ * Send onto the wireframe's visual language (StarField + GlassPanel + hero
+ * amount), themed via [SendPalette] so the panel's light/dark toggle carries.
  *
- * The screen is stateless w.r.t. the chain: it parses the user's decimal NIGHT into
- * base units and hands (recipient, amount) to [onSubmit]; the host VM runs
- * `MidnightSdk.sendNight` (validate → fewest-coin select → auto-consolidate → sign →
- * dust-pay → submit) and pushes progress/outcome back through [sendState].
+ * Three steps + review, then the post-submit state machine driven by
+ * [sendState]:
+ *   Token+Mode → Recipient → Amount → Review → (Confirm) → Pending → Success/Failure
  *
- * @param senderAddress this wallet's unshielded address (shown as the "from").
- * @param spendableNightRaw unshielded NIGHT available to spend, in base units
- *   (1 NIGHT = 1,000,000) — drives the "available" hint and the MAX shortcut.
- *   Shielded NIGHT isn't spendable by this unshielded transfer, so it's excluded.
- * @param sendState live send-flow state (idle form / sending / success / failure).
- * @param onSubmit (recipient, amount-in-base-units) — fired when the user taps Send.
- * @param onResetState clear the flow back to Idle (on close, or to re-edit after a failure).
- * @param onBack user-initiated dismissal.
+ * The SDK pill only sends unshielded NIGHT today, so the Token+Mode screen
+ * offers NIGHT/Unshielded and shows Shielded as "soon". The screen stays
+ * stateless w.r.t. the chain: it hands (recipient, base-unit amount) to
+ * [onSubmit]; the host VM runs `MidnightSdk.sendNight` and pushes progress and
+ * outcome back through [sendState].
+ *
+ * @param spendableNightRaw unshielded NIGHT available, in base units
+ *   (1 NIGHT = 1,000,000) — drives the Available hint + MAX shortcut.
+ * @param sendState live send-flow state (idle / sending / success / failure).
+ * @param onSubmit (recipient, amount-in-base-units) — fired on Confirm.
+ * @param onResetState clear the flow back to Idle.
+ * @param onBack dismiss the whole wizard.
  */
 @Composable
 internal fun WalletSendScreen(
-    senderAddress: String,
     spendableNightRaw: BigInteger,
     network: MidnightNetwork,
     sendState: SendUiState,
@@ -78,306 +77,573 @@ internal fun WalletSendScreen(
     onSubmit: (toAddress: String, amount: BigInteger) -> Unit,
     onResetState: () -> Unit,
     onBack: () -> Unit,
+    registerBack: (() -> Boolean) -> Unit = {},
 ) {
+    val palette = remember(colors) { SendPalette.from(colors) }
+    val clipboard = LocalClipboardManager.current
+    val focusManager = LocalFocusManager.current
+
+    var step by rememberSaveable { mutableStateOf(SendStep.TOKEN_MODE) }
     var recipient by rememberSaveable { mutableStateOf("") }
     var amountText by rememberSaveable { mutableStateOf("") }
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    // Tracks whether a text field holds focus (keyboard up) — the back press
+    // then hides the keyboard instead of leaving the screen.
+    var fieldFocused by remember { mutableStateOf(false) }
 
     val amountRaw = remember(amountText) { parseNightToBaseUnits(amountText) }
     val overBalance = amountRaw != null && amountRaw > spendableNightRaw
-    val sending = sendState is SendUiState.Sending
-    val canSend = recipient.isNotBlank() && amountRaw != null && !overBalance && !sending
+    val recipientError = recipientErrorOrNull(recipient)
+    val recipientReady = recipient.isNotBlank() && recipientError == null
+    val amountReady = amountRaw != null && !overBalance
 
-    // Editing after a failure clears the stale error so the form reads clean.
-    val clearFailureOnEdit: () -> Unit = { if (sendState is SendUiState.Failure) onResetState() }
+    // Editing anything after a failure clears the stale error.
+    val clearFailure: () -> Unit = { if (sendState is SendUiState.Failure) onResetState() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.sheetBackground),
-    ) {
+    // The Send screen lives in a Popup whose back press is consumed at the view
+    // level (it fires the host's onDismissRequest) before any child BackHandler
+    // runs — so we publish the back logic for the host to invoke. It walks the
+    // wizard stack and hides the keyboard instead of dismissing the whole Popup.
+    // Returns true when it consumed the back; false tells the host to close.
+    val handleBack: () -> Boolean = {
+        when {
+            sendState is SendUiState.Sending -> true                 // don't abandon an in-flight submit
+            scanning -> { scanning = false; true }
+            fieldFocused -> { focusManager.clearFocus(); true }      // hide keyboard, stay put
+            sendState is SendUiState.Success -> { onResetState(); false }
+            step == SendStep.REVIEW -> { step = SendStep.AMOUNT; true }
+            step == SendStep.AMOUNT -> { step = SendStep.RECIPIENT; true }
+            step == SendStep.RECIPIENT -> { step = SendStep.TOKEN_MODE; true }
+            else -> { onResetState(); false }                        // TOKEN_MODE → host closes
+        }
+    }
+    SideEffect { registerBack(handleBack) }
+
+    // The QR scanner takes over the whole surface while open.
+    if (scanning) {
+        QrScannerScreen(
+            palette = palette,
+            onResult = { scanned ->
+                recipient = extractAddress(scanned)
+                scanning = false
+                clearFailure()
+            },
+            onCancel = { scanning = false },
+        )
+        return
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(palette.bg)) {
+        StarField(
+            modifier = Modifier.fillMaxSize(),
+            color = palette.text,
+            alpha = if (palette.isLight) STAR_ALPHA_LIGHT else STAR_ALPHA_DARK,
+            starCount = STAR_COUNT,
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()),
         ) {
-            SendTopBar(colors) { onResetState(); onBack() }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = SendDimens.HorizontalPadding)
-                    .padding(
-                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                            + SendDimens.BottomSpacing,
-                    ),
-            ) {
-                Spacer(modifier = Modifier.height(SendDimens.HeaderTopGap))
-
-                if (sendState is SendUiState.Success) {
-                    SendSuccessCard(txHash = sendState.txHash, colors = colors) { onResetState(); onBack() }
-                    return@Column
+            // Post-submit states override the wizard chrome.
+            when (sendState) {
+                is SendUiState.Sending -> {
+                    WizardTopBar(title = "Sending", palette = palette, backEnabled = false, onBack = {})
+                    PendingScreen(stage = sendState.stage, palette = palette)
                 }
 
-                Text(
-                    text = "Send NIGHT on ${network.displayName}",
-                    color = colors.onSheet,
-                    fontSize = SendType.Header,
-                    fontWeight = FontWeight.W300,
-                )
-                Spacer(modifier = Modifier.height(SendDimens.SectionGap))
-
-                // Recipient.
-                SendFieldCard(
-                    label = "to",
-                    value = recipient,
-                    onValueChange = { recipient = it.trim(); clearFailureOnEdit() },
-                    placeholder = "mn_addr_${network.rustNetworkId}1…",
-                    monospace = true,
-                    keyboardType = KeyboardType.Ascii,
-                    enabled = !sending,
-                    colors = colors,
-                )
-
-                Spacer(modifier = Modifier.height(SendDimens.FieldGap))
-
-                // Amount + available hint + MAX shortcut.
-                SendFieldCard(
-                    label = "amount (NIGHT)",
-                    value = amountText,
-                    onValueChange = { amountText = sanitizeAmount(it); clearFailureOnEdit() },
-                    placeholder = "0.0",
-                    monospace = true,
-                    keyboardType = KeyboardType.Decimal,
-                    enabled = !sending,
-                    colors = colors,
-                    trailing = {
-                        Text(
-                            text = "MAX",
-                            color = if (sending) colors.onSheetDim else colors.accent,
-                            fontSize = SendType.Max,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(SendDimens.MaxCornerRadius))
-                                .then(
-                                    if (sending) Modifier
-                                    else Modifier.clickable {
-                                        amountText = baseUnitsToNight(spendableNightRaw)
-                                        clearFailureOnEdit()
-                                    },
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    },
-                )
-                Spacer(modifier = Modifier.height(SendDimens.HintGap))
-                Text(
-                    text = if (overBalance) "Amount exceeds your ${baseUnitsToNight(spendableNightRaw)} NIGHT"
-                    else "Available: ${baseUnitsToNight(spendableNightRaw)} NIGHT",
-                    color = if (overBalance) ErrorRed else colors.onSheetSubtle,
-                    fontSize = SendType.Hint,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                if (sendState is SendUiState.Failure) {
-                    Spacer(modifier = Modifier.height(SendDimens.SectionGap))
-                    Text(
-                        text = sendState.message,
-                        color = ErrorRed,
-                        fontSize = SendType.Error,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
+                is SendUiState.Success -> {
+                    SuccessScreen(
+                        txHash = sendState.txHash,
+                        palette = palette,
+                        onCopyHash = { clipboard.setText(AnnotatedString(sendState.txHash)) },
+                        onSendAnother = {
+                            recipient = ""
+                            amountText = ""
+                            step = SendStep.TOKEN_MODE
+                            onResetState()
+                        },
+                        onDone = { onResetState(); onBack() },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(SendDimens.SectionGap))
+                else -> when (step) {
+                    SendStep.TOKEN_MODE -> TokenModeStep(
+                        palette = palette,
+                        availableNight = baseUnitsToNight(spendableNightRaw),
+                        onBack = { onResetState(); onBack() },
+                        onPickUnshielded = { step = SendStep.RECIPIENT },
+                    )
 
-                SendButton(
-                    sendingStage = (sendState as? SendUiState.Sending)?.stage,
-                    enabled = canSend,
-                    colors = colors,
-                    onClick = { amountRaw?.let { onSubmit(recipient.trim(), it) } },
-                )
+                    SendStep.RECIPIENT -> RecipientStep(
+                        palette = palette,
+                        network = network,
+                        recipient = recipient,
+                        error = recipientError,
+                        canAdvance = recipientReady,
+                        onBack = { step = SendStep.TOKEN_MODE },
+                        onChange = { recipient = it; clearFailure() },
+                        onPaste = { clipboard.getText()?.text?.let { recipient = extractAddress(it); clearFailure() } },
+                        onScan = { scanning = true },
+                        onNext = { step = SendStep.AMOUNT },
+                        onFocusChanged = { fieldFocused = it },
+                    )
+
+                    SendStep.AMOUNT -> AmountStep(
+                        palette = palette,
+                        recipient = recipient,
+                        amountText = amountText,
+                        availableNight = baseUnitsToNight(spendableNightRaw),
+                        overBalance = overBalance,
+                        canReview = amountReady,
+                        onBack = { step = SendStep.RECIPIENT },
+                        onEditRecipient = { step = SendStep.RECIPIENT },
+                        onChange = { amountText = sanitizeNightAmount(it); clearFailure() },
+                        onMax = { amountText = baseUnitsToNight(spendableNightRaw); clearFailure() },
+                        onReview = { step = SendStep.REVIEW },
+                        onFocusChanged = { fieldFocused = it },
+                    )
+
+                    SendStep.REVIEW -> ReviewStep(
+                        palette = palette,
+                        recipient = recipient,
+                        amountText = amountText,
+                        failure = sendState as? SendUiState.Failure,
+                        onBack = { step = SendStep.AMOUNT },
+                        onConfirm = { amountRaw?.let { onSubmit(recipient.trim(), it) } },
+                    )
+                }
             }
         }
     }
 }
 
-// ── Internal components ──
+// ── Screen 1 — Token + Mode ──
 
 @Composable
-private fun SendTopBar(colors: WalletPanelColors, onBack: () -> Unit) {
+private fun TokenModeStep(
+    palette: SendPalette,
+    availableNight: String,
+    onBack: () -> Unit,
+    onPickUnshielded: () -> Unit,
+) {
+    WizardTopBar(title = "Send", palette = palette, onBack = onBack)
+    ScrollColumn {
+        Spacer(modifier = Modifier.height(SendDimens.Space32))
+        SendSectionHeader(label = "SELECT TOKEN", palette = palette)
+        Spacer(modifier = Modifier.height(SendDimens.Space12))
+        SendPanel(palette = palette, contentPadding = 0.dp) {
+            SendDetailRow(label = "NIGHT", value = "$availableNight available", palette = palette)
+            SendDivider(palette)
+            TokenModeRow(
+                label = "Unshielded",
+                hint = "Visible on chain",
+                palette = palette,
+                onClick = onPickUnshielded,
+                trailing = { Text("›", color = palette.textMuted, fontSize = SendType.HeroDenom) },
+            )
+            SendDivider(palette)
+            TokenModeRow(
+                label = "Shielded",
+                hint = "Private · ZK proof",
+                palette = palette,
+                enabled = false,
+                onClick = {},
+                trailing = { SendBadge(text = "SOON", palette = palette) },
+            )
+        }
+    }
+}
+
+// ── Screen 2 — Recipient ──
+
+@Composable
+private fun RecipientStep(
+    palette: SendPalette,
+    network: MidnightNetwork,
+    recipient: String,
+    error: String?,
+    canAdvance: Boolean,
+    onBack: () -> Unit,
+    onChange: (String) -> Unit,
+    onPaste: () -> Unit,
+    onScan: () -> Unit,
+    onNext: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+) {
+    WizardTopBar(title = "Send NIGHT", palette = palette, onBack = onBack)
+    ColumnWithFooter(
+        footer = {
+            SendPrimaryButton(text = "Next", onClick = onNext, palette = palette, enabled = canAdvance)
+        },
+    ) {
+        Spacer(modifier = Modifier.height(SendDimens.Space32))
+        SendBadge(text = "UNSHIELDED", palette = palette)
+        Spacer(modifier = Modifier.height(SendDimens.Space24))
+        SendSectionHeader(label = "TO", palette = palette)
+        Spacer(modifier = Modifier.height(SendDimens.Space12))
+        SendInputField(
+            value = recipient,
+            onValueChange = onChange,
+            palette = palette,
+            placeholder = "mn_addr_${network.rustNetworkId}1…",
+            error = error,
+            monospace = true,
+            onFocusChanged = onFocusChanged,
+            trailingSlot = {
+                GlyphButton(palette = palette, onClick = onPaste) { PasteGlyph(color = palette.textMuted) }
+                GlyphButton(palette = palette, onClick = onScan) { ScanGlyph(color = palette.textMuted) }
+            },
+        )
+    }
+}
+
+// ── Screen 3 — Amount (hero) ──
+
+@Composable
+private fun AmountStep(
+    palette: SendPalette,
+    recipient: String,
+    amountText: String,
+    availableNight: String,
+    overBalance: Boolean,
+    canReview: Boolean,
+    onBack: () -> Unit,
+    onEditRecipient: () -> Unit,
+    onChange: (String) -> Unit,
+    onMax: () -> Unit,
+    onReview: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+) {
+    WizardTopBar(
+        title = "Enter amount",
+        palette = palette,
+        onBack = onBack,
+        trailing = {
+            Text(
+                text = "Review",
+                color = if (canReview) palette.textSoft else palette.hairline,
+                fontSize = SendType.Title,
+                fontWeight = FontWeight.W300,
+                modifier = Modifier.clickable(enabled = canReview, onClick = onReview),
+            )
+        },
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = SendDimens.Space16),
+    ) {
+        Spacer(modifier = Modifier.height(SendDimens.Space4))
+        RecipientChip(addressShort = shortAddress(recipient), palette = palette, onEdit = onEditRecipient)
+
+        Spacer(modifier = Modifier.weight(1f))
+        SendPanel(palette = palette, contentPadding = SendDimens.PanelPaddingHero) {
+            AmountHero(
+                value = amountText,
+                onValueChange = onChange,
+                error = if (overBalance) "Insufficient balance" else null,
+                palette = palette,
+                onFocusChanged = onFocusChanged,
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16),
+        ) {
+            Column {
+                Text("Available", color = palette.textMuted, fontSize = SendType.Hint, fontWeight = FontWeight.W400)
+                Text("$availableNight NIGHT", color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(SendDimens.RadiusFull))
+                    .background(palette.barely)
+                    .clickable(onClick = onMax)
+                    .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space8),
+            ) {
+                Text("MAX", color = palette.textSoft, fontSize = SendType.Max, letterSpacing = SendType.TrackMax)
+            }
+        }
+    }
+}
+
+// ── Screen 4 — Review / Confirm ──
+
+@Composable
+private fun ReviewStep(
+    palette: SendPalette,
+    recipient: String,
+    amountText: String,
+    failure: SendUiState.Failure?,
+    onBack: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    WizardTopBar(title = "Review", palette = palette, onBack = onBack)
+    ColumnWithFooter(
+        footer = {
+            SendButtonRow(
+                secondaryText = "Cancel",
+                primaryText = if (failure != null) "Try again" else "Confirm",
+                onSecondary = onBack,
+                onPrimary = onConfirm,
+                palette = palette,
+            )
+        },
+    ) {
+        Spacer(modifier = Modifier.height(SendDimens.Space32))
+
+        // Receipt hero — amount + mode badge, star-protected.
+        SendPanel(palette = palette, contentPadding = SendDimens.PanelPaddingHero) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = amountText.ifEmpty { "0" },
+                        color = palette.text,
+                        fontSize = SendType.HeroNumber,
+                        fontWeight = FontWeight.W200,
+                        letterSpacing = SendType.HeroTracking,
+                    )
+                    Spacer(modifier = Modifier.width(SendDimens.Space8))
+                    Text(
+                        text = "NIGHT",
+                        color = palette.textMuted,
+                        fontSize = SendType.HeroDenom,
+                        fontWeight = FontWeight.W300,
+                        modifier = Modifier.padding(bottom = SendDimens.Space8),
+                    )
+                }
+                Spacer(modifier = Modifier.height(SendDimens.Space8))
+                SendBadge(text = "UNSHIELDED", palette = palette)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(SendDimens.Space32))
+
+        SendPanel(palette = palette, contentPadding = 0.dp) {
+            SendDetailRow(label = "To", value = shortAddress(recipient), palette = palette, valueMono = true)
+            SendDivider(palette)
+            SendDetailRow(label = "Amount", value = "${amountText.ifEmpty { "0" }} NIGHT", palette = palette)
+        }
+        Spacer(modifier = Modifier.height(SendDimens.Space12))
+        // Honest fee note: Midnight NIGHT transfers pay fees from Dust, not
+        // NIGHT — so there's no NIGHT fee line to show, and no oracle to fake one.
+        Text(
+            text = "Network fees are paid automatically from your Dust.",
+            color = palette.textMuted,
+            fontSize = SendType.Hint,
+            fontWeight = FontWeight.W400,
+        )
+
+        if (failure != null) {
+            Spacer(modifier = Modifier.height(SendDimens.Space24))
+            SendPanel(palette = palette) {
+                Text("Send failed", color = palette.error, fontSize = SendType.Caption, fontWeight = FontWeight.W400)
+                Spacer(modifier = Modifier.height(SendDimens.Space4))
+                Text(failure.message, color = palette.textSoft, fontSize = SendType.Hint, fontWeight = FontWeight.W400)
+            }
+        }
+    }
+}
+
+// ── Post-submit — Pending ──
+
+@Composable
+private fun PendingScreen(stage: String, palette: SendPalette) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = SendDimens.Space16),
+    ) {
+        Spacer(modifier = Modifier.height(SendDimens.Space48))
+        RunnerWithDust(
+            modifier = Modifier
+                .fillMaxWidth(RUNNER_WIDTH_FRACTION)
+                .height(RunnerHeight),
+            color = palette.text,
+        )
+        Spacer(modifier = Modifier.height(SendDimens.Space32))
+        Text(stage, color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
+        Spacer(modifier = Modifier.height(SendDimens.Space8))
+        Text(
+            text = "This usually takes a few seconds.",
+            color = palette.textMuted,
+            fontSize = SendType.Hint,
+            fontWeight = FontWeight.W400,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+// ── Post-submit — Success ──
+
+@Composable
+private fun SuccessScreen(
+    txHash: String,
+    palette: SendPalette,
+    onCopyHash: () -> Unit,
+    onSendAnother: () -> Unit,
+    onDone: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .height(SendDimens.TopBarHeight)
-            .padding(horizontal = SendDimens.HorizontalPadding),
+            .padding(horizontal = SendDimens.Space16),
     ) {
         Text(
-            text = "←",
-            color = colors.onSheet,
-            fontSize = SendType.BackGlyph,
-            modifier = Modifier
-                .clip(RoundedCornerShape(SendDimens.BackHitRadius))
-                .clickable(onClick = onBack)
-                .padding(SendDimens.BackHitPadding),
+            text = "Done",
+            color = palette.text,
+            fontSize = SendType.Title,
+            fontWeight = FontWeight.W300,
+            modifier = Modifier.clickable(onClick = onDone),
         )
-        Spacer(modifier = Modifier.size(SendDimens.TopBarTitleGap))
-        Text(
-            text = "Send",
-            color = colors.onSheet,
-            fontSize = SendType.TopBarTitle,
-            fontWeight = FontWeight.W400,
-        )
+        Spacer(modifier = Modifier.width(SendDimens.Space16))
+        Text("Sent", color = palette.text, fontSize = SendType.Title, fontWeight = FontWeight.W400)
+    }
+    HorizontalDivider(color = palette.hairline, thickness = SendDimens.DividerThickness)
+
+    ColumnWithFooter(
+        footer = { SendPrimaryButton(text = "Send another", onClick = onSendAnother, palette = palette) },
+    ) {
+        Spacer(modifier = Modifier.height(SendDimens.Space48))
+        SendPanel(palette = palette, contentPadding = SendDimens.PanelPaddingHero) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                CheckGlyph(color = palette.success, size = SendDimens.Icon32)
+                Spacer(modifier = Modifier.height(SendDimens.Space20))
+                Text(
+                    "Transaction submitted",
+                    color = palette.text,
+                    fontSize = SendType.SuccessHeadline,
+                    fontWeight = FontWeight.W300,
+                )
+                Spacer(modifier = Modifier.height(SendDimens.Space8))
+                Text(
+                    "It may take a few minutes to confirm.",
+                    color = palette.textMuted,
+                    fontSize = SendType.Caption,
+                    fontWeight = FontWeight.W400,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        if (txHash.isNotBlank()) {
+            Spacer(modifier = Modifier.height(SendDimens.Space32))
+            SendSectionHeader(label = "TRANSACTION", palette = palette)
+            Spacer(modifier = Modifier.height(SendDimens.Space12))
+            SendPanel(palette = palette, contentPadding = 0.dp) {
+                SendDetailRow(
+                    label = "Hash",
+                    value = shortAddress(txHash),
+                    palette = palette,
+                    valueMono = true,
+                    trailing = { CopyGlyph(color = palette.textMuted) },
+                    onClick = onCopyHash,
+                )
+            }
+        }
     }
 }
 
+// ── Shared chrome ──
+
 @Composable
-private fun SendFieldCard(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    monospace: Boolean,
-    keyboardType: KeyboardType,
-    enabled: Boolean,
-    colors: WalletPanelColors,
+private fun WizardTopBar(
+    title: String,
+    palette: SendPalette,
+    modifier: Modifier = Modifier,
+    backEnabled: Boolean = true,
+    onBack: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            color = colors.onSheetSubtle,
-            fontSize = SendType.FieldLabel,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(modifier = Modifier.height(SendDimens.FieldLabelGap))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(SendDimens.FieldCornerRadius))
-                .background(colors.button)
-                .border(
-                    width = SendDimens.FieldBorderWidth,
-                    color = colors.pillBorder,
-                    shape = RoundedCornerShape(SendDimens.FieldCornerRadius),
-                )
-                .padding(SendDimens.FieldPadding),
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (value.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        color = colors.onSheetSubtle,
-                        fontSize = SendType.Field,
-                        fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-                    )
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    enabled = enabled,
-                    singleLine = !monospace || keyboardType == KeyboardType.Decimal,
-                    textStyle = TextStyle(
-                        color = colors.onSheet,
-                        fontSize = SendType.Field,
-                        fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-                    ),
-                    cursorBrush = SolidColor(colors.accent),
-                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            if (trailing != null) {
-                Spacer(modifier = Modifier.size(8.dp))
-                trailing()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SendButton(
-    sendingStage: String?,
-    enabled: Boolean,
-    colors: WalletPanelColors,
-    onClick: () -> Unit,
-) {
-    val isSending = sendingStage != null
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(SendDimens.ButtonCornerRadius))
-            .background(if (enabled || isSending) colors.accent else colors.button)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = SendDimens.ButtonVerticalPadding),
+            .height(SendDimens.TopBarHeight)
+            .padding(horizontal = SendDimens.Space16),
     ) {
-        if (isSending) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CircularProgressIndicator(
-                    color = colors.sheetBackground,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(SendDimens.SpinnerSize),
-                )
-                Text(
-                    text = sendingStage!!,
-                    color = colors.sheetBackground,
-                    fontSize = SendType.Button,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        } else {
-            Text(
-                text = "Send",
-                color = if (enabled) colors.sheetBackground else colors.onSheetDim,
-                fontSize = SendType.Button,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.sp,
-            )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(SendDimens.RadiusLg))
+                .clickable(enabled = backEnabled, onClick = onBack)
+                .padding(SendDimens.GlyphHit),
+        ) {
+            BackGlyph(color = if (backEnabled) palette.text else palette.textMuted)
         }
+        Spacer(modifier = Modifier.size(SendDimens.Space8))
+        Text(title, color = palette.text, fontSize = SendType.Title, fontWeight = FontWeight.W300)
+        if (trailing != null) {
+            Spacer(modifier = Modifier.weight(1f))
+            trailing()
+        }
+    }
+    HorizontalDivider(color = palette.hairline, thickness = SendDimens.DividerThickness)
+}
+
+/** A scrolling content column with full-screen padding (Token+Mode). */
+@Composable
+private fun ScrollColumn(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = SendDimens.Space16)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space24),
+    ) { content() }
+}
+
+/** Content column that pins a footer (primary button / button row) to the bottom. */
+@Composable
+private fun ColumnWithFooter(
+    footer: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = SendDimens.Space16)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space24),
+    ) {
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() }
+        Spacer(modifier = Modifier.height(SendDimens.Space16))
+        footer()
     }
 }
 
 @Composable
-private fun SendSuccessCard(txHash: String, colors: WalletPanelColors, onDone: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Spacer(modifier = Modifier.height(SendDimens.SuccessTopGap))
-        Text(text = "✓", color = colors.accent, fontSize = SendType.SuccessGlyph)
-        Spacer(modifier = Modifier.height(SendDimens.SectionGap))
-        Text(text = "Sent", color = colors.onSheet, fontSize = SendType.Header, fontWeight = FontWeight.W300)
-        if (txHash.isNotBlank()) {
-            Spacer(modifier = Modifier.height(SendDimens.HintGap))
-            Text(
-                text = txHash,
-                color = colors.onSheetSubtle,
-                fontSize = SendType.TxHash,
-                fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Spacer(modifier = Modifier.height(SendDimens.SuccessButtonGap))
-        SendButton(sendingStage = null, enabled = true, colors = colors, onClick = onDone)
-    }
+private fun GlyphButton(palette: SendPalette, onClick: () -> Unit, glyph: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(SendDimens.RowMinHeightAccessibility)
+            .clip(RoundedCornerShape(SendDimens.RadiusSm))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { glyph() }
 }
+
+// ── Wizard step model ──
+
+private enum class SendStep { TOKEN_MODE, RECIPIENT, AMOUNT, REVIEW }
 
 // ── Amount parsing (NIGHT decimal ↔ base units; 1 NIGHT = 1,000,000) ──
 
-/** Keep only digits and a single decimal point as the user types. */
-private fun sanitizeAmount(input: String): String {
+/** Keep digits + a single decimal point, and cap fractional digits at the NIGHT scale. */
+private fun sanitizeNightAmount(input: String): String {
     val filtered = input.filter { it.isDigit() || it == '.' }
     val dot = filtered.indexOf('.')
-    return if (dot < 0) filtered else filtered.substring(0, dot + 1) + filtered.substring(dot + 1).replace(".", "")
+    if (dot < 0) return filtered
+    val whole = filtered.substring(0, dot)
+    val frac = filtered.substring(dot + 1).replace(".", "").take(NIGHT_DECIMAL_PLACES)
+    return "$whole.$frac"
 }
 
 /** Parse decimal NIGHT → base units, or null if not a positive number. Sub-unit digits truncate. */
@@ -392,48 +658,34 @@ private fun baseUnitsToNight(base: BigInteger): String =
 
 private const val NIGHT_DECIMAL_PLACES = 6
 
-private val ErrorRed = Color(0xFFE57373)
+// ── Address helpers ──
 
-// ── Local design tokens (own full-screen scale, like WalletReceiveScreen) ──
-
-private object SendDimens {
-    val HorizontalPadding = 20.dp
-    val BottomSpacing = 24.dp
-    val SectionGap = 20.dp
-    val FieldGap = 16.dp
-    val HintGap = 8.dp
-
-    val TopBarHeight = 56.dp
-    val TopBarTitleGap = 16.dp
-    val BackHitRadius = 20.dp
-    val BackHitPadding = 8.dp
-
-    val HeaderTopGap = 16.dp
-
-    val FieldLabelGap = 8.dp
-    val FieldCornerRadius = 14.dp
-    val FieldBorderWidth = 1.dp
-    val FieldPadding = 14.dp
-    val MaxCornerRadius = 8.dp
-
-    val ButtonCornerRadius = 14.dp
-    val ButtonVerticalPadding = 16.dp
-    val SpinnerSize: Dp = 16.dp
-
-    val SuccessTopGap = 48.dp
-    val SuccessButtonGap = 40.dp
+/** Soft client-side recipient check (the VM does authoritative bech32m validation on submit). */
+private fun recipientErrorOrNull(recipient: String): String? = when {
+    recipient.isBlank() -> null
+    recipient.startsWith(SHIELDED_PREFIX) -> "Shielded addresses can't receive an unshielded send"
+    !recipient.startsWith(UNSHIELDED_PREFIX) -> "This doesn't look like a Midnight address"
+    else -> null
 }
 
-private object SendType {
-    val TopBarTitle = 16.sp
-    val BackGlyph = 24.sp
-    val Header = 20.sp
-    val FieldLabel = 11.sp
-    val Field = 15.sp
-    val Hint = 12.sp
-    val Max = 11.sp
-    val Error = 13.sp
-    val Button = 15.sp
-    val SuccessGlyph = 56.sp
-    val TxHash = 12.sp
+/** Pull the address out of a bare string or a `scheme:mn_addr…` URI from a QR. */
+private fun extractAddress(scanned: String): String {
+    val trimmed = scanned.trim()
+    val start = trimmed.indexOf("mn_")
+    return (if (start >= 0) trimmed.substring(start) else trimmed).takeWhile { !it.isWhitespace() }
 }
+
+/** Head…tail elision for long bech32m strings (addresses, hashes). */
+private fun shortAddress(value: String): String =
+    if (value.length <= ADDRESS_HEAD + ADDRESS_TAIL + 1) value
+    else "${value.take(ADDRESS_HEAD)}…${value.takeLast(ADDRESS_TAIL)}"
+
+private const val UNSHIELDED_PREFIX = "mn_addr_"
+private const val SHIELDED_PREFIX = "mn_shield-addr"
+private const val ADDRESS_HEAD = 10
+private const val ADDRESS_TAIL = 6
+
+// ── Local dimensions specific to this screen ──
+
+private val RunnerHeight: Dp = 120.dp
+private const val RUNNER_WIDTH_FRACTION = 0.4f

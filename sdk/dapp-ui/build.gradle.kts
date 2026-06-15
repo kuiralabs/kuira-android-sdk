@@ -110,11 +110,19 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    // ZXing core — QR matrix generation for the Receive screen. `:core` is the
-    // pure-Java module (~500KB); the Android-specific bitmap helpers we
-    // implement ourselves to avoid pulling in `:android-core` (which links
-    // against android.hardware.camera and bloats the APK).
+    // ZXing core — QR matrix generation for the Receive screen AND QR decoding
+    // for the Send-screen scanner (`MultiFormatReader` over CameraX frames).
+    // `:core` is the pure-Java module (~500KB); the Android-specific bitmap +
+    // camera glue we implement ourselves rather than pull in `:android-core`.
     implementation(libs.zxing.core)
+
+    // CameraX — the Send-screen recipient QR scanner. camera-view gives the
+    // Compose-embeddable PreviewView; ImageAnalysis feeds frames to ZXing.
+    // No ML Kit / Play Services — the decode reuses the zxing-core above.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     // ── Unit-test stack ──
     //

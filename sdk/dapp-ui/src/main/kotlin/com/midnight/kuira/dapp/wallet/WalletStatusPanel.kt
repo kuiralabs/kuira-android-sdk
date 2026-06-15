@@ -383,13 +383,22 @@ fun WalletStatusPanel(
     // available when Ready (we need the sender address + spendable balance); the
     // sheet's Send button is disabled otherwise so this branch shouldn't fire.
     if (sendOpen && readyStatus != null) {
+        // A focusable Popup consumes back at the view level (fires onDismissRequest)
+        // before any child BackHandler — so the wizard publishes its back logic here
+        // and we let it walk the steps / hide the keyboard; only an unconsumed back
+        // (first step) closes the Popup.
+        val sendBack = remember { mutableStateOf<() -> Boolean>({ false }) }
         Popup(
             alignment = Alignment.TopStart,
-            onDismissRequest = { sendOpen = false },
+            onDismissRequest = {
+                if (!sendBack.value()) {
+                    sendOpen = false
+                    sheetOpen = true
+                }
+            },
             properties = PopupProperties(focusable = true, dismissOnBackPress = true),
         ) {
             WalletSendScreen(
-                senderAddress = readyStatus.address,
                 // sendNight spends UNSHIELDED NIGHT, so cap the form at that pool.
                 spendableNightRaw = readyStatus.balance.unshieldedNight,
                 network = network,
@@ -401,6 +410,7 @@ fun WalletStatusPanel(
                     sendOpen = false
                     sheetOpen = true
                 },
+                registerBack = { sendBack.value = it },
             )
         }
     }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The Send screen's recipient field offers a QR scanner (CameraX). The
+      permission is declared here in the SDK UI library so host apps that embed
+      WalletStatusPanel inherit it via manifest merge — they don't redeclare it.
+
+      camera.any is NOT required: a device without a camera (or a user who
+      denies the runtime grant) still uses paste/manual entry. Marking it
+      optional keeps the SDK installable on camera-less hardware.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
+</manifest>
