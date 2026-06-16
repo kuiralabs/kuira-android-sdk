@@ -87,28 +87,6 @@ class OperationRegistryTest {
         }
 
     @Test
-    fun `a notifyOnFinish=false op de-enrolls but emits NO terminal outcome`() =
-        runTest(UnconfinedTestDispatcher()) {
-            val reg = OperationRegistry()
-            val outcomes = mutableListOf<OperationOutcome>()
-            val collector = launch { reg.outcomes.collect { outcomes.add(it) } }
-
-            // A keep-alive-only prelude (e.g. joining a match): holds the process up while it
-            // runs, but its completion is NOT a user-facing "done", so no finalization push.
-            val result = reg.run(
-                OperationDescriptor(OperationKind.Custom, label = "join", notifyOnFinish = false),
-            ) {
-                assertEquals("enrolled while running", 1, reg.active.value.size)
-                "joined"
-            }
-
-            assertEquals("joined", result)
-            assertTrue("de-enrolled after", reg.active.value.isEmpty())
-            assertTrue("a keep-alive-only op fires no completion push", outcomes.isEmpty())
-            collector.cancel()
-        }
-
-    @Test
     fun `classify maps a returned value to its real terminal status`() =
         runTest(UnconfinedTestDispatcher()) {
             val reg = OperationRegistry()

@@ -550,10 +550,9 @@ class MidnightSdk private constructor(
         label: String,
         completionLabel: String? = null,
         contentIntent: PendingIntent? = null,
-        notifyOnFinish: Boolean = true,
         block: suspend () -> T,
     ): T = operations.run(
-        OperationDescriptor(OperationKind.Custom, label, completionLabel, contentIntent, notifyOnFinish),
+        OperationDescriptor(OperationKind.Custom, label, completionLabel, contentIntent),
         block = block,
     )
 
