@@ -163,8 +163,13 @@ private fun DisableBackupDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(DISABLE_TITLE, color = colors.onSheet, fontWeight = FontWeight.SemiBold) },
-        text = { Text(DISABLE_BODY, color = colors.onSheetDim, fontSize = 13.sp, lineHeight = 18.sp) },
+        // Match the dark wallet sheet — the default Material3 dialog surface is light, which clashed
+        // with the app and washed out the onSheet* text colors (those are tuned for the dark sheet).
+        containerColor = colors.sheetBackground,
+        titleContentColor = colors.onSheet,
+        textContentColor = colors.onSheet,
+        title = { Text(DISABLE_TITLE, fontWeight = FontWeight.SemiBold) },
+        text = { Text(DISABLE_BODY, fontSize = 13.sp, lineHeight = 18.sp) },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Disconnect", color = colors.error) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.onSheetDim) } },
     )
