@@ -62,6 +62,31 @@ class OperationRegistryTest {
         }
 
     @Test
+    fun `a cancelled operation de-enrolls but emits NO terminal outcome`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val reg = OperationRegistry()
+            val outcomes = mutableListOf<OperationOutcome>()
+            val collector = launch { reg.outcomes.collect { outcomes.add(it) } }
+
+            val gate = CompletableDeferred<Unit>()
+            val op = launch {
+                reg.run<Unit>(OperationDescriptor(OperationKind.Custom, label = "match")) {
+                    gate.await() // suspend until the job is cancelled out from under us
+                }
+            }
+            assertEquals("enrolled while suspended", 1, reg.active.value.size)
+
+            op.cancel()
+            op.join()
+
+            // A cancellation is abandonment, not failure: a host re-launching a resumable
+            // saga (cancelling its predecessor) must NOT fire a false "Failed" push.
+            assertTrue("de-enrolled after cancellation", reg.active.value.isEmpty())
+            assertTrue("cancelled op emits no outcome", outcomes.isEmpty())
+            collector.cancel()
+        }
+
+    @Test
     fun `classify maps a returned value to its real terminal status`() =
         runTest(UnconfinedTestDispatcher()) {
             val reg = OperationRegistry()

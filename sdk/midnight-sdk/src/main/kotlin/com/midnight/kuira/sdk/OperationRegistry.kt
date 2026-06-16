@@ -1,6 +1,7 @@
 package com.midnight.kuira.sdk
 
 import android.app.PendingIntent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,6 +123,13 @@ class OperationRegistry {
             val result = withContext(Marker(id)) { block() }
             emitOutcome(id, descriptor, classify(result))
             return result
+        } catch (c: CancellationException) {
+            // A cancelled operation is ABANDONED, not failed — e.g. a host re-launches a
+            // resumable saga (cancelling its predecessor), or the caller's scope tears down
+            // on navigation. Emitting a "Failed" finalization here would fire a false failure
+            // push while the real work continues (or was deliberately dropped). Re-throw to
+            // keep structured concurrency intact, but emit NO terminal outcome.
+            throw c
         } catch (t: Throwable) {
             emitOutcome(id, descriptor, OperationResult(OperationTerminalStatus.Failed))
             throw t
