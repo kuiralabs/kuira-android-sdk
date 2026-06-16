@@ -16,11 +16,8 @@ import androidx.core.content.ContextCompat
  * system permission dialog from a library service, so the host requests [PERMISSION] with the
  * standard `ActivityResultContracts.RequestPermission` (one line in a `ComponentActivity`/Compose),
  * using [isGranted] to gate the ask.
- *
- * NOTE: the object name still reads "DustSync" for historical reasons; a rename to
- * `WalletNotifications` is tracked as a follow-up (it's a public API used across the example apps).
  */
-object DustSyncNotifications {
+object WalletNotifications {
 
     /** The runtime permission gating notification visibility on API 33+. */
     const val PERMISSION: String = Manifest.permission.POST_NOTIFICATIONS
