@@ -677,6 +677,18 @@ class MidnightWallet internal constructor(
     }
 
     /**
+     * Disable dust cloud backup and DELETE the cloud copy (#246 — true backup disable). Stops
+     * future uploads ([dustBackupEnabled] = false) and clears the remote blob + local upload
+     * digests via the coordinator. No-op when no coordinator is wired. The wallet itself is
+     * unaffected — recovery is the passkey; the cloud blob is only a dust-sync-speed checkpoint.
+     */
+    suspend fun disableDustCloudBackup() = withContext(Dispatchers.IO) {
+        dustBackupEnabled = false
+        dustCloudBackup?.clear()
+        updateDustBackup(CloudBackupStatus.Idle)
+    }
+
+    /**
      * Snapshot the current dust checkpoint and hand it to the cloud backup
      * coordinator (e.g. Google Drive) for cross-device recovery. No-op when no
      * coordinator is wired or there's no checkpoint yet. The coordinator

@@ -23,6 +23,7 @@ public final class com/midnight/kuira/sdk/walletruntime/AppStateCloudBackupCoord
 }
 
 public abstract interface class com/midnight/kuira/sdk/walletruntime/DustBackupDigestStore {
+	public abstract fun clear ()V
 	public abstract fun get (Ljava/lang/String;)Ljava/lang/String;
 	public abstract fun put (Ljava/lang/String;Ljava/lang/String;)V
 }
@@ -30,6 +31,7 @@ public abstract interface class com/midnight/kuira/sdk/walletruntime/DustBackupD
 public final class com/midnight/kuira/sdk/walletruntime/DustCloudBackupCoordinator : com/midnight/kuira/sdk/DustCloudBackup {
 	public static final field TAG Ljava/lang/String;
 	public fun <init> (Lcom/midnight/kuira/core/identity/backup/BackupStorage;[BLcom/midnight/kuira/sdk/walletruntime/DustBackupDigestStore;)V
+	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun fetch (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun upload (Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -92,6 +94,7 @@ public final class com/midnight/kuira/sdk/walletruntime/PrefsAppStateBackupDiges
 public final class com/midnight/kuira/sdk/walletruntime/PrefsDustBackupDigestStore : com/midnight/kuira/sdk/walletruntime/DustBackupDigestStore {
 	public static final field PREFS Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;)V
+	public fun clear ()V
 	public fun get (Ljava/lang/String;)Ljava/lang/String;
 	public fun put (Ljava/lang/String;Ljava/lang/String;)V
 }

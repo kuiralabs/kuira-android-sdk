@@ -80,6 +80,7 @@ public final class com/midnight/kuira/sdk/CloudBackupStatus$UpToDate : com/midni
 }
 
 public abstract interface class com/midnight/kuira/sdk/DustCloudBackup : com/midnight/kuira/sdk/DustCloudBackupSource {
+	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun upload (Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -242,6 +243,7 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public final fun balanceFlow ()Lkotlinx/coroutines/flow/Flow;
 	public fun balanceTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close ()V
+	public final fun disableDustCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAddress ()Ljava/lang/String;
 	public final fun getAppStateProvider ()Lkotlin/jvm/functions/Function1;

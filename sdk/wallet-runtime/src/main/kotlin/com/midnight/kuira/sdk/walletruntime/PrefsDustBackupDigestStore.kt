@@ -18,6 +18,10 @@ class PrefsDustBackupDigestStore(context: Context) : DustBackupDigestStore {
         prefs.edit().putString(address, digest).apply()
     }
 
+    override fun clear() {
+        prefs.edit().clear().apply()
+    }
+
     private companion object {
         const val PREFS = "kuira_dust_backup_digests"
     }

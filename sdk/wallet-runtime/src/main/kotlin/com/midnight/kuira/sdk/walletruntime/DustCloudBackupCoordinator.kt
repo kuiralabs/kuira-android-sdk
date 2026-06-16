@@ -17,6 +17,10 @@ import java.security.MessageDigest
 interface DustBackupDigestStore {
     fun get(address: String): String?
     fun put(address: String, digest: String)
+
+    /** Drop all recorded digests (#246) — used when the cloud blob is deleted so a later
+     *  re-enable re-uploads instead of the hash-guard skipping an "already-uploaded" checkpoint. */
+    fun clear()
 }
 
 /**
@@ -73,6 +77,14 @@ class DustCloudBackupCoordinator(
         storage.store(blob)
         // Record only after a confirmed store, so a failed upload retries next time.
         digestStore.put(address, digest)
+    }
+
+    override suspend fun clear() {
+        // Delete the remote blob first, then drop the local digests so a later re-enable
+        // re-uploads (the hash-guard won't skip an "unchanged" checkpoint whose blob is gone).
+        storage.delete()
+        digestStore.clear()
+        Log.i(TAG, "clear: deleted cloud dust blob + cleared upload digests")
     }
 
     private fun digest(address: String, lastEventId: Long, stateBytes: ByteArray): String {

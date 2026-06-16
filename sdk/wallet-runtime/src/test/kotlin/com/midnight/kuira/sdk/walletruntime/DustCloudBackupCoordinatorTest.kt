@@ -29,6 +29,7 @@ class DustCloudBackupCoordinatorTest {
         private val map = mutableMapOf<String, String>()
         override fun get(address: String): String? = map[address]
         override fun put(address: String, digest: String) { map[address] = digest }
+        override fun clear() { map.clear() }
     }
 
     private val key = SeedDerivedKeyDeriver.deriveDustBackupKey(ByteArray(32) { 9 })
@@ -52,6 +53,25 @@ class DustCloudBackupCoordinatorTest {
     @Test
     fun `fetch returns null when nothing stored`() = runTest {
         assertNull(coordinator(FakeStorage()).fetch("mn_addr_preprod1abc"))
+    }
+
+    @Test
+    fun `clear deletes the blob and resets the digest guard so the same checkpoint re-uploads`() = runTest {
+        val storage = FakeStorage()
+        val c = coordinator(storage)
+        val state = ByteArray(1_000) { 7 }
+
+        c.upload("mn_addr1", state, 5L)
+        assertEquals(1, storage.storeCount)
+        c.upload("mn_addr1", state, 5L) // unchanged → digest guard skips the network round-trip
+        assertEquals("digest guard skips an unchanged checkpoint", 1, storage.storeCount)
+
+        c.clear()
+        assertNull("blob deleted on clear", storage.blob)
+
+        // After clear, the guard is reset → the SAME checkpoint uploads again (no stale skip).
+        c.upload("mn_addr1", state, 5L)
+        assertEquals("re-uploads after clear", 2, storage.storeCount)
     }
 
     @Test

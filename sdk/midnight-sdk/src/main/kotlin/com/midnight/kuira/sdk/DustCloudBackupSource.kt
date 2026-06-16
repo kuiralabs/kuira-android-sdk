@@ -48,4 +48,12 @@ interface DustCloudBackup : DustCloudBackupSource {
      * so a backup failure never affects wallet operations.
      */
     suspend fun upload(address: String, stateBytes: ByteArray, lastEventId: Long)
+
+    /**
+     * Delete the cloud dust-checkpoint blob and clear the local upload digests (#246 — true
+     * backup disable). After this, re-enabling backup re-uploads from scratch (the digest guard
+     * won't wrongly skip an unchanged checkpoint as already-uploaded). Best-effort; idempotent
+     * (deleting an absent blob is a no-op).
+     */
+    suspend fun clear()
 }
