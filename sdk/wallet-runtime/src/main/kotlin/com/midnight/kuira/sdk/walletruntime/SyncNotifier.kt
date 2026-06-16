@@ -77,12 +77,17 @@ class SyncNotifier(private val context: Context) {
      * [label] as the body and a brand-forward chip. Reuses the same channel /
      * promotion / style plumbing as the sync notification.
      */
-    fun buildOperation(label: String, stage: String? = null): Notification = build(
+    fun buildOperation(
+        label: String,
+        stage: String? = null,
+        contentIntent: PendingIntent? = null,
+    ): Notification = build(
         phase = null,
         fraction = null,
         labelOverride = stage?.let { "$label · $it" } ?: label,
         chipOverride = stage?.let { context.getString(R.string.kuira_op_chip_fmt, it) }
             ?: context.getString(R.string.kuira_op_chip),
+        overrideIntent = contentIntent,
     )
 
     private fun build(
@@ -90,6 +95,7 @@ class SyncNotifier(private val context: Context) {
         fraction: Float?,
         labelOverride: String? = null,
         chipOverride: String? = null,
+        overrideIntent: PendingIntent? = null,
     ): Notification {
         ensureChannel()
         val label = labelOverride
@@ -107,9 +113,9 @@ class SyncNotifier(private val context: Context) {
             ?.let { context.getString(R.string.kuira_sync_chip_fmt, phaseChip, it) }
             ?: phaseChip
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-            buildRich(text, percent, accent, chip, largeIconRes)
+            buildRich(text, percent, accent, chip, largeIconRes, overrideIntent)
         } else {
-            buildCompat(text, percent, accent, chip, largeIconRes)
+            buildCompat(text, percent, accent, chip, largeIconRes, overrideIntent)
         }
     }
 
@@ -119,7 +125,7 @@ class SyncNotifier(private val context: Context) {
      * `android.requestPromotedOngoing` extra (no public platform constant exists).
      */
     @RequiresApi(Build.VERSION_CODES.BAKLAVA)
-    private fun buildRich(text: String, percent: Int?, accent: Int, chip: String, largeIconRes: Int): Notification {
+    private fun buildRich(text: String, percent: Int?, accent: Int, chip: String, largeIconRes: Int, overrideIntent: PendingIntent? = null): Notification {
         val style = Notification.ProgressStyle().setStyledByProgress(false)
         if (percent != null) {
             val pointColor = ContextCompat.getColor(context, R.color.kuira_sync_point)
@@ -147,12 +153,12 @@ class SyncNotifier(private val context: Context) {
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addExtras(Bundle().apply { putBoolean(EXTRA_REQUEST_PROMOTED_ONGOING, true) })
-        launchIntent()?.let(builder::setContentIntent)
+        (overrideIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()
     }
 
     /** API 30–35: NotificationCompat fallback (BigText + classic progress bar). */
-    private fun buildCompat(text: String, percent: Int?, accent: Int, chip: String, largeIconRes: Int): Notification {
+    private fun buildCompat(text: String, percent: Int?, accent: Int, chip: String, largeIconRes: Int, overrideIntent: PendingIntent? = null): Notification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.kuira_sync_icon)
             .setLargeIcon(Icon.createWithResource(context, largeIconRes))
@@ -173,7 +179,7 @@ class SyncNotifier(private val context: Context) {
         } else {
             builder.setProgress(0, 0, true) // indeterminate (replay tail)
         }
-        launchIntent()?.let(builder::setContentIntent)
+        (overrideIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()
     }
 

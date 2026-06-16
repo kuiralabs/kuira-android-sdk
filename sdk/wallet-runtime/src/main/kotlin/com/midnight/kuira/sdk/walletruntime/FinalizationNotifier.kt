@@ -66,7 +66,7 @@ class FinalizationNotifier(private val context: Context) {
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        launchIntent()?.let(builder::setContentIntent)
+        (outcome.contentIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()
     }
 

@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk
 
+import android.app.PendingIntent
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,12 @@ class OperationDescriptor(
     val kind: OperationKind,
     val label: String? = null,
     val completionLabel: String? = null,
+    /**
+     * Optional tap target for this operation's ongoing + finalization notifications. Lets a
+     * host send the user back to the RIGHT screen (e.g. the in-flight match) instead of the
+     * default launcher — which a singleTask launcher would otherwise clear the task down to.
+     */
+    val contentIntent: PendingIntent? = null,
 )
 
 /** How a finished operation's normal return maps to a terminal outcome. */
@@ -42,6 +49,8 @@ class ActiveOperation internal constructor(
     val label: String?,
     /** Live sub-state of the operation (e.g. "Submitting commit…"), shown in the notification. */
     val stage: String? = null,
+    /** Tap target for the ongoing notification (see [OperationDescriptor.contentIntent]). */
+    val contentIntent: PendingIntent? = null,
 )
 
 /** A one-shot terminal event — the unit the finalization notification rides. */
@@ -52,6 +61,8 @@ class OperationOutcome internal constructor(
     val completionLabel: String?,
     val status: OperationTerminalStatus,
     val txHash: String?,
+    /** Tap target for the finalization notification (see [OperationDescriptor.contentIntent]). */
+    val contentIntent: PendingIntent? = null,
 )
 
 /**
@@ -106,7 +117,7 @@ class OperationRegistry {
         if (currentCoroutineContext()[Marker] != null) return block()
 
         val id = nextId.getAndIncrement()
-        _active.update { it + ActiveOperation(id, descriptor.kind, descriptor.label) }
+        _active.update { it + ActiveOperation(id, descriptor.kind, descriptor.label, contentIntent = descriptor.contentIntent) }
         try {
             val result = withContext(Marker(id)) { block() }
             emitOutcome(id, descriptor, classify(result))
@@ -133,7 +144,7 @@ class OperationRegistry {
     suspend fun updateCurrentStage(stage: String?) {
         val id = currentCoroutineContext()[Marker]?.id ?: return
         _active.update { list ->
-            list.map { if (it.id == id) ActiveOperation(it.id, it.kind, it.label, stage) else it }
+            list.map { if (it.id == id) ActiveOperation(it.id, it.kind, it.label, stage, it.contentIntent) else it }
         }
     }
 
@@ -146,6 +157,7 @@ class OperationRegistry {
                 completionLabel = descriptor.completionLabel,
                 status = result.status,
                 txHash = result.txHash,
+                contentIntent = descriptor.contentIntent,
             ),
         )
     }

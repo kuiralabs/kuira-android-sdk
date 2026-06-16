@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk
 
+import android.app.PendingIntent
 import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.preferencesDataStore
@@ -548,8 +549,12 @@ class MidnightSdk private constructor(
     suspend fun <T> runForegroundOperation(
         label: String,
         completionLabel: String? = null,
+        contentIntent: PendingIntent? = null,
         block: suspend () -> T,
-    ): T = operations.run(OperationDescriptor(OperationKind.Custom, label, completionLabel), block = block)
+    ): T = operations.run(
+        OperationDescriptor(OperationKind.Custom, label, completionLabel, contentIntent),
+        block = block,
+    )
 
     /**
      * Update the live progress stage of the foreground operation the CURRENT coroutine is
@@ -567,9 +572,10 @@ class MidnightSdk private constructor(
     fun launchForegroundOperation(
         label: String,
         completionLabel: String? = null,
+        contentIntent: PendingIntent? = null,
         block: suspend () -> Unit,
     ): Job = subscriptionScope.launch {
-        runCatching { runForegroundOperation(label, completionLabel, block) }
+        runCatching { runForegroundOperation(label, completionLabel, contentIntent, block) }
             .onFailure { Log.w(TAG, "foreground operation '$label' failed: ${it.message}") }
     }
 

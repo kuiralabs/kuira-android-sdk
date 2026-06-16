@@ -157,7 +157,7 @@ class WalletForegroundService : Service() {
     private fun buildNotification(ops: List<ActiveOperation>, status: SyncStatus): Notification {
         val op = ops.firstOrNull()
         return when {
-            op != null -> notifier.buildOperation(op.label ?: getString(op.kind.defaultLabelRes()), op.stage)
+            op != null -> notifier.buildOperation(op.label ?: getString(op.kind.defaultLabelRes()), op.stage, op.contentIntent)
             status is SyncStatus.Syncing -> notifier.build(status)
             else -> notifier.buildIndeterminate()
         }
