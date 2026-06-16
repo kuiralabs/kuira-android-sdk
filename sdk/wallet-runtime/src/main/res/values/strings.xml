@@ -36,4 +36,6 @@
     <string name="kuira_op_chip_fmt">Kuira · %1$s</string>
     <!-- Finalization-notification channel (dismissible; the user clears it). -->
     <string name="kuira_op_finalize_channel">Transaction updates</string>
+    <!-- #264 inbound: heads-up "your turn" / received-funds alert channel. -->
+    <string name="kuira_alert_channel">Action needed</string>
 </resources>

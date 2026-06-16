@@ -67,6 +67,22 @@ class OperationOutcome internal constructor(
 )
 
 /**
+ * A one-shot ATTENTION request (#264 inbound) — fired MID-flight to pull the user BACK to a
+ * tracked operation that needs them (a protocol step waiting on their input, a counterparty's
+ * move). Distinct from [OperationOutcome], which fires when the op FINISHES. The presentation
+ * edge turns it into a heads-up notification and decides whether to suppress it (e.g. when the
+ * app is already foreground — no point summoning someone who's looking). [title]/[body] are
+ * caller-provided; [contentIntent] taps back to the op's screen.
+ */
+class OperationAttention internal constructor(
+    val id: Long,
+    val kind: OperationKind,
+    val title: String,
+    val body: String?,
+    val contentIntent: PendingIntent? = null,
+)
+
+/**
  * Process-singleton registry of in-flight value-bearing wallet operations
  * (#261-264). Mirrors [MidnightWallet.syncStatus]'s observable-state model:
  *
@@ -93,6 +109,14 @@ class OperationRegistry {
         extraBufferCapacity = OUTCOME_BUFFER_CAPACITY,
     )
     val outcomes: SharedFlow<OperationOutcome> = _outcomes.asSharedFlow()
+
+    // Mid-flight "your turn" alerts (#264 inbound). Same replay/buffer rationale as outcomes:
+    // a late subscriber must not replay a stale summons, and tryEmit must never drop one.
+    private val _attentions = MutableSharedFlow<OperationAttention>(
+        replay = 0,
+        extraBufferCapacity = OUTCOME_BUFFER_CAPACITY,
+    )
+    val attentions: SharedFlow<OperationAttention> = _attentions.asSharedFlow()
 
     private val nextId = AtomicLong(0L)
 
@@ -154,6 +178,20 @@ class OperationRegistry {
         _active.update { list ->
             list.map { if (it.id == id) ActiveOperation(it.id, it.kind, it.label, stage, it.contentIntent) else it }
         }
+    }
+
+    /**
+     * Request the user's ATTENTION for the operation the CURRENT coroutine is inside (#264):
+     * emits an [OperationAttention] a presentation edge turns into a heads-up notification, to
+     * pull a user who left the app back to a step that needs them. Tagged with the op's
+     * [OperationDescriptor.contentIntent] so the alert taps back to the right screen. No-op
+     * outside a tracked operation. The edge decides whether to actually alert (e.g. suppress
+     * when foreground), so callers may fire this unconditionally.
+     */
+    suspend fun requestAttention(title: String, body: String? = null) {
+        val id = currentCoroutineContext()[Marker]?.id ?: return
+        val op = _active.value.firstOrNull { it.id == id } ?: return
+        _attentions.tryEmit(OperationAttention(op.id, op.kind, title, body, op.contentIntent))
     }
 
     private fun emitOutcome(id: Long, descriptor: OperationDescriptor, result: OperationResult) {

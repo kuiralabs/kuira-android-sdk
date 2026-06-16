@@ -87,6 +87,29 @@ class OperationRegistryTest {
         }
 
     @Test
+    fun `requestAttention emits inside a tracked op (tagged with it) and is a no-op outside one`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val reg = OperationRegistry()
+            val attentions = mutableListOf<OperationAttention>()
+            val collector = launch { reg.attentions.collect { attentions.add(it) } }
+
+            // Outside any operation → no-op (nothing to summon back to).
+            reg.requestAttention("ignored")
+            assertTrue("no attention fired outside an op", attentions.isEmpty())
+
+            // Inside a tracked op → emits, tagged with the op's kind.
+            reg.run(OperationDescriptor(OperationKind.Custom, label = "match")) {
+                reg.requestAttention("Your turn", "Take your kick")
+            }
+
+            assertEquals(1, attentions.size)
+            assertEquals("Your turn", attentions.first().title)
+            assertEquals("Take your kick", attentions.first().body)
+            assertEquals(OperationKind.Custom, attentions.first().kind)
+            collector.cancel()
+        }
+
+    @Test
     fun `classify maps a returned value to its real terminal status`() =
         runTest(UnconfinedTestDispatcher()) {
             val reg = OperationRegistry()

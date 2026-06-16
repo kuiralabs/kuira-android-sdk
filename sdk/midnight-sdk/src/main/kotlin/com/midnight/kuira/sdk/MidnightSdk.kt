@@ -565,6 +565,15 @@ class MidnightSdk private constructor(
     suspend fun updateOperationStage(stage: String?) = operations.updateCurrentStage(stage)
 
     /**
+     * Pull the user BACK to the current foreground operation with a heads-up alert (#264
+     * inbound) — e.g. a protocol step that needs their input, or a counterparty's move. Fires
+     * an alerting notification that taps back to the operation's screen. [title]/[body] are
+     * YOUR strings (the SDK emits none). No-op outside a tracked operation; the host suppresses
+     * it when the app is already foreground, so you can call it unconditionally.
+     */
+    suspend fun requestAttention(title: String, body: String? = null) = operations.requestAttention(title, body)
+
+    /**
      * Fire-and-forget [runForegroundOperation] on the SDK's lifecycle scope: returns a
      * [Job] immediately, and the tracked work keeps running (under the foreground
      * service) even after the caller leaves the screen. Failures are logged, not thrown.

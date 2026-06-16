@@ -230,6 +230,7 @@ class WalletForegroundService : Service() {
             val provider = ep.sdkProvider()
             val sessionLock = ep.sessionLock()
             val finalizer = FinalizationNotifier(application)
+            val alerter = AlertNotifier(application)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
             // Start the FGS when an operation or sync begins — but ONLY while the app is
@@ -277,6 +278,20 @@ class WalletForegroundService : Service() {
                 provider.sdk
                     .flatMapLatest { it?.operations?.outcomes ?: emptyFlow() }
                     .collect { outcome -> runCatching { finalizer.post(outcome) } }
+            }
+
+            // "Your turn" alerts (#264 inbound): a tracked op asked for the user's attention
+            // (a step waiting on their input, a counterparty's move). SUPPRESS it when the
+            // wallet UI is already foreground — no point summoning someone who's here.
+            // `inForeground` reflects only THIS process; a dual-process host (e.g. a game whose
+            // UI runs in another process) gates timing on its side (it fires the request only
+            // once it knows the user has actually drifted away), so the two compose.
+            scope.launch {
+                provider.sdk
+                    .flatMapLatest { it?.operations?.attentions ?: emptyFlow() }
+                    .collect { attention ->
+                        if (!sessionLock.inForeground.value) runCatching { alerter.postAttention(attention) }
+                    }
             }
         }
     }
