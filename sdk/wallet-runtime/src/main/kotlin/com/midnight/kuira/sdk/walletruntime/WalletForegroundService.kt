@@ -11,7 +11,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.midnight.kuira.sdk.ActiveOperation
+import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.SyncStatus
+import com.midnight.kuira.sdk.formatNight
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,12 +26,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.math.BigInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -293,7 +298,41 @@ class WalletForegroundService : Service() {
                         if (!sessionLock.inForeground.value) runCatching { alerter.postAttention(attention) }
                     }
             }
+
+            // Incoming-funds alert (#264 inbound): tell the user when NIGHT ARRIVES while they're
+            // away. SUPPRESS it when an operation is in flight (our own send / claim moves the
+            // balance — not a receipt) or the wallet UI is foreground (they'll see it). [label]
+            // is a host-overridable resource (the SDK emits no English of its own).
+            scope.launch {
+                provider.sdk
+                    .flatMapLatest { sdk -> sdk?.let { incomingNight(it) } ?: emptyFlow() }
+                    .collect { delta ->
+                        val opActive = provider.sdk.value?.operations?.active?.value?.isNotEmpty() == true
+                        if (opActive || sessionLock.inForeground.value) return@collect
+                        runCatching {
+                            alerter.postReceived(
+                                application.getString(R.string.kuira_alert_received_fmt, formatNight(delta)),
+                                application.getString(R.string.kuira_alert_received_body),
+                            )
+                        }
+                    }
+            }
         }
+
+        /**
+         * Stream of incoming NIGHT amounts (smallest units) for [sdk]: emits the positive delta
+         * each time the balance INCREASES — but only after the wallet's initial sync has gone
+         * idle once, so the initial `0 → balance` ramp (which can land in several stages) never
+         * reads as a flurry of receipts. A genuine later receipt is still caught even though it
+         * triggers its own sync, because by then the initial sync is long done. `prev` +
+         * `initialSyncDone` live inside the flow, so they reset per-SDK (a network switch rebuilds
+         * it). Best-effort heuristic over the balance stream — a precise received-UTXO event would
+         * need indexer support, a documented follow-on.
+         */
+        private fun incomingNight(sdk: MidnightSdk): Flow<BigInteger> =
+            combine(sdk.wallet.balanceFlow(), sdk.wallet.syncStatus) { balance, status ->
+                balance.totalNight to (status !is SyncStatus.Syncing)
+            }.nightReceipts()
     }
 
     @EntryPoint
@@ -301,5 +340,23 @@ class WalletForegroundService : Service() {
     interface WalletForegroundEntryPoint {
         fun sdkProvider(): MidnightSdkProvider
         fun sessionLock(): SessionLock
+    }
+}
+
+/**
+ * Pure seam (unit-tested): from a stream of `(totalNight, idle)` ticks, emit each positive
+ * balance INCREASE that lands AFTER the initial sync has settled once. The initial `0 → balance`
+ * ramp (idle stays false until the first full sync completes) is swallowed; a genuine later
+ * receipt — which triggers its own sync — is still emitted, because `initialSyncDone` is already
+ * true by then. Drives [WalletForegroundService]'s incoming-funds alert (#264 inbound).
+ */
+internal fun Flow<Pair<BigInteger, Boolean>>.nightReceipts(): Flow<BigInteger> = flow {
+    var prev: BigInteger? = null
+    var initialSyncDone = false
+    collect { (curr, idle) ->
+        if (idle) initialSyncDone = true
+        val before = prev
+        prev = curr
+        if (initialSyncDone && before != null && curr > before) emit(curr - before)
     }
 }

@@ -1,7 +1,11 @@
 package com.midnight.kuira.sdk.walletruntime
 
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.math.BigInteger
 
 /**
  * Lifecycle matrix for [decideForegroundService] (#261-264, generalizing #235) — the
@@ -87,5 +91,34 @@ class WalletForegroundServicePolicyTest {
             ForegroundServiceAction.None,
             decideForegroundService(activeOps = true, syncing = true, locked = true, running = false),
         )
+    }
+
+    // ── Incoming-funds detection (#264 inbound) — the nightReceipts seam ──
+
+    private fun n(v: Long) = BigInteger.valueOf(v)
+
+    @Test
+    fun `nightReceipts swallows the initial sync ramp, then emits real receipts`() = runTest {
+        // (totalNight, idle). Initial sync ramps 0→100 while NOT idle, then settles. After that
+        // two receipts arrive, each landing during its own sync cycle (not-idle → idle).
+        val deltas = flowOf(
+            n(0) to false,    // initial-sync staging — swallowed (initial sync not done)
+            n(40) to false,   // "
+            n(100) to false,  // "
+            n(100) to true,   // initial sync settles → increases from here are receipts
+            n(150) to false,  // receipt #1 (+50), mid its own sync
+            n(150) to true,   // settles → no change
+            n(225) to true,   // receipt #2 (+75)
+        ).nightReceipts().toList()
+        assertEquals(listOf(n(50), n(75)), deltas)
+    }
+
+    @Test
+    fun `nightReceipts ignores a decrease (our own send)`() = runTest {
+        val deltas = flowOf(
+            n(100) to true, // baseline (initial sync done) — no emit
+            n(70) to true,  // balance dropped (a send) — not a receipt
+        ).nightReceipts().toList()
+        assertEquals(emptyList<BigInteger>(), deltas)
     }
 }

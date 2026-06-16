@@ -724,9 +724,10 @@ class WalletPanelViewModel @Inject constructor(
 /**
  * NIGHT has 6 decimals (1 NIGHT = 1,000,000 base units). Shared across the wallet
  * package — the VM (shortfall formatting) and the Send screen (amount parsing) both
- * reference it, so it lives top-level rather than being redeclared per file.
+ * reference it. Aliases the SDK's [com.midnight.kuira.sdk.NIGHT_DECIMALS] so the scale
+ * has ONE source of truth (the SDK domain layer), not a re-hardcoded `6`.
  */
-internal const val NIGHT_DECIMALS = 6
+internal const val NIGHT_DECIMALS = com.midnight.kuira.sdk.NIGHT_DECIMALS
 
 /**
  * Send-flow UI state for the Send screen (#240).

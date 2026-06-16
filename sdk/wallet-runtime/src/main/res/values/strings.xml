@@ -38,4 +38,7 @@
     <string name="kuira_op_finalize_channel">Transaction updates</string>
     <!-- #264 inbound: heads-up "your turn" / received-funds alert channel. -->
     <string name="kuira_alert_channel">Action needed</string>
+    <!-- #264 inbound: received-funds alert (host-overridable). %1$s = formatted NIGHT amount. -->
+    <string name="kuira_alert_received_fmt">Received %1$s NIGHT</string>
+    <string name="kuira_alert_received_body">Tap to view your wallet.</string>
 </resources>
