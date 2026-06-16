@@ -114,6 +114,7 @@ public final class com/midnight/kuira/core/crypto/dust/DustLocalState : java/io/
 	public fun close ()V
 	public final fun commitmentRoot ()Ljava/lang/String;
 	public final fun currentNullifiers ([B)Ljava/util/List;
+	public final fun filterUnregisteredNight (Ljava/lang/String;)Ljava/lang/String;
 	public final fun generationRoot ()Ljava/lang/String;
 	public final fun getAllUtxos ()Ljava/util/List;
 	public final fun getBalance (J)Ljava/math/BigInteger;

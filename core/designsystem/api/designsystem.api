@@ -60,6 +60,10 @@ public final class com/midnight/kuira/core/designsystem/effect/RunnerWithDustKt 
 	public static final fun RunnerWithDust-iJQMabo (Landroidx/compose/ui/Modifier;JLandroidx/compose/runtime/Composer;II)V
 }
 
+public final class com/midnight/kuira/core/designsystem/effect/ShimmerEffectKt {
+	public static final fun ShimmerBlock-0_AQgcw (FLandroidx/compose/ui/Modifier;FJJLandroidx/compose/runtime/Composer;II)V
+}
+
 public final class com/midnight/kuira/core/designsystem/theme/ColorKt {
 	public static final fun getPink40 ()J
 	public static final fun getPink80 ()J
@@ -89,8 +93,10 @@ public final class com/midnight/kuira/core/designsystem/theme/DuskTypography {
 public final class com/midnight/kuira/core/designsystem/theme/MidnightColors {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/midnight/kuira/core/designsystem/theme/MidnightColors;
+	public final fun getButtonSurface-0d7_KjU ()J
 	public final fun getConfirm-0d7_KjU ()J
 	public final fun getConfirmSurface-0d7_KjU ()J
+	public final fun getErrorText-0d7_KjU ()J
 	public final fun getLight-0d7_KjU ()J
 	public final fun getLightBarely-0d7_KjU ()J
 	public final fun getLightFaint-0d7_KjU ()J
@@ -99,6 +105,7 @@ public final class com/midnight/kuira/core/designsystem/theme/MidnightColors {
 	public final fun getRejectText-0d7_KjU ()J
 	public final fun getStarBright-0d7_KjU ()J
 	public final fun getStarDim-0d7_KjU ()J
+	public final fun getSuccessText-0d7_KjU ()J
 	public final fun getVoid-0d7_KjU ()J
 	public final fun getVoidElevated-0d7_KjU ()J
 	public final fun getVoidSoft-0d7_KjU ()J

@@ -217,6 +217,10 @@ public final class com/midnight/kuira/core/identity/backup/DriveBackupStorage : 
 public final class com/midnight/kuira/core/identity/backup/DriveBackupStorage$Companion {
 }
 
+public final class com/midnight/kuira/core/identity/backup/DriveConsentRequiredException : java/lang/IllegalStateException {
+	public fun <init> ()V
+}
+
 public final class com/midnight/kuira/core/identity/backup/DustBackupEncryptor {
 	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/DustBackupEncryptor;
 	public final fun decrypt ([B[B)[B
@@ -278,6 +282,7 @@ public final class com/midnight/kuira/core/identity/backup/RestoredAppState {
 
 public final class com/midnight/kuira/core/identity/backup/SeedDerivedKeyDeriver {
 	public static final field INSTANCE Lcom/midnight/kuira/core/identity/backup/SeedDerivedKeyDeriver;
+	public final fun deriveAppStateBackupKey ([B)[B
 	public final fun deriveDustBackupKey ([B)[B
 }
 
@@ -343,6 +348,11 @@ public final class com/midnight/kuira/core/identity/passkey/AttestationParser {
 	public final fun extractPublicKey (Ljava/lang/String;)Lcom/midnight/kuira/core/identity/passkey/P256PublicKey;
 }
 
+public final class com/midnight/kuira/core/identity/passkey/NoPasskeyCredentialException : com/midnight/kuira/core/identity/passkey/PasskeyException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
 public final class com/midnight/kuira/core/identity/passkey/P256PublicKey {
 	public fun <init> ([B[B)V
 	public final fun compressedHex ()Ljava/lang/String;
@@ -379,7 +389,7 @@ public final class com/midnight/kuira/core/identity/passkey/PasskeyConfig {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class com/midnight/kuira/core/identity/passkey/PasskeyException : java/lang/Exception {
+public class com/midnight/kuira/core/identity/passkey/PasskeyException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 }
@@ -388,8 +398,8 @@ public final class com/midnight/kuira/core/identity/passkey/PasskeyManager {
 	public static final field Companion Lcom/midnight/kuira/core/identity/passkey/PasskeyManager$Companion;
 	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/PasskeyConfig;)V
 	public final fun authenticate (Landroid/app/Activity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun authenticateWithPrf (Landroid/app/Activity;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun authenticateWithPrf$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Landroid/app/Activity;[B[B[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun authenticateWithPrf (Landroid/app/Activity;[B[B[BZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun authenticateWithPrf$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Landroid/app/Activity;[B[B[BZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun createPasskey (Landroid/app/Activity;[BLjava/lang/String;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun createPasskey$default (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Landroid/app/Activity;[BLjava/lang/String;[B[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
@@ -457,6 +467,10 @@ public abstract interface class com/midnight/kuira/core/identity/sigil/SigilIden
 	public abstract fun getPrfSalt ()[B
 }
 
+public final class com/midnight/kuira/core/identity/sigil/SigilOverwriteException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public final class com/midnight/kuira/core/identity/sigil/SigilSnapshot {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -488,7 +502,8 @@ public final class com/midnight/kuira/core/identity/sigil/SigilStateStore {
 	public final fun hasSigil ()Z
 	public final fun isBackupDismissed ()Z
 	public final fun markBackupDismissed ()V
-	public final fun persistSigil (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun persistSigil (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public static synthetic fun persistSigil$default (Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)V
 	public final fun snapshot ()Lcom/midnight/kuira/core/identity/sigil/SigilSnapshot;
 }
 

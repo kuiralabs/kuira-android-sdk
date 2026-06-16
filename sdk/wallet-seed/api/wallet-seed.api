@@ -6,6 +6,23 @@ public final class com/midnight/kuira/sdk/walletseed/BuildConfig {
 	public fun <init> ()V
 }
 
+public final class com/midnight/kuira/sdk/walletseed/EstablishResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/midnight/kuira/sdk/walletseed/EstablishResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/walletseed/EstablishResult;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/midnight/kuira/sdk/walletseed/EstablishResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getDid ()Ljava/lang/String;
+	public final fun getPublicKeyHex ()Ljava/lang/String;
+	public final fun getReused ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/sdk/walletseed/ForgeResult {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -24,11 +41,14 @@ public final class com/midnight/kuira/sdk/walletseed/ForgeResult {
 public final class com/midnight/kuira/sdk/walletseed/SigilSession {
 	public static final field CHALLENGE_SIZE I
 	public static final field POST_CREATE_SETTLE_MS J
+	public static final field SIGIL_DISPLAY_NAME Ljava/lang/String;
 	public static final field TAG Ljava/lang/String;
 	public static final field USER_ID_BYTES I
 	public fun <init> (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;)V
-	public final fun forge (Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun signIn (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun establishSigil (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun forge (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun signIn (Landroidx/fragment/app/FragmentActivity;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun signIn$default (Lcom/midnight/kuira/sdk/walletseed/SigilSession;Landroidx/fragment/app/FragmentActivity;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/sdk/walletseed/SigilSession_Factory : dagger/internal/Factory {
@@ -45,6 +65,7 @@ public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource {
 	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/auth/SeedVault;Lcom/midnight/kuira/core/auth/WalletKeyManager;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)V
 	public final fun acceptPreDerivedSeed (Landroidx/fragment/app/FragmentActivity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun ensureSeedReady (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun requireFreshAuthNext ()V
 }
 
 public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource$Companion {

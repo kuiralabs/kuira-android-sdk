@@ -38,6 +38,8 @@ public final class com/midnight/kuira/core/auth/BiometricGate {
 	public static synthetic fun authenticateForDecrypt$default (Lcom/midnight/kuira/core/auth/BiometricGate;Landroidx/fragment/app/FragmentActivity;[BLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun authenticateForEncrypt (Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun authenticateForEncrypt$default (Lcom/midnight/kuira/core/auth/BiometricGate;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun authenticatePresence (Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun authenticatePresence$default (Lcom/midnight/kuira/core/auth/BiometricGate;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun tryDecryptWithinAuthWindow ([B[B)[B
 	public final fun tryEncryptWithinAuthWindow ()Ljavax/crypto/Cipher;
 }
@@ -86,6 +88,7 @@ public final class com/midnight/kuira/core/auth/SeedVault {
 	public final fun deleteSeed ()V
 	public final fun hasSeed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun loadSeed (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun requireFreshAuthNext ()V
 	public final fun storeSeed (Landroidx/fragment/app/FragmentActivity;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

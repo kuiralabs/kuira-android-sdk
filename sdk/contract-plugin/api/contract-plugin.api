@@ -1,11 +1,20 @@
+public abstract class com/midnight/kuira/contract/AdbReverseLocalnetTask : org/gradle/api/DefaultTask {
+	public fun <init> ()V
+	public final fun forward ()V
+	public abstract fun getExecOps ()Lorg/gradle/process/ExecOperations;
+}
+
 public abstract class com/midnight/kuira/contract/KuiraContractExtension {
 	public fun <init> ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
+	public abstract fun getBundleWalletKeys ()Lorg/gradle/api/provider/Property;
 	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRequireDoctorPass ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRpId ()Lorg/gradle/api/provider/Property;
 	public abstract fun getSource ()Lorg/gradle/api/provider/Property;
+	public abstract fun getWalletKeysBaseUrl ()Lorg/gradle/api/provider/Property;
+	public abstract fun getWalletKeysVersion ()Lorg/gradle/api/provider/Property;
 }
 
 public final class com/midnight/kuira/contract/KuiraContractPlugin : org/gradle/api/Plugin {
@@ -56,6 +65,26 @@ public final class com/midnight/kuira/contract/KuiraDoctorTask$Severity : java/l
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
 	public static fun values ()[Lcom/midnight/kuira/contract/KuiraDoctorTask$Severity;
+}
+
+public final class com/midnight/kuira/contract/KuiraLocalnetPlugin : org/gradle/api/Plugin {
+	public fun <init> ()V
+	public synthetic fun apply (Ljava/lang/Object;)V
+	public fun apply (Lorg/gradle/api/Project;)V
+}
+
+public abstract class com/midnight/kuira/contract/ProvisionWalletKeysTask : org/gradle/api/DefaultTask {
+	public static final field Companion Lcom/midnight/kuira/contract/ProvisionWalletKeysTask$Companion;
+	public static final field TASK_NAME Ljava/lang/String;
+	public fun <init> ()V
+	public abstract fun getAssetsDir ()Lorg/gradle/api/file/DirectoryProperty;
+	public abstract fun getBaseUrl ()Lorg/gradle/api/provider/Property;
+	public abstract fun getCacheRoot ()Lorg/gradle/api/file/DirectoryProperty;
+	public abstract fun getVersion ()Lorg/gradle/api/provider/Property;
+	public final fun provision ()V
+}
+
+public final class com/midnight/kuira/contract/ProvisionWalletKeysTask$Companion {
 }
 
 public abstract class com/midnight/kuira/contract/ValidateKuiraContractSourceTask : org/gradle/api/DefaultTask {

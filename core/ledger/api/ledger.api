@@ -1,6 +1,8 @@
 public final class com/midnight/kuira/core/ledger/api/FfiTransactionSerializer : com/midnight/kuira/core/ledger/api/TransactionSerializer {
 	public fun <init> (Ljava/lang/String;)V
-	public final fun getSigningMessageForInput (Ljava/util/List;Ljava/util/List;IJ)Ljava/lang/String;
+	public final fun getBindingCommitmentHex ()Ljava/lang/String;
+	public final fun getSigningMessageForInput (Ljava/util/List;Ljava/util/List;IJLjava/lang/String;)Ljava/lang/String;
+	public static synthetic fun getSigningMessageForInput$default (Lcom/midnight/kuira/core/ledger/api/FfiTransactionSerializer;Ljava/util/List;Ljava/util/List;IJLjava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
 	public final fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
 	public fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
 	public fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
@@ -257,6 +259,8 @@ public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter {
 	public final fun getLastProvingMode ()Lcom/midnight/kuira/core/compact/proving/ProvingMode;
 	public final fun getProvingMode ()Lcom/midnight/kuira/core/compact/proving/ProvingMode;
 	public final fun setProvingMode (Lcom/midnight/kuira/core/compact/proving/ProvingMode;)V
+	public final fun signAndSubmitTransfer (Lcom/midnight/kuira/core/ledger/model/Intent;[BLjava/lang/String;Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun signAndSubmitTransfer$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/core/ledger/model/Intent;[BLjava/lang/String;Ljava/lang/String;[BJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun submitAndWait (Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun submitAndWait$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/core/ledger/model/Intent;Ljava/lang/String;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun submitOnly (Lcom/midnight/kuira/core/ledger/model/Intent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -350,8 +354,8 @@ public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionB
 	public static final field Companion Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$Companion;
 	public static final field DEFAULT_TTL_MINUTES I
 	public fun <init> (Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;)V
-	public final fun buildTransfer (Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun buildTransfer (Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public abstract class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult {
