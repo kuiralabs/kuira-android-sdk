@@ -84,15 +84,19 @@ class SessionLockTest {
     }
 
     @Test
-    fun `background locks only after the grace period`() = runTest {
+    fun `background SOFT-locks after the grace — gates UI + re-auth, but KEEPS the SDK alive`() = runTest {
         val lock = newLock().also { it.scope = this }
         lock.onBackground()
 
         advanceTimeBy(499); runCurrent()
-        verify(exactly = 0) { provider.close() }
+        assertFalse("within the grace — not locked yet", lock.locked.value)
 
         advanceTimeBy(2); runCurrent()
-        verify(exactly = 1) { provider.close() }
+        // App-switching soft-locks: the UI gates (re-auth on return is armed) but the SDK is
+        // NOT closed, so background monitoring (received-funds / sync) keeps running.
+        assertTrue("soft-locked after the grace", lock.locked.value)
+        verify(exactly = 1) { walletSeedSource.requireFreshAuthNext() }
+        verify(exactly = 0) { provider.close() }
     }
 
     @Test
@@ -132,19 +136,20 @@ class SessionLockTest {
     // ── Operation holds (#235 pivot: don't drop the SDK mid-transaction) ──
 
     @Test
-    fun `auto-lock is deferred while an operation hold is active, then fires on release`() = runTest {
+    fun `a background soft-lock keeps the SDK alive (even with a hold) and never escalates to a wipe`() = runTest {
         val lock = newLock().also { it.scope = this }
         val hold = lock.acquireHold()
 
-        // Background grace expires while the op is in flight — must NOT close yet.
+        // Background grace expires: SOFT-lock — gate the UI but KEEP the SDK alive so monitoring
+        // continues. It's non-destructive, so it neither defers on the hold nor ever wipes.
         lock.onBackground()
         advanceTimeBy(501); runCurrent()
+        assertTrue("soft-locked after the grace", lock.locked.value)
         verify(exactly = 0) { provider.close() }
 
-        // Releasing the last hold runs the deferred lock (the in-flight op finished).
+        // Releasing the hold must NOT trigger a wipe — the background trigger queued no hard lock.
         hold.close()
-        verify(exactly = 1) { provider.close() }
-        verify(exactly = 1) { walletSeedSource.requireFreshAuthNext() }
+        verify(exactly = 0) { provider.close() }
     }
 
     @Test

@@ -126,14 +126,20 @@ class SessionLock @Inject constructor(
         restartIdleTimer()
     }
 
-    /** App left the foreground: lock after the grace period unless we come back. */
+    /**
+     * App left the foreground: SOFT-lock after the grace period unless we come back.
+     * App-switching isn't the same threat as the device being secured, so backgrounding gates
+     * the UI + requires re-auth on return but KEEPS the SDK alive — so background monitoring
+     * (received-funds, sync) keeps running instead of dying the moment you switch apps. The
+     * HARD triggers (screen-off / idle / manual) still wipe the SDK.
+     */
     fun onBackground() {
         _inForeground.value = false
         idleJob?.cancel()
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
             delay(backgroundGraceMs)
-            lock("backgrounded")
+            softLock("backgrounded")
         }
     }
 
@@ -321,6 +327,28 @@ class SessionLock @Inject constructor(
         // ~30s and the "lock" would be a no-op.
         walletSeedSource.requireFreshAuthNext()
         provider.close()
+    }
+
+    /**
+     * SOFT lock (the app-switch trigger): gate the UI + require re-auth on return, but KEEP the
+     * SDK alive so background monitoring (received-funds, sync) keeps running. Unlike [doLock]
+     * it does NOT `provider.close()`, so the in-memory wallet (and its observers) survive — the
+     * device-secured triggers (screen-off / idle / manual) still wipe via [doLock]. Bypasses
+     * holds (it's non-destructive). [unlock] still runs the real biometric, since
+     * [requireFreshAuthNext] arms it here too.
+     *
+     * Caveat: while backgrounded WITHOUT a foreground service, Android still throttles the app's
+     * network (it tears the live sockets down — see [WalletForegroundService]'s abort root
+     * cause), so monitoring is BEST-EFFORT — a receipt is caught when a subscription retry
+     * reconnects, not instantly. Reliable always-on background receive needs a kept-alive FGS or
+     * a server/indexer push (the #264 follow-on).
+     */
+    private fun softLock(reason: String) {
+        Log.i(TAG, "Soft-locking session ($reason) — gating UI + re-auth, KEEPING the SDK alive for monitoring")
+        _locked.value = true
+        walletSeedSource.requireFreshAuthNext()
+        // No provider.close() — the wallet stays alive so received-funds / sync observers keep
+        // running; a screen-off / idle / manual lock escalates to the full wipe.
     }
 
     private fun restartIdleTimer() {
