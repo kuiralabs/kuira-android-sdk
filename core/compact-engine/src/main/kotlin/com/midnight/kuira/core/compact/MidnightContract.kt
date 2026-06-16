@@ -90,6 +90,26 @@ class MidnightContract private constructor(
     }
 
     /**
+     * Idempotent single call (#254): if [isDoneOnLedger] is already true the on-chain
+     * effect is present, so this SKIPS the call and returns `null` (no double-submit);
+     * otherwise it runs [call] and returns the receipt.
+     *
+     * The check is anchored to the LEDGER, not local state — so a retry (after a crash, or
+     * on resume) is always safe: the chain decides whether the work is done.
+     * [com.midnight.kuira.sdk] `MidnightSdk.runProtocol`'s `step` is the multi-step
+     * generalization of this pattern.
+     */
+    suspend fun callIdempotent(
+        circuitName: String,
+        vararg args: Any?,
+        isDoneOnLedger: suspend () -> Boolean,
+        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
+    ): TransactionReceipt? {
+        if (isDoneOnLedger()) return null
+        return call(circuitName, *args, onProgress = onProgress)
+    }
+
+    /**
      * Execute and prove a circuit without submitting (offline mode).
      *
      * The result can be submitted later via [MidnightConfig.submit].

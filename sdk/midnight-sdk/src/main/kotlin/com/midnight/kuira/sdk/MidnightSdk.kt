@@ -588,6 +588,69 @@ class MidnightSdk private constructor(
         onResult?.invoke(result)
     }
 
+    // ── Durable protocol orchestrator (#253 + #254) ──
+
+    private val protocolStore by lazy { ProtocolStore(config.context) }
+
+    /**
+     * Run a durable, idempotent multi-step protocol saga as ONE foreground operation
+     * (#253). Each [ProtocolScope.step] is skipped when its `doneWhen` is already true
+     * on-ledger, so re-running [id] (after process death, or on app resume) resumes from
+     * the first not-done step with no double-submit — the chain is the journal. The inner
+     * `contract.call`s coalesce under this op, so it reads as ONE operation + one
+     * finalization push. [label] drives the notification.
+     *
+     * Returns [ProtocolResult.Completed] when every step finished, or
+     * [ProtocolResult.AwaitingCounterparty] when the saga hit an unsatisfied
+     * [ProtocolScope.awaitCounterparty] (the foreground service is released; re-run to
+     * resume once the counterparty acts).
+     */
+    suspend fun runProtocol(
+        id: String,
+        label: String,
+        block: suspend ProtocolScope.() -> Unit,
+    ): ProtocolResult {
+        protocolStore.markInFlight(id, label)
+        var awaiting: String? = null
+        operations.run(
+            OperationDescriptor(OperationKind.Custom, label),
+            classify = {
+                OperationResult(if (awaiting == null) OperationTerminalStatus.Success else OperationTerminalStatus.Pending)
+            },
+        ) {
+            val scope = ProtocolScopeImpl(id, PROTOCOL_CONFIRM_TIMEOUT_MS, PROTOCOL_CONFIRM_POLL_MS)
+            try {
+                scope.block()
+            } catch (s: ProtocolSuspendSignal) {
+                awaiting = s.stepName
+            }
+        }
+        return if (awaiting == null) {
+            protocolStore.clear(id)
+            ProtocolResult.Completed
+        } else {
+            ProtocolResult.AwaitingCounterparty(awaiting!!)
+        }
+    }
+
+    /** Fire-and-forget [runProtocol] on the SDK's lifecycle scope (survives the caller); #253. */
+    fun launchProtocol(
+        id: String,
+        label: String,
+        block: suspend ProtocolScope.() -> Unit,
+    ): Job = subscriptionScope.launch {
+        runCatching { runProtocol(id, label, block) }
+            .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "protocol '$id' failed: ${it.message}") }
+    }
+
+    /**
+     * Ids of protocol sagas that started but haven't completed — candidates to resume on
+     * app start. The dApp re-launches each via [runProtocol] with the same id; the ledger-
+     * anchored `doneWhen`s skip the already-done steps. (Saga definitions are code the dApp
+     * re-provides — only ids are persisted.)
+     */
+    fun inFlightProtocolIds(): Set<String> = protocolStore.inFlightIds()
+
     /** Release all resources. */
     fun close() {
         subscriptionJob.cancel()
@@ -974,6 +1037,15 @@ class MidnightSdk private constructor(
          */
         private const val DUST_PROPAGATION_TIMEOUT_MS = 120_000L
         private const val DUST_POLL_INTERVAL_MS = 5_000L
+
+        /**
+         * Per-step confirmation budget for [runProtocol]: after a step's action submits, the
+         * engine polls the step's `doneWhen` until the effect surfaces on the indexer (which
+         * lags finalization by ~1 block) so the next step sees a consistent ledger. A ceiling,
+         * not a fixed cost — the wait ends the moment `doneWhen` flips true.
+         */
+        private const val PROTOCOL_CONFIRM_TIMEOUT_MS = 30_000L
+        private const val PROTOCOL_CONFIRM_POLL_MS = 2_000L
 
         /** DataStore for SDK dust state (separate from Kuira app). */
         private val Context.sdkDustDataStore by preferencesDataStore(name = "sdk_dust_state")
