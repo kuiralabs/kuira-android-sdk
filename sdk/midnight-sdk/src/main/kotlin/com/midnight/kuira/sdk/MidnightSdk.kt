@@ -550,9 +550,10 @@ class MidnightSdk private constructor(
         label: String,
         completionLabel: String? = null,
         contentIntent: PendingIntent? = null,
+        notifyOnFinish: Boolean = true,
         block: suspend () -> T,
     ): T = operations.run(
-        OperationDescriptor(OperationKind.Custom, label, completionLabel, contentIntent),
+        OperationDescriptor(OperationKind.Custom, label, completionLabel, contentIntent, notifyOnFinish),
         block = block,
     )
 
@@ -575,7 +576,7 @@ class MidnightSdk private constructor(
         contentIntent: PendingIntent? = null,
         block: suspend () -> Unit,
     ): Job = subscriptionScope.launch {
-        runCatching { runForegroundOperation(label, completionLabel, contentIntent, block) }
+        runCatching { runForegroundOperation(label, completionLabel, contentIntent, block = block) }
             .onFailure { Log.w(TAG, "foreground operation '$label' failed: ${it.message}") }
     }
 

@@ -35,6 +35,15 @@ class OperationDescriptor(
      * default launcher — which a singleTask launcher would otherwise clear the task down to.
      */
     val contentIntent: PendingIntent? = null,
+    /**
+     * Whether finishing this operation fires a dismissible finalization push. Default true.
+     * Set FALSE for a keep-alive-only PRELUDE — one that should hold the process up + show the
+     * ongoing notification while it runs, but whose completion is NOT a user-facing "done"
+     * (e.g. joining a match is the START of play, not its end; the match's real "done" comes
+     * from the gameplay operation). Such an op still de-enrolls + drops the ongoing
+     * notification when it finishes; it just emits no terminal outcome (success OR failure).
+     */
+    val notifyOnFinish: Boolean = true,
 )
 
 /** How a finished operation's normal return maps to a terminal outcome. */
@@ -121,7 +130,7 @@ class OperationRegistry {
         _active.update { it + ActiveOperation(id, descriptor.kind, descriptor.label, contentIntent = descriptor.contentIntent) }
         try {
             val result = withContext(Marker(id)) { block() }
-            emitOutcome(id, descriptor, classify(result))
+            if (descriptor.notifyOnFinish) emitOutcome(id, descriptor, classify(result))
             return result
         } catch (c: CancellationException) {
             // A cancelled operation is ABANDONED, not failed — e.g. a host re-launches a
@@ -131,7 +140,7 @@ class OperationRegistry {
             // keep structured concurrency intact, but emit NO terminal outcome.
             throw c
         } catch (t: Throwable) {
-            emitOutcome(id, descriptor, OperationResult(OperationTerminalStatus.Failed))
+            if (descriptor.notifyOnFinish) emitOutcome(id, descriptor, OperationResult(OperationTerminalStatus.Failed))
             throw t
         } finally {
             _active.update { list -> list.filterNot { it.id == id } }
