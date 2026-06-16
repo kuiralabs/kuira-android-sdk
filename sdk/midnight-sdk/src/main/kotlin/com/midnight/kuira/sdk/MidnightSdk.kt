@@ -39,6 +39,7 @@ import com.midnight.kuira.core.ledger.fee.FeeCalculator
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -566,17 +567,25 @@ class MidnightSdk private constructor(
 
     /**
      * Fire-and-forget [sendNight] on the SDK's lifecycle scope so the transfer survives
-     * the caller leaving the app (#263). Returns immediately; observe [operations] for
-     * progress/terminal state, or rely on the finalization notification. [onProgress]
-     * is best-effort for an in-app live view while the caller is still around.
+     * the caller leaving the app (#263). Returns immediately; the durable lifecycle
+     * (foreground service + finalization notification) is owned by the operation registry.
+     * [onProgress] is best-effort for an in-app live view while the caller is still around;
+     * [onResult] delivers the typed [SendResult] when done (also on the SDK scope, so it
+     * survives the caller — a dead caller's callback is simply a no-op).
      */
     fun launchSendNight(
         toAddress: String,
         amount: BigInteger,
         onProgress: ((SendProgress) -> Unit)? = null,
+        onResult: ((SendResult) -> Unit)? = null,
     ): Job = subscriptionScope.launch {
-        runCatching { sendNight(toAddress, amount, onProgress) }
-            .onFailure { Log.w(TAG, "background send failed: ${it.message}") }
+        val result = runCatching { sendNight(toAddress, amount, onProgress) }
+            .getOrElse { e ->
+                if (e is CancellationException) throw e
+                Log.w(TAG, "background send failed: ${e.message}")
+                SendResult.Failed(e.message ?: "Send failed")
+            }
+        onResult?.invoke(result)
     }
 
     /** Release all resources. */

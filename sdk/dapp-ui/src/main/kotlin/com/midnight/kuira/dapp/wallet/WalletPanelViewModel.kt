@@ -543,51 +543,63 @@ class WalletPanelViewModel @Inject constructor(
     fun sendNight(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) {
         lastRequestedConfig = config
         viewModelScope.launch {
-            // Keep the session unlocked while the (possibly multi-tx) send is in flight.
+            // Hold the auto-lock across the (interactive) bootstrap; the send itself is then
+            // held by the operation registry (SessionLock.bindOperationHold), so we release
+            // this one the moment the durable send is launched.
             val hold = sessionLock.acquireHold()
             try {
                 _sendState.value = SendUiState.Sending("Preparing…")
-                val built = sdkProvider.ensureSdk(activity, config)
-                val result = built.sendNight(toAddress, amount) { stage ->
-                    _sendState.value = SendUiState.Sending(
-                        when (stage) {
-                            MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
-                            MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
-                        },
-                    )
+                val built = try {
+                    sdkProvider.ensureSdk(activity, config)
+                } catch (e: SigilRequiredException) {
+                    _sendState.value = SendUiState.Failure("Sign in to your sigil first, then try again.")
+                    return@launch
+                } catch (e: AuthenticationCancelledException) {
+                    _sendState.value = SendUiState.Idle // user dismissed the unlock biometric
+                    return@launch
+                } catch (e: Exception) {
+                    Log.e(TAG, "send bootstrap failed", e)
+                    _sendState.value = SendUiState.Failure(e.message ?: "Send failed")
+                    return@launch
                 }
-                Log.i(TAG, "sendNight result: $result")
-                _sendState.value = when (result) {
-                    is MidnightSdk.SendResult.Success -> SendUiState.Success(result.txHash)
-                    // Submitted; finalization confirmation timed out — treat as sent.
-                    is MidnightSdk.SendResult.Pending -> SendUiState.Success(result.txHash)
-                    is MidnightSdk.SendResult.InvalidAddress -> SendUiState.Failure(result.reason)
-                    is MidnightSdk.SendResult.InsufficientFunds -> {
-                        val short = result.shortfall.toBigDecimal().movePointLeft(NIGHT_DECIMALS)
-                            .stripTrailingZeros().toPlainString()
-                        SendUiState.Failure("Not enough NIGHT — you're short $short.")
-                    }
-                    is MidnightSdk.SendResult.Failed -> SendUiState.Failure(result.reason)
-                }
-                // The send spent coins (+ change); nudge a resync so the pill reflects it.
-                if (_sendState.value is SendUiState.Success) {
-                    runCatching { built.wallet.refresh() }
-                        .onFailure { Log.w(TAG, "post-send refresh failed: ${it.message}") }
-                }
-            } catch (e: SigilRequiredException) {
-                _sendState.value = SendUiState.Failure("Sign in to your sigil first, then try again.")
-            } catch (e: AuthenticationCancelledException) {
-                // User dismissed the unlock biometric — drop back to the form.
-                _sendState.value = SendUiState.Idle
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "sendNight failed", e)
-                _sendState.value = SendUiState.Failure(e.message ?: "Send failed")
+                // Fire-and-forget on the SDK scope so the transfer survives the user leaving
+                // the app (#263). The registry / foreground service / finalization push own
+                // the durable lifecycle; this VM only projects progress + the result while the
+                // Send screen is open (callbacks land on the SDK scope, so a dead VM is a no-op).
+                built.launchSendNight(
+                    toAddress = toAddress,
+                    amount = amount,
+                    onProgress = { stage ->
+                        _sendState.value = SendUiState.Sending(
+                            when (stage) {
+                                MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
+                                MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
+                            },
+                        )
+                    },
+                    onResult = { result ->
+                        Log.i(TAG, "sendNight result: $result")
+                        _sendState.value = result.toSendUiState()
+                    },
+                )
             } finally {
                 hold.close()
             }
         }
+    }
+
+    /** Map a typed [MidnightSdk.SendResult] onto the pill's send UI state. */
+    private fun MidnightSdk.SendResult.toSendUiState(): SendUiState = when (this) {
+        is MidnightSdk.SendResult.Success -> SendUiState.Success(txHash)
+        // Submitted; finalization confirmation timed out — treat as sent.
+        is MidnightSdk.SendResult.Pending -> SendUiState.Success(txHash)
+        is MidnightSdk.SendResult.InvalidAddress -> SendUiState.Failure(reason)
+        is MidnightSdk.SendResult.InsufficientFunds -> {
+            val short = shortfall.toBigDecimal().movePointLeft(NIGHT_DECIMALS)
+                .stripTrailingZeros().toPlainString()
+            SendUiState.Failure("Not enough NIGHT — you're short $short.")
+        }
+        is MidnightSdk.SendResult.Failed -> SendUiState.Failure(reason)
     }
 
     /** Reset the send flow to Idle (on Send-screen close, or to re-edit after a failure). */
