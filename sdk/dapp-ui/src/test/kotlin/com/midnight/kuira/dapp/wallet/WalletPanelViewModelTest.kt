@@ -17,6 +17,7 @@ import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,6 +105,45 @@ class WalletPanelViewModelTest {
 
         assertEquals(false, dustPrefs().getBoolean("dust_backup_opted_out", true))
         coVerify { driveAuth.authorize() }
+    }
+
+    // ── #246 true disable: delete both blobs, then revoke, then opt out ──
+
+    @Test
+    fun `disableBackup deletes both cloud blobs BEFORE revoking, then opts out`() = runTest {
+        val wallet = mockk<MidnightWallet>(relaxed = true)
+        val built = mockk<MidnightSdk>(relaxed = true)
+        every { built.wallet } returns wallet
+        coEvery { sdkProvider.ensureSdk(activity, any()) } returns built
+
+        val vm = newVm()
+        vm.disableBackup(devConfig(), activity)
+        advanceUntilIdle()
+
+        // ORDER matters: delete BOTH blobs while Drive access still exists, THEN revoke consent.
+        coVerifyOrder {
+            wallet.disableDustCloudBackup()
+            wallet.disableAppStateCloudBackup()
+            driveAuth.revoke()
+        }
+        // Opted out locally so the lane reflects off + survives a restart.
+        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+    }
+
+    @Test
+    fun `disableBackup still opts out locally even if a delete leg fails`() = runTest {
+        val wallet = mockk<MidnightWallet>(relaxed = true)
+        val built = mockk<MidnightSdk>(relaxed = true)
+        every { built.wallet } returns wallet
+        coEvery { sdkProvider.ensureSdk(activity, any()) } returns built
+        coEvery { wallet.disableDustCloudBackup() } throws RuntimeException("drive unreachable")
+
+        val vm = newVm()
+        vm.disableBackup(devConfig(), activity)
+        advanceUntilIdle()
+
+        // Best-effort: a failed delete/revoke leg must NOT leave the user "still backed up" in the UI.
+        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
     }
 
     @Test
