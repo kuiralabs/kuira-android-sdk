@@ -80,6 +80,12 @@ fun PanelBar(
     modifier: Modifier = Modifier,
     walletColors: WalletPanelColors = WalletPanelColors.Default,
     sigilColors: SigilPanelColors = SigilPanelColors.Default,
+    /**
+     * One-shot trigger to OPEN the wallet panel from outside — e.g. a host routing a
+     * "received funds" notification tap to the wallet. Each change to a new non-zero value
+     * pops the panel open; `0` (default) never auto-opens.
+     */
+    openWalletSignal: Int = 0,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -141,6 +147,7 @@ fun PanelBar(
                 is SigilStatus.Creating,
                 is SigilStatus.Error -> false
             },
+            openSheetSignal = openWalletSignal,
         )
     }
 }

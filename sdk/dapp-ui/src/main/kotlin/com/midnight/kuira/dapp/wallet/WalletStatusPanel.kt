@@ -182,6 +182,13 @@ fun WalletStatusPanel(
      * any pending sigil state.
      */
     enabled: Boolean = true,
+    /**
+     * One-shot trigger to OPEN the expanded panel from OUTSIDE — e.g. a host routing a
+     * "received funds" notification tap to the wallet. Each time this changes to a new
+     * non-zero value the sheet opens; `0` (default) never auto-opens. [PanelBar] threads it
+     * through, so a host increments a counter and the panel pops open.
+     */
+    openSheetSignal: Int = 0,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -192,6 +199,13 @@ fun WalletStatusPanel(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
+
+    // Open the expanded panel when a host fires [openSheetSignal] (e.g. routing a
+    // received-funds notification tap to the wallet). Keyed on the value so each new
+    // signal re-opens; the initial 0 is a no-op.
+    LaunchedEffect(openSheetSignal) {
+        if (openSheetSignal > 0) sheetOpen = true
+    }
 
     // Whole-app session lock (#14): a ModalBottomSheet renders in its own window
     // ABOVE the activity content, so if a lock fires while the sheet (or the

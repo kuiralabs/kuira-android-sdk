@@ -54,9 +54,13 @@ class AlertNotifier(private val context: Context) {
             contentIntent = attention.contentIntent,
         )
 
-    /** Post a received-funds alert (#264 inbound). [contentIntent] null → opens the app. */
+    /**
+     * Post a received-funds alert (#264 inbound). [contentIntent] null → opens the app. Uses a
+     * DISTINCT id per receipt (rolling) so a later receipt heads-up on its own instead of
+     * silently updating an earlier one (the `setOnlyAlertOnce` would otherwise mute it).
+     */
     fun postReceived(title: String, body: String?, contentIntent: PendingIntent? = null) =
-        post(RECEIVED_ID, title, body, contentIntent)
+        post(RECEIVED_BASE_ID + (receivedSeq.getAndIncrement() % MAX_CONCURRENT), title, body, contentIntent)
 
     private fun post(id: Int, title: String, body: String?, contentIntent: PendingIntent?) {
         ensureChannel()
@@ -91,11 +95,17 @@ class AlertNotifier(private val context: Context) {
         )
     }
 
+    // Rolling sequence so each received-funds alert gets its own notification id.
+    private val receivedSeq = java.util.concurrent.atomic.AtomicInteger(0)
+
     companion object {
         const val CHANNEL_ID = "kuira_alerts"
-        private const val ATTENTION_BASE_ID = 0xD060
-        private const val RECEIVED_ID = 0xD05F
-        /** Spread of distinct ids so near-simultaneous "your turn"s don't collide. */
+        // Non-overlapping id ranges (16 wide each). SyncNotifier=0xD057,
+        // FinalizationNotifier=0xD058..0xD067 — so these start at 0xD068 to avoid clobbering a
+        // completion push with an alert.
+        private const val ATTENTION_BASE_ID = 0xD068
+        private const val RECEIVED_BASE_ID = 0xD078
+        /** Spread of distinct ids so near-simultaneous alerts don't collide. */
         private const val MAX_CONCURRENT = 16
     }
 }

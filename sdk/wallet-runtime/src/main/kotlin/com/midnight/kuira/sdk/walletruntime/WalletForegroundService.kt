@@ -2,6 +2,7 @@ package com.midnight.kuira.sdk.walletruntime
 
 import android.app.Application
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.math.BigInteger
 import java.util.concurrent.atomic.AtomicBoolean
@@ -226,9 +228,13 @@ class WalletForegroundService : Service() {
          * lock. A SEPARATE observer rides the operation terminal stream and posts the
          * dismissible finalization notification (#264) — app-scoped, so it fires even after the
          * FGS has already stopped. No-op if not called.
+         *
+         * [walletContentIntent] is where a received-funds alert taps to — the host's wallet
+         * view (the SDK can't reference a host screen). When null the alert opens the app
+         * launcher.
          */
         @OptIn(ExperimentalCoroutinesApi::class)
-        fun attach(application: Application) {
+        fun attach(application: Application, walletContentIntent: PendingIntent? = null) {
             if (attached) return
             attached = true
             val ep = EntryPointAccessors.fromApplication(application, WalletForegroundEntryPoint::class.java)
@@ -308,11 +314,14 @@ class WalletForegroundService : Service() {
                     .flatMapLatest { sdk -> sdk?.let { incomingNight(it) } ?: emptyFlow() }
                     .collect { delta ->
                         val opActive = provider.sdk.value?.operations?.active?.value?.isNotEmpty() == true
+                        // Suppress our OWN balance moves (a send/claim op is in flight) and the
+                        // case where the wallet UI is already up (they'll see the balance).
                         if (opActive || sessionLock.inForeground.value) return@collect
                         runCatching {
                             alerter.postReceived(
                                 application.getString(R.string.kuira_alert_received_fmt, formatNight(delta)),
                                 application.getString(R.string.kuira_alert_received_body),
+                                walletContentIntent,
                             )
                         }
                     }
@@ -330,9 +339,7 @@ class WalletForegroundService : Service() {
          * need indexer support, a documented follow-on.
          */
         private fun incomingNight(sdk: MidnightSdk): Flow<BigInteger> =
-            combine(sdk.wallet.balanceFlow(), sdk.wallet.syncStatus) { balance, status ->
-                balance.totalNight to (status !is SyncStatus.Syncing)
-            }.nightReceipts()
+            sdk.wallet.balanceFlow().map { it.totalNight }.nightReceipts()
     }
 
     @EntryPoint
@@ -344,19 +351,32 @@ class WalletForegroundService : Service() {
 }
 
 /**
- * Pure seam (unit-tested): from a stream of `(totalNight, idle)` ticks, emit each positive
- * balance INCREASE that lands AFTER the initial sync has settled once. The initial `0 → balance`
- * ramp (idle stays false until the first full sync completes) is swallowed; a genuine later
- * receipt — which triggers its own sync — is still emitted, because `initialSyncDone` is already
- * true by then. Drives [WalletForegroundService]'s incoming-funds alert (#264 inbound).
+ * Pure seam (unit-tested): from a stream of NIGHT totals, emit a received-funds amount each time
+ * the balance reaches a NEW HIGH (the delta over the previous high). Drives
+ * [WalletForegroundService]'s incoming-funds alert (#264 inbound).
+ *
+ * Why "new high" and not just "any increase": the shielded subscription resets to a low/stale
+ * value on each reconnect (it's flaky on localnet — "connection abort") and then re-syncs back
+ * up, so a naive prev-vs-curr diff counts that RECOVERY as a phantom receipt. Tracking the
+ * running high means a dip-and-recover never re-counts — only a genuinely higher balance does.
+ *
+ * Trade-off: a receipt that arrives AFTER a spend (so the new balance is still below the prior
+ * high) is not flagged until the balance exceeds that old high. Acceptable for an alert (vs. a
+ * stream of false positives); a precise received-UTXO event would need indexer support.
+ *
+ * Deliberately not gated on sync status — an airdrop always lands mid-sync, so such a gate
+ * swallows real receipts. The cold-start `0 → balance` ramp is handled by the observer's
+ * foreground-suppression (a cold start is foreground).
  */
-internal fun Flow<Pair<BigInteger, Boolean>>.nightReceipts(): Flow<BigInteger> = flow {
-    var prev: BigInteger? = null
-    var initialSyncDone = false
-    collect { (curr, idle) ->
-        if (idle) initialSyncDone = true
-        val before = prev
-        prev = curr
-        if (initialSyncDone && before != null && curr > before) emit(curr - before)
+internal fun Flow<BigInteger>.nightReceipts(): Flow<BigInteger> = flow {
+    var high: BigInteger? = null
+    collect { curr ->
+        val prevHigh = high
+        when {
+            prevHigh == null -> high = curr          // baseline
+            curr > prevHigh -> { emit(curr - prevHigh); high = curr }
+            // curr <= prevHigh: a dip (a send, or a flaky resync transient) — keep the high so
+            // the recovery back up isn't re-counted as a receipt.
+        }
     }
 }
