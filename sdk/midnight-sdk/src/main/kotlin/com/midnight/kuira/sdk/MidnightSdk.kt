@@ -552,6 +552,14 @@ class MidnightSdk private constructor(
     ): T = operations.run(OperationDescriptor(OperationKind.Custom, label, completionLabel), block = block)
 
     /**
+     * Update the live progress stage of the foreground operation the CURRENT coroutine is
+     * running inside (see [runForegroundOperation]) — this drives the ongoing notification
+     * text and the status-bar chip ("Submitting commit…" → "Finalizing…"). [stage] is YOUR
+     * string (the SDK emits none). No-op when called outside a tracked operation.
+     */
+    suspend fun updateOperationStage(stage: String?) = operations.updateCurrentStage(stage)
+
+    /**
      * Fire-and-forget [runForegroundOperation] on the SDK's lifecycle scope: returns a
      * [Job] immediately, and the tracked work keeps running (under the foreground
      * service) even after the caller leaves the screen. Failures are logged, not thrown.

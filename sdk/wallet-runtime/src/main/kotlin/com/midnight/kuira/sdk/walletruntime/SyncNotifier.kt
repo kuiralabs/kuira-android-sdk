@@ -77,11 +77,12 @@ class SyncNotifier(private val context: Context) {
      * [label] as the body and a brand-forward chip. Reuses the same channel /
      * promotion / style plumbing as the sync notification.
      */
-    fun buildOperation(label: String): Notification = build(
+    fun buildOperation(label: String, stage: String? = null): Notification = build(
         phase = null,
         fraction = null,
-        labelOverride = label,
-        chipOverride = context.getString(R.string.kuira_op_chip),
+        labelOverride = stage?.let { "$label · $it" } ?: label,
+        chipOverride = stage?.let { context.getString(R.string.kuira_op_chip_fmt, it) }
+            ?: context.getString(R.string.kuira_op_chip),
     )
 
     private fun build(

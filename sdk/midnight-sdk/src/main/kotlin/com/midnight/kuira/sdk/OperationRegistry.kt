@@ -40,6 +40,8 @@ class ActiveOperation internal constructor(
     val id: Long,
     val kind: OperationKind,
     val label: String?,
+    /** Live sub-state of the operation (e.g. "Submitting commit…"), shown in the notification. */
+    val stage: String? = null,
 )
 
 /** A one-shot terminal event — the unit the finalization notification rides. */
@@ -120,6 +122,19 @@ class OperationRegistry {
     /** Marks a coroutine as already inside a tracked operation (see [run]'s nesting guard). */
     private class Marker(val id: Long) : AbstractCoroutineContextElement(Marker) {
         companion object Key : CoroutineContext.Key<Marker>
+    }
+
+    /**
+     * Update the live [ActiveOperation.stage] of the operation the CURRENT coroutine is
+     * running inside (identified by the context [Marker]) — so a tracked block can drive
+     * the foreground-service notification text ("Submitting commit…" → "Finalizing…")
+     * without threading an id around. No-op outside a tracked operation.
+     */
+    suspend fun updateCurrentStage(stage: String?) {
+        val id = currentCoroutineContext()[Marker]?.id ?: return
+        _active.update { list ->
+            list.map { if (it.id == id) ActiveOperation(it.id, it.kind, it.label, stage) else it }
+        }
     }
 
     private fun emitOutcome(id: Long, descriptor: OperationDescriptor, result: OperationResult) {
