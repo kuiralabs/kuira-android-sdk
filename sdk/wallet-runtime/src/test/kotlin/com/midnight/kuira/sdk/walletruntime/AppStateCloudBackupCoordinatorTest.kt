@@ -29,6 +29,7 @@ class AppStateCloudBackupCoordinatorTest {
         private var value: String? = null
         override fun get(): String? = value
         override fun put(digest: String) { value = digest }
+        override fun clear() { value = null }
     }
 
     private val key = SeedDerivedKeyDeriver.deriveAppStateBackupKey(ByteArray(32) { 9 })
@@ -79,6 +80,23 @@ class AppStateCloudBackupCoordinatorTest {
 
         c.uploadAppState(byteArrayOf(7, 7, 7, 8)) // changed → stores
         assertEquals(2, storage.storeCount)
+    }
+
+    @Test
+    fun `clear deletes the blob and resets the digest guard so the same app state re-uploads`() = runTest {
+        val storage = FakeStorage()
+        val c = coordinator(storage)
+        val metadata = byteArrayOf(3, 3, 3, 3)
+
+        c.uploadAppState(metadata)
+        c.uploadAppState(metadata) // unchanged → guarded
+        assertEquals(1, storage.storeCount)
+
+        c.clear()
+        assertNull("blob deleted on clear", storage.blob)
+
+        c.uploadAppState(metadata) // guard reset → re-uploads
+        assertEquals("re-uploads after clear", 2, storage.storeCount)
     }
 
     @Test

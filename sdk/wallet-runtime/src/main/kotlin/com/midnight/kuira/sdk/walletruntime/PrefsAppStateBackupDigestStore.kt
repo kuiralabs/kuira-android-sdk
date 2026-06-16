@@ -18,6 +18,10 @@ class PrefsAppStateBackupDigestStore(context: Context) : AppStateBackupDigestSto
         prefs.edit().putString(KEY, digest).apply()
     }
 
+    override fun clear() {
+        prefs.edit().clear().apply()
+    }
+
     private companion object {
         const val PREFS = "kuira_appstate_backup_digest"
         const val KEY = "digest"

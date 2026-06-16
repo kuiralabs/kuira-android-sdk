@@ -22,4 +22,11 @@ interface AppStateCloudBackup {
 
     /** Encrypt + store [appMetadata]; skips the write when unchanged since the last upload. */
     suspend fun uploadAppState(appMetadata: ByteArray)
+
+    /**
+     * Delete the cloud app-state blob and clear the local upload digest (#246 — true backup
+     * disable), so a later re-enable re-uploads instead of the hash-guard skipping. Best-effort;
+     * idempotent.
+     */
+    suspend fun clear()
 }

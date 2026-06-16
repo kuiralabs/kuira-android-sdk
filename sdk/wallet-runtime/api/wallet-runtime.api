@@ -12,12 +12,14 @@ public final class com/midnight/kuira/sdk/walletruntime/AlertNotifier$Companion 
 }
 
 public abstract interface class com/midnight/kuira/sdk/walletruntime/AppStateBackupDigestStore {
+	public abstract fun clear ()V
 	public abstract fun get ()Ljava/lang/String;
 	public abstract fun put (Ljava/lang/String;)V
 }
 
 public final class com/midnight/kuira/sdk/walletruntime/AppStateCloudBackupCoordinator : com/midnight/kuira/sdk/AppStateCloudBackup {
 	public fun <init> (Lcom/midnight/kuira/core/identity/backup/BackupStorage;[BLcom/midnight/kuira/sdk/walletruntime/AppStateBackupDigestStore;)V
+	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun uploadAppState ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -87,6 +89,7 @@ public final class com/midnight/kuira/sdk/walletruntime/PrefsAppStateBackupDiges
 	public static final field KEY Ljava/lang/String;
 	public static final field PREFS Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;)V
+	public fun clear ()V
 	public fun get ()Ljava/lang/String;
 	public fun put (Ljava/lang/String;)V
 }

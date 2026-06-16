@@ -689,6 +689,16 @@ class MidnightWallet internal constructor(
     }
 
     /**
+     * Delete the cloud app-state blob (#246 — true backup disable). Clears the remote blob + local
+     * upload digest via the coordinator; no-op when none is wired. Recovery is unaffected (the seed
+     * is passkey-derived) — this only drops the convenience app-state copy.
+     */
+    suspend fun disableAppStateCloudBackup() = withContext(Dispatchers.IO) {
+        appStateCloudBackup?.clear()
+        updateAppDataBackup(CloudBackupStatus.Idle)
+    }
+
+    /**
      * Snapshot the current dust checkpoint and hand it to the cloud backup
      * coordinator (e.g. Google Drive) for cross-device recovery. No-op when no
      * coordinator is wired or there's no checkpoint yet. The coordinator

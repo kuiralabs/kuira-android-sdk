@@ -7,6 +7,7 @@ public final class com/midnight/kuira/sdk/ActiveOperation {
 }
 
 public abstract interface class com/midnight/kuira/sdk/AppStateCloudBackup {
+	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun uploadAppState ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -243,6 +244,7 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public final fun balanceFlow ()Lkotlinx/coroutines/flow/Flow;
 	public fun balanceTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close ()V
+	public final fun disableAppStateCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun disableDustCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAddress ()Ljava/lang/String;

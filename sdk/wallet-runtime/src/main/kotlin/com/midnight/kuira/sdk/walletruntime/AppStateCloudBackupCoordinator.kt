@@ -14,6 +14,10 @@ import java.security.MessageDigest
 interface AppStateBackupDigestStore {
     fun get(): String?
     fun put(digest: String)
+
+    /** Drop the recorded digest (#246) — used when the cloud blob is deleted so a later
+     *  re-enable re-uploads instead of the hash-guard skipping an "already-uploaded" blob. */
+    fun clear()
 }
 
 /**
@@ -60,6 +64,11 @@ class AppStateCloudBackupCoordinator(
         storage.store(blob)
         // Record only after a confirmed store, so a failed upload retries next time.
         digestStore.put(digest)
+    }
+
+    override suspend fun clear() {
+        storage.delete()
+        digestStore.clear()
     }
 
     private fun digest(appMetadata: ByteArray): String {
