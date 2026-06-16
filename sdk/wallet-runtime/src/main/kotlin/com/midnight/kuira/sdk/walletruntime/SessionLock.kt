@@ -357,21 +357,19 @@ class SessionLock @Inject constructor(
      * reconnects, not instantly. Reliable always-on background receive needs a kept-alive FGS or
      * a server/indexer push (the #264 follow-on).
      *
-     * Bounded, NOT indefinite: the decrypted seed must not live in memory forever just because
-     * the device screen never turned off. So a soft-lock arms the same idle countdown the
-     * foreground uses ([idleTimeoutMs]) — after that long still backgrounded, it escalates to a
-     * full [doLock] wipe (which still respects operation holds, so an in-flight tx finishes
-     * first). Returning to the foreground re-arms the timer; short-term monitoring survives an
-     * app-switch, but the exposure window is capped.
+     * Deliberately does NOT arm a background idle-wipe. A dual-process consumer (Midnight Kicks)
+     * backgrounds the main process for the ENTIRE match — gameplay runs in another process — so a
+     * background countdown would wipe the SDK out from under an in-flight game. The SDK stays alive
+     * while backgrounded; only a screen-off / foreground-idle / manual lock wipes via [doLock].
+     * Bounding the backgrounded seed lifetime in a way that doesn't kill an active game is tracked
+     * separately (it must key off operation/match holds, not a blind timer).
      */
     private fun softLock(reason: String) {
         Log.i(TAG, "Soft-locking session ($reason) — gating UI + re-auth, KEEPING the SDK alive for monitoring")
         _locked.value = true
         walletSeedSource.requireFreshAuthNext()
-        // No provider.close() — the wallet stays alive so received-funds / sync observers keep
-        // running. The idle ceiling below escalates to the full wipe if we stay backgrounded;
-        // a screen-off / manual lock wipes immediately.
-        restartIdleTimer()
+        // No provider.close() — the wallet stays alive so received-funds / sync observers (and a
+        // backgrounded Kicks match) keep running; a screen-off / idle / manual lock wipes via doLock.
     }
 
     private fun restartIdleTimer() {
