@@ -16,6 +16,7 @@ import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
 import com.midnight.kuira.core.identity.accesskey.AccessKeyManager
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
+import com.midnight.kuira.core.indexer.model.BlockInfo
 import com.midnight.kuira.core.indexer.database.UtxoDatabase
 import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
@@ -46,7 +47,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity
 import kotlinx.coroutines.delay
@@ -675,6 +678,15 @@ class MidnightSdk private constructor(
      */
     fun inFlightProtocolIds(): Set<String> = protocolStore.inFlightIds()
 
+    /**
+     * Observe the chain's new-block stream (#255). Each emission is a freshly-produced [BlockInfo]
+     * (height, hash, timestamp, ledger params). This is the same stream that drives
+     * [com.midnight.kuira.core.compact.MidnightContract.observeLedger]; exposed here so a dApp can
+     * react to chain progress directly (e.g. a tip indicator, time-gating). Cold — collecting opens
+     * an indexer subscription; cancel the collection to close it.
+     */
+    fun observeBlocks(): Flow<BlockInfo> = indexerClient.subscribeToBlocks()
+
     /** Release all resources. */
     fun close() {
         subscriptionJob.cancel()
@@ -977,6 +989,9 @@ class MidnightSdk private constructor(
                 .indexerUrl(networkConfig.indexerBaseUrl)
                 .transactionBalancer(wallet)
                 .operationListener(contractOperationListener)
+                // Reactive ledger reads (#255): contract.observeLedger() refreshes on each new
+                // block instead of polling. Map the indexer's block stream to bare ticks.
+                .blockSignals(indexerClient.subscribeToBlocks().map { })
                 .networkId(net.rustNetworkId)
                 .build()
 

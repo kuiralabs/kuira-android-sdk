@@ -1,5 +1,11 @@
 package com.midnight.kuira.core.compact
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import java.io.InputStream
 
 /**
@@ -215,6 +221,26 @@ class MidnightContract private constructor(
         val stateHex = config.fetchContractState(contractAddress)
         val fields = ledgerEvaluator.readAll(contractJsContent, stateHex)
         return MidnightLedger(fields)
+    }
+
+    /**
+     * Observe this contract's ledger state as it changes on-chain (#255).
+     *
+     * Emits the CURRENT [MidnightLedger] immediately, then a fresh one each time the contract's
+     * on-chain state actually changes — driven by the chain's block stream (the SDK wires
+     * [MidnightConfig.Builder.blockSignals]; a raw config falls back to a poll). The raw state hex
+     * is de-duplicated BEFORE the (QuickJs) decode, so an unchanged block costs only a state fetch,
+     * not a decode. Lets a dApp REACT to state instead of polling [ledger] in a loop.
+     *
+     * The flow keeps running until the collector cancels; the fetch+decode run on [Dispatchers.IO].
+     *
+     * @throws IllegalArgumentException if this contract was built without an address.
+     */
+    fun observeLedger(): Flow<MidnightLedger> {
+        requireAddress("observeLedger")
+        return ledgerStateHexSignals(config.ledgerSignals()) { config.fetchContractState(contractAddress) }
+            .map { hex -> MidnightLedger(ledgerEvaluator.readAll(contractJsContent, hex)) }
+            .flowOn(Dispatchers.IO)
     }
 
     /**
@@ -439,3 +465,17 @@ class MidnightContract private constructor(
                 .joinToString("\n")
     }
 }
+
+/**
+ * Pure seam (unit-tested) behind [MidnightContract.observeLedger]: from a block-tick flow, fetch
+ * the contract state hex on each tick (plus an immediate first read via [onStart]) and emit only
+ * when it CHANGES — so the expensive QuickJs decode downstream runs once per real state change,
+ * not once per block.
+ */
+internal fun ledgerStateHexSignals(
+    ticks: Flow<Unit>,
+    fetchState: suspend () -> String,
+): Flow<String> =
+    ticks.onStart { emit(Unit) }
+        .map { fetchState() }
+        .distinctUntilChanged()

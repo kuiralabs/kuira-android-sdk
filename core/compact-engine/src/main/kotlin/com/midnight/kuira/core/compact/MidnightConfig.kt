@@ -3,6 +3,9 @@ package com.midnight.kuira.core.compact
 import android.content.Context
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -46,9 +49,24 @@ class MidnightConfig private constructor(
     val provingKeyManager: ProvingKeyManager,
     private val externalBalancer: TransactionBalancer?,
     private val operationListener: ContractOperationListener?,
+    private val blockSignals: Flow<Unit>?,
 ) {
     internal val executor = CircuitExecutor(context)
     internal val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
+
+    /**
+     * A tick each time the chain may have advanced — drives [MidnightContract.observeLedger].
+     * Rides the SDK-injected block subscription ([Builder.blockSignals]); when none is wired (a
+     * raw compact-engine consumer), falls back to a poll so observeLedger still works. Neither
+     * source emits on subscribe — observeLedger prepends its own initial read.
+     */
+    internal fun ledgerSignals(): Flow<Unit> =
+        blockSignals ?: flow {
+            while (true) {
+                delay(LEDGER_POLL_INTERVAL_MS)
+                emit(Unit)
+            }
+        }
 
     /**
      * Bracket [block] as a tracked foreground operation when an [operationListener]
@@ -192,6 +210,7 @@ class MidnightConfig private constructor(
         private var networkId: String? = null
         private var balancer: TransactionBalancer? = null
         private var operationListener: ContractOperationListener? = null
+        private var blockSignals: Flow<Unit>? = null
 
         fun indexerUrl(url: String) = apply { this.indexerUrl = url }
         fun walletUrl(url: String) = apply { this.walletUrl = url }
@@ -206,6 +225,13 @@ class MidnightConfig private constructor(
          * configs without it behave exactly as before.
          */
         fun operationListener(listener: ContractOperationListener?) = apply { this.operationListener = listener }
+
+        /**
+         * Wire a chain block-tick [Flow] (emit once per new block) so [MidnightContract.observeLedger]
+         * refreshes reactively instead of polling. The SDK injects one mapped from the indexer's
+         * block subscription. Optional — without it observeLedger falls back to a poll.
+         */
+        fun blockSignals(signals: Flow<Unit>?) = apply { this.blockSignals = signals }
 
         fun build(): MidnightConfig {
             val indexer = requireNotNull(indexerUrl) { "indexerUrl is required" }
@@ -234,6 +260,7 @@ class MidnightConfig private constructor(
                 provingKeyManager = ProvingKeyManager(context.applicationContext),
                 externalBalancer = balancer,
                 operationListener = operationListener,
+                blockSignals = blockSignals,
             )
         }
     }
@@ -241,6 +268,9 @@ class MidnightConfig private constructor(
     companion object {
         private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 30_000
+
+        /** Poll cadence for [ledgerSignals] when no block subscription is wired. */
+        private const val LEDGER_POLL_INTERVAL_MS = 5_000L
 
         /** Convenience factory for local development (Android emulator). */
         fun localDev(context: Context): MidnightConfig {

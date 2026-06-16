@@ -1,3 +1,84 @@
+public final class com/midnight/kuira/sdk/ActiveOperation {
+	public final fun getContentIntent ()Landroid/app/PendingIntent;
+	public final fun getId ()J
+	public final fun getKind ()Lcom/midnight/kuira/sdk/OperationKind;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getStage ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/sdk/AppStateCloudBackup {
+	public abstract fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun uploadAppState ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/BackupStatusSnapshot {
+	public fun <init> ()V
+	public fun <init> (Lcom/midnight/kuira/sdk/CloudBackupStatus;Lcom/midnight/kuira/sdk/CloudBackupStatus;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/sdk/CloudBackupStatus;Lcom/midnight/kuira/sdk/CloudBackupStatus;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/midnight/kuira/sdk/CloudBackupStatus;
+	public final fun component2 ()Lcom/midnight/kuira/sdk/CloudBackupStatus;
+	public final fun copy (Lcom/midnight/kuira/sdk/CloudBackupStatus;Lcom/midnight/kuira/sdk/CloudBackupStatus;)Lcom/midnight/kuira/sdk/BackupStatusSnapshot;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/BackupStatusSnapshot;Lcom/midnight/kuira/sdk/CloudBackupStatus;Lcom/midnight/kuira/sdk/CloudBackupStatus;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/BackupStatusSnapshot;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAppData ()Lcom/midnight/kuira/sdk/CloudBackupStatus;
+	public final fun getDust ()Lcom/midnight/kuira/sdk/CloudBackupStatus;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/sdk/CloudBackupStatus {
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$Failed : com/midnight/kuira/sdk/CloudBackupStatus {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/sdk/CloudBackupStatus$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/CloudBackupStatus$Failed;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/CloudBackupStatus$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$Idle : com/midnight/kuira/sdk/CloudBackupStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/CloudBackupStatus$Idle;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$NeedsConsent : com/midnight/kuira/sdk/CloudBackupStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/CloudBackupStatus$NeedsConsent;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$Offline : com/midnight/kuira/sdk/CloudBackupStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/CloudBackupStatus$Offline;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$Syncing : com/midnight/kuira/sdk/CloudBackupStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/CloudBackupStatus$Syncing;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/CloudBackupStatus$UpToDate : com/midnight/kuira/sdk/CloudBackupStatus {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Lcom/midnight/kuira/sdk/CloudBackupStatus$UpToDate;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/CloudBackupStatus$UpToDate;JILjava/lang/Object;)Lcom/midnight/kuira/sdk/CloudBackupStatus$UpToDate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAtEpochMs ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class com/midnight/kuira/sdk/DustCloudBackup : com/midnight/kuira/sdk/DustCloudBackupSource {
 	public abstract fun upload (Ljava/lang/String;[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -28,25 +109,44 @@ public final class com/midnight/kuira/sdk/InsufficientDustException : java/lang/
 
 public final class com/midnight/kuira/sdk/MidnightSdk {
 	public static final field Companion Lcom/midnight/kuira/sdk/MidnightSdk$Companion;
-	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lkotlinx/coroutines/Job;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lkotlinx/coroutines/Job;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
 	public final fun getAccessKeyPath ()Ljava/lang/String;
 	public final fun getAccessKeyPublicKey ()[B
 	public final fun getCoinPublicKey ()[B
 	public final fun getConfig ()Lcom/midnight/kuira/core/compact/MidnightConfig;
+	public final fun getOperations ()Lcom/midnight/kuira/sdk/OperationRegistry;
 	public final fun getProvingKeyManager ()Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
 	public final fun getShieldedWalletAddress ()Ljava/lang/String;
 	public final fun getWallet ()Lcom/midnight/kuira/sdk/MidnightWallet;
 	public final fun getWalletAddress ()Ljava/lang/String;
+	public final fun inFlightProtocolIds ()Ljava/util/Set;
+	public final fun launchForegroundOperation (Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/Job;
+	public static synthetic fun launchForegroundOperation$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
+	public final fun launchProtocol (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/Job;
+	public final fun launchSendNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/Job;
+	public static synthetic fun launchSendNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
+	public final fun observeBlocks ()Lkotlinx/coroutines/flow/Flow;
 	public final fun registerForDustGeneration (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun requestAttention (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun requestAttention$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun runForegroundOperation (Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun runForegroundOperation$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun runProtocol (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun sendNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun sendNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun updateOperationStage (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/sdk/MidnightSdk$Builder {
 	public fun <init> (Landroid/content/Context;)V
 	public final fun accountIndex (I)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun appStateBackupFactory (Lkotlin/jvm/functions/Function1;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun build ()Lcom/midnight/kuira/sdk/MidnightSdk;
 	public final fun dustCloudBackupFactory (Lkotlin/jvm/functions/Function2;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun network (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun proactiveDustSync (Z)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public static synthetic fun proactiveDustSync$default (Lcom/midnight/kuira/sdk/MidnightSdk$Builder;ZILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun proofServerUrl (Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun provingMode (Lcom/midnight/kuira/core/compact/proving/ProvingMode;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun seed ([B)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
@@ -55,24 +155,210 @@ public final class com/midnight/kuira/sdk/MidnightSdk$Builder {
 public final class com/midnight/kuira/sdk/MidnightSdk$Companion {
 }
 
+public final class com/midnight/kuira/sdk/MidnightSdk$SendProgress : java/lang/Enum {
+	public static final field CONSOLIDATING Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
+	public static final field SUBMITTING Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
+	public static fun values ()[Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
+}
+
+public abstract class com/midnight/kuira/sdk/MidnightSdk$SendResult {
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$SendResult$Failed : com/midnight/kuira/sdk/MidnightSdk$SendResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Failed;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$SendResult$InsufficientFunds : com/midnight/kuira/sdk/MidnightSdk$SendResult {
+	public fun <init> (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun component2 ()Ljava/math/BigInteger;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InsufficientFunds;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InsufficientFunds;Ljava/math/BigInteger;Ljava/math/BigInteger;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InsufficientFunds;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAvailable ()Ljava/math/BigInteger;
+	public final fun getRequired ()Ljava/math/BigInteger;
+	public final fun getShortfall ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$SendResult$InvalidAddress : com/midnight/kuira/sdk/MidnightSdk$SendResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InvalidAddress;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InvalidAddress;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$InvalidAddress;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$SendResult$Pending : com/midnight/kuira/sdk/MidnightSdk$SendResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Pending;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Pending;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Pending;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/MidnightSdk$SendResult$Success : com/midnight/kuira/sdk/MidnightSdk$SendResult {
+	public fun <init> (Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun copy (Ljava/lang/String;J)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Success;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Success;Ljava/lang/String;JILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$SendResult$Success;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()J
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/core/compact/TransactionBalancer {
 	public static final field Companion Lcom/midnight/kuira/sdk/MidnightWallet$Companion;
+	public final fun backupAppStateToCloud ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun backupAppStateToCloud$default (Lcom/midnight/kuira/sdk/MidnightWallet;[BLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun backupDustToCloud (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun balance (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun balanceAndSubmit (Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun balanceFlow ()Lkotlinx/coroutines/flow/Flow;
 	public fun balanceTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close ()V
+	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAddress ()Ljava/lang/String;
+	public final fun getAppStateProvider ()Lkotlin/jvm/functions/Function1;
+	public final fun getBackupStatus ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getDustBackupEnabled ()Z
+	public final fun getNightUtxoJsonProvider ()Lkotlin/jvm/functions/Function1;
+	public final fun getSyncStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun setAppStateProvider (Lkotlin/jvm/functions/Function1;)V
+	public final fun setDustBackupEnabled (Z)V
+	public final fun setNightUtxoJsonProvider (Lkotlin/jvm/functions/Function1;)V
 	public fun submitTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun syncDust (Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun syncDust$default (Lcom/midnight/kuira/sdk/MidnightWallet;Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun unregisteredNightUtxos (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun waitForFunding (Ljava/math/BigInteger;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun waitForFunding$default (Lcom/midnight/kuira/sdk/MidnightWallet;Ljava/math/BigInteger;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/sdk/MidnightWallet$Companion {
+}
+
+public final class com/midnight/kuira/sdk/NightAmountKt {
+	public static final field NIGHT_DECIMALS I
+	public static final fun formatNight (Ljava/math/BigInteger;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/OperationAttention {
+	public final fun getBody ()Ljava/lang/String;
+	public final fun getContentIntent ()Landroid/app/PendingIntent;
+	public final fun getId ()J
+	public final fun getKind ()Lcom/midnight/kuira/sdk/OperationKind;
+	public final fun getTitle ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/OperationDescriptor {
+	public fun <init> (Lcom/midnight/kuira/sdk/OperationKind;Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/sdk/OperationKind;Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCompletionLabel ()Ljava/lang/String;
+	public final fun getContentIntent ()Landroid/app/PendingIntent;
+	public final fun getKind ()Lcom/midnight/kuira/sdk/OperationKind;
+	public final fun getLabel ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/OperationKind : java/lang/Enum {
+	public static final field ContractCall Lcom/midnight/kuira/sdk/OperationKind;
+	public static final field Custom Lcom/midnight/kuira/sdk/OperationKind;
+	public static final field DustRegistration Lcom/midnight/kuira/sdk/OperationKind;
+	public static final field Send Lcom/midnight/kuira/sdk/OperationKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/sdk/OperationKind;
+	public static fun values ()[Lcom/midnight/kuira/sdk/OperationKind;
+}
+
+public final class com/midnight/kuira/sdk/OperationOutcome {
+	public final fun getCompletionLabel ()Ljava/lang/String;
+	public final fun getContentIntent ()Landroid/app/PendingIntent;
+	public final fun getId ()J
+	public final fun getKind ()Lcom/midnight/kuira/sdk/OperationKind;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getStatus ()Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public final fun getTxHash ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/OperationRegistry {
+	public static final field OUTCOME_BUFFER_CAPACITY I
+	public fun <init> ()V
+	public final fun getActive ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getAttentions ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getOutcomes ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun requestAttention (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun requestAttention$default (Lcom/midnight/kuira/sdk/OperationRegistry;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun run (Lcom/midnight/kuira/sdk/OperationDescriptor;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun run$default (Lcom/midnight/kuira/sdk/OperationRegistry;Lcom/midnight/kuira/sdk/OperationDescriptor;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun updateCurrentStage (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/OperationResult {
+	public fun <init> (Lcom/midnight/kuira/sdk/OperationTerminalStatus;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/sdk/OperationTerminalStatus;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getStatus ()Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public final fun getTxHash ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/OperationTerminalStatus : java/lang/Enum {
+	public static final field Failed Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public static final field Pending Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public static final field Success Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+	public static fun values ()[Lcom/midnight/kuira/sdk/OperationTerminalStatus;
+}
+
+public abstract class com/midnight/kuira/sdk/ProtocolResult {
+}
+
+public final class com/midnight/kuira/sdk/ProtocolResult$AwaitingCounterparty : com/midnight/kuira/sdk/ProtocolResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/sdk/ProtocolResult$AwaitingCounterparty;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/ProtocolResult$AwaitingCounterparty;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/ProtocolResult$AwaitingCounterparty;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStepName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/ProtocolResult$Completed : com/midnight/kuira/sdk/ProtocolResult {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/ProtocolResult$Completed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/sdk/ProtocolScope {
+	public abstract fun awaitCounterparty (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun step (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/sdk/RestoredDustCheckpoint {
@@ -84,6 +370,62 @@ public final class com/midnight/kuira/sdk/RestoredDustCheckpoint {
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getLastEventId ()J
 	public final fun getStateBytes ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/SyncPhase : java/lang/Enum {
+	public static final field DustDelta Lcom/midnight/kuira/sdk/SyncPhase;
+	public static final field DustFull Lcom/midnight/kuira/sdk/SyncPhase;
+	public static final field Finalizing Lcom/midnight/kuira/sdk/SyncPhase;
+	public static final field GenesisRebuild Lcom/midnight/kuira/sdk/SyncPhase;
+	public static final field ShieldedRefresh Lcom/midnight/kuira/sdk/SyncPhase;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/sdk/SyncPhase;
+	public static fun values ()[Lcom/midnight/kuira/sdk/SyncPhase;
+}
+
+public abstract interface class com/midnight/kuira/sdk/SyncStatus {
+}
+
+public final class com/midnight/kuira/sdk/SyncStatus$Failed : com/midnight/kuira/sdk/SyncStatus {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/sdk/SyncStatus$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/SyncStatus$Failed;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/SyncStatus$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/SyncStatus$Idle : com/midnight/kuira/sdk/SyncStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/SyncStatus$Idle;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/SyncStatus$Syncing : com/midnight/kuira/sdk/SyncStatus {
+	public fun <init> (Ljava/lang/Float;IILcom/midnight/kuira/sdk/SyncPhase;)V
+	public final fun component1 ()Ljava/lang/Float;
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()Lcom/midnight/kuira/sdk/SyncPhase;
+	public final fun copy (Ljava/lang/Float;IILcom/midnight/kuira/sdk/SyncPhase;)Lcom/midnight/kuira/sdk/SyncStatus$Syncing;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/SyncStatus$Syncing;Ljava/lang/Float;IILcom/midnight/kuira/sdk/SyncPhase;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/SyncStatus$Syncing;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEventsProcessed ()I
+	public final fun getFraction ()Ljava/lang/Float;
+	public final fun getPhase ()Lcom/midnight/kuira/sdk/SyncPhase;
+	public final fun getTotalEvents ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/SyncStatus$UpToDate : com/midnight/kuira/sdk/SyncStatus {
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/SyncStatus$UpToDate;
+	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

@@ -200,6 +200,10 @@ public final class com/midnight/kuira/core/compact/ContractCallStage$Submitting 
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract interface class com/midnight/kuira/core/compact/ContractOperationListener {
+	public abstract fun trackContractCall (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class com/midnight/kuira/core/compact/ContractRuntime {
 	public static final field INSTANCE Lcom/midnight/kuira/core/compact/ContractRuntime;
 	public final fun assembleContractCallTx (Ljava/lang/String;)Ljava/lang/String;
@@ -296,7 +300,7 @@ public final class com/midnight/kuira/core/compact/LocalProofProvider : com/midn
 
 public final class com/midnight/kuira/core/compact/MidnightConfig {
 	public static final field Companion Lcom/midnight/kuira/core/compact/MidnightConfig$Companion;
-	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/TransactionBalancer;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/TransactionBalancer;Lcom/midnight/kuira/core/compact/ContractOperationListener;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
 	public final fun getContext ()Landroid/content/Context;
 	public final fun getIndexerUrl ()Ljava/lang/String;
@@ -308,9 +312,11 @@ public final class com/midnight/kuira/core/compact/MidnightConfig {
 
 public final class com/midnight/kuira/core/compact/MidnightConfig$Builder {
 	public fun <init> (Landroid/content/Context;)V
+	public final fun blockSignals (Lkotlinx/coroutines/flow/Flow;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun build ()Lcom/midnight/kuira/core/compact/MidnightConfig;
 	public final fun indexerUrl (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun networkId (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
+	public final fun operationListener (Lcom/midnight/kuira/core/compact/ContractOperationListener;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun transactionBalancer (Lcom/midnight/kuira/core/compact/TransactionBalancer;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun walletUrl (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 }
@@ -324,10 +330,13 @@ public final class com/midnight/kuira/core/compact/MidnightContract {
 	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;[BLjava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun call (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun call$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun callIdempotent (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun callIdempotent$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun deploy (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun deploy$default (Lcom/midnight/kuira/core/compact/MidnightContract;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun getContractAddress ()Ljava/lang/String;
 	public final fun ledger (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun observeLedger ()Lkotlinx/coroutines/flow/Flow;
 	public final fun prepare (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun prepare$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
@@ -537,6 +546,7 @@ public final class com/midnight/kuira/core/compact/proving/LocalProver$Companion
 public final class com/midnight/kuira/core/compact/proving/ProvingKeyManager {
 	public static final field CURRENT_VERSION I
 	public static final field Companion Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager$Companion;
+	public static final field WALLET_ASSET_DIR Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;Lkotlin/jvm/functions/Function0;)V
 	public synthetic fun <init> (Landroid/content/Context;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun cachedSizeBytes ()J
@@ -561,6 +571,8 @@ public final class com/midnight/kuira/core/compact/proving/ProvingKeyManager {
 	public static synthetic fun installContractKeys$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/lang/String;Ljava/util/List;Ljava/io/File;Ljava/io/File;ZILjava/lang/Object;)V
 	public final fun installFromLocalTmp (Ljava/io/File;)Z
 	public static synthetic fun installFromLocalTmp$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/io/File;ILjava/lang/Object;)Z
+	public final fun installWalletKeysFromAssets (Ljava/lang/String;Z)Z
+	public static synthetic fun installWalletKeysFromAssets$default (Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Ljava/lang/String;ZILjava/lang/Object;)Z
 	public final fun removeContractKeys (Ljava/lang/String;)V
 }
 
