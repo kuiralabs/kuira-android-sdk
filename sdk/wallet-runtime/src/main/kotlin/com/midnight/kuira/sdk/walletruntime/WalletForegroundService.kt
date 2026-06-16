@@ -36,6 +36,14 @@ import javax.inject.Inject
 /** What the foreground service should do for a given (activeOps, syncing, locked) state. */
 internal enum class ForegroundServiceAction { Start, Update, Stop, None }
 
+/** The distinct inputs to the FGS start decision (all booleans → cheap distinctUntilChanged). */
+private data class StartTrigger(
+    val activeOps: Boolean,
+    val syncing: Boolean,
+    val locked: Boolean,
+    val foreground: Boolean,
+)
+
 /**
  * Pure start/stop policy for [WalletForegroundService] (#261-264, generalizing #235) —
  * extracted so the lifecycle matrix is unit-testable without a Service harness.
@@ -224,29 +232,43 @@ class WalletForegroundService : Service() {
             val finalizer = FinalizationNotifier(application)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-            // Start the FGS when an operation or sync begins.
+            // Start the FGS when an operation or sync begins — but ONLY while the app is
+            // foreground. Android 12+ forbids starting a foreground service from the
+            // background (ForegroundServiceStartNotAllowedException), which is exactly the
+            // case for a process that's backgrounded when the work begins (e.g. a dual-process
+            // host whose main process is stopped while another process is foreground). Once
+            // started from the foreground the service survives backgrounding normally; a
+            // background-started op runs best-effort under the session-lock hold. Including
+            // `inForeground` in the trigger means returning to the foreground (while the op is
+            // still in flight) re-evaluates and starts the service then.
             scope.launch {
                 combine(
                     provider.sdk.flatMapLatest { it?.operations?.active ?: flowOf(emptyList<ActiveOperation>()) },
                     provider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
                     sessionLock.locked,
-                ) { ops, status, locked -> Triple(ops, status, locked) }
+                    sessionLock.inForeground,
+                ) { ops, status, locked, foreground ->
+                    StartTrigger(ops.isNotEmpty(), status is SyncStatus.Syncing, locked, foreground)
+                }
                     .distinctUntilChanged()
-                    .collect { (ops, status, locked) ->
+                    .collect { t ->
                         val action = decideForegroundService(
-                            activeOps = ops.isNotEmpty(),
-                            syncing = status is SyncStatus.Syncing,
-                            locked = locked,
+                            activeOps = t.activeOps,
+                            syncing = t.syncing,
+                            locked = t.locked,
                             running = running.get(),
                         )
-                        if (action == ForegroundServiceAction.Start) {
-                            runCatching {
-                                ContextCompat.startForegroundService(
-                                    application,
-                                    Intent(application, WalletForegroundService::class.java),
-                                )
-                            }.onFailure { Log.w(TAG, "startForegroundService failed: ${it.message}") }
+                        if (action != ForegroundServiceAction.Start) return@collect
+                        if (!t.foreground) {
+                            Log.i(TAG, "Work started while backgrounded — not starting the foreground service (Android background-start restriction); running best-effort under the session-lock hold.")
+                            return@collect
                         }
+                        runCatching {
+                            ContextCompat.startForegroundService(
+                                application,
+                                Intent(application, WalletForegroundService::class.java),
+                            )
+                        }.onFailure { Log.w(TAG, "startForegroundService failed: ${it.message}") }
                     }
             }
 
