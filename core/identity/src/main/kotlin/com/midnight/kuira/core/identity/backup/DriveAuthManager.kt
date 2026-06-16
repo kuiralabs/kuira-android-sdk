@@ -7,7 +7,12 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * An OAuth access token (+ the account it was granted on) for the Google Drive
@@ -48,6 +53,14 @@ interface DriveAuthManager {
 
     /** Extract the token from the consent activity result Intent. */
     fun tokenFromConsent(data: Intent?): DriveAuth
+
+    /**
+     * Revoke the Drive `appDataFolder` grant (#246 — true backup disable). After this the app no
+     * longer has Drive access; the next [authorize] returns [AuthorizeOutcome.NeedsConsent]. No-op
+     * if nothing is currently granted. Best-effort: a network failure to reach the revoke endpoint
+     * is logged, not thrown (the local grant is gone from the user's intent either way).
+     */
+    suspend fun revoke()
 }
 
 /**
@@ -97,6 +110,30 @@ class PlayServicesDriveAuthManager(
     override fun tokenFromConsent(data: Intent?): DriveAuth =
         client.getAuthorizationResultFromIntent(data).toDriveAuth()
 
+    override suspend fun revoke(): Unit = withContext(Dispatchers.IO) {
+        // The Identity AuthorizationClient has no revoke API; revoke the grant server-side via
+        // Google's OAuth revoke endpoint using a current token. Nothing granted → nothing to do.
+        val token = when (val outcome = authorize()) {
+            is AuthorizeOutcome.Authorized -> outcome.auth.accessToken
+            is AuthorizeOutcome.NeedsConsent -> return@withContext
+        }
+        runCatching {
+            val conn = (URL("$REVOKE_ENDPOINT?token=$token").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            }
+            try {
+                val code = conn.responseCode
+                // 200 = revoked. The endpoint also returns 400 for an already-invalid token, which
+                // for our purpose (the grant is gone) is success enough.
+                Log.i(TAG, "Drive consent revoke → HTTP $code")
+            } finally {
+                conn.disconnect()
+            }
+        }.onFailure { Log.w(TAG, "Drive consent revoke failed (network): ${it.message}") }
+    }
+
     private fun AuthorizationResult.toDriveAuth(): DriveAuth {
         val token = accessToken
             ?: throw IllegalStateException("AuthorizationResult had no access token")
@@ -104,6 +141,10 @@ class PlayServicesDriveAuthManager(
     }
 
     companion object {
+        private const val TAG = "DriveAuthManager"
         const val DRIVE_APPDATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
+
+        /** Google's OAuth 2.0 token/grant revocation endpoint (#246). */
+        private const val REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
     }
 }

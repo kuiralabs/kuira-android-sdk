@@ -198,6 +198,7 @@ public final class com/midnight/kuira/core/identity/backup/DriveAuth {
 
 public abstract interface class com/midnight/kuira/core/identity/backup/DriveAuthManager {
 	public abstract fun authorize (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun revoke (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun tokenFromConsent (Landroid/content/Intent;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
 }
 
@@ -254,6 +255,7 @@ public final class com/midnight/kuira/core/identity/backup/PlayServicesDriveAuth
 	public static final field DRIVE_APPDATA_SCOPE Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;)V
 	public fun authorize (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun revoke (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun tokenFromConsent (Landroid/content/Intent;)Lcom/midnight/kuira/core/identity/backup/DriveAuth;
 }
 
