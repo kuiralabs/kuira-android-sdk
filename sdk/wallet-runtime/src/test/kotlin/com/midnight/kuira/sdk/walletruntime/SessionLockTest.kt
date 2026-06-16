@@ -168,6 +168,21 @@ class SessionLockTest {
     }
 
     @Test
+    fun `hardLocked is false on a soft-lock and true on a hard lock`() = runTest {
+        // The FGS keys its teardown on hardLocked, NOT locked: a soft-lock (SDK kept alive) must
+        // read false so the foreground service survives an app-switch; a real wipe reads true.
+        val lock = newLock().also { it.scope = this }
+
+        lock.onBackground()
+        advanceTimeBy(501); runCurrent()
+        assertTrue("backgrounding soft-locks", lock.locked.value)
+        assertFalse("a soft-lock keeps the SDK alive → not hard-locked", lock.hardLocked.value)
+
+        lock.onScreenOff() // device-secured trigger → full wipe
+        assertTrue("screen-off hard-locks (SDK torn down)", lock.hardLocked.value)
+    }
+
+    @Test
     fun `screen-off lock is deferred while held`() = runTest {
         val lock = newLock().also { it.scope = this }
         val hold = lock.acquireHold()

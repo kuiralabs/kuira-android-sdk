@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The notification-signal instrumented tests post real notifications and read them
+         back via NotificationManager.getActiveNotifications(). POST_NOTIFICATIONS must be
+         DECLARED here so the test can runtime-grant it (API 33+); the library itself doesn't
+         request it — the consuming app does. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+</manifest>
