@@ -1,10 +1,12 @@
 package com.midnight.kuira.core.compact
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onStart
 import java.io.InputStream
 
@@ -232,7 +234,10 @@ class MidnightContract private constructor(
      * is de-duplicated BEFORE the (QuickJs) decode, so an unchanged block costs only a state fetch,
      * not a decode. Lets a dApp REACT to state instead of polling [ledger] in a loop.
      *
-     * The flow keeps running until the collector cancels; the fetch+decode run on [Dispatchers.IO].
+     * Resilient: a transient state-fetch failure (indexer hiccup) skips that tick rather than
+     * terminating the flow, and if the block stream itself errors the SDK config degrades to
+     * polling — so the flow keeps running until the collector cancels. Fetch+decode run on
+     * [Dispatchers.IO].
      *
      * @throws IllegalArgumentException if this contract was built without an address.
      */
@@ -477,5 +482,16 @@ internal fun ledgerStateHexSignals(
     fetchState: suspend () -> String,
 ): Flow<String> =
     ticks.onStart { emit(Unit) }
-        .map { fetchState() }
+        // Skip a tick whose fetch fails transiently (an indexer hiccup) instead of terminating the
+        // whole stream — the next tick recovers (mirrors the Kicks StatePoller). Cancellation still
+        // propagates so the flow stops cleanly when the collector goes away.
+        .mapNotNull {
+            try {
+                fetchState()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
         .distinctUntilChanged()

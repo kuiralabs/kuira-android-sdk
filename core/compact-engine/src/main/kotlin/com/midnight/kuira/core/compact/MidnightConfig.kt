@@ -5,6 +5,8 @@ import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,13 +62,20 @@ class MidnightConfig private constructor(
      * raw compact-engine consumer), falls back to a poll so observeLedger still works. Neither
      * source emits on subscribe — observeLedger prepends its own initial read.
      */
-    internal fun ledgerSignals(): Flow<Unit> =
-        blockSignals ?: flow {
-            while (true) {
-                delay(LEDGER_POLL_INTERVAL_MS)
-                emit(Unit)
-            }
+    internal fun ledgerSignals(): Flow<Unit> {
+        val poll = pollTicks()
+        // Prefer block-driven ticks; if the block stream errors (WS unavailable / not yet
+        // implemented server-side), DEGRADE to polling so observeLedger keeps working instead
+        // of terminating. No block stream wired at all → poll directly.
+        return blockSignals?.catch { emitAll(poll) } ?: poll
+    }
+
+    private fun pollTicks(): Flow<Unit> = flow {
+        while (true) {
+            delay(LEDGER_POLL_INTERVAL_MS)
+            emit(Unit)
         }
+    }
 
     /**
      * Bracket [block] as a tracked foreground operation when an [operationListener]

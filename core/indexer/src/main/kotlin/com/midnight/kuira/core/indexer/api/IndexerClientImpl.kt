@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -297,17 +298,18 @@ class IndexerClientImpl(
     }
 
     override fun subscribeToBlocks(): Flow<BlockInfo> = flow {
-        val subscription = """
-            subscription {
-                blocks {
-                    height
-                    hash
-                    timestamp
-                }
+        // Mirrors subscribeToUnshieldedTransactions / subscribeToDustEvents: open (idempotent,
+        // mutex-serialized) WS, subscribe via the centralized query, parse each payload to BlockInfo.
+        val client = getOrCreateWsClient()
+        client.connect()
+        client.subscribe(GraphQLQueries.SUBSCRIBE_BLOCKS)
+            .buffer(Channel.UNLIMITED)
+            .collect { jsonElement ->
+                // The indexer may send "data": null (keepalives / completion); skip gracefully.
+                val data = jsonElement.jsonObject["data"]
+                if (data == null || data is kotlinx.serialization.json.JsonNull) return@collect
+                parseBlockInfo(data.jsonObject)?.let { emit(it) }
             }
-        """.trimIndent()
-
-        error("WebSocket subscriptions not yet implemented - Phase 4A infrastructure only")
     }
 
     override suspend fun getNetworkState(): NetworkState = retryWithPolicy() {
@@ -655,4 +657,19 @@ class IndexerClientImpl(
         wsClient?.close()
         wsClient = null  // Force new connection on next subscription
     }
+}
+
+/**
+ * Parse a `blocks` subscription payload's `data` object into [BlockInfo] (the WS round-trip itself
+ * needs a live indexer to verify, so the parse is split out and unit-tested). Returns null on a
+ * malformed/partial payload so [IndexerClientImpl.subscribeToBlocks] skips it rather than crashing.
+ * `eventCount`/`ledgerParameters` aren't selected by [GraphQLQueries.SUBSCRIBE_BLOCKS], so they
+ * default (0 / null).
+ */
+internal fun parseBlockInfo(data: JsonObject): BlockInfo? {
+    val block = data["blocks"]?.jsonObject ?: return null
+    val height = block["height"]?.jsonPrimitive?.long ?: return null
+    val hash = block["hash"]?.jsonPrimitive?.content ?: return null
+    val timestamp = block["timestamp"]?.jsonPrimitive?.long ?: return null
+    return BlockInfo(height = height, hash = hash, timestamp = timestamp)
 }

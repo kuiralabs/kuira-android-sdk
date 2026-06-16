@@ -41,4 +41,19 @@ class ObserveLedgerTest {
         val out = ledgerStateHexSignals(ticks) { "SAME" }.toList()
         assertEquals(listOf("SAME"), out)
     }
+
+    @Test
+    fun `a transient fetch failure skips that tick instead of terminating the stream`() = runTest {
+        // onStart adds the initial read, then 3 ticks → 4 fetches; the 2nd throws (indexer hiccup).
+        val script = listOf<() -> String>(
+            { "A" },                                       // initial (onStart)
+            { throw RuntimeException("indexer hiccup") },   // tick 1 → skipped, NOT fatal
+            { "B" },                                       // tick 2
+            { "C" },                                       // tick 3
+        )
+        var i = 0
+        val out = ledgerStateHexSignals(flowOf(Unit, Unit, Unit)) { script[i++]() }.toList()
+        // The failed tick is skipped; the stream keeps going and later changes still flow.
+        assertEquals(listOf("A", "B", "C"), out)
+    }
 }
