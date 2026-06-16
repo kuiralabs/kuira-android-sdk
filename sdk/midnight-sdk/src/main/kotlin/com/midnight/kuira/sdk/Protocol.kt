@@ -50,8 +50,17 @@ sealed class ProtocolResult {
     data class AwaitingCounterparty(val stepName: String) : ProtocolResult()
 }
 
-/** Internal control signal: unwinds the saga block at an unmet [ProtocolScope.awaitCounterparty]. */
-internal class ProtocolSuspendSignal(val stepName: String) : Exception() {
+/**
+ * Internal control signal: unwinds the saga block at an unmet [ProtocolScope.awaitCounterparty].
+ *
+ * Extends [Throwable] directly (NOT [Exception]) on purpose: the saga body is arbitrary dApp code,
+ * and `MidnightContract.call` (and many dApps) wrap work in a broad `catch (e: Exception)`. A plain
+ * `Exception` here could be silently swallowed by such a catch — losing the resume boundary and
+ * making the saga read as Completed when it should be AwaitingCounterparty. As a bare [Throwable]
+ * it sails past `catch (Exception)`; [MidnightSdk.runProtocol] still catches it by its concrete
+ * type at the saga boundary.
+ */
+internal class ProtocolSuspendSignal(val stepName: String) : Throwable() {
     // No stack trace — this is control flow, not an error.
     override fun fillInStackTrace(): Throwable = this
 }

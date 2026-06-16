@@ -41,4 +41,9 @@
     <!-- #264 inbound: received-funds alert (host-overridable). %1$s = formatted NIGHT amount. -->
     <string name="kuira_alert_received_fmt">Received %1$s NIGHT</string>
     <string name="kuira_alert_received_body">Tap to view your wallet.</string>
+    <!-- Lock-screen redaction: the PUBLIC (lock-screen) version of every wallet notification
+         hides amounts + activity behind this neutral line; the full content (amount / phase)
+         shows only once the device is unlocked. A privacy wallet must not leak balances to a
+         locked screen. One source for all three notifier types. -->
+    <string name="kuira_notification_redacted">Wallet activity</string>
 </resources>

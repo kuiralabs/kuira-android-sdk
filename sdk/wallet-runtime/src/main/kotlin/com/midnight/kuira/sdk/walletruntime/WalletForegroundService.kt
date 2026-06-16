@@ -40,14 +40,14 @@ import java.math.BigInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
-/** What the foreground service should do for a given (activeOps, syncing, locked) state. */
+/** What the foreground service should do for a given (activeOps, syncing, hardLocked) state. */
 internal enum class ForegroundServiceAction { Start, Update, Stop, None }
 
 /** The distinct inputs to the FGS start decision (all booleans → cheap distinctUntilChanged). */
 private data class StartTrigger(
     val activeOps: Boolean,
     val syncing: Boolean,
-    val locked: Boolean,
+    val hardLocked: Boolean,
     val foreground: Boolean,
 )
 
@@ -56,8 +56,10 @@ private data class StartTrigger(
  * extracted so the lifecycle matrix is unit-testable without a Service harness.
  *
  * Rules, in order:
- *  1. **Locked → tear down.** A locked session already had `provider.close()` cancel the
- *     SDK; a lingering notification would be stale + a privacy leak.
+ *  1. **Hard-locked → tear down.** A HARD lock already had `provider.close()` cancel the SDK; a
+ *     lingering notification would be stale + a privacy leak. A *soft* lock (app backgrounded,
+ *     SDK kept alive) is deliberately NOT a teardown trigger — stopping the FGS while an
+ *     operation is still in flight would defeat #261-264 (the op would lose process survival).
  *  2. Surface the Live-Update notification whenever a value-bearing **operation** is in
  *     flight OR the wallet is **syncing** — foreground AND background — so it appears the
  *     moment work starts and the process is kept alive while it runs.
@@ -69,10 +71,10 @@ private data class StartTrigger(
 internal fun decideForegroundService(
     activeOps: Boolean,
     syncing: Boolean,
-    locked: Boolean,
+    hardLocked: Boolean,
     running: Boolean,
 ): ForegroundServiceAction {
-    if (locked) return if (running) ForegroundServiceAction.Stop else ForegroundServiceAction.None
+    if (hardLocked) return if (running) ForegroundServiceAction.Stop else ForegroundServiceAction.None
     val shouldShow = activeOps || syncing
     return when {
         shouldShow && !running -> ForegroundServiceAction.Start
@@ -128,14 +130,14 @@ class WalletForegroundService : Service() {
             combine(
                 sdkProvider.sdk.flatMapLatest { it?.operations?.active ?: flowOf(emptyList<ActiveOperation>()) },
                 sdkProvider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
-                sessionLock.locked,
-            ) { ops, status, locked -> Triple(ops, status, locked) }
+                sessionLock.hardLocked,
+            ) { ops, status, hardLocked -> Triple(ops, status, hardLocked) }
                 .distinctUntilChanged()
-                .collect { (ops, status, locked) ->
+                .collect { (ops, status, hardLocked) ->
                     val action = decideForegroundService(
                         activeOps = ops.isNotEmpty(),
                         syncing = status is SyncStatus.Syncing,
-                        locked = locked,
+                        hardLocked = hardLocked,
                         running = true,
                     )
                     when (action) {
@@ -144,7 +146,7 @@ class WalletForegroundService : Service() {
                             updateNotification(buildNotification(ops, status))
                         }
                         ForegroundServiceAction.Stop ->
-                            if (locked) {
+                            if (hardLocked) {
                                 pendingStop?.cancel(); pendingStop = null
                                 stopServiceNow()
                             } else if (pendingStop == null) {
@@ -257,17 +259,17 @@ class WalletForegroundService : Service() {
                 combine(
                     provider.sdk.flatMapLatest { it?.operations?.active ?: flowOf(emptyList<ActiveOperation>()) },
                     provider.sdk.flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) },
-                    sessionLock.locked,
+                    sessionLock.hardLocked,
                     sessionLock.inForeground,
-                ) { ops, status, locked, foreground ->
-                    StartTrigger(ops.isNotEmpty(), status is SyncStatus.Syncing, locked, foreground)
+                ) { ops, status, hardLocked, foreground ->
+                    StartTrigger(ops.isNotEmpty(), status is SyncStatus.Syncing, hardLocked, foreground)
                 }
                     .distinctUntilChanged()
                     .collect { t ->
                         val action = decideForegroundService(
                             activeOps = t.activeOps,
                             syncing = t.syncing,
-                            locked = t.locked,
+                            hardLocked = t.hardLocked,
                             running = running.get(),
                         )
                         if (action != ForegroundServiceAction.Start) return@collect
@@ -330,13 +332,11 @@ class WalletForegroundService : Service() {
 
         /**
          * Stream of incoming NIGHT amounts (smallest units) for [sdk]: emits the positive delta
-         * each time the balance INCREASES — but only after the wallet's initial sync has gone
-         * idle once, so the initial `0 → balance` ramp (which can land in several stages) never
-         * reads as a flurry of receipts. A genuine later receipt is still caught even though it
-         * triggers its own sync, because by then the initial sync is long done. `prev` +
-         * `initialSyncDone` live inside the flow, so they reset per-SDK (a network switch rebuilds
-         * it). Best-effort heuristic over the balance stream — a precise received-UTXO event would
-         * need indexer support, a documented follow-on.
+         * each time the balance reaches a NEW HIGH (see [nightReceipts]). The running high resets
+         * per-SDK (a network switch rebuilds it). The cold-start `0 → balance` ramp is suppressed
+         * by the observer's foreground-gate (a cold start is foreground), not by this stream.
+         * Best-effort heuristic over the balance stream — a precise received-UTXO event would need
+         * indexer support, a documented follow-on.
          */
         private fun incomingNight(sdk: MidnightSdk): Flow<BigInteger> =
             sdk.wallet.balanceFlow().map { it.totalNight }.nightReceipts()

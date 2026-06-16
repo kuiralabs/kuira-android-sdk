@@ -89,6 +89,17 @@ class SessionLock @Inject constructor(
      */
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
 
+    private val _hardLocked = MutableStateFlow(false)
+
+    /**
+     * True only when a HARD lock ([doLock]) has actually torn the SDK down
+     * (`provider.close()`), as opposed to a [softLock] that gates the UI but keeps the SDK
+     * alive. The foreground service keys its immediate-teardown on THIS, not [locked]: a
+     * soft-lock must not stop the FGS while a value-bearing operation is still in flight
+     * (that would defeat #261-264). Cleared when the SDK is rebuilt (re-auth / network switch).
+     */
+    val hardLocked: StateFlow<Boolean> = _hardLocked.asStateFlow()
+
     private val _inForeground = MutableStateFlow(false)
 
     /**
@@ -321,6 +332,9 @@ class SessionLock @Inject constructor(
     private fun doLock(reason: String) {
         Log.i(TAG, "Locking session ($reason) — dropping cached SDK + forcing re-auth")
         _locked.value = true
+        // A hard lock genuinely tears the SDK down — distinct from a soft-lock that keeps it
+        // alive. The foreground service reads [hardLocked] to know it may stop immediately.
+        _hardLocked.value = true
         // Two parts make a lock REAL: drop the in-memory SDK (its decrypted seed),
         // AND force the next seed load to prompt for biometric — otherwise the
         // Keystore auth-validity window would let it silently re-decrypt within
@@ -342,13 +356,22 @@ class SessionLock @Inject constructor(
      * cause), so monitoring is BEST-EFFORT — a receipt is caught when a subscription retry
      * reconnects, not instantly. Reliable always-on background receive needs a kept-alive FGS or
      * a server/indexer push (the #264 follow-on).
+     *
+     * Bounded, NOT indefinite: the decrypted seed must not live in memory forever just because
+     * the device screen never turned off. So a soft-lock arms the same idle countdown the
+     * foreground uses ([idleTimeoutMs]) — after that long still backgrounded, it escalates to a
+     * full [doLock] wipe (which still respects operation holds, so an in-flight tx finishes
+     * first). Returning to the foreground re-arms the timer; short-term monitoring survives an
+     * app-switch, but the exposure window is capped.
      */
     private fun softLock(reason: String) {
         Log.i(TAG, "Soft-locking session ($reason) — gating UI + re-auth, KEEPING the SDK alive for monitoring")
         _locked.value = true
         walletSeedSource.requireFreshAuthNext()
         // No provider.close() — the wallet stays alive so received-funds / sync observers keep
-        // running; a screen-off / idle / manual lock escalates to the full wipe.
+        // running. The idle ceiling below escalates to the full wipe if we stay backgrounded;
+        // a screen-off / manual lock wipes immediately.
+        restartIdleTimer()
     }
 
     private fun restartIdleTimer() {
@@ -417,9 +440,14 @@ class SessionLock @Inject constructor(
         // Started here, not in the constructor, so unit tests stay framework-free.
         scope.launch {
             provider.sdk.collect { sdk ->
-                if (sdk != null && _locked.value) {
-                    Log.i(TAG, "Session unlocked — SDK rebuilt after re-auth")
-                    _locked.value = false
+                if (sdk != null) {
+                    // A live SDK means it isn't torn down — clear the hard-lock signal so the
+                    // foreground service is allowed again (re-auth rebuild OR a network switch).
+                    if (_hardLocked.value) _hardLocked.value = false
+                    if (_locked.value) {
+                        Log.i(TAG, "Session unlocked — SDK rebuilt after re-auth")
+                        _locked.value = false
+                    }
                 }
             }
         }

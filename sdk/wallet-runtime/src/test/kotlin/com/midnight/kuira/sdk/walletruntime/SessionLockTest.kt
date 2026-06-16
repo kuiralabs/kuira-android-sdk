@@ -136,20 +136,38 @@ class SessionLockTest {
     // ── Operation holds (#235 pivot: don't drop the SDK mid-transaction) ──
 
     @Test
-    fun `a background soft-lock keeps the SDK alive (even with a hold) and never escalates to a wipe`() = runTest {
+    fun `a background soft-lock keeps the SDK alive through the grace, then hard-wipes at the idle ceiling`() = runTest {
         val lock = newLock().also { it.scope = this }
-        val hold = lock.acquireHold()
 
         // Background grace expires: SOFT-lock — gate the UI but KEEP the SDK alive so monitoring
-        // continues. It's non-destructive, so it neither defers on the hold nor ever wipes.
+        // continues (no provider.close yet).
         lock.onBackground()
         advanceTimeBy(501); runCurrent()
         assertTrue("soft-locked after the grace", lock.locked.value)
         verify(exactly = 0) { provider.close() }
 
-        // Releasing the hold must NOT trigger a wipe — the background trigger queued no hard lock.
-        hold.close()
+        // Still backgrounded past the idle ceiling (idleTimeoutMs, re-armed by the soft-lock):
+        // the seed must not live forever, so it escalates to a full wipe.
+        advanceTimeBy(1_001); runCurrent()
+        verify(exactly = 1) { provider.close() }
+    }
+
+    @Test
+    fun `the soft-lock idle-ceiling wipe still defers while an operation is held`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val hold = lock.acquireHold()
+
+        lock.onBackground()
+        advanceTimeBy(501); runCurrent() // soft-lock; SDK alive
         verify(exactly = 0) { provider.close() }
+
+        // Idle ceiling fires, but a value-bearing op is in flight → the wipe is DEFERRED, not skipped.
+        advanceTimeBy(1_001); runCurrent()
+        verify(exactly = 0) { provider.close() }
+
+        // Op finishes → the deferred wipe runs, so the seed isn't pinned in memory after the op.
+        hold.close()
+        verify(exactly = 1) { provider.close() }
     }
 
     @Test

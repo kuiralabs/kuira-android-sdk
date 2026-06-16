@@ -78,7 +78,11 @@ class AlertNotifier(private val context: Context) {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH) // heads-up on API < 26
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // PRIVATE, not PUBLIC: the title can carry a received NIGHT amount — never leak it to a
+            // locked screen. The lock screen shows the neutral [redactedPublic]; the full amount
+            // appears only once unlocked (when the user is present anyway).
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(redactedPublicNotification(context, CHANNEL_ID, accent))
         body?.let { builder.setContentText(it).setStyle(NotificationCompat.BigTextStyle().bigText(it)) }
         (contentIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()

@@ -151,7 +151,11 @@ class SyncNotifier(private val context: Context) {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_PROGRESS)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            // PRIVATE, not PUBLIC: the op label / sync phase ("Sending NIGHT…") reveals wallet
+            // activity — keep it off a locked screen, showing the neutral [redactedPublic] there.
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            // NotificationCompat-built public version (Notification.setPublicVersion accepts it).
+            .setPublicVersion(redactedPublicNotification(context, CHANNEL_ID, accent, ongoing = true))
             .addExtras(Bundle().apply { putBoolean(EXTRA_REQUEST_PROMOTED_ONGOING, true) })
         (overrideIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()
@@ -173,7 +177,9 @@ class SyncNotifier(private val context: Context) {
             .setSilent(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // PRIVATE: keep the op label / sync phase off a locked screen (see buildRich).
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(redactedPublicNotification(context, CHANNEL_ID, accent, ongoing = true))
         if (percent != null) {
             builder.setProgress(PROGRESS_MAX, percent, false)
         } else {

@@ -37,11 +37,13 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigInteger
 import java.util.Optional
 import javax.inject.Inject
@@ -557,6 +559,11 @@ class WalletPanelViewModel @Inject constructor(
                 } catch (e: AuthenticationCancelledException) {
                     _sendState.value = SendUiState.Idle // user dismissed the unlock biometric
                     return@launch
+                } catch (e: CancellationException) {
+                    // A network/config switch or session lock cancelled the scope mid-bootstrap.
+                    // Don't paint "Job was cancelled" as a Failure — let cancellation propagate
+                    // (mirrors refreshBalance; the generic catch below must not swallow it).
+                    throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "send bootstrap failed", e)
                     _sendState.value = SendUiState.Failure(e.message ?: "Send failed")
@@ -582,6 +589,13 @@ class WalletPanelViewModel @Inject constructor(
                         _sendState.value = result.toSendUiState()
                     },
                 )
+                // Don't release the bootstrap hold until the durable op is observably enrolled, so
+                // SessionLock.bindOperationHold has taken over: otherwise a hard auto-lock landing
+                // in the gap between launch and the (async) enrollment could close the SDK out from
+                // under the just-launched send. Bounded so a never-enrolling launch can't hang us.
+                withTimeoutOrNull(SEND_HOLD_HANDOFF_TIMEOUT_MS) {
+                    built.operations.active.first { it.isNotEmpty() }
+                }
             } finally {
                 hold.close()
             }
@@ -705,6 +719,10 @@ class WalletPanelViewModel @Inject constructor(
 
         /** Upper bound on the post-registration Dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L
+
+        /** Bound on waiting for the fire-and-forget send to enroll before releasing the
+         *  bootstrap session-hold (closes the lock-handoff gap without risking a hang). */
+        private const val SEND_HOLD_HANDOFF_TIMEOUT_MS = 5_000L
 
         /** Cadence of the post-registration poll. */
         private const val DUST_POLL_INTERVAL_MS = 2_000L

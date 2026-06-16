@@ -65,7 +65,10 @@ class FinalizationNotifier(private val context: Context) {
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // PRIVATE: the title is the op label ("Sending NIGHT…") — keep it off a locked screen,
+            // showing the neutral [redactedPublic] there; the full label appears only once unlocked.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(redactedPublicNotification(context, CHANNEL_ID, accent))
         (outcome.contentIntent ?: launchIntent())?.let(builder::setContentIntent)
         return builder.build()
     }

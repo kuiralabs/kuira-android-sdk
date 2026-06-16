@@ -585,7 +585,7 @@ class MidnightSdk private constructor(
         block: suspend () -> Unit,
     ): Job = subscriptionScope.launch {
         runCatching { runForegroundOperation(label, completionLabel, contentIntent, block = block) }
-            .onFailure { Log.w(TAG, "foreground operation '$label' failed: ${it.message}") }
+            .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "foreground operation '$label' failed: ${it.message}") }
     }
 
     /**
@@ -648,11 +648,12 @@ class MidnightSdk private constructor(
                 awaiting = s.stepName
             }
         }
-        return if (awaiting == null) {
+        val pending = awaiting
+        return if (pending == null) {
             protocolStore.clear(id)
             ProtocolResult.Completed
         } else {
-            ProtocolResult.AwaitingCounterparty(awaiting!!)
+            ProtocolResult.AwaitingCounterparty(pending)
         }
     }
 
