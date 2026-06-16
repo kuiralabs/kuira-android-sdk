@@ -16,7 +16,10 @@ import org.mockito.kotlin.verifyBlocking
  */
 class MidnightWalletBackupGateTest {
 
-    private fun walletWith(backup: DustCloudBackup): MidnightWallet = MidnightWallet(
+    private fun walletWith(
+        backup: DustCloudBackup,
+        appStateBackup: AppStateCloudBackup? = null,
+    ): MidnightWallet = MidnightWallet(
         dustSyncManager = mock(),
         dustRepository = mock(),
         indexerClient = mock(),
@@ -29,6 +32,7 @@ class MidnightWalletBackupGateTest {
         networkId = "test",
         spentDustNullifierStore = mock(),
         dustCloudBackup = backup,
+        appStateCloudBackup = appStateBackup,
     )
 
     @Test
@@ -41,5 +45,19 @@ class MidnightWalletBackupGateTest {
 
         verifyBlocking(backup, never()) { upload(any(), any(), any()) }
         assertEquals(CloudBackupStatus.Idle, wallet.backupStatus.value.dust)
+    }
+
+    @Test
+    fun `disabled app-state backup skips the upload and reports Idle`() = runTest {
+        // #246 fix: without an app-state opt-out gate, a "disable" would re-upload the deleted blob
+        // on the next refresh. appStateBackupEnabled=false must stop the upload (mirrors dust).
+        val appBackup = mock<AppStateCloudBackup>()
+        val wallet = walletWith(backup = mock(), appStateBackup = appBackup)
+
+        wallet.appStateBackupEnabled = false
+        wallet.backupAppStateToCloud(byteArrayOf(1, 2))
+
+        verifyBlocking(appBackup, never()) { uploadAppState(any()) }
+        assertEquals(CloudBackupStatus.Idle, wallet.backupStatus.value.appData)
     }
 }

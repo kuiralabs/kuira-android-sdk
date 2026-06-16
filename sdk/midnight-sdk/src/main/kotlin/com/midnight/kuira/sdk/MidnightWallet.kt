@@ -80,6 +80,15 @@ class MidnightWallet internal constructor(
     var dustBackupEnabled: Boolean = true
 
     /**
+     * Same "disable = stop uploading" gate for the app-state blob (#246). Set false by
+     * [disableAppStateCloudBackup]; the host persists the preference and re-applies it after each
+     * SDK (re)build — WITHOUT it a disable wouldn't stick (the next [refresh] would re-upload the
+     * deleted blob). Default true.
+     */
+    @Volatile
+    var appStateBackupEnabled: Boolean = true
+
+    /**
      * Live NIGHT-UTXO list (as the registration-filter JSON) wired by [MidnightSdk].
      * Lets [balance]/[balanceFlow] compute `dustRegistered` from true per-UTXO
      * registration state — "are all current NIGHT UTXOs generating dust?" — instead
@@ -694,6 +703,7 @@ class MidnightWallet internal constructor(
      * is passkey-derived) — this only drops the convenience app-state copy.
      */
     suspend fun disableAppStateCloudBackup() = withContext(Dispatchers.IO) {
+        appStateBackupEnabled = false // stop future uploads, else refresh() re-uploads the deleted blob
         appStateCloudBackup?.clear()
         updateAppDataBackup(CloudBackupStatus.Idle)
     }
@@ -777,6 +787,12 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupAppStateToCloud(appMetadata: ByteArray? = null) = withContext(Dispatchers.IO) {
         val backup = appStateCloudBackup ?: return@withContext
+        if (!appStateBackupEnabled) {
+            // User disabled backup — never upload (else a deleted blob silently re-uploads on the
+            // next refresh). Reflect "off" on the lane. Mirrors backupDustToCloud's gate.
+            updateAppDataBackup(CloudBackupStatus.Idle)
+            return@withContext
+        }
         updateAppDataBackup(CloudBackupStatus.Syncing)
         runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
             .onSuccess { updateAppDataBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis())) }

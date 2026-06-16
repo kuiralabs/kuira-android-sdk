@@ -358,10 +358,11 @@ class WalletPanelViewModel @Inject constructor(
             }
             try {
                 val built = sdkProvider.ensureSdk(activity, config)
-                // Re-apply the persisted dust-backup opt-out to this (possibly
-                // freshly built) wallet so a disabled user never silently resumes
-                // uploading after a rebuild.
+                // Re-apply the persisted backup opt-out to this (possibly freshly built)
+                // wallet so a disabled user never silently resumes uploading after a rebuild —
+                // BOTH the dust checkpoint and the app-state blob (#246).
                 built.wallet.dustBackupEnabled = !_dustOptedOut.value
+                built.wallet.appStateBackupEnabled = !_dustOptedOut.value
                 // Connect the host's app-state source so refresh() actually backs
                 // it up (null host provider → lane stays "None yet", e.g. BBoard).
                 built.wallet.appStateProvider = appStateSnapshot
@@ -648,24 +649,42 @@ class WalletPanelViewModel @Inject constructor(
      */
     fun disableBackup(config: WalletConfig, activity: FragmentActivity) {
         viewModelScope.launch {
-            try {
-                val built = sdkProvider.ensureSdk(activity, config)
-                // Delete while Drive access still exists…
-                built.wallet.disableDustCloudBackup()
-                built.wallet.disableAppStateCloudBackup()
-                // …then revoke the grant (the next enable re-prompts Google consent).
-                driveAuth.revoke()
-                _dustOptedOut.value = true
-                backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
-                Log.i(TAG, "disableBackup: deleted both cloud blobs, revoked Drive consent, opted out")
+            val built = try {
+                sdkProvider.ensureSdk(activity, config)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AuthenticationCancelledException) {
+                // User dismissed the unlock — nothing was deleted/revoked, so DON'T flip the lane
+                // to "off" (that would falsely claim backup is disabled). Leave state unchanged.
+                Log.i(TAG, "disableBackup: unlock cancelled — backup state unchanged")
+                return@launch
             } catch (e: Exception) {
-                // Best-effort: even if a delete/revoke leg fails, we've opted out locally below.
-                Log.w(TAG, "disableBackup partial failure", e)
-                _dustOptedOut.value = true
-                backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
+                // No sigil / bootstrap failure → can't reach the wallet to delete the blobs; abort
+                // without claiming "disabled".
+                Log.w(TAG, "disableBackup: SDK unavailable — aborting", e)
+                return@launch
             }
+            // Each leg is INDEPENDENT — a failure (e.g. a never-granted Drive token throwing on the
+            // dust delete) must not skip the app-state delete or the revoke. Delete both blobs while
+            // Drive access still exists, then revoke.
+            bestEffortDisable("dust blob delete") { built.wallet.disableDustCloudBackup() }
+            bestEffortDisable("app-state blob delete") { built.wallet.disableAppStateCloudBackup() }
+            bestEffortDisable("Drive consent revoke") { driveAuth.revoke() }
+            // Opt out locally (re-applied on every rebuild to gate BOTH blobs — see ensureSdk above).
+            _dustOptedOut.value = true
+            backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
+            Log.i(TAG, "disableBackup: deleted both cloud blobs, revoked Drive consent, opted out")
+        }
+    }
+
+    /** Run one disable leg, isolating its failure so the remaining legs still execute (#246). */
+    private suspend fun bestEffortDisable(label: String, block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "disableBackup: $label failed (continuing)", e)
         }
     }
 

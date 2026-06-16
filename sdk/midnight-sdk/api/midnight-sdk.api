@@ -248,12 +248,14 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public final fun disableDustCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAddress ()Ljava/lang/String;
+	public final fun getAppStateBackupEnabled ()Z
 	public final fun getAppStateProvider ()Lkotlin/jvm/functions/Function1;
 	public final fun getBackupStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getDustBackupEnabled ()Z
 	public final fun getNightUtxoJsonProvider ()Lkotlin/jvm/functions/Function1;
 	public final fun getSyncStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun setAppStateBackupEnabled (Z)V
 	public final fun setAppStateProvider (Lkotlin/jvm/functions/Function1;)V
 	public final fun setDustBackupEnabled (Z)V
 	public final fun setNightUtxoJsonProvider (Lkotlin/jvm/functions/Function1;)V

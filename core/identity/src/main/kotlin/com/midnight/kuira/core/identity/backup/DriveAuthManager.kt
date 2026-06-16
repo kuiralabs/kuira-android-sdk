@@ -13,6 +13,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 /**
  * An OAuth access token (+ the account it was granted on) for the Google Drive
@@ -118,9 +119,11 @@ class PlayServicesDriveAuthManager(
             is AuthorizeOutcome.NeedsConsent -> return@withContext
         }
         runCatching {
-            val conn = (URL("$REVOKE_ENDPOINT?token=$token").openConnection() as HttpURLConnection).apply {
+            // Pure query-param POST (Google's revoke endpoint accepts ?token=). No request body, so
+            // NO doOutput (that would force a Content-Length:0 / body wait). URL-encode the token.
+            val encoded = URLEncoder.encode(token, "UTF-8")
+            val conn = (URL("$REVOKE_ENDPOINT?token=$encoded").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                doOutput = true
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             }
             try {

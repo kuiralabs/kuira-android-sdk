@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.compact.proving.ProvingMode
+import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
@@ -131,19 +132,36 @@ class WalletPanelViewModelTest {
     }
 
     @Test
-    fun `disableBackup still opts out locally even if a delete leg fails`() = runTest {
+    fun `disableBackup runs the remaining legs even when the dust delete fails`() = runTest {
         val wallet = mockk<MidnightWallet>(relaxed = true)
         val built = mockk<MidnightSdk>(relaxed = true)
         every { built.wallet } returns wallet
         coEvery { sdkProvider.ensureSdk(activity, any()) } returns built
+        // Common case: Drive was never granted → the dust delete throws on its token fetch.
         coEvery { wallet.disableDustCloudBackup() } throws RuntimeException("drive unreachable")
 
         val vm = newVm()
         vm.disableBackup(devConfig(), activity)
         advanceUntilIdle()
 
-        // Best-effort: a failed delete/revoke leg must NOT leave the user "still backed up" in the UI.
+        // Per-leg isolation: a failed dust delete must NOT skip the app-state delete or the revoke.
+        coVerify { wallet.disableAppStateCloudBackup() }
+        coVerify { driveAuth.revoke() }
+        // …and the user is opted out (the UI never lies "still backed up").
         assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+    }
+
+    @Test
+    fun `disableBackup leaves backup state unchanged when the unlock is cancelled`() = runTest {
+        coEvery { sdkProvider.ensureSdk(activity, any()) } throws AuthenticationCancelledException("unlock cancelled")
+
+        val vm = newVm()
+        vm.disableBackup(devConfig(), activity)
+        advanceUntilIdle()
+
+        // Nothing was deleted/revoked → must NOT flip the lane to "off" (no false "disabled").
+        assertEquals(false, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        coVerify(exactly = 0) { driveAuth.revoke() }
     }
 
     @Test
