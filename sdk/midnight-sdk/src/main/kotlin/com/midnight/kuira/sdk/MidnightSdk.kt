@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import com.midnight.kuira.core.compact.ContractOperationListener
 import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.address.Bech32m
@@ -111,6 +112,16 @@ class MidnightSdk private constructor(
     /** HD derivation path of the access key (e.g., "m/44'/2400'/0'/5/0"). */
     val accessKeyPath: String,
 
+    /**
+     * Registry of in-flight value-bearing operations (#261-264). Observe
+     * [OperationRegistry.active] / [OperationRegistry.outcomes] to project any UI
+     * (the wallet pill is just one consumer); enroll your own long-running work via
+     * [runForegroundOperation] / [launchForegroundOperation] to get the same
+     * process-survival + notification treatment the SDK's own send/dust/contract
+     * actions receive.
+     */
+    val operations: OperationRegistry,
+
     // ── Internals held for [registerForDustGeneration] and lifecycle cleanup ──
     private val nightPrivateKey: ByteArray,
     private val dustSeed: ByteArray,
@@ -165,7 +176,14 @@ class MidnightSdk private constructor(
      *   [SubmissionResult.Failed] if the chain rejected the tx, or no NIGHT UTXOs
      *   are available, or the FFI builder returned null.
      */
-    suspend fun registerForDustGeneration(): SubmissionResult {
+    suspend fun registerForDustGeneration(): SubmissionResult = operations.run(
+        OperationDescriptor(OperationKind.DustRegistration),
+        classify = { it.toOperationResult() },
+    ) {
+        registerForDustGenerationInternal()
+    }
+
+    private suspend fun registerForDustGenerationInternal(): SubmissionResult {
         val dustPublicKeyHex = DustKeyDeriver.derivePublicKey(dustSeed)
             ?: return SubmissionResult.Failed(
                 txHash = null,
@@ -285,6 +303,17 @@ class MidnightSdk private constructor(
         toAddress: String,
         amount: BigInteger,
         onProgress: ((SendProgress) -> Unit)? = null,
+    ): SendResult = operations.run(
+        OperationDescriptor(OperationKind.Send),
+        classify = { it.toOperationResult() },
+    ) {
+        sendNightInternal(toAddress, amount, onProgress)
+    }
+
+    private suspend fun sendNightInternal(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)?,
     ): SendResult {
         // Chain-independent request validation (positive amount, well-formed
         // same-network recipient) — pure + unit-tested in [validateSendRequest].
@@ -348,9 +377,10 @@ class MidnightSdk private constructor(
         // it would strand the user on a progress spinner after the send is done.
         // Registration self-pays (allow_fee_payment), so it works even though this
         // transfer just consumed the prior backing. Runs on the SDK's subscriptionScope
-        // (best-effort, cancelled with the SDK; #263 moves it under the in-flight-
-        // operation foreground service). The accurate dustRegistered signal flips back
-        // to true on the next balance read once registration lands.
+        // so it survives this call returning; registerForDustGeneration enrolls as a
+        // tracked DustRegistration operation (#262), so it keeps the process alive under
+        // the foreground service and fires its own finalization notification. The
+        // accurate dustRegistered signal flips back to true on the next balance read.
         if (result is SubmissionResult.Success || result is SubmissionResult.Pending) {
             subscriptionScope.launch {
                 runCatching { registerForDustGeneration() }
@@ -452,6 +482,23 @@ class MidnightSdk private constructor(
         is SubmissionResult.StaleUtxo -> SendResult.Failed(reason)
     }
 
+    /** Map a [SendResult] onto the operation-registry terminal outcome (#261-264). */
+    private fun SendResult.toOperationResult(): OperationResult = when (this) {
+        is SendResult.Success -> OperationResult(OperationTerminalStatus.Success, txHash)
+        is SendResult.Pending -> OperationResult(OperationTerminalStatus.Pending, txHash)
+        is SendResult.Failed -> OperationResult(OperationTerminalStatus.Failed, txHash)
+        is SendResult.InsufficientFunds -> OperationResult(OperationTerminalStatus.Failed)
+        is SendResult.InvalidAddress -> OperationResult(OperationTerminalStatus.Failed)
+    }
+
+    /** Map a [SubmissionResult] onto the operation-registry terminal outcome (#261-264). */
+    private fun SubmissionResult.toOperationResult(): OperationResult = when (this) {
+        is SubmissionResult.Success -> OperationResult(OperationTerminalStatus.Success, txHash)
+        is SubmissionResult.Pending -> OperationResult(OperationTerminalStatus.Pending, txHash)
+        is SubmissionResult.Failed -> OperationResult(OperationTerminalStatus.Failed, txHash)
+        is SubmissionResult.StaleUtxo -> OperationResult(OperationTerminalStatus.Failed)
+    }
+
     /** Coarse progress stages for [sendNight], for driving a UI spinner/status. */
     enum class SendProgress {
         /** Merging coins so the transfer fits under the ledger's input ceiling. */
@@ -481,6 +528,55 @@ class MidnightSdk private constructor(
 
         /** Any other failure (proving, dust fee, node rejection, unexpected error). */
         data class Failed(val reason: String, val txHash: String? = null) : SendResult()
+    }
+
+    /**
+     * Run [block] as a tracked foreground operation (#261-264) and return its result.
+     *
+     * The SDK keeps the process alive under a foreground service for the operation's
+     * duration, holds the session-lock off (so an auto-lock can't tear the SDK out
+     * mid-flight), shows an ongoing progress notification, and fires a dismissible
+     * finalization notification when it completes. [label] is YOUR string (shown in
+     * the notification) — the SDK emits no text of its own. This is the SAME machinery
+     * the SDK's own [sendNight] / [registerForDustGeneration] / contract calls use, so
+     * any dApp's long-running work gets identical treatment.
+     *
+     * For "submit then leave the app", use [launchForegroundOperation] (fire-and-forget
+     * on the SDK's own scope) so the work survives the caller's coroutine being cancelled.
+     */
+    suspend fun <T> runForegroundOperation(
+        label: String,
+        completionLabel: String? = null,
+        block: suspend () -> T,
+    ): T = operations.run(OperationDescriptor(OperationKind.Custom, label, completionLabel), block = block)
+
+    /**
+     * Fire-and-forget [runForegroundOperation] on the SDK's lifecycle scope: returns a
+     * [Job] immediately, and the tracked work keeps running (under the foreground
+     * service) even after the caller leaves the screen. Failures are logged, not thrown.
+     */
+    fun launchForegroundOperation(
+        label: String,
+        completionLabel: String? = null,
+        block: suspend () -> Unit,
+    ): Job = subscriptionScope.launch {
+        runCatching { runForegroundOperation(label, completionLabel, block) }
+            .onFailure { Log.w(TAG, "foreground operation '$label' failed: ${it.message}") }
+    }
+
+    /**
+     * Fire-and-forget [sendNight] on the SDK's lifecycle scope so the transfer survives
+     * the caller leaving the app (#263). Returns immediately; observe [operations] for
+     * progress/terminal state, or rely on the finalization notification. [onProgress]
+     * is best-effort for an in-app live view while the caller is still around.
+     */
+    fun launchSendNight(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)? = null,
+    ): Job = subscriptionScope.launch {
+        runCatching { sendNight(toAddress, amount, onProgress) }
+            .onFailure { Log.w(TAG, "background send failed: ${it.message}") }
     }
 
     /** Release all resources. */
@@ -769,11 +865,22 @@ class MidnightSdk private constructor(
                 provingMode = provingMode,
             )
 
+            // ── Operation registry + the contract-call listener that enrolls in it ──
+            // Wiring the listener onto the config means every MidnightContract call
+            // made through `sdk.config` runs as a tracked foreground operation — the
+            // FULL pipeline incl. ZK proving — with no per-call dApp code (#261-264).
+            val operations = OperationRegistry()
+            val contractOperationListener = object : ContractOperationListener {
+                override suspend fun <T> trackContractCall(circuitName: String, block: suspend () -> T): T =
+                    operations.run(OperationDescriptor(OperationKind.ContractCall)) { block() }
+            }
+
             // ── Create config with embedded wallet ──
 
             val config = MidnightConfig.Builder(appContext)
                 .indexerUrl(networkConfig.indexerBaseUrl)
                 .transactionBalancer(wallet)
+                .operationListener(contractOperationListener)
                 .networkId(net.rustNetworkId)
                 .build()
 
@@ -787,6 +894,7 @@ class MidnightSdk private constructor(
                 dustTracker = dustTracker,
                 accessKeyPublicKey = keys.accessKeyPublicKey,
                 accessKeyPath = keys.accessKeyPath,
+                operations = operations,
                 nightPrivateKey = keys.nightPrivateKey,
                 dustSeed = keys.dustSeed,
                 networkId = net.rustNetworkId,

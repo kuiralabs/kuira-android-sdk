@@ -45,9 +45,18 @@ class MidnightConfig private constructor(
     val networkId: String,
     val provingKeyManager: ProvingKeyManager,
     private val externalBalancer: TransactionBalancer?,
+    private val operationListener: ContractOperationListener?,
 ) {
     internal val executor = CircuitExecutor(context)
     internal val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
+
+    /**
+     * Bracket [block] as a tracked foreground operation when an [operationListener]
+     * is wired (the SDK injects one), else run it directly. Used by [MidnightContract]
+     * to keep the process alive across a whole call/deploy — proving included.
+     */
+    internal suspend fun <T> runTracked(circuitName: String, block: suspend () -> T): T =
+        operationListener?.trackContractCall(circuitName, block) ?: block()
 
     private var connectorClient: DAppConnectorClient? = null
     private val balancerMutex = Mutex()
@@ -111,7 +120,7 @@ class MidnightConfig private constructor(
     }
 
     /** Submit a previously prepared transaction. */
-    suspend fun submit(prepared: PreparedTransaction): TransactionReceipt {
+    suspend fun submit(prepared: PreparedTransaction): TransactionReceipt = runTracked(prepared.circuitName) {
         val balancer = getBalancer()
         val start = System.currentTimeMillis()
 
@@ -122,7 +131,7 @@ class MidnightConfig private constructor(
         balancer.submitTransaction(balancedTxHex)
         val submitMs = System.currentTimeMillis() - submitStart
 
-        return TransactionReceipt(
+        TransactionReceipt(
             txHash = null,
             status = TransactionStatus.SUBMITTED,
             timings = prepared.timings.copy(
@@ -182,6 +191,7 @@ class MidnightConfig private constructor(
         private var walletUrl: String? = null
         private var networkId: String? = null
         private var balancer: TransactionBalancer? = null
+        private var operationListener: ContractOperationListener? = null
 
         fun indexerUrl(url: String) = apply { this.indexerUrl = url }
         fun walletUrl(url: String) = apply { this.walletUrl = url }
@@ -189,6 +199,13 @@ class MidnightConfig private constructor(
 
         /** Provide an embedded [TransactionBalancer] instead of a remote wallet URL. */
         fun transactionBalancer(balancer: TransactionBalancer) = apply { this.balancer = balancer }
+
+        /**
+         * Wire a [ContractOperationListener] so every contract call/deploy through this
+         * config runs as a tracked foreground operation (the SDK injects one). Optional —
+         * configs without it behave exactly as before.
+         */
+        fun operationListener(listener: ContractOperationListener?) = apply { this.operationListener = listener }
 
         fun build(): MidnightConfig {
             val indexer = requireNotNull(indexerUrl) { "indexerUrl is required" }
@@ -216,6 +233,7 @@ class MidnightConfig private constructor(
                 networkId = network,
                 provingKeyManager = ProvingKeyManager(context.applicationContext),
                 externalBalancer = balancer,
+                operationListener = operationListener,
             )
         }
     }

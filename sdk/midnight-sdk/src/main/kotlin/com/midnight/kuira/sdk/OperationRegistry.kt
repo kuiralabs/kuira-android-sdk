@@ -1,0 +1,142 @@
+package com.midnight.kuira.sdk
+
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+
+/** Terminal status of a tracked operation. */
+enum class OperationTerminalStatus { Success, Pending, Failed }
+
+/**
+ * Describes a foreground operation to track. [label] is CALLER-PROVIDED (the
+ * dApp/host owns its own strings) so the SDK emits no English of its own; when
+ * null, the presentation edge resolves a default label from [kind]. A [Custom]
+ * operation MUST provide a [label]. [completionLabel] optionally overrides the
+ * finalization-notification title (else the ongoing [label] is reused).
+ */
+class OperationDescriptor(
+    val kind: OperationKind,
+    val label: String? = null,
+    val completionLabel: String? = null,
+)
+
+/** How a finished operation's normal return maps to a terminal outcome. */
+class OperationResult(
+    val status: OperationTerminalStatus,
+    val txHash: String? = null,
+)
+
+/** An operation currently in flight — the unit observed by the foreground service. */
+class ActiveOperation internal constructor(
+    val id: Long,
+    val kind: OperationKind,
+    val label: String?,
+)
+
+/** A one-shot terminal event — the unit the finalization notification rides. */
+class OperationOutcome internal constructor(
+    val id: Long,
+    val kind: OperationKind,
+    val label: String?,
+    val completionLabel: String?,
+    val status: OperationTerminalStatus,
+    val txHash: String?,
+)
+
+/**
+ * Process-singleton registry of in-flight value-bearing wallet operations
+ * (#261-264). Mirrors [MidnightWallet.syncStatus]'s observable-state model:
+ *
+ *  - [active] — the set of operations in flight. The foreground service keeps the
+ *    process alive while it is non-empty; [com.midnight.kuira.sdk] callers in
+ *    wallet-runtime hold the session-lock off it.
+ *  - [outcomes] — a one-shot terminal stream the finalization notifier rides.
+ *
+ * The SDK's built-ins (send / dust-registration / contract call) and any
+ * third-party dApp enroll through the SAME registry via [run] (wrapped publicly
+ * by [MidnightSdk.runForegroundOperation]), so there is ONE source of truth, not
+ * three. The registry is pure Kotlin/coroutines — no Android, fully unit-testable.
+ */
+class OperationRegistry {
+
+    private val _active = MutableStateFlow<List<ActiveOperation>>(emptyList())
+    val active: StateFlow<List<ActiveOperation>> = _active.asStateFlow()
+
+    // replay=0: only LIVE observers see a finalization (a late subscriber must not
+    // replay a stale completion). extraBufferCapacity absorbs bursts so tryEmit
+    // from the non-suspending finally path never drops an outcome.
+    private val _outcomes = MutableSharedFlow<OperationOutcome>(
+        replay = 0,
+        extraBufferCapacity = OUTCOME_BUFFER_CAPACITY,
+    )
+    val outcomes: SharedFlow<OperationOutcome> = _outcomes.asSharedFlow()
+
+    private val nextId = AtomicLong(0L)
+
+    /**
+     * Run [block] as a tracked operation: enroll it in [active], run it, classify
+     * the result into a terminal [OperationOutcome] (emitted on [outcomes]), and
+     * de-enroll in `finally` — whether [block] returns OR throws.
+     *
+     * [classify] maps a NORMAL return to its real status (e.g. a `SendResult.Failed`
+     * is a returned failure, not a thrown one); a thrown exception is always
+     * [OperationTerminalStatus.Failed] and is rethrown so structured concurrency
+     * keeps working.
+     */
+    suspend fun <T> run(
+        descriptor: OperationDescriptor,
+        classify: (T) -> OperationResult = { OperationResult(OperationTerminalStatus.Success) },
+        block: suspend () -> T,
+    ): T {
+        // Nesting guard: a contract call enrolls once at the full-pipeline listener
+        // AND would re-enter here at the wallet's balanceAndSubmit chokepoint. The
+        // outer enrollment already covers it, so an inner call just passes through —
+        // enrollment is idempotent across nesting, never double-counted.
+        if (currentCoroutineContext()[Marker] != null) return block()
+
+        val id = nextId.getAndIncrement()
+        _active.update { it + ActiveOperation(id, descriptor.kind, descriptor.label) }
+        try {
+            val result = withContext(Marker(id)) { block() }
+            emitOutcome(id, descriptor, classify(result))
+            return result
+        } catch (t: Throwable) {
+            emitOutcome(id, descriptor, OperationResult(OperationTerminalStatus.Failed))
+            throw t
+        } finally {
+            _active.update { list -> list.filterNot { it.id == id } }
+        }
+    }
+
+    /** Marks a coroutine as already inside a tracked operation (see [run]'s nesting guard). */
+    private class Marker(val id: Long) : AbstractCoroutineContextElement(Marker) {
+        companion object Key : CoroutineContext.Key<Marker>
+    }
+
+    private fun emitOutcome(id: Long, descriptor: OperationDescriptor, result: OperationResult) {
+        _outcomes.tryEmit(
+            OperationOutcome(
+                id = id,
+                kind = descriptor.kind,
+                label = descriptor.label,
+                completionLabel = descriptor.completionLabel,
+                status = result.status,
+                txHash = result.txHash,
+            ),
+        )
+    }
+
+    private companion object {
+        /** Headroom so a burst of near-simultaneous completions never drops an outcome. */
+        const val OUTCOME_BUFFER_CAPACITY = 16
+    }
+}

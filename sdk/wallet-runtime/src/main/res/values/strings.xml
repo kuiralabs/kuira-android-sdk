@@ -18,4 +18,20 @@
     <string name="kuira_sync_chip_balances">Balances</string>
     <string name="kuira_sync_chip_genesis">Genesis</string>
     <string name="kuira_sync_chip_finalizing">Finalizing</string>
+
+    <!-- Foreground-operation labels (#261-264). Default ongoing-notification text for
+         the SDK's built-in operations when the caller didn't provide its own label;
+         host-overridable, one source. The status words feed the dismissible
+         finalization notification. -->
+    <string name="kuira_op_send">Sending NIGHT…</string>
+    <string name="kuira_op_dust_register">Registering dust…</string>
+    <string name="kuira_op_contract">Submitting transaction…</string>
+    <string name="kuira_op_generic">Working…</string>
+    <string name="kuira_op_done">Done</string>
+    <string name="kuira_op_submitted">Submitted</string>
+    <string name="kuira_op_failed">Failed</string>
+    <!-- Short status-bar chip for an in-flight operation (Android 16 promoted ongoing). -->
+    <string name="kuira_op_chip">Kuira</string>
+    <!-- Finalization-notification channel (dismissible; the user clears it). -->
+    <string name="kuira_op_finalize_channel">Transaction updates</string>
 </resources>

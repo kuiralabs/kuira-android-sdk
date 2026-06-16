@@ -56,7 +56,7 @@ class MidnightContract private constructor(
         circuitName: String,
         vararg args: Any?,
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
-    ): TransactionReceipt {
+    ): TransactionReceipt = config.runTracked(circuitName) {
         requireWriteCapable()
         requireAddress("call")
         val prepared = prepare(circuitName, *args, onProgress = onProgress)
@@ -78,7 +78,7 @@ class MidnightContract private constructor(
         }
         val balanceAndSubmitMs = System.currentTimeMillis() - balanceAndSubmitStart
 
-        return TransactionReceipt(
+        TransactionReceipt(
             txHash = null,
             status = TransactionStatus.SUBMITTED,
             timings = prepared.timings.copy(
@@ -208,7 +208,7 @@ class MidnightContract private constructor(
      */
     suspend fun deploy(
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
-    ): DeployResult {
+    ): DeployResult = config.runTracked(DEPLOY_OP_NAME) {
         requireWriteCapable()
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
@@ -256,7 +256,7 @@ class MidnightContract private constructor(
         }
         val balanceMs = System.currentTimeMillis() - balanceStart
 
-        return DeployResult(
+        DeployResult(
             contractAddress = deployExec.contractAddress,
             timings = DeployTimings(
                 executeMs = executeMs,
@@ -374,6 +374,9 @@ class MidnightContract private constructor(
 
     companion object {
         private const val CONTRACT_ADDRESS_HEX_LENGTH = 64
+
+        /** Informational op name for a deploy (no circuit name); see [ContractOperationListener]. */
+        private const val DEPLOY_OP_NAME = "deploy"
 
         /** Create a contract handle using the DSL builder. */
         fun create(config: MidnightConfig, block: ContractBuilder.() -> Unit): MidnightContract {

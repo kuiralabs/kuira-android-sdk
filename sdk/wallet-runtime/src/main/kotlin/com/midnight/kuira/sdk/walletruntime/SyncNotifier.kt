@@ -71,16 +71,36 @@ class SyncNotifier(private val context: Context) {
      */
     fun buildIndeterminate(): Notification = build(phase = null, fraction = null)
 
-    private fun build(phase: SyncPhase?, fraction: Float?): Notification {
+    /**
+     * Build the ongoing notification for an in-flight foreground OPERATION (#261-264):
+     * indeterminate (operations are stage-based, not %-based), with the caller's
+     * [label] as the body and a brand-forward chip. Reuses the same channel /
+     * promotion / style plumbing as the sync notification.
+     */
+    fun buildOperation(label: String): Notification = build(
+        phase = null,
+        fraction = null,
+        labelOverride = label,
+        chipOverride = context.getString(R.string.kuira_op_chip),
+    )
+
+    private fun build(
+        phase: SyncPhase?,
+        fraction: Float?,
+        labelOverride: String? = null,
+        chipOverride: String? = null,
+    ): Notification {
         ensureChannel()
-        val label = phase?.let { context.getString(it.labelRes()) }
+        val label = labelOverride
+            ?: phase?.let { context.getString(it.labelRes()) }
             ?: context.getString(R.string.kuira_sync_generic)
         val (text, percent) = syncNotificationText(label, fraction)
         val accent = ContextCompat.getColor(context, R.color.kuira_sync_accent)
         val largeIconRes = (phase ?: SyncPhase.DustFull).largeIconRes()
-        // Phase-aware chip: a short phase word + percent ("Dust 45%"); the brand
-        // generic ("Kuira Syncing") only when no phase is known yet.
-        val phaseChip = phase?.let { context.getString(it.chipLabelRes()) }
+        // Phase-aware chip: a short phase word + percent ("Dust 45%"); a caller chip
+        // override for operations; else the brand generic ("Kuira Syncing").
+        val phaseChip = chipOverride
+            ?: phase?.let { context.getString(it.chipLabelRes()) }
             ?: context.getString(R.string.kuira_sync_chip)
         val chip = percent
             ?.let { context.getString(R.string.kuira_sync_chip_fmt, phaseChip, it) }

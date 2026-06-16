@@ -49,7 +49,7 @@ object WalletRuntimeModule {
             // #235: the embedded-wallet provider keeps dust pre-synced in the
             // background (live tip-advance subscription) so a tx never waits on a
             // cold sync. The SDK Builder default is off (for raw SDK consumers);
-            // every dapp-ui host opts in here. Surfaced via DustSyncService.
+            // every dapp-ui host opts in here. Surfaced via WalletForegroundService.
             .proactiveDustSync(true)
             .also { builder -> config.proofServerUrl?.let { builder.proofServerUrl(it) } }
             // Cross-device dust backup: assemble the coordinator from the proven

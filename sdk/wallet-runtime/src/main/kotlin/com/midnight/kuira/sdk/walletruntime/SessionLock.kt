@@ -263,6 +263,37 @@ class SessionLock @Inject constructor(
         }
     }
 
+    /**
+     * Hold off the auto-lock while a value-bearing operation is in flight (#261-264):
+     * a backgrounded send / dust-registration / contract call must not have the SDK
+     * torn out from under it by the background grace. Mirrors [bindSyncHold], but rides
+     * the wallet's [com.midnight.kuira.sdk.OperationRegistry.active] set instead of
+     * `syncStatus`: hold while ≥1 operation is active, release a short linger after the
+     * set empties (bridges a send → chained dust-registration so the lock doesn't slip
+     * into the gap). The deferred lock then fires, security intact.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun bindOperationHold() {
+        scope.launch {
+            var hold: AutoCloseable? = null
+            var releaseJob: Job? = null
+            provider.sdk
+                .flatMapLatest { sdk -> sdk?.operations?.active?.map { it.isNotEmpty() } ?: flowOf(false) }
+                .distinctUntilChanged()
+                .collect { active ->
+                    if (active) {
+                        releaseJob?.cancel(); releaseJob = null
+                        if (hold == null) hold = acquireHold()
+                    } else if (hold != null && releaseJob == null) {
+                        releaseJob = scope.launch {
+                            delay(OPERATION_HOLD_LINGER_MS)
+                            hold?.close(); hold = null; releaseJob = null
+                        }
+                    }
+                }
+        }
+    }
+
     /** Auto-lock path (idle/background/screen-off): defers while an operation is held. */
     private fun lock(reason: String) {
         idleJob?.cancel()
@@ -317,6 +348,7 @@ class SessionLock @Inject constructor(
         walletSeedSource.requireFreshAuthNext()
 
         bindSyncHold()
+        bindOperationHold()
 
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
@@ -387,6 +419,13 @@ class SessionLock @Inject constructor(
          * `Syncing` between phases, so the deferred lock doesn't fire in the gap.
          */
         private const val SYNC_HOLD_LINGER_MS = 2 * 1000L
+
+        /**
+         * Linger after the active-operation set empties before releasing the
+         * [bindOperationHold] hold — bridges a send → chained dust-registration (and
+         * Kicks circuit → circuit) so the deferred lock doesn't fire in the gap.
+         */
+        private const val OPERATION_HOLD_LINGER_MS = 2 * 1000L
 
         /**
          * Resolve the singleton [SessionLock] and register its app-level hooks.

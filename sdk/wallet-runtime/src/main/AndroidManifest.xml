@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Dust-sync foreground service + permissions (#235). Declared in the SDK library
-  manifest so they merge into any host that opts in via DustSyncService.attach();
-  hosts edit nothing. POST_NOTIFICATIONS is best-effort (sync still runs if denied).
+  Wallet foreground service + permissions (#261-264, generalizing #235). Keeps a
+  backgrounded wallet operation (send / dust-registration / contract call) OR a sync
+  alive. Declared in the SDK library manifest so they merge into any host that opts in
+  via WalletForegroundService.attach(); hosts edit nothing. POST_NOTIFICATIONS is
+  best-effort (the work still runs if denied).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -15,7 +17,7 @@
 
     <application>
         <service
-            android:name="com.midnight.kuira.sdk.walletruntime.DustSyncService"
+            android:name="com.midnight.kuira.sdk.walletruntime.WalletForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>
