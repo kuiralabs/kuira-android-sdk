@@ -324,6 +324,7 @@ fun WalletStatusPanel(
                 onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
                 backupSection = backupSection,
                 onDustToggle = { enabled -> activity?.let { viewModel.setDustBackup(enabled, config, it) } },
+                onDisableBackup = { activity?.let { viewModel.disableBackup(config, it) } },
                 onReceive = {
                     // Dismiss the sheet first, then open the Receive screen on
                     // the next frame so the sheet's exit animation isn't
@@ -560,6 +561,7 @@ private fun WalletSheetContent(
     onRegisterDust: () -> Unit,
     backupSection: BackupSectionState,
     onDustToggle: (Boolean) -> Unit,
+    onDisableBackup: () -> Unit,
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onLockNow: () -> Unit,
@@ -641,6 +643,7 @@ private fun WalletSheetContent(
                 state = backupSection,
                 colors = colors,
                 onDustToggle = onDustToggle,
+                onDisableBackup = onDisableBackup,
                 // App-data backup is automatic; its only actionable state is a
                 // failed save, whose "Retry" re-runs a forced refresh.
                 onAppDataAction = onRefreshBalance,

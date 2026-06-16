@@ -641,6 +641,35 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
+     * TRUE backup disable (#246): delete BOTH cloud blobs (dust + app-state), then revoke the Drive
+     * grant, and opt out locally. Order matters — delete the blobs (which need Drive access) BEFORE
+     * revoking consent. The wallet + sigil are unaffected (recovery is the passkey); this only drops
+     * the cloud copies. The host confirms first via the BackupSection dialog.
+     */
+    fun disableBackup(config: WalletConfig, activity: FragmentActivity) {
+        viewModelScope.launch {
+            try {
+                val built = sdkProvider.ensureSdk(activity, config)
+                // Delete while Drive access still exists…
+                built.wallet.disableDustCloudBackup()
+                built.wallet.disableAppStateCloudBackup()
+                // …then revoke the grant (the next enable re-prompts Google consent).
+                driveAuth.revoke()
+                _dustOptedOut.value = true
+                backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
+                Log.i(TAG, "disableBackup: deleted both cloud blobs, revoked Drive consent, opted out")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Best-effort: even if a delete/revoke leg fails, we've opted out locally below.
+                Log.w(TAG, "disableBackup partial failure", e)
+                _dustOptedOut.value = true
+                backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
+            }
+        }
+    }
+
+    /**
      * Enable cross-device Dust cloud sync: obtain the Drive `drive.appdata`
      * grant, then run a full sync. This is **bidirectional** — once consent
      * exists, `wallet.refresh()` first restores from the cloud checkpoint if

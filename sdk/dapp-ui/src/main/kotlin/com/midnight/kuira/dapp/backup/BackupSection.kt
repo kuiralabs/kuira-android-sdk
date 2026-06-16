@@ -16,17 +16,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,10 +105,17 @@ fun BackupSection(
     state: BackupSectionState,
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
-    /** Two-way dust switch: true = turn on (enable), false = turn off (opt out). */
+    /** Turn dust/cloud backup ON (enable + sync). */
     onDustToggle: (Boolean) -> Unit = {},
+    /** TRUE disable (#246): delete the cloud blobs + revoke Drive consent. Confirmed first. */
+    onDisableBackup: () -> Unit = {},
     onAppDataAction: () -> Unit = {},
 ) {
+    // Turning backup OFF is a real disconnect (deletes the cloud copies + revokes Drive), so it
+    // confirms first; turning ON enables immediately.
+    var showDisableConfirm by remember { mutableStateOf(false) }
+    val dustToggle: (Boolean) -> Unit = { want -> if (want) onDustToggle(true) else showDisableConfirm = true }
+
     Column(modifier.fillMaxWidth()) {
         Eyebrow("BACKUP & RECOVERY", colors)
         Spacer(Modifier.height(12.dp))
@@ -115,13 +128,46 @@ fun BackupSection(
         ) {
             Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors)
             Divider(colors)
-            Lane(icon = "✨", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = onDustToggle)
+            Lane(icon = "✨", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = dustToggle)
             state.appData?.let { appData ->
                 Divider(colors)
                 Lane(icon = "☁", title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)
             }
         }
     }
+
+    if (showDisableConfirm) {
+        DisableBackupDialog(
+            colors = colors,
+            onConfirm = { showDisableConfirm = false; onDisableBackup() },
+            onDismiss = { showDisableConfirm = false },
+        )
+    }
+}
+
+// Approved copy (#246): lead with the outcome, reassure the sigil/wallet is safe (passkey
+// recovery), name the real cost — never "lose funds". Externalized to resources with the rest of
+// the pill's strings in #277.
+private const val DISABLE_TITLE = "Disconnect cloud backup?"
+private const val DISABLE_BODY =
+    "This removes your synced data from Google Drive and turns off backup. Your wallet and sigil " +
+        "stay safe — they're recovered by your passkey, not this backup. You'll just re-sync from " +
+        "scratch next time (slower), and any saved app state is cleared. Turning it back on will " +
+        "ask for Google permission again."
+
+@Composable
+private fun DisableBackupDialog(
+    colors: WalletPanelColors,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(DISABLE_TITLE, color = colors.onSheet, fontWeight = FontWeight.SemiBold) },
+        text = { Text(DISABLE_BODY, color = colors.onSheetDim, fontSize = 13.sp, lineHeight = 18.sp) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Disconnect", color = colors.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.onSheetDim) } },
+    )
 }
 
 // One-line-per-lane keeps the section uncluttered; the "how it works" detail
