@@ -665,15 +665,22 @@ class WalletPanelViewModel @Inject constructor(
                 return@launch
             }
             // Each leg is INDEPENDENT — a failure (e.g. a never-granted Drive token throwing on the
-            // dust delete) must not skip the app-state delete or the revoke. Delete both blobs while
-            // Drive access still exists, then revoke.
+            // dust delete) must not skip the other. Delete both cloud blobs so the user's data is
+            // gone from Drive.
+            //
+            // We deliberately DON'T revoke the Drive grant here. Revoking tears down the Play
+            // Services authorization, so re-enabling would have to re-authorize from scratch — which
+            // right after a revoke hangs ~20s and fails with ApiException 22 ("connection suspended
+            // during call"), stranding the toggle in the off state. Keeping the (now dormant) grant
+            // makes re-enable instant: authorize() returns Authorized immediately, no re-consent. The
+            // user's data is already deleted; anyone who wants to fully revoke the app's Drive access
+            // can do so from their Google account.
             bestEffortDisable("dust blob delete") { built.wallet.disableDustCloudBackup() }
             bestEffortDisable("app-state blob delete") { built.wallet.disableAppStateCloudBackup() }
-            bestEffortDisable("Drive consent revoke") { driveAuth.revoke() }
             // Opt out locally (re-applied on every rebuild to gate BOTH blobs — see ensureSdk above).
             _dustOptedOut.value = true
             backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
-            Log.i(TAG, "disableBackup: deleted both cloud blobs, revoked Drive consent, opted out")
+            Log.i(TAG, "disableBackup: deleted both cloud blobs, opted out (Drive grant kept for instant re-enable)")
         }
     }
 

@@ -148,12 +148,13 @@ fun BackupSection(
 // Approved copy (#246): lead with the outcome, reassure the sigil/wallet is safe (passkey
 // recovery), name the real cost — never "lose funds". Externalized to resources with the rest of
 // the pill's strings in #277.
-private const val DISABLE_TITLE = "Disconnect cloud backup?"
+private const val DISABLE_TITLE = "Turn off cloud backup?"
 private const val DISABLE_BODY =
-    "This removes your synced data from Google Drive and turns off backup. Your wallet and sigil " +
-        "stay safe — they're recovered by your passkey, not this backup. You'll just re-sync from " +
-        "scratch next time (slower), and any saved app state is cleared. Turning it back on will " +
-        "ask for Google permission again."
+    "This deletes your cloud backup from Google Drive and turns it off. Your wallet and sigil " +
+        "stay safe — they're recovered by your passkey, not this backup. Nothing changes on this " +
+        "device — it keeps its data and still syncs fast. Only a new device or a reinstall is " +
+        "affected: it re-syncs from scratch (slower) and without your saved app state. You can " +
+        "turn backup back on anytime."
 
 @Composable
 private fun DisableBackupDialog(
