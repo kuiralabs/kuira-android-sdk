@@ -343,11 +343,16 @@ class WalletForegroundService : Service() {
             // the recorded high fires (so launching with an existing balance is silent), and
             // whichever path — this observer or the worker — records the high first leaves the
             // other with no delta. [label] is host-overridable (the SDK emits no English of its own).
+            //
+            // UNSHIELDED only (`unshieldedNight`, NOT `totalNight`): the seed-free worker can read
+            // only the unshielded balance, and the two share one checkpoint — mixing in shielded
+            // here would write a different number into that checkpoint and report a wrong delta.
+            // Shielded receipts are the #280 carve-out.
             scope.launch {
                 val checkpoint = ReceiveCheckpointStore(application)
                 provider.sdk
                     .flatMapLatest { sdk ->
-                        sdk?.let { s -> s.wallet.balanceFlow().map { s to it.totalNight } } ?: emptyFlow()
+                        sdk?.let { s -> s.wallet.balanceFlow().map { s to it.unshieldedNight } } ?: emptyFlow()
                     }
                     .collect { (sdk, current) ->
                         // Our own send/claim is moving the balance — not an incoming receipt.
