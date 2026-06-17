@@ -661,6 +661,8 @@ class MidnightWallet internal constructor(
                 balanceMutex.withLock {
                     dustSyncManager.refreshIncremental(onSyncProgress = publish)
                 }
+            } catch (e: CancellationException) {
+                throw e // refresh cancelled (superseded / scope closed) — propagate, not a failure
             } catch (e: Exception) {
                 Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
             }
@@ -668,6 +670,8 @@ class MidnightWallet internal constructor(
             // unconfigured; the coordinator's hash guard skips an unchanged blob).
             try {
                 backupDustToCloud()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
             }
@@ -678,6 +682,8 @@ class MidnightWallet internal constructor(
             appStateProvider?.let { provider ->
                 try {
                     backupAppStateToCloud(provider.invoke())
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "App-state cloud backup failed during refresh(): ${e.message}")
                 }
@@ -740,6 +746,8 @@ class MidnightWallet internal constructor(
         } catch (e: DriveConsentRequiredException) {
             // Surfaced (not silent) so the UI can offer "enable cloud backup".
             updateDustBackup(CloudBackupStatus.NeedsConsent)
+        } catch (e: CancellationException) {
+            throw e // backup cancelled (e.g. backgrounded mid-upload) — not a failure; don't flip to red Failed
         } catch (e: Exception) {
             if (isTransientNetworkError(e)) {
                 // Best-effort backup, momentary connectivity/DNS blip — not a real
@@ -797,6 +805,7 @@ class MidnightWallet internal constructor(
         runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
             .onSuccess { updateAppDataBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis())) }
             .onFailure {
+                if (it is CancellationException) throw it // cancelled, not failed — runCatching swallows it, so rethrow
                 if (isTransientNetworkError(it)) {
                     updateAppDataBackup(CloudBackupStatus.Offline)
                     Log.i(TAG, "App-state cloud backup deferred — offline: ${it.message}")
