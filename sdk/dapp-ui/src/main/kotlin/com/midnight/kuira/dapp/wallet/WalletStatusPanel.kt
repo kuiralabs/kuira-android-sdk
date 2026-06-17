@@ -222,7 +222,12 @@ fun WalletStatusPanel(
     // Panel owns the full wallet config now (network + proving mode + proof
     // server URL). User picks any of these in the sheet, the LaunchedEffect
     // below re-fires with the new config and the VM rebuilds the SDK.
-    var network by rememberSaveable { mutableStateOf(initialNetwork) }
+    // Network is the DURABLE single source of truth ([NetworkPreferenceStore], via the VM) —
+    // NOT an in-memory rememberSaveable, which died on a process kill and reverted to the
+    // localnet default on cold start (a session-lock kill silently dropped a PreProd choice).
+    // Seed the host's first-run default once; the persisted choice wins thereafter.
+    LaunchedEffect(Unit) { viewModel.seedNetworkDefault(initialNetwork) }
+    val network by viewModel.selectedNetwork.collectAsStateWithLifecycle()
     var provingMode by rememberSaveable { mutableStateOf(ProvingMode.DEFAULT) }
     var proofServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
     val config = remember(network, provingMode, proofServerUrl) {
@@ -315,7 +320,7 @@ fun WalletStatusPanel(
                 lightMode = lightMode,
                 onToggleLightMode = { lightMode = !lightMode },
                 onNetworkChange = {
-                    network = it
+                    viewModel.selectNetwork(it)
                     onNetworkChange(it)
                 },
                 onProvingModeChange = { provingMode = it },

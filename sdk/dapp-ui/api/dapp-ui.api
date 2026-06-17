@@ -133,6 +133,8 @@ public final class com/midnight/kuira/dapp/backup/ComposableSingletons$BackupSec
 	public fun <init> ()V
 	public final fun getLambda$-1805081364$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$-744995784$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-82891522$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1794377373$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 }
 
 public abstract class com/midnight/kuira/dapp/di/AppDataBackupModule {
@@ -477,12 +479,13 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelColors$Companion {
 public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : androidx/lifecycle/ViewModel {
 	public static final field $stable I
 	public static final field Companion Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel$Companion;
-	public fun <init> (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lcom/midnight/kuira/sdk/walletruntime/SessionLock;Landroid/content/Context;Ljava/util/Optional;)V
+	public fun <init> (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lcom/midnight/kuira/sdk/walletruntime/SessionLock;Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore;Landroid/content/Context;Ljava/util/Optional;)V
 	public final fun disableBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun enableCloudBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun getBackupSection ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getConsentRequests ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getRetryRequests ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getSelectedNetwork ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSendState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSyncProgress ()Lkotlinx/coroutines/flow/StateFlow;
@@ -492,6 +495,8 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : android
 	public static synthetic fun refreshBalance$default (Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;ZILjava/lang/Object;)V
 	public final fun registerDust (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun resetSendState ()V
+	public final fun seedNetworkDefault (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
+	public final fun selectNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
 	public final fun sendNight (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/math/BigInteger;)V
 	public final fun setDustBackup (ZLcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 }
@@ -500,10 +505,10 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel$Companion
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_Factory : dagger/internal/Factory {
-	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel_Factory;
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel_Factory;
 	public fun get ()Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;
 	public synthetic fun get ()Ljava/lang/Object;
-	public static fun newInstance (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lcom/midnight/kuira/sdk/walletruntime/SessionLock;Landroid/content/Context;Ljava/util/Optional;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;
+	public static fun newInstance (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lcom/midnight/kuira/sdk/walletruntime/SessionLock;Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore;Landroid/content/Context;Ljava/util/Optional;)Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel_HiltModules {

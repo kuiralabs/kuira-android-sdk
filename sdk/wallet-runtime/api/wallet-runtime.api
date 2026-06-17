@@ -81,6 +81,25 @@ public final class com/midnight/kuira/sdk/walletruntime/MidnightSdkProvider_Fact
 	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;
 }
 
+public final class com/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore {
+	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun getSelected ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun seedDefaultIfUnset (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
+	public final fun set (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore$Companion {
+	public final fun getDEFAULT ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore_Factory;
+	public fun get ()Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroid/content/Context;)Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore;
+}
+
 public final class com/midnight/kuira/sdk/walletruntime/OperationLabelsKt {
 	public static final fun defaultLabelRes (Lcom/midnight/kuira/sdk/OperationKind;)I
 	public static final fun labelRes (Lcom/midnight/kuira/sdk/OperationTerminalStatus;)I

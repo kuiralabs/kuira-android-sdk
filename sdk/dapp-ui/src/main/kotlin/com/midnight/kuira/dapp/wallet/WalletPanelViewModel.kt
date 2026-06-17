@@ -20,7 +20,9 @@ import com.midnight.kuira.sdk.CloudBackupStatus
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.sdk.SyncStatus
+import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.NetworkPreferenceStore
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import com.midnight.kuira.sdk.walletruntime.labelRes
@@ -75,6 +77,7 @@ class WalletPanelViewModel @Inject constructor(
     private val sigilStateStore: SigilStateStore,
     private val driveAuth: DriveAuthManager,
     private val sessionLock: SessionLock,
+    private val networkStore: NetworkPreferenceStore,
     @ApplicationContext private val appContext: Context,
     /**
      * Host-bound app-state source (empty when the host binds none, e.g. BBoard).
@@ -84,6 +87,19 @@ class WalletPanelViewModel @Inject constructor(
      */
     private val appDataProvider: Optional<AppDataBackupProvider>,
 ) : ViewModel() {
+
+    /**
+     * The selected network — the DURABLE single source of truth ([NetworkPreferenceStore]),
+     * surviving process death so a session-lock kill can't revert the choice to the localnet
+     * default. The panel observes this instead of an in-memory selection.
+     */
+    val selectedNetwork: StateFlow<MidnightNetwork> = networkStore.selected
+
+    /** Persist the user's network choice durably (synchronous — survives an immediate kill). */
+    fun selectNetwork(network: MidnightNetwork) = networkStore.set(network)
+
+    /** Seed the first-run network from a host default; ignored once the user has ever chosen. */
+    fun seedNetworkDefault(network: MidnightNetwork) = networkStore.seedDefaultIfUnset(network)
 
     /** Adapts the bound provider to the wallet's `appStateProvider` lambda type. */
     private val appStateSnapshot: (suspend () -> ByteArray?)? =

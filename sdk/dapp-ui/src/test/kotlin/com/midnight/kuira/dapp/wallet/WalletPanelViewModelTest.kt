@@ -14,6 +14,7 @@ import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.MidnightWallet
 import com.midnight.kuira.sdk.WalletBalance
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletruntime.NetworkPreferenceStore
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import io.mockk.coEvery
@@ -59,6 +60,7 @@ class WalletPanelViewModelTest {
     private val activity: FragmentActivity = mockk(relaxed = true)
     private val driveAuth: DriveAuthManager = mockk(relaxed = true)
     private val sessionLock: SessionLock = mockk(relaxed = true)
+    private val networkStore: NetworkPreferenceStore = mockk(relaxed = true)
     private val lockedFlow = MutableStateFlow(false)
 
     private fun dustPrefs() =
@@ -519,6 +521,7 @@ class WalletPanelViewModelTest {
         sigilStateStore = store,
         driveAuth = driveAuth,
         sessionLock = sessionLock,
+        networkStore = networkStore,
         appContext = context,
         appDataProvider = java.util.Optional.empty(),
     )
