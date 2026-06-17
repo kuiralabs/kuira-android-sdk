@@ -86,6 +86,15 @@ class DustRepository @Inject constructor(
         lastSyncedState = null
     }
 
+    /**
+     * Adopt [state] as the live in-memory cache, closing the one it replaces, so
+     * [getLastSyncedState] stays warm without a deserialize. Takes ownership of [state].
+     */
+    private fun retainLastSyncedState(state: DustLocalState) {
+        lastSyncedState?.close()
+        lastSyncedState = state
+    }
+
     companion object {
         private const val TAG = "DustRepository"
 
@@ -394,23 +403,43 @@ class DustRepository @Inject constructor(
                 val tip = withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
                     indexerClient.subscribeToDustEvents(fromId = null).firstOrNull()?.maxId ?: -1L
                 }
-                if (tip != null && tip < lastEventId) {
-                    Log.w(TAG, "Dust reorg detected: chain tip $tip < checkpoint $lastEventId — rebuilding from genesis")
-                    existingState.close()
-                    deleteState(address)
-                    // fall through to full sync below
-                } else {
-                    // Delta sync: replay only events after the checkpoint ON TOP of
-                    // the loaded state (streamDustEvents takes ownership of it).
-                    Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                    val result = streamDustEvents(
-                        address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
-                    )
-                    if (result) return true
+                when (dustSyncPlan(tip = tip, lastEventId = lastEventId)) {
+                    DustSyncPlan.REORG -> {
+                        Log.w(TAG, "Dust reorg detected: chain tip $tip < checkpoint $lastEventId — rebuilding from genesis")
+                        existingState.close()
+                        deleteState(address)
+                        // fall through to full sync below
+                    }
+                    DustSyncPlan.AT_TIP -> {
+                        // The checkpoint already covers every dust event (`maxId`, fetched
+                        // above, equals our cursor), so a delta from lastEventId+1 has nothing
+                        // to fetch. Calling streamDustEvents here would block the full
+                        // DELTA_FIRST_EVENT_TIMEOUT_MS waiting on a live subscription that never
+                        // emits (the chain hasn't advanced past our cursor) — the dominant
+                        // "slow even at the tip" stall. Short-circuit instead. The dust *value*
+                        // is unaffected: getCurrentBalance recomputes it from this state + the
+                        // current time on every read. Retain the loaded state as the live cache
+                        // (mirrors streamDustEvents' no-new-events path), taking ownership of the
+                        // caller-owned checkpoint state.
+                        Log.d(TAG, "At tip (event $lastEventId) — no new dust events, checkpoint current")
+                        retainLastSyncedState(existingState)
+                        return true
+                    }
+                    DustSyncPlan.DELTA -> {
+                        // New events to apply (tip > cursor), or tip unknown (reorg-guard timed
+                        // out) → try a delta from the checkpoint cursor. Replays only events
+                        // after the checkpoint ON TOP of the loaded state (streamDustEvents takes
+                        // ownership of it).
+                        Log.d(TAG, "Delta sync: resuming from event $lastEventId")
+                        val result = streamDustEvents(
+                            address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
+                        )
+                        if (result) return true
 
-                    // Resume failed — drop the checkpoint and rebuild from genesis.
-                    Log.w(TAG, "Delta sync returned no results, falling back to full sync")
-                    deleteState(address)
+                        // Resume failed — drop the checkpoint and rebuild from genesis.
+                        Log.w(TAG, "Delta sync returned no results, falling back to full sync")
+                        deleteState(address)
+                    }
                 }
             }
 
@@ -540,8 +569,7 @@ class DustRepository @Inject constructor(
             if (baseState != null) {
                 // Delta resume with nothing new on chain — the loaded checkpoint
                 // is already current. Keep it live for callers.
-                lastSyncedState?.close()
-                lastSyncedState = baseState
+                retainLastSyncedState(baseState)
                 return true
             }
             return fromId != null
@@ -589,8 +617,7 @@ class DustRepository @Inject constructor(
         // serialize_deserialize_reproduces_root test — so this is a perf
         // shortcut, not a correctness workaround; the saved checkpoint above
         // is authoritative across process restarts.)
-        lastSyncedState?.close()
-        lastSyncedState = newState
+        retainLastSyncedState(newState)
 
         // Success = the sync completed and the checkpoint is saved, NOT "has
         // dust". Returning utxoCount > 0 here made a 0-UTXO wallet look like a
@@ -911,4 +938,36 @@ class DustRepository @Inject constructor(
     private fun hexStringToBytes(hex: String): ByteArray {
         return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
+}
+
+/** What a delta-sync attempt should do, given the chain dust-event tip vs our checkpoint cursor. */
+internal enum class DustSyncPlan {
+    /** Chain tip is below our cursor — the chain reset under us; rebuild from genesis. */
+    REORG,
+
+    /** Chain tip equals our cursor — already caught up; keep the checkpoint, skip the network. */
+    AT_TIP,
+
+    /** Chain tip is ahead, or unknown (tip probe timed out) — attempt a delta from the cursor. */
+    DELTA,
+}
+
+/**
+ * Pure decision seam (unit-tested) for [DustRepository.syncFromBlockchain]'s delta path.
+ *
+ * [tip] is the chain's current highest dust-event id (the reorg-guard `maxId` probe); null
+ * means the probe timed out and the tip is unknown. [lastEventId] is our checkpoint cursor
+ * (the last applied event id).
+ *
+ *  - `tip < lastEventId` → [DustSyncPlan.REORG] (chain reset below us).
+ *  - `tip == lastEventId` → [DustSyncPlan.AT_TIP] (caught up; the old behavior here would
+ *    block the full `DELTA_FIRST_EVENT_TIMEOUT_MS` on a subscription that never emits).
+ *  - `tip > lastEventId` OR `tip == null` → [DustSyncPlan.DELTA] (real events to fetch, or
+ *    unknown tip → fall back to the delta probe, preserving the prior behavior).
+ */
+internal fun dustSyncPlan(tip: Long?, lastEventId: Long): DustSyncPlan = when {
+    tip == null -> DustSyncPlan.DELTA
+    tip < lastEventId -> DustSyncPlan.REORG
+    tip == lastEventId -> DustSyncPlan.AT_TIP
+    else -> DustSyncPlan.DELTA
 }
