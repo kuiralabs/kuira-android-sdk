@@ -60,7 +60,7 @@ class AlertNotifier(private val context: Context) {
      * silently updating an earlier one (the `setOnlyAlertOnce` would otherwise mute it).
      */
     fun postReceived(title: String, body: String?, contentIntent: PendingIntent? = null) =
-        post(RECEIVED_BASE_ID + (receivedSeq.getAndIncrement() % MAX_CONCURRENT), title, body, contentIntent)
+        post(RECEIVED_BASE_ID + nextReceivedSlot(), title, body, contentIntent)
 
     private fun post(id: Int, title: String, body: String?, contentIntent: PendingIntent?) {
         ensureChannel()
@@ -99,8 +99,21 @@ class AlertNotifier(private val context: Context) {
         )
     }
 
-    // Rolling sequence so each received-funds alert gets its own notification id.
-    private val receivedSeq = java.util.concurrent.atomic.AtomicInteger(0)
+    /**
+     * Next received-alert slot, PERSISTED across notifier instances and process restarts.
+     * The background poll ([ReceivePollWorker]) news up a fresh [AlertNotifier] on every run,
+     * so an in-memory counter would reset to 0 and every receipt would land on the same id,
+     * silently replacing the last (the collapse this fixes). Rolling over [MAX_CONCURRENT]
+     * slots so distinct receipts each get their own notification, bounded so they don't stack
+     * without end. Best-effort under a rare concurrent post (live observer + worker) — a
+     * collision at worst merges two near-simultaneous receipts.
+     */
+    private fun nextReceivedSlot(): Int {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val seq = prefs.getInt(KEY_RECEIVED_SEQ, 0)
+        prefs.edit().putInt(KEY_RECEIVED_SEQ, (seq + 1) % MAX_CONCURRENT).apply()
+        return seq % MAX_CONCURRENT
+    }
 
     companion object {
         const val CHANNEL_ID = "kuira_alerts"
@@ -111,5 +124,8 @@ class AlertNotifier(private val context: Context) {
         private const val RECEIVED_BASE_ID = 0xD078
         /** Spread of distinct ids so near-simultaneous alerts don't collide. */
         private const val MAX_CONCURRENT = 16
+        // The rolling received-slot counter outlives any single notifier instance.
+        private const val PREFS = "kuira_alert_state"
+        private const val KEY_RECEIVED_SEQ = "received_seq"
     }
 }

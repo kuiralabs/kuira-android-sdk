@@ -1,9 +1,11 @@
 package com.midnight.kuira.sdk.walletruntime
 
+import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +48,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class MidnightSdkProvider @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val walletSeedSource: WalletSeedSource,
     private val sdkFactory: MidnightSdkFactory,
 ) {
@@ -113,6 +116,9 @@ class MidnightSdkProvider @Inject constructor(
             // a non-null sdk, and must see the matching activeConfig when it does.
             _activeConfig.value = config
             _sdk.value = built
+            // Record the active (network, receive address) so the background receive poll
+            // (#271) knows what to check even after the SDK is dropped (lock / background).
+            runCatching { ReceiveTargetStore(appContext).setTarget(config.network, built.walletAddress) }
             Log.i(TAG, "SDK ready for $config")
             built
         }

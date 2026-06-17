@@ -8,6 +8,7 @@ import android.content.Context
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.midnight.kuira.sdk.OperationKind
 import com.midnight.kuira.sdk.OperationOutcome
 
 /**
@@ -44,17 +45,17 @@ class FinalizationNotifier(private val context: Context) {
     fun post(outcome: OperationOutcome) {
         ensureChannel()
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-        // ONE stable id: a new completion REPLACES the previous, so only the LATEST
-        // finalization is ever shown (host request — stacked "submitted/done" pushes were
-        // confusing, and tapping a stale one returned to a finished op). Paired with [cancel]
-        // on a new operation's start, a stale completion can't linger or be mis-tapped during
-        // the next op. Trade-off: two ops finishing at the same instant show only the latest
-        // completion — acceptable for "only the latest", and rare.
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, build(outcome))
+        NotificationManagerCompat.from(context)
+            .notify(finalizationNotificationId(outcome.kind, outcome.id), build(outcome))
     }
 
-    /** Clear the current finalization push — called when a new operation starts (only-latest). */
-    fun cancel() = NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    /**
+     * Clear the only-latest completion slot — called when a new operation starts so a stale
+     * non-value completion can't linger or be mis-tapped during the next op. Value-transfer
+     * (Send) finalizations live in their OWN ids and are deliberately NOT cleared here: each
+     * sent transaction is a record the user dismisses themselves.
+     */
+    fun cancel() = NotificationManagerCompat.from(context).cancel(ONLY_LATEST_ID)
 
     internal fun build(outcome: OperationOutcome): Notification {
         val title = outcome.completionLabel
@@ -91,7 +92,31 @@ class FinalizationNotifier(private val context: Context) {
 
     companion object {
         const val CHANNEL_ID = "kuira_tx_updates"
-        /** Single stable id: only the latest finalization shows (a new one replaces it). */
-        private const val NOTIFICATION_ID = 0xD058
+        /**
+         * Id map within the reserved finalization block 0xD058..0xD067:
+         *  - [ONLY_LATEST_ID] (0xD058): stale / non-value op completions (dust, contract,
+         *    custom). A new one REPLACES the previous so only the latest shows (#282); [cancel]
+         *    clears it on a new op.
+         *  - [SENT_BASE_ID] + id % [SENT_SPAN] (0xD059..0xD067): value sends. Each distinct send
+         *    keeps its own slot so transactions don't replace each other; keyed by the op id so
+         *    a single send's terminal outcome can't duplicate.
+         */
+        internal const val ONLY_LATEST_ID = 0xD058
+        internal const val SENT_BASE_ID = 0xD059
+        internal const val SENT_SPAN = 15
     }
 }
+
+/**
+ * Which notification id a finalization posts to (pure, unit-tested). A NIGHT
+ * [OperationKind.Send] is a value transaction — it gets its OWN id, keyed by the op [id], so
+ * distinct sends are separate, persistent records while a single send can't duplicate. Every
+ * other kind shares the single only-latest slot, so stale operation completions keep collapsing
+ * to the latest (#282).
+ */
+internal fun finalizationNotificationId(kind: OperationKind, id: Long): Int =
+    if (kind == OperationKind.Send) {
+        FinalizationNotifier.SENT_BASE_ID + (id % FinalizationNotifier.SENT_SPAN).toInt()
+    } else {
+        FinalizationNotifier.ONLY_LATEST_ID
+    }

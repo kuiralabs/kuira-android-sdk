@@ -11,6 +11,14 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.midnight.kuira.sdk.ActiveOperation
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.SyncStatus
@@ -32,11 +40,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import java.math.BigInteger
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -246,6 +253,12 @@ class WalletForegroundService : Service() {
             val alerter = AlertNotifier(application)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+            // Background receive polling (#271): a Doze-aware periodic poll + an expedited
+            // one-shot when the app backgrounds, so incoming unshielded NIGHT is noticed while
+            // the app is backgrounded / locked (when the live observer below isn't running).
+            // The worker self-gates on a persisted target + foreground state.
+            scheduleReceivePolling(application, scope, sessionLock)
+
             // Start the FGS when an operation or sync begins — but ONLY while the app is
             // foreground. Android 12+ forbids starting a foreground service from the
             // background (ForegroundServiceStartNotAllowedException), which is exactly the
@@ -321,39 +334,86 @@ class WalletForegroundService : Service() {
                     }
             }
 
-            // Incoming-funds alert (#264 inbound): tell the user when NIGHT ARRIVES while they're
-            // away. SUPPRESS it when an operation is in flight (our own send / claim moves the
-            // balance — not a receipt) or the wallet UI is foreground (they'll see it). [label]
-            // is a host-overridable resource (the SDK emits no English of its own).
+            // Incoming-funds alert (#264 inbound): tell the user when NIGHT ARRIVES — even while
+            // they're USING the app. Being in the app (mid-game, on another screen) is not the
+            // same as watching the wallet balance, so a receipt should still surface. SUPPRESS
+            // only when one of OUR OWN ops is in flight (a send / claim moves the balance — that
+            // is not a receipt). Cold-start absorption and dedup against the background poll come
+            // from the SHARED persisted checkpoint, not a foreground gate: only a balance ABOVE
+            // the recorded high fires (so launching with an existing balance is silent), and
+            // whichever path — this observer or the worker — records the high first leaves the
+            // other with no delta. [label] is host-overridable (the SDK emits no English of its own).
             scope.launch {
+                val checkpoint = ReceiveCheckpointStore(application)
                 provider.sdk
-                    .flatMapLatest { sdk -> sdk?.let { incomingNight(it) } ?: emptyFlow() }
-                    .collect { delta ->
-                        val opActive = provider.sdk.value?.operations?.active?.value?.isNotEmpty() == true
-                        // Suppress our OWN balance moves (a send/claim op is in flight) and the
-                        // case where the wallet UI is already up (they'll see the balance).
-                        if (opActive || sessionLock.inForeground.value) return@collect
-                        runCatching {
-                            alerter.postReceived(
-                                application.getString(R.string.kuira_alert_received_fmt, formatNight(delta)),
-                                application.getString(R.string.kuira_alert_received_body),
-                                walletContentIntent,
-                            )
+                    .flatMapLatest { sdk ->
+                        sdk?.let { s -> s.wallet.balanceFlow().map { s to it.totalNight } } ?: emptyFlow()
+                    }
+                    .collect { (sdk, current) ->
+                        // Our own send/claim is moving the balance — not an incoming receipt.
+                        if (provider.sdk.value?.operations?.active?.value?.isNotEmpty() == true) return@collect
+                        val network = provider.activeConfig.value?.network ?: return@collect
+                        val address = sdk.walletAddress
+                        val stored = checkpoint.lastHigh(network, address)
+                        ReceiveCheckpointStore.receivedDelta(stored, current)?.let { delta ->
+                            runCatching {
+                                alerter.postReceived(
+                                    application.getString(R.string.kuira_alert_received_fmt, formatNight(delta)),
+                                    application.getString(R.string.kuira_alert_received_body),
+                                    walletContentIntent,
+                                )
+                            }
+                        }
+                        if (ReceiveCheckpointStore.shouldRecord(stored, current)) {
+                            checkpoint.recordHigh(network, address, current)
                         }
                     }
             }
         }
 
         /**
-         * Stream of incoming NIGHT amounts (smallest units) for [sdk]: emits the positive delta
-         * each time the balance reaches a NEW HIGH (see [nightReceipts]). The running high resets
-         * per-SDK (a network switch rebuilds it). The cold-start `0 → balance` ramp is suppressed
-         * by the observer's foreground-gate (a cold start is foreground), not by this stream.
-         * Best-effort heuristic over the balance stream — a precise received-UTXO event would need
-         * indexer support, a documented follow-on.
+         * Schedule the background receive poll (#271). Idempotent: the periodic poll is unique
+         * work (KEEP across launches); the on-background one-shot replaces any pending one.
          */
-        private fun incomingNight(sdk: MidnightSdk): Flow<BigInteger> =
-            sdk.wallet.balanceFlow().map { it.totalNight }.nightReceipts()
+        private fun scheduleReceivePolling(
+            application: Application,
+            scope: CoroutineScope,
+            sessionLock: SessionLock,
+        ) {
+            val networkConstraint = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            // Periodic poll. Android floors periodic work at 15 min and Doze batches it
+            // further — the "reliable but delayed" path while the device is idle/locked.
+            WorkManager.getInstance(application).enqueueUniquePeriodicWork(
+                ReceivePollWorker.PERIODIC_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                PeriodicWorkRequestBuilder<ReceivePollWorker>(15, TimeUnit.MINUTES)
+                    .setConstraints(networkConstraint)
+                    .build(),
+            )
+            // Expedited one-shot the moment the app backgrounds (foreground → background), so a
+            // receipt that lands right after the user leaves surfaces in seconds, not at the
+            // next periodic tick.
+            scope.launch {
+                var wasForeground = false
+                sessionLock.inForeground.collect { foreground ->
+                    if (wasForeground && !foreground) {
+                        runCatching {
+                            WorkManager.getInstance(application).enqueueUniqueWork(
+                                ReceivePollWorker.ONESHOT_NAME,
+                                ExistingWorkPolicy.REPLACE,
+                                OneTimeWorkRequestBuilder<ReceivePollWorker>()
+                                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                                    .setConstraints(networkConstraint)
+                                    .build(),
+                            )
+                        }
+                    }
+                    wasForeground = foreground
+                }
+            }
+        }
     }
 
     @EntryPoint
@@ -361,36 +421,5 @@ class WalletForegroundService : Service() {
     interface WalletForegroundEntryPoint {
         fun sdkProvider(): MidnightSdkProvider
         fun sessionLock(): SessionLock
-    }
-}
-
-/**
- * Pure seam (unit-tested): from a stream of NIGHT totals, emit a received-funds amount each time
- * the balance reaches a NEW HIGH (the delta over the previous high). Drives
- * [WalletForegroundService]'s incoming-funds alert (#264 inbound).
- *
- * Why "new high" and not just "any increase": the shielded subscription resets to a low/stale
- * value on each reconnect (it's flaky on localnet — "connection abort") and then re-syncs back
- * up, so a naive prev-vs-curr diff counts that RECOVERY as a phantom receipt. Tracking the
- * running high means a dip-and-recover never re-counts — only a genuinely higher balance does.
- *
- * Trade-off: a receipt that arrives AFTER a spend (so the new balance is still below the prior
- * high) is not flagged until the balance exceeds that old high. Acceptable for an alert (vs. a
- * stream of false positives); a precise received-UTXO event would need indexer support.
- *
- * Deliberately not gated on sync status — an airdrop always lands mid-sync, so such a gate
- * swallows real receipts. The cold-start `0 → balance` ramp is handled by the observer's
- * foreground-suppression (a cold start is foreground).
- */
-internal fun Flow<BigInteger>.nightReceipts(): Flow<BigInteger> = flow {
-    var high: BigInteger? = null
-    collect { curr ->
-        val prevHigh = high
-        when {
-            prevHigh == null -> high = curr          // baseline
-            curr > prevHigh -> { emit(curr - prevHigh); high = curr }
-            // curr <= prevHigh: a dip (a send, or a flaky resync transient) — keep the high so
-            // the recovery back up isn't re-counted as a receipt.
-        }
     }
 }

@@ -1,5 +1,6 @@
 package com.midnight.kuira.sdk.walletruntime
 
+import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -36,8 +37,9 @@ import org.robolectric.RobolectricTestRunner
  * handing back relaxed [MidnightSdk] mocks — no real HD derivation, Room DB,
  * or indexer socket required.
  *
- * Robolectric only for `android.util.Log` shadowing (the provider logs build
- * lifecycle); the class touches no Context or SharedPreferences itself.
+ * Robolectric for `android.util.Log` shadowing (the provider logs build lifecycle).
+ * The provider's only Context use is persisting the receive-poll target (#271),
+ * wrapped in runCatching and given a relaxed mock here.
  */
 @OptIn(ExperimentalCoroutinesApi::class) // runCurrent — TestScope time control
 @RunWith(RobolectricTestRunner::class)
@@ -60,6 +62,9 @@ class MidnightSdkProviderTest {
     )
 
     private fun newProvider() = MidnightSdkProvider(
+        // Relaxed: the provider only uses it to persist the receive-poll target (#271),
+        // inside a runCatching — the write itself is covered by ReceiveCheckpointStore tests.
+        appContext = mockk(relaxed = true),
         walletSeedSource = walletSeedSource,
         sdkFactory = sdkFactory,
     )

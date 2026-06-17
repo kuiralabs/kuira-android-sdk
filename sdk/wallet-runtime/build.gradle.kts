@@ -51,6 +51,8 @@ dependencies {
     // FragmentActivity flows through to WalletSeedSource (biometric host).
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    // WorkManager — Doze-aware background receive polling (#271).
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Hilt — MidnightSdkProvider is a @Singleton with an @Inject constructor.
     implementation(libs.hilt.android)

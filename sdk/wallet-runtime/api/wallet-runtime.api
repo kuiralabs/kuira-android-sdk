@@ -66,7 +66,7 @@ public abstract interface class com/midnight/kuira/sdk/walletruntime/MidnightSdk
 
 public final class com/midnight/kuira/sdk/walletruntime/MidnightSdkProvider {
 	public static final field TAG Ljava/lang/String;
-	public fun <init> (Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)V
+	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)V
 	public final fun awaitSdk (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close ()V
 	public final fun ensureSdk (Landroidx/fragment/app/FragmentActivity;Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -75,10 +75,10 @@ public final class com/midnight/kuira/sdk/walletruntime/MidnightSdkProvider {
 }
 
 public final class com/midnight/kuira/sdk/walletruntime/MidnightSdkProvider_Factory : dagger/internal/Factory {
-	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider_Factory;
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider_Factory;
 	public fun get ()Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;
 	public synthetic fun get ()Ljava/lang/Object;
-	public static fun newInstance (Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;
+	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkFactory;)Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;
 }
 
 public final class com/midnight/kuira/sdk/walletruntime/OperationLabelsKt {
@@ -101,6 +101,52 @@ public final class com/midnight/kuira/sdk/walletruntime/PrefsDustBackupDigestSto
 	public fun clear ()V
 	public fun get (Ljava/lang/String;)Ljava/lang/String;
 	public fun put (Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceiveCheckpointStore {
+	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/ReceiveCheckpointStore$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun lastHigh (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)Ljava/math/BigInteger;
+	public final fun recordHigh (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/math/BigInteger;)V
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceiveCheckpointStore$Companion {
+	public final fun receivedDelta (Ljava/math/BigInteger;Ljava/math/BigInteger;)Ljava/math/BigInteger;
+	public final fun shouldRecord (Ljava/math/BigInteger;Ljava/math/BigInteger;)Z
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceivePollWorker : androidx/work/CoroutineWorker {
+	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/ReceivePollWorker$Companion;
+	public static final field ONESHOT_NAME Ljava/lang/String;
+	public static final field PERIODIC_NAME Ljava/lang/String;
+	public fun <init> (Landroid/content/Context;Landroidx/work/WorkerParameters;)V
+	public fun doWork (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceivePollWorker$Companion {
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceiveTargetStore {
+	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun setTarget (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)V
+	public final fun target ()Lcom/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Target;
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Companion {
+}
+
+public final class com/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Target {
+	public fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)Lcom/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Target;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Target;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Target;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAddress ()Ljava/lang/String;
+	public final fun getNetwork ()Lcom/midnight/kuira/core/network/MidnightNetwork;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/sdk/walletruntime/SessionLock {

@@ -12,6 +12,15 @@ public abstract interface class com/midnight/kuira/sdk/AppStateCloudBackup {
 	public abstract fun uploadAppState ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public final class com/midnight/kuira/sdk/BackgroundReceiveChecker {
+	public static final field Companion Lcom/midnight/kuira/sdk/BackgroundReceiveChecker$Companion;
+	public fun <init> (Landroid/content/Context;)V
+	public final fun currentUnshieldedNight (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/BackgroundReceiveChecker$Companion {
+}
+
 public final class com/midnight/kuira/sdk/BackupStatusSnapshot {
 	public fun <init> ()V
 	public fun <init> (Lcom/midnight/kuira/sdk/CloudBackupStatus;Lcom/midnight/kuira/sdk/CloudBackupStatus;)V
