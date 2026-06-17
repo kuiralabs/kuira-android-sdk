@@ -108,10 +108,13 @@ class WalletPanelViewModelTest {
         coVerify { driveAuth.authorize() }
     }
 
-    // ── #246 true disable: delete both blobs, then revoke, then opt out ──
+    // ── disable: delete both cloud blobs + opt out, WITHOUT revoking the Drive grant ──
+    // The deleted blobs already remove the user's data from Drive; revoking the grant would only
+    // strand re-enable (authorize() hangs ~20s then fails ApiException 22 right after a revoke), so
+    // the switch-off must NOT revoke — that keeps re-enabling instant.
 
     @Test
-    fun `disableBackup deletes both cloud blobs BEFORE revoking, then opts out`() = runTest {
+    fun `disableBackup deletes both cloud blobs and opts out WITHOUT revoking the grant`() = runTest {
         val wallet = mockk<MidnightWallet>(relaxed = true)
         val built = mockk<MidnightSdk>(relaxed = true)
         every { built.wallet } returns wallet
@@ -121,12 +124,13 @@ class WalletPanelViewModelTest {
         vm.disableBackup(devConfig(), activity)
         advanceUntilIdle()
 
-        // ORDER matters: delete BOTH blobs while Drive access still exists, THEN revoke consent.
+        // Both blobs deleted (dust, then app-state).
         coVerifyOrder {
             wallet.disableDustCloudBackup()
             wallet.disableAppStateCloudBackup()
-            driveAuth.revoke()
         }
+        // The grant is KEPT — revoking would make re-enable hang/fail (ApiException 22).
+        coVerify(exactly = 0) { driveAuth.revoke() }
         // Opted out locally so the lane reflects off + survives a restart.
         assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
     }
@@ -144,9 +148,10 @@ class WalletPanelViewModelTest {
         vm.disableBackup(devConfig(), activity)
         advanceUntilIdle()
 
-        // Per-leg isolation: a failed dust delete must NOT skip the app-state delete or the revoke.
+        // Per-leg isolation: a failed dust delete must NOT skip the app-state delete.
         coVerify { wallet.disableAppStateCloudBackup() }
-        coVerify { driveAuth.revoke() }
+        // Still never revokes — keeps re-enable instant.
+        coVerify(exactly = 0) { driveAuth.revoke() }
         // …and the user is opted out (the UI never lies "still backed up").
         assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
     }
