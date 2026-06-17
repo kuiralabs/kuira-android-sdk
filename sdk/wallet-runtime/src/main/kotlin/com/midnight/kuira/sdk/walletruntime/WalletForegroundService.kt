@@ -287,10 +287,24 @@ class WalletForegroundService : Service() {
             }
 
             // Fire the dismissible finalization notification on each terminal outcome (#264).
+            // FinalizationNotifier uses ONE stable id, so each completion replaces the previous —
+            // only the latest is ever shown.
             scope.launch {
                 provider.sdk
                     .flatMapLatest { it?.operations?.outcomes ?: emptyFlow() }
                     .collect { outcome -> runCatching { finalizer.post(outcome) } }
+            }
+
+            // Clear the prior completion push the moment a NEW operation starts, so a stale
+            // "done" can't linger — or be tapped to return to an already-finished op — during the
+            // next one. distinctUntilChanged on isNotEmpty fires once per op session (not per
+            // nested call), so it doesn't flicker mid-operation.
+            scope.launch {
+                provider.sdk
+                    .flatMapLatest { it?.operations?.active ?: flowOf(emptyList<ActiveOperation>()) }
+                    .map { it.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collect { anyActive -> if (anyActive) runCatching { finalizer.cancel() } }
             }
 
             // "Your turn" alerts (#264 inbound): a tracked op asked for the user's attention

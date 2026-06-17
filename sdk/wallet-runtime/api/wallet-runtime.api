@@ -42,6 +42,7 @@ public final class com/midnight/kuira/sdk/walletruntime/FinalizationNotifier {
 	public static final field CHANNEL_ID Ljava/lang/String;
 	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/FinalizationNotifier$Companion;
 	public fun <init> (Landroid/content/Context;)V
+	public final fun cancel ()V
 	public final fun ensureChannel ()V
 	public final fun post (Lcom/midnight/kuira/sdk/OperationOutcome;)V
 }

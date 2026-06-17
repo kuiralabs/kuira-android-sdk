@@ -44,12 +44,17 @@ class FinalizationNotifier(private val context: Context) {
     fun post(outcome: OperationOutcome) {
         ensureChannel()
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-        // A distinct id per outcome so two finalizing ops don't overwrite each other.
-        NotificationManagerCompat.from(context).notify(
-            BASE_NOTIFICATION_ID + (outcome.id % MAX_CONCURRENT).toInt(),
-            build(outcome),
-        )
+        // ONE stable id: a new completion REPLACES the previous, so only the LATEST
+        // finalization is ever shown (host request — stacked "submitted/done" pushes were
+        // confusing, and tapping a stale one returned to a finished op). Paired with [cancel]
+        // on a new operation's start, a stale completion can't linger or be mis-tapped during
+        // the next op. Trade-off: two ops finishing at the same instant show only the latest
+        // completion — acceptable for "only the latest", and rare.
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, build(outcome))
     }
+
+    /** Clear the current finalization push — called when a new operation starts (only-latest). */
+    fun cancel() = NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
 
     internal fun build(outcome: OperationOutcome): Notification {
         val title = outcome.completionLabel
@@ -86,8 +91,7 @@ class FinalizationNotifier(private val context: Context) {
 
     companion object {
         const val CHANNEL_ID = "kuira_tx_updates"
-        private const val BASE_NOTIFICATION_ID = 0xD058
-        /** Spread of distinct ids so near-simultaneous finalizations don't collide. */
-        private const val MAX_CONCURRENT = 16
+        /** Single stable id: only the latest finalization shows (a new one replaces it). */
+        private const val NOTIFICATION_ID = 0xD058
     }
 }
