@@ -20,10 +20,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -39,13 +41,21 @@ import javax.inject.Singleton
  * subscription when it resets the shared WebSocket connection.
  */
 @Singleton
-class ShieldedRepository @Inject constructor(
+open class ShieldedRepository @Inject constructor(
     @ShieldedStateDataStore private val dataStore: DataStore<Preferences>,
     private val indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient,
     private val networkConfig: NetworkConfig
 ) {
     companion object {
         private const val TAG = "ShieldedRepository"
+
+        /**
+         * Timeout for the cheap tip probe (read the chain's zswap `maxId` from the first event of
+         * a from-genesis subscription) that decides at-tip / delta / full. If it doesn't resolve
+         * in time the tip is unknown and we fall back to a safe full genesis sync.
+         */
+        private const val TIP_PROBE_TIMEOUT_MS = 30_000L
+
         private fun stateKey(address: String) = stringPreferencesKey("zswap_state_$address")
         private fun eventIdKey(address: String) = longPreferencesKey("zswap_last_event_$address")
     }
@@ -69,57 +79,118 @@ class ShieldedRepository @Inject constructor(
     }
 
     /**
-     * Sync shielded state from blockchain.
+     * Sync shielded (zswap) state from blockchain (#279/#1 — checkpoint + delta).
      *
-     * Queries all zswap events, replays into ZswapLocalState, persists.
-     * For now: full replay from genesis (incremental sync in Phase 2).
+     * Previously this re-streamed and re-replayed EVERY zswap event from genesis on every
+     * refresh ("Phase 2" TODO). Now it resumes from a saved checkpoint: probe the chain's
+     * zswap tip (`maxId`) and route via [shieldedSyncPlan] —
+     *  - **AT_TIP** (tip == cursor): nothing new — keep the persisted state, skip the network.
+     *  - **DELTA** (tip > cursor): replay only events after the cursor ON TOP of the restored
+     *    checkpoint (proven byte-identical to a genesis replay by `ZswapCheckpointResumeTest`).
+     *  - **FULL** (no checkpoint / reorg / probe timeout): replay from genesis, as before.
+     * The checkpoint (state + cursor) is written atomically; a half-written pair reads as absent
+     * (forces a clean full sync), mirroring the dust side's `NonLinearInsertion` safety net.
      *
      * @param address Wallet address (for DataStore key)
      * @param zswapSeed 32-byte zswap seed (derived at m/44'/2400'/0'/3/0)
-     * @return true if sync succeeded and coins found
+     * @return true if sync succeeded and coins were found
      */
     suspend fun syncFromBlockchain(address: String, zswapSeed: ByteArray): Boolean {
         Log.d(TAG, "Syncing shielded state for $address")
-
         try {
-            val eventsHex = queryZswapEventsViaOwnClient()
-
-            if (eventsHex.isEmpty()) {
-                Log.d(TAG, "No zswap events found")
-                return false
+            // Only probe the tip when we have a checkpoint to compare against — a first sync
+            // goes straight to full, where the genesis stream surfaces the tip anyway.
+            val checkpoint = loadCheckpoint(address)
+            val tip = if (checkpoint != null) {
+                withTimeoutOrNull(TIP_PROBE_TIMEOUT_MS) {
+                    subscribeToZswapEvents(fromId = null).firstOrNull()?.maxId ?: -1L
+                }
+            } else {
+                null
             }
 
-            Log.d(TAG, "Retrieved ${eventsHex.length / 2} bytes of zswap events")
-
-            val initialState = ZswapLocalState.create()
-            if (initialState == null) {
-                Log.e(TAG, "Failed to create ZswapLocalState")
-                return false
-            }
-
-            try {
-                val restoredState = initialState.replayEvents(zswapSeed, eventsHex)
-                if (restoredState == null) {
-                    Log.e(TAG, "Failed to replay zswap events")
-                    return false
+            return when (shieldedSyncPlan(tip = tip, cursor = checkpoint?.cursor)) {
+                ShieldedSyncPlan.AT_TIP -> {
+                    // Caught up: the persisted state already covers every zswap event, and (unlike
+                    // dust) the shielded balance isn't time-based, so there's nothing to recompute.
+                    val coinCount = checkpoint!!.state.getCoinCount()
+                    checkpoint.state.close()
+                    Log.d(TAG, "At tip (event ${checkpoint.cursor}) — shielded state current, skipping re-replay")
+                    coinCount > 0
                 }
-
-                try {
-                    val coinCount = restoredState.getCoinCount()
-                    Log.d(TAG, "Replay complete: $coinCount shielded coins")
-
-                    saveState(address, restoredState)
-
-                    return coinCount > 0
-                } finally {
-                    restoredState.close()
+                ShieldedSyncPlan.DELTA -> deltaSync(address, zswapSeed, checkpoint!!)
+                ShieldedSyncPlan.FULL -> {
+                    checkpoint?.state?.close()
+                    fullSync(address, zswapSeed)
                 }
-            } finally {
-                initialState.close()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync shielded state", e)
             return false
+        }
+    }
+
+    /** Replay every zswap event from genesis into a fresh state and checkpoint it. */
+    private suspend fun fullSync(address: String, zswapSeed: ByteArray): Boolean {
+        val stream = streamZswapEvents(fromId = null)
+        if (stream.count == 0) {
+            Log.d(TAG, "No zswap events found")
+            return false
+        }
+        Log.d(TAG, "Full sync from genesis: ${stream.count} events (${stream.eventsHex.length / 2} bytes)")
+        val base = ZswapLocalState.create() ?: run {
+            Log.e(TAG, "Failed to create ZswapLocalState")
+            return false
+        }
+        val state = try {
+            base.replayEvents(zswapSeed, stream.eventsHex)
+        } finally {
+            base.close()
+        }
+        if (state == null) {
+            Log.e(TAG, "Failed to replay zswap events")
+            return false
+        }
+        return persistAndReport(address, state, stream.lastEventId, "Full sync")
+    }
+
+    /**
+     * Replay only the events after the checkpoint cursor ON TOP of the restored checkpoint state.
+     * Falls back to a full genesis rebuild if the delta replay is rejected (a misaligned resume —
+     * the same `NonLinearInsertion` safety net the dust side relies on).
+     */
+    private suspend fun deltaSync(address: String, zswapSeed: ByteArray, checkpoint: ZswapCheckpoint): Boolean {
+        val stream = streamZswapEvents(fromId = checkpoint.cursor + 1)
+        if (stream.count == 0) {
+            // Nothing new arrived between the probe and the stream — keep the checkpoint.
+            val coinCount = checkpoint.state.getCoinCount()
+            checkpoint.state.close()
+            Log.d(TAG, "Delta sync: no new events past ${checkpoint.cursor}, keeping checkpoint")
+            return coinCount > 0
+        }
+        Log.d(TAG, "Delta sync: resuming from event ${checkpoint.cursor}, replaying ${stream.count} events")
+        val newState = try {
+            checkpoint.state.replayEvents(zswapSeed, stream.eventsHex)
+        } finally {
+            checkpoint.state.close()
+        }
+        if (newState == null) {
+            Log.w(TAG, "Delta replay rejected (misaligned resume) — rebuilding from genesis")
+            deleteState(address)
+            return fullSync(address, zswapSeed)
+        }
+        return persistAndReport(address, newState, stream.lastEventId, "Delta sync")
+    }
+
+    /** Checkpoint [state] at [cursor] (best-effort) and report has-coins. Closes [state]. */
+    private suspend fun persistAndReport(address: String, state: ZswapLocalState, cursor: Long, label: String): Boolean {
+        try {
+            val coinCount = state.getCoinCount()
+            saveCheckpoint(address, state, cursor)
+            Log.d(TAG, "$label complete: $coinCount shielded coins, cursor=$cursor")
+            return coinCount > 0
+        } finally {
+            state.close()
         }
     }
 
@@ -151,8 +222,11 @@ class ShieldedRepository @Inject constructor(
 
     /**
      * Subscribe to zswap events using dedicated WebSocket (not shared with unshielded).
+     *
+     * `open` so tests can substitute a deterministic event source (the production body opens a
+     * real WebSocket); see `ShieldedRepositorySyncPlanInstrumentedTest`.
      */
-    fun subscribeToZswapEvents(fromId: Long? = null): Flow<RawLedgerEvent> {
+    open fun subscribeToZswapEvents(fromId: Long? = null): Flow<RawLedgerEvent> {
         val variables = buildMap<String, Any> {
             if (fromId != null) {
                 put("id", fromId)
@@ -208,22 +282,32 @@ class ShieldedRepository @Inject constructor(
         }
     }
 
+    /** Result of streaming zswap events: the concatenated hex, the last applied event id, and a count. */
+    private data class ZswapStreamResult(val eventsHex: String, val lastEventId: Long, val count: Int)
+
     /**
-     * Query all zswap events using own WebSocket client (not shared).
+     * Stream zswap events from [fromId] (null = genesis) until caught up to the chain tip, in id
+     * order. Returns the concatenated raw hex (the form [ZswapLocalState.replayEvents] expects)
+     * plus the highest applied event id — the cursor to checkpoint. Same WebSocket pattern as
+     * `IndexerClientImpl.queryDustEvents`.
      */
-    /**
-     * Query all zswap events using dedicated WebSocket (not shared with unshielded).
-     * Same pattern as IndexerClientImpl.queryDustEvents.
-     */
-    private suspend fun queryZswapEventsViaOwnClient(): String {
-        val allEvents = subscribeToZswapEvents(fromId = null)
+    private suspend fun streamZswapEvents(fromId: Long?): ZswapStreamResult {
+        val events = subscribeToZswapEvents(fromId = fromId)
             .transformWhile { event ->
                 emit(event)
                 event.id < event.maxId
             }
             .toList()
 
-        return if (allEvents.isEmpty()) "" else allEvents.sortedBy { it.id }.joinToString("") { it.rawHex }
+        if (events.isEmpty()) {
+            return ZswapStreamResult(eventsHex = "", lastEventId = (fromId ?: 0L) - 1, count = 0)
+        }
+        val sorted = events.sortedBy { it.id }
+        return ZswapStreamResult(
+            eventsHex = sorted.joinToString("") { it.rawHex },
+            lastEventId = sorted.last().id,
+            count = sorted.size,
+        )
     }
 
     /** Check if cached shielded state exists. */
@@ -248,6 +332,34 @@ class ShieldedRepository @Inject constructor(
         }
     }
 
+    /**
+     * Persist the checkpoint (serialized state + resume cursor) ATOMICALLY — both keys in one
+     * edit — so a reader can never observe a torn pair (an old state with a new cursor would make
+     * the next delta resume at the wrong frontier; see [loadCheckpoint]).
+     */
+    suspend fun saveCheckpoint(address: String, state: ZswapLocalState, cursor: Long) {
+        val serialized = state.serialize() ?: return
+        dataStore.edit { prefs ->
+            prefs[stateKey(address)] = serialized
+            prefs[eventIdKey(address)] = cursor
+        }
+    }
+
+    /**
+     * Load the checkpoint (state + cursor) as ONE consistent snapshot — both keys from a single
+     * DataStore emission, so the pair can't be torn across a concurrent write. Returns null if
+     * EITHER half is missing or the state fails to deserialize (a legacy state saved by [saveState]
+     * has no cursor → reads as absent → caller does a clean full sync that establishes the cursor).
+     * The returned [ZswapCheckpoint.state] is owned by the caller and must be closed.
+     */
+    suspend fun loadCheckpoint(address: String): ZswapCheckpoint? {
+        val prefs = dataStore.data.first()
+        val hexString = prefs[stateKey(address)] ?: return null
+        val cursor = prefs[eventIdKey(address)] ?: return null
+        val state = ZswapLocalState.deserialize(hexString) ?: return null
+        return ZswapCheckpoint(state, cursor)
+    }
+
     suspend fun deleteState(address: String) {
         dataStore.edit { prefs ->
             prefs.remove(stateKey(address))
@@ -255,4 +367,40 @@ class ShieldedRepository @Inject constructor(
         }
         Log.d(TAG, "Deleted shielded state for $address")
     }
+}
+
+/** A loaded shielded checkpoint: the restored state plus its resume cursor (last applied event id). */
+class ZswapCheckpoint(val state: ZswapLocalState, val cursor: Long)
+
+/** What a shielded sync should do, given the chain zswap tip vs our checkpoint cursor. */
+internal enum class ShieldedSyncPlan {
+    /** No checkpoint, unknown tip (probe timeout), or chain reset below us → full genesis replay. */
+    FULL,
+
+    /** Chain tip equals our cursor — already caught up; keep the checkpoint, skip the network. */
+    AT_TIP,
+
+    /** Chain tip is ahead — replay only the events after the cursor onto the checkpoint. */
+    DELTA,
+}
+
+/**
+ * Pure decision seam (unit-tested) for [ShieldedRepository.syncFromBlockchain].
+ *
+ * [tip] is the chain's current highest zswap event id (the `maxId` probe); null means no
+ * checkpoint to probe against, or the probe timed out. [cursor] is our checkpoint's last applied
+ * event id; null means no checkpoint.
+ *
+ *  - no [cursor] → [ShieldedSyncPlan.FULL] (first sync).
+ *  - [tip] null → [ShieldedSyncPlan.FULL] (unknown tip → safe full).
+ *  - `tip < cursor` → [ShieldedSyncPlan.FULL] (chain reset below us → rebuild from genesis).
+ *  - `tip == cursor` → [ShieldedSyncPlan.AT_TIP] (caught up — skip the genesis re-replay).
+ *  - `tip > cursor` → [ShieldedSyncPlan.DELTA] (replay only the new events).
+ */
+internal fun shieldedSyncPlan(tip: Long?, cursor: Long?): ShieldedSyncPlan = when {
+    cursor == null -> ShieldedSyncPlan.FULL
+    tip == null -> ShieldedSyncPlan.FULL
+    tip < cursor -> ShieldedSyncPlan.FULL
+    tip == cursor -> ShieldedSyncPlan.AT_TIP
+    else -> ShieldedSyncPlan.DELTA
 }

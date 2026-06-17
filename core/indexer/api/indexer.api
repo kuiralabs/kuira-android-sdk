@@ -1142,16 +1142,18 @@ public final class com/midnight/kuira/core/indexer/repository/DustRepository_Fac
 	public static fun newInstance (Lcom/midnight/kuira/core/indexer/database/DustDao;Landroidx/datastore/core/DataStore;Lcom/midnight/kuira/core/indexer/dust/DustBalanceCalculator;Lcom/midnight/kuira/core/indexer/api/IndexerClient;)Lcom/midnight/kuira/core/indexer/repository/DustRepository;
 }
 
-public final class com/midnight/kuira/core/indexer/repository/ShieldedRepository {
+public class com/midnight/kuira/core/indexer/repository/ShieldedRepository {
 	public static final field Companion Lcom/midnight/kuira/core/indexer/repository/ShieldedRepository$Companion;
 	public fun <init> (Landroidx/datastore/core/DataStore;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/network/NetworkConfig;)V
 	public final fun deleteState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getBalances (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getCoinCount (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun hasCachedState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun loadCheckpoint (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun loadState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun saveCheckpoint (Ljava/lang/String;Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun saveState (Ljava/lang/String;Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun subscribeToZswapEvents (Ljava/lang/Long;)Lkotlinx/coroutines/flow/Flow;
+	public fun subscribeToZswapEvents (Ljava/lang/Long;)Lkotlinx/coroutines/flow/Flow;
 	public static synthetic fun subscribeToZswapEvents$default (Lcom/midnight/kuira/core/indexer/repository/ShieldedRepository;Ljava/lang/Long;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
 	public final fun syncFromBlockchain (Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -1179,6 +1181,12 @@ public final class com/midnight/kuira/core/indexer/repository/SpentDustNullifier
 	public fun get ()Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore;
 	public synthetic fun get ()Ljava/lang/Object;
 	public static fun newInstance (Landroidx/datastore/core/DataStore;)Lcom/midnight/kuira/core/indexer/repository/SpentDustNullifierStore;
+}
+
+public final class com/midnight/kuira/core/indexer/repository/ZswapCheckpoint {
+	public fun <init> (Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;J)V
+	public final fun getCursor ()J
+	public final fun getState ()Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
 }
 
 public final class com/midnight/kuira/core/indexer/storage/EventEntity {
