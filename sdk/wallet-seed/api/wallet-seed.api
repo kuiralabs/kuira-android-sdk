@@ -38,6 +38,23 @@ public final class com/midnight/kuira/sdk/walletseed/ForgeResult {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/midnight/kuira/sdk/walletseed/InvalidRecoveryPhraseException : java/lang/Exception {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/sdk/walletseed/RecoveryNotAllowedException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/sdk/walletseed/RecoveryPhraseManager_Factory : dagger/internal/Factory {
+	public static fun create (Ldagger/internal/Provider;Ldagger/internal/Provider;)Lcom/midnight/kuira/sdk/walletseed/RecoveryPhraseManager_Factory;
+	public fun get ()Lcom/midnight/kuira/sdk/walletseed/RecoveryPhraseManager;
+	public synthetic fun get ()Ljava/lang/Object;
+	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/sdk/walletseed/RecoverySeedStore;)Lcom/midnight/kuira/sdk/walletseed/RecoveryPhraseManager;
+}
+
 public final class com/midnight/kuira/sdk/walletseed/SigilSession {
 	public static final field CHALLENGE_SIZE I
 	public static final field POST_CREATE_SETTLE_MS J
@@ -58,13 +75,23 @@ public final class com/midnight/kuira/sdk/walletseed/SigilSession_Factory : dagg
 	public static fun newInstance (Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilIdentityProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;)Lcom/midnight/kuira/sdk/walletseed/SigilSession;
 }
 
-public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource {
+public abstract interface class com/midnight/kuira/sdk/walletseed/WalletRecovery {
+	public abstract fun isPhraseSaved ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun isValidPhrase (Ljava/util/List;)Z
+	public abstract fun markPhraseSaved ()V
+	public abstract fun restoreFromPhrase (Landroidx/fragment/app/FragmentActivity;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun revealPhrase (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource : com/midnight/kuira/sdk/walletseed/RecoverySeedStore {
 	public static final field Companion Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource$Companion;
 	public static final field KEY_SEED_IS_PRF_DERIVED Ljava/lang/String;
 	public static final field PREFS_NAME Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/auth/SeedVault;Lcom/midnight/kuira/core/auth/WalletKeyManager;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)V
-	public final fun acceptPreDerivedSeed (Landroidx/fragment/app/FragmentActivity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun acceptPreDerivedSeed (Landroidx/fragment/app/FragmentActivity;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun ensureSeedReady (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun hasSeed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun loadEntropy (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun requireFreshAuthNext ()V
 }
 
@@ -77,5 +104,13 @@ public final class com/midnight/kuira/sdk/walletseed/WalletSeedSource_Factory : 
 	public fun get ()Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;
 	public synthetic fun get ()Ljava/lang/Object;
 	public static fun newInstance (Landroid/content/Context;Lcom/midnight/kuira/core/auth/SeedVault;Lcom/midnight/kuira/core/auth/WalletKeyManager;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;)Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;
+}
+
+public final class com/midnight/kuira/sdk/walletseed/di/HiltWrapper_RecoveryModule {
+	public fun <init> ()V
+}
+
+public class hilt_aggregated_deps/_com_midnight_kuira_sdk_walletseed_di_HiltWrapper_RecoveryModule {
+	public fun <init> ()V
 }
 

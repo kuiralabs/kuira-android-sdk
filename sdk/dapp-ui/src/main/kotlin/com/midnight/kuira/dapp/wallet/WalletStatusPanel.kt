@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -189,6 +188,13 @@ fun WalletStatusPanel(
      * through, so a host increments a counter and the panel pops open.
      */
     openSheetSignal: Int = 0,
+    /**
+     * Opens the host's Settings surface — fired by the gear in the expanded sheet (shown only
+     * when the wallet is Ready, since the settings act on a live wallet). [PanelBar] wires this
+     * to its bundled [WalletSettingsScreen]; default no-op so standalone call sites compile
+     * unchanged and a host can hide the gear by leaving it unset.
+     */
+    onOpenSettings: () -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -357,6 +363,15 @@ fun WalletStatusPanel(
                         sheetState.hide()
                         sheetOpen = false
                     }
+                },
+                onSettings = {
+                    // Close the sheet, then surface Settings (a full-screen overlay the host
+                    // hosts above us) — same sheet→overlay handoff as Receive/Send/Lock.
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        sheetOpen = false
+                    }
+                    onOpenSettings()
                 },
                 onClose = {
                     coroutineScope.launch {
@@ -570,6 +585,7 @@ private fun WalletSheetContent(
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onLockNow: () -> Unit,
+    onSettings: () -> Unit,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -596,18 +612,32 @@ private fun WalletSheetContent(
                     bottom = PanelDimens.SheetVerticalPadding,
                 ),
         ) {
-            // No title (redundant — the pill already names the wallet). Just the
-            // light/dark toggle, top-right; shows the icon for the mode you'd switch to.
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Text(
-                    if (lightMode) "☾" else "☀",
-                    color = colors.onSheetDim,
-                    fontSize = 18.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(PanelDimens.PillCornerRadius))
-                        .dappPressable(shape = RoundedCornerShape(PanelDimens.PillCornerRadius)) { onToggleLightMode() }
-                        .padding(6.dp),
-                )
+            // No title (redundant — the pill already names the wallet). A settings gear on the
+            // left (only with a live wallet — the settings act on it) and the light/dark toggle
+            // on the right; the toggle shows the icon for the mode you'd switch to.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (status is WalletStatus.Ready) {
+                    GlyphButton(onClick = onSettings, contentDescription = "Settings") {
+                        GearGlyph(color = colors.onSheetDim)
+                    }
+                } else {
+                    // Empty left slot — SpaceBetween still holds the toggle to the right.
+                    Spacer(modifier = Modifier)
+                }
+                GlyphButton(
+                    onClick = onToggleLightMode,
+                    contentDescription = if (lightMode) "Switch to dark theme" else "Switch to light theme",
+                ) {
+                    Text(
+                        if (lightMode) "☾" else "☀",
+                        color = colors.onSheetDim,
+                        fontSize = 18.sp,
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
 

@@ -142,6 +142,35 @@ object SeedDeriver {
         return BIP39.mnemonicToSeed(mnemonic)
     }
 
+    // ── Recovery-phrase codec (#252) ───────────────────────────────────────────
+    //
+    // The wallet's 32-byte entropy IS BIP-39 entropy (see [entropyToBip39Seed]), so it has a
+    // canonical 24-word phrase that reconstructs the exact wallet. These pure, deterministic
+    // wrappers expose that round-trip for the sovereign recovery feature. They're public so any
+    // recovery UI — the bundled one or a third-party dApp's own — can build on the same codec.
+
+    /** Encode 32-byte BIP-39 entropy as a recovery phrase (24 words). Pure; no secrets retained. */
+    fun entropyToRecoveryWords(entropy: ByteArray): List<String> =
+        BIP39.entropyToMnemonic(entropy).split(WORD_SEPARATOR)
+
+    /**
+     * Decode a recovery phrase back to its 32-byte entropy. Input is normalized (trimmed,
+     * lowercased) so user-typed casing/spacing doesn't matter. Throws if the phrase is invalid
+     * (wrong word count, unknown word, or bad checksum) — validate with [isValidRecoveryPhrase]
+     * first for a non-throwing check.
+     */
+    fun recoveryWordsToEntropy(words: List<String>): ByteArray =
+        BIP39.mnemonicToEntropy(normalizePhrase(words))
+
+    /** Whether [words] is a valid BIP-39 phrase (known words + correct checksum). Non-throwing. */
+    fun isValidRecoveryPhrase(words: List<String>): Boolean =
+        BIP39.validateMnemonic(normalizePhrase(words))
+
+    private fun normalizePhrase(words: List<String>): String =
+        words.joinToString(WORD_SEPARATOR) { it.trim().lowercase() }.trim()
+
+    private const val WORD_SEPARATOR = " "
+
     private const val CHALLENGE_SIZE = 32
 
     /** BIP-39 entropy size for a 24-word mnemonic. */

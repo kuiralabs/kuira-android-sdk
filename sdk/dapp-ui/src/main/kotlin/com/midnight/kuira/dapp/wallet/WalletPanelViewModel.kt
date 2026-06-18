@@ -249,7 +249,7 @@ class WalletPanelViewModel @Inject constructor(
     private var lastFullRefreshAtMs = 0L
 
     init {
-        observeSigilForAutoRetry()
+        observeSigilLifecycle()
         observeSessionLock()
     }
 
@@ -288,38 +288,47 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Reactively unblock the wallet when the user signs in / forges
-     * AFTER the wallet panel landed on [WalletStatus.SigilRequired].
+     * Keep the wallet in lock-step with the sigil's lifecycle.
      *
-     * Flow: [SigilStateStore.snapshotFlow] emits the persisted sigil
-     * triple (initially null on a fresh install, non-null after
-     * `SigilSession.signIn` lands). When it transitions to non-null
-     * AND our status is currently `SigilRequired`, we:
-     *  1. Clear status to None so the "sigil required" body
-     *     disappears from the sheet.
-     *  2. Emit a one-shot `retryRequests` event so the host fires
-     *     `refreshBalance` with the last config the user actually
-     *     asked for.
+     * [SigilStateStore.snapshotFlow] emits the persisted sigil triple — null on a
+     * fresh install, non-null after `SigilSession.signIn`/forge lands, and back to
+     * null when the user signs out (`SigilStateStore.clear`). Two transitions matter:
      *
-     * No-op when the user hasn't yet tried a wallet action — we don't
-     * auto-trigger biometric prompts for users who only signed in to
-     * the sigil panel. Action stays user-initiated; we just don't
-     * leave a stale "sigil required" status hanging around.
+     *  - **null → non-null (signed in):** if the wallet was parked on
+     *    [WalletStatus.SigilRequired], clear it to [WalletStatus.None] and emit a
+     *    one-shot retry so the host re-runs `refreshBalance` with the last config the
+     *    user asked for. No-op otherwise, so we never auto-trigger a biometric for a
+     *    user who only touched the sigil panel.
+     *  - **non-null → null (signed out):** the seed is gone and the SDK is closed, so
+     *    a live wallet must NOT keep showing a balance. Cancel the balance observer and
+     *    reset to [WalletStatus.SigilRequired] — the accurate "forge your sigil first"
+     *    state the sheet already renders. Re-forging takes the first branch back to a
+     *    live wallet. Skipped when already None/SigilRequired (fresh install's initial
+     *    null isn't a sign-out).
      */
-    private fun observeSigilForAutoRetry() {
+    private fun observeSigilLifecycle() {
         viewModelScope.launch {
             sigilStateStore.snapshotFlow
                 .collect { snapshot ->
-                    if (snapshot != null && _status.value is WalletStatus.SigilRequired) {
-                        Log.i(TAG, "Sigil became available — clearing SigilRequired and requesting retry")
-                        _status.value = WalletStatus.None
-                        // Capture the snapshot value into a local so the
-                        // smart cast survives the emit (lastRequestedConfig
-                        // is a mutable property — Kotlin can't prove
-                        // non-null past the suspend point otherwise).
-                        val retryConfig = lastRequestedConfig
-                        if (retryConfig != null) {
-                            _retryRequests.emit(retryConfig)
+                    when {
+                        snapshot != null && _status.value is WalletStatus.SigilRequired -> {
+                            Log.i(TAG, "Sigil became available — clearing SigilRequired and requesting retry")
+                            _status.value = WalletStatus.None
+                            // Capture into a local so the smart cast survives the emit
+                            // (lastRequestedConfig is mutable — Kotlin can't prove
+                            // non-null past the suspend point otherwise).
+                            val retryConfig = lastRequestedConfig
+                            if (retryConfig != null) {
+                                _retryRequests.emit(retryConfig)
+                            }
+                        }
+                        snapshot == null &&
+                            _status.value !is WalletStatus.None &&
+                            _status.value !is WalletStatus.SigilRequired -> {
+                            Log.i(TAG, "Sigil cleared (signed out) — tearing the wallet down to SigilRequired")
+                            observeBalanceJob?.cancel()
+                            observedWalletAddress = null
+                            _status.value = WalletStatus.SigilRequired
                         }
                     }
                 }
@@ -636,6 +645,80 @@ class WalletPanelViewModel @Inject constructor(
     /** Reset the send flow to Idle (on Send-screen close, or to re-edit after a failure). */
     fun resetSendState() {
         _sendState.value = SendUiState.Idle
+    }
+
+    // ── Sovereign recovery phrase (#252) ────────────────────────────────────────
+    //
+    // The panel is one consumer of the SDK's [com.midnight.kuira.sdk.walletseed.WalletRecovery]
+    // contract; everything here just projects that contract into UI state. A dApp building its own
+    // recovery screens can skip this VM and use the contract directly (inject it / read it off
+    // MidnightSdkProvider.recovery).
+
+    /** Whether the user has saved their phrase — drives the backup-status chip. */
+    val recoveryPhraseSaved: StateFlow<Boolean> = sdkProvider.recovery.isPhraseSaved
+
+    private val _revealedPhrase = MutableStateFlow<List<String>?>(null)
+
+    /** The revealed 24 words while the reveal screen is open; null otherwise. Cleared on exit. */
+    val revealedPhrase: StateFlow<List<String>?> = _revealedPhrase
+
+    private val _recoveryError = MutableStateFlow<String?>(null)
+    val recoveryError: StateFlow<String?> = _recoveryError
+
+    private val _restoreState = MutableStateFlow<RestoreUiState>(RestoreUiState.Idle)
+    val restoreState: StateFlow<RestoreUiState> = _restoreState
+
+    /** Reveal the recovery phrase (biometric-gated). Result lands in [revealedPhrase]. */
+    fun revealRecoveryPhrase(activity: FragmentActivity) {
+        viewModelScope.launch {
+            _recoveryError.value = null
+            try {
+                _revealedPhrase.value = sdkProvider.recovery.revealPhrase(activity)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AuthenticationCancelledException) {
+                // User dismissed the biometric — no error surface, just stay on the consent step.
+            } catch (e: Exception) {
+                Log.w(TAG, "reveal recovery phrase failed: ${e.message}")
+                _recoveryError.value = e.message ?: "Couldn't reveal the recovery phrase"
+            }
+        }
+    }
+
+    /** Drop the in-memory revealed words (call when the reveal screen closes). */
+    fun clearRevealedPhrase() {
+        _revealedPhrase.value = null
+        _recoveryError.value = null
+    }
+
+    /** Record that the user has saved their phrase (their "I've written it down" confirm). */
+    fun markRecoveryPhraseSaved() = sdkProvider.recovery.markPhraseSaved()
+
+    /** Validate a phrase without restoring — for live input feedback in the restore screen. */
+    fun isValidRecoveryPhrase(words: List<String>): Boolean =
+        sdkProvider.recovery.isValidPhrase(words)
+
+    /** Restore a wallet from a 24-word phrase. Result lands in [restoreState]. */
+    fun restoreFromPhrase(activity: FragmentActivity, words: List<String>) {
+        viewModelScope.launch {
+            _restoreState.value = RestoreUiState.Restoring
+            try {
+                sdkProvider.recovery.restoreFromPhrase(activity, words)
+                _restoreState.value = RestoreUiState.Success
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AuthenticationCancelledException) {
+                _restoreState.value = RestoreUiState.Idle // cancelled biometric — let them retry
+            } catch (e: Exception) {
+                Log.w(TAG, "restore from phrase failed: ${e.message}")
+                _restoreState.value = RestoreUiState.Error(e.message ?: "Restore failed")
+            }
+        }
+    }
+
+    /** Reset the restore flow to Idle (on screen close / re-edit after an error). */
+    fun resetRestoreState() {
+        _restoreState.value = RestoreUiState.Idle
     }
 
     /**

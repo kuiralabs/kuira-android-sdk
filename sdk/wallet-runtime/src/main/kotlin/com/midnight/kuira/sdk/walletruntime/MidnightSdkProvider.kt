@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
+import com.midnight.kuira.sdk.walletseed.WalletRecovery
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,7 @@ class MidnightSdkProvider @Inject constructor(
     private val walletSeedSource: WalletSeedSource,
     private val sdkFactory: MidnightSdkFactory,
     private val networkStore: NetworkPreferenceStore,
+    private val recoveryManager: WalletRecovery,
 ) {
     /**
      * Serializes [ensureSdk] so two consumers racing the first build (or a
@@ -86,6 +88,14 @@ class MidnightSdkProvider @Inject constructor(
 
     /** Persist + publish a network switch durably (commit, survives a kill). See [selectedNetwork]. */
     fun selectNetwork(network: MidnightNetwork) = networkStore.set(network)
+
+    /**
+     * Sovereign recovery-phrase capability (#252): reveal the wallet's 24-word phrase, restore a
+     * wallet from one, and observe whether it's been saved. Surfaced here for the bundled wallet
+     * UI; a dApp building its own recovery screens can equally `@Inject` [WalletRecovery] directly.
+     * See `docs/security/recovery-model.md`.
+     */
+    val recovery: WalletRecovery get() = recoveryManager
 
     /**
      * Seed a host's first-run network, only if the user has never chosen one (a no-op

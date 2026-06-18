@@ -33,7 +33,7 @@ public final class com/midnight/kuira/dapp/DappPressableKt {
 }
 
 public final class com/midnight/kuira/dapp/PanelBarKt {
-	public static final fun PanelBar (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;ILandroidx/compose/runtime/Composer;II)V
+	public static final fun PanelBar (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;ILjava/lang/String;Landroidx/compose/runtime/Composer;II)V
 }
 
 public abstract interface class com/midnight/kuira/dapp/backup/AppDataBackupProvider {
@@ -344,7 +344,7 @@ public final class com/midnight/kuira/dapp/sigil/SigilStatus$None : com/midnight
 }
 
 public final class com/midnight/kuira/dapp/sigil/SigilStatusPanelKt {
-	public static final fun SigilStatusPanel (Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
+	public static final fun SigilStatusPanel (Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletBalanceCompactKt {
@@ -353,8 +353,56 @@ public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletBal
 	public final fun getLambda$734261077$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
+public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSettingsScreenKt {
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSettingsScreenKt;
+	public fun <init> ()V
+	public final fun getLambda$-716361875$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$2006797668$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$406048324$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$737181477$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+}
+
 public final class com/midnight/kuira/dapp/wallet/QrCodeKt {
 	public static final fun QrCode-uFdPcIQ (Ljava/lang/String;FLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+}
+
+public abstract interface class com/midnight/kuira/dapp/wallet/RestoreUiState {
+}
+
+public final class com/midnight/kuira/dapp/wallet/RestoreUiState$Error : com/midnight/kuira/dapp/wallet/RestoreUiState {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Error;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Error;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Error;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/RestoreUiState$Idle : com/midnight/kuira/dapp/wallet/RestoreUiState {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Idle;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/RestoreUiState$Restoring : com/midnight/kuira/dapp/wallet/RestoreUiState {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Restoring;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/RestoreUiState$Success : com/midnight/kuira/dapp/wallet/RestoreUiState {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/RestoreUiState$Success;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract interface class com/midnight/kuira/dapp/wallet/SendUiState {
@@ -480,21 +528,31 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : android
 	public static final field $stable I
 	public static final field Companion Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel$Companion;
 	public fun <init> (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/core/identity/sigil/SigilStateStore;Lcom/midnight/kuira/core/identity/backup/DriveAuthManager;Lcom/midnight/kuira/sdk/walletruntime/SessionLock;Lcom/midnight/kuira/sdk/walletruntime/NetworkPreferenceStore;Landroid/content/Context;Ljava/util/Optional;)V
+	public final fun clearRevealedPhrase ()V
 	public final fun disableBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun enableCloudBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun getBackupSection ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getConsentRequests ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getRecoveryError ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getRecoveryPhraseSaved ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getRestoreState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getRetryRequests ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getRevealedPhrase ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSelectedNetwork ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSendState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSyncProgress ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun isValidRecoveryPhrase (Ljava/util/List;)Z
 	public final fun lockNow ()V
+	public final fun markRecoveryPhraseSaved ()V
 	public final fun onConsentResult (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Landroid/content/Intent;)V
 	public final fun refreshBalance (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Z)V
 	public static synthetic fun refreshBalance$default (Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;ZILjava/lang/Object;)V
 	public final fun registerDust (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
+	public final fun resetRestoreState ()V
 	public final fun resetSendState ()V
+	public final fun restoreFromPhrase (Landroidx/fragment/app/FragmentActivity;Ljava/util/List;)V
+	public final fun revealRecoveryPhrase (Landroidx/fragment/app/FragmentActivity;)V
 	public final fun seedNetworkDefault (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
 	public final fun selectNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
 	public final fun sendNight (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/math/BigInteger;)V
@@ -614,7 +672,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : c
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
-	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILandroidx/compose/runtime/Composer;II)V
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletSyncIndicatorKt {

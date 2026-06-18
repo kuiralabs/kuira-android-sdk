@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.dappPressable
+import com.midnight.kuira.dapp.wallet.GearGlyph
+import com.midnight.kuira.dapp.wallet.GlyphButton
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +84,13 @@ fun SigilStatusPanel(
      * into their own state. Default no-op.
      */
     onStatusChange: (SigilStatus) -> Unit = {},
+    /**
+     * Opens the host's Settings surface — fired by the gear in the expanded sheet (shown only
+     * once a sigil is Forged, since the settings act on a live identity/wallet). [PanelBar] wires
+     * this to the same [com.midnight.kuira.dapp.wallet.WalletSettingsScreen] the wallet pill opens,
+     * so the gear is one entry point from either panel. Default no-op hides the gear.
+     */
+    onOpenSettings: () -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     LaunchedEffect(status) { onStatusChange(status) }
@@ -117,6 +126,10 @@ fun SigilStatusPanel(
                 onStartFresh = {
                     viewModel.dismissBackup()
                     sheetOpen = false
+                },
+                onOpenSettings = {
+                    sheetOpen = false
+                    onOpenSettings()
                 },
             )
         }
@@ -366,15 +379,29 @@ private fun SigilSheetContent(
     onRestore: () -> Unit,
     onSignOut: () -> Unit = {},
     onStartFresh: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
 
-    Text(
-        text = "sigil identity",
-        color = colors.onSheetDim,
-        fontSize = SigilType.SheetTitle,
-        fontWeight = FontWeight.Medium,
-    )
+    // Title on the left; a settings gear on the right once a sigil exists (the settings act on a
+    // live identity/wallet). Shares the bundled WalletSettingsScreen with the wallet pill's gear.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "sigil identity",
+            color = colors.onSheetDim,
+            fontSize = SigilType.SheetTitle,
+            fontWeight = FontWeight.Medium,
+        )
+        if (status is SigilStatus.Forged) {
+            GlyphButton(onClick = onOpenSettings, contentDescription = "Settings") {
+                GearGlyph(color = colors.onSheetDim)
+            }
+        }
+    }
     Spacer(modifier = Modifier.height(SigilDimens.SheetTitleGap))
 
     when (status) {

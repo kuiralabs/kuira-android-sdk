@@ -366,6 +366,44 @@ class WalletPanelViewModelTest {
         collectJob.cancel()
     }
 
+    // ── Sign-out tears the wallet down ──
+
+    @Test
+    fun `signing out clears a live wallet — Ready falls back to SigilRequired`() = runTest {
+        // Regression: after sign-out the seed is gone and the SDK is closed, but the
+        // pill kept its last Ready(balance) because nothing observed the sigil being
+        // cleared (the auto-retry observer only handled sigil ARRIVING). A signed-out
+        // wallet must drop to SigilRequired — never keep showing a balance for an
+        // identity that's been signed out. SigilPanelViewModel.signOut calls clear().
+        val store = SigilStateStore(context)
+        store.persistSigil("did:key:z6MkTest", "cred-test", "")
+        stubReadyWallet()
+
+        val vm = newVmWithStore(store)
+        vm.refreshBalance(devConfig(), activity)
+        assertTrue("precondition: wallet is live", vm.status.value is WalletStatus.Ready)
+
+        store.clear()
+
+        assertEquals(
+            "A signed-out wallet must not keep showing a balance",
+            WalletStatus.SigilRequired,
+            vm.status.value,
+        )
+    }
+
+    @Test
+    fun `clearing the sigil with no live wallet stays None — fresh-install initial null is not a sign-out`() = runTest {
+        // The teardown must fire only for a LIVE wallet; the snapshotFlow's initial
+        // null on a fresh install must not strand a never-used pill on SigilRequired.
+        val store = SigilStateStore(context)
+        val vm = newVmWithStore(store)
+
+        store.clear()
+
+        assertEquals(WalletStatus.None, vm.status.value)
+    }
+
     @Test
     fun `panel auto-updates when balanceFlow emits — no manual refresh needed`() = runTest {
         // The reactive end of the auto-update fix: the SDK's background

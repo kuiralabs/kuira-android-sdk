@@ -69,6 +69,9 @@ class MidnightSdkProviderTest {
         sdkFactory = sdkFactory,
         // Network facade is unused by the build/rebuild paths under test (#285).
         networkStore = mockk(relaxed = true),
+        // Recovery contract (#252) is exposed by the provider but unused by the build/rebuild
+        // paths under test — a relaxed mock keeps the constructor satisfied.
+        recoveryManager = mockk(relaxed = true),
     )
 
     /** A fresh seed each call so a wipe of one call's seed can't mask another. */

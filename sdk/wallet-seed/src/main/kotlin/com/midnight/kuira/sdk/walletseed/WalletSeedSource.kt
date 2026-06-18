@@ -54,7 +54,7 @@ class WalletSeedSource @Inject constructor(
     private val walletKeyManager: WalletKeyManager,
     private val passkeyManager: PasskeyManager,
     private val sigilStateStore: SigilStateStore,
-) {
+) : RecoverySeedStore {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -79,6 +79,28 @@ class WalletSeedSource @Inject constructor(
      * re-decrypting within the window.
      */
     fun requireFreshAuthNext() = seedVault.requireFreshAuthNext()
+
+    /** #252: true if a wallet seed exists. Recovery restore must not clobber an existing wallet. */
+    override suspend fun hasSeed(): Boolean = seedVault.hasSeed()
+
+    /**
+     * #252: load the wallet's 32-byte BIP-39 entropy (biometric-gated) — the source for a recovery
+     * phrase. Serialized on [bootstrapMutex] so it can't race a concurrent [ensureSeedReady].
+     * Returns a fresh copy the caller MUST wipe; throws if no wallet exists.
+     *
+     * This is the low-level seam behind [WalletRecovery.revealPhrase] — which is the recommended,
+     * phrase-shaped API. It's biometric-gated regardless (decrypting the vault prompts), so it's
+     * not a silent leak; prefer [WalletRecovery] unless you specifically need raw entropy.
+     */
+    override suspend fun loadEntropy(activity: FragmentActivity): ByteArray = bootstrapMutex.withLock {
+        require(seedVault.hasSeed()) { "No wallet seed to reveal" }
+        val plaintext = seedVault.loadSeed(activity)
+        try {
+            plaintext.mnemonicEntropy.copyOf()
+        } finally {
+            plaintext.wipe()
+        }
+    }
 
     /**
      * Returns the wallet's BIP-39 seed, deriving it from the user's
@@ -165,7 +187,7 @@ class WalletSeedSource @Inject constructor(
      * The serialization point with [ensureSeedReady] is the shared
      * [bootstrapMutex] — concurrent calls are safe.
      */
-    suspend fun acceptPreDerivedSeed(
+    override suspend fun acceptPreDerivedSeed(
         activity: FragmentActivity,
         prfEntropy: ByteArray,
     ): ByteArray = bootstrapMutex.withLock {

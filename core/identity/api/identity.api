@@ -294,8 +294,11 @@ public final class com/midnight/kuira/core/identity/backup/SeedDeriver {
 	public final fun derivePrfEntropy (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun derivePrfMaterial (Landroid/app/Activity;Lcom/midnight/kuira/core/identity/passkey/PasskeyManager;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun entropyToBip39Seed ([B)[B
+	public final fun entropyToRecoveryWords ([B)Ljava/util/List;
 	public final fun getSEED_SALT ()[B
 	public final fun getSIGIL_SALT ()[B
+	public final fun isValidRecoveryPhrase (Ljava/util/List;)Z
+	public final fun recoveryWordsToEntropy (Ljava/util/List;)[B
 }
 
 public final class com/midnight/kuira/core/identity/backup/SigilRequiredException : java/lang/Exception {
