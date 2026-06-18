@@ -125,6 +125,7 @@ public final class com/midnight/kuira/core/crypto/dust/DustLocalState : java/io/
 	public final fun replayEvents ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
 	public final fun replayEventsFromFile ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/dust/DustLocalState;
 	public final fun serialize ()[B
+	public final fun syncTimeMs ()J
 }
 
 public final class com/midnight/kuira/core/crypto/dust/DustLocalState$Companion {
@@ -408,6 +409,7 @@ public final class com/midnight/kuira/core/crypto/shielded/ZswapLocalState : jav
 	public final fun getCoinCount ()I
 	public final fun getFirstFree ()J
 	public final fun replayEvents ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
+	public final fun replayEventsFromFile ([BLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;
 	public final fun serialize ()Ljava/lang/String;
 }
 

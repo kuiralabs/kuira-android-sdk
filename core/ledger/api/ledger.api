@@ -6,7 +6,7 @@ public final class com/midnight/kuira/core/ledger/api/FfiTransactionSerializer :
 	public final fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
 	public fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
 	public fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
-	public final fun serializeWithDust (Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;[BLjava/lang/String;J)Ljava/lang/String;
+	public final fun serializeWithDust (Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;[BLjava/lang/String;JJ)Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/ledger/api/NodeHttpException : com/midnight/kuira/core/ledger/api/NodeRpcException {
@@ -233,12 +233,14 @@ public final class com/midnight/kuira/core/ledger/api/TransactionRejected : com/
 	public static final field Companion Lcom/midnight/kuira/core/ledger/api/TransactionRejected$Companion;
 	public static final field ERROR_EFFECTS_CHECK_FAILURE I
 	public static final field ERROR_INPUT_NOT_IN_UTXOS I
+	public static final field ERROR_INVALID_DUST_SPEND_PROOF I
 	public static final field ERROR_INVALID_PROOF I
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getCustomErrorCode ()Ljava/lang/Integer;
 	public final fun getReason ()Ljava/lang/String;
 	public final fun getTxHash ()Ljava/lang/String;
+	public final fun isDustSpendProof ()Z
 	public final fun isInvalidProof ()Z
 	public final fun isStaleUtxo ()Z
 }
@@ -298,12 +300,15 @@ public abstract class com/midnight/kuira/core/ledger/api/TransactionSubmitter$Su
 }
 
 public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Failed;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCustomErrorCode ()Ljava/lang/Integer;
 	public final fun getReason ()Ljava/lang/String;
 	public final fun getTxHash ()Ljava/lang/String;
 	public fun hashCode ()I
@@ -463,8 +468,8 @@ public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder {
 public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder {
 	public static final field Companion Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$Companion;
 	public fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/fee/FeeCalculator;Lcom/midnight/kuira/core/ledger/fee/DustSpendCreator;)V
-	public final fun buildDustActions (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun buildDustActions$default (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun buildDustActions (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BLcom/midnight/kuira/core/crypto/dust/DustLocalState;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildDustActions$default (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BLcom/midnight/kuira/core/crypto/dust/DustLocalState;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun confirmDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun rollbackDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun validateDustActions (Lcom/midnight/kuira/core/ledger/fee/DustActionsBuilder$DustActions;)Z
