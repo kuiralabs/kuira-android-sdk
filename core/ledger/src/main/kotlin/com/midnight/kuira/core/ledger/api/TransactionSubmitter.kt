@@ -667,11 +667,15 @@ class TransactionSubmitter(
                 is TransactionFinalizationResult.Finalized -> {
                     Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
 
-                    // DELETE dust cache - the old UTXO is now pending (hidden from balance)
-                    // and the new UTXO (change) will come from blockchain events on next sync.
-                    // This forces a fresh dust sync before the next transaction.
-                    dustRepository.deleteState(fromAddress)
-                    Log.d(TAG, "Dust state cache cleared (will re-sync before next tx)")
+                    // #297: do NOT delete the dust checkpoint here. The post-send refresh
+                    // (MidnightSdk.sendNight → wallet.refresh → DustSyncManager.refreshIncremental,
+                    // and the per-tx ensureDustFresh on the contract path) does a cheap DELTA
+                    // resume from the SURVIVING checkpoint — applying this tx's dust-spend event
+                    // and, after re-registration, the change UTXO's dust generation. Deleting it
+                    // forced the next sync to rebuild from GENESIS: invisible on localnet (a few
+                    // events) but a ~1.1M-event replay on PreProd that never catches the advancing
+                    // tip ("submit never finishes"). Genesis is reserved for error-170 recovery
+                    // (DustSyncManager.forceResync), not a routine successful send.
 
                     // Mark UTXOs as SPENT (transaction is confirmed)
                     if (spentUtxoIntents.isNotEmpty()) {
@@ -687,8 +691,8 @@ class TransactionSubmitter(
 
                 is TransactionFinalizationResult.InBlock -> {
                     Log.w(TAG, "Transaction in block but not finalized")
-                    // DELETE dust cache - forces re-sync before next tx
-                    dustRepository.deleteState(fromAddress)
+                    // #297: keep the dust checkpoint intact (see the Finalized branch). The
+                    // post-send refresh deltas from it; deleting would force a full genesis replay.
                     if (spentUtxoIntents.isNotEmpty()) {
                         utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
                     }
