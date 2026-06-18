@@ -67,6 +67,8 @@ class MidnightSdkProviderTest {
         appContext = mockk(relaxed = true),
         walletSeedSource = walletSeedSource,
         sdkFactory = sdkFactory,
+        // Network facade is unused by the build/rebuild paths under test (#285).
+        networkStore = mockk(relaxed = true),
     )
 
     /** A fresh seed each call so a wipe of one call's seed can't mask another. */

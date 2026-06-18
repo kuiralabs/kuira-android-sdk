@@ -3,6 +3,7 @@ package com.midnight.kuira.sdk.walletruntime
 import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +52,7 @@ class MidnightSdkProvider @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val walletSeedSource: WalletSeedSource,
     private val sdkFactory: MidnightSdkFactory,
+    private val networkStore: NetworkPreferenceStore,
 ) {
     /**
      * Serializes [ensureSdk] so two consumers racing the first build (or a
@@ -71,6 +73,25 @@ class MidnightSdkProvider @Inject constructor(
      * "which network / proving mode is the wallet on". Null when no SDK exists.
      */
     val activeConfig: StateFlow<WalletConfig?> = _activeConfig.asStateFlow()
+
+    /**
+     * The user's selected network — the SINGLE durable source every consumer should
+     * build its [WalletConfig] from (#285). Delegates to the process-wide
+     * [NetworkPreferenceStore] so the wallet panel, this provider, and host apps
+     * (Kicks, BBoard, …) all read ONE value that survives process death; no per-app
+     * SharedPreferences mirror to drift out of sync. Read [selectedNetwork].value when
+     * building a config, observe it to rebuild on a switch.
+     */
+    val selectedNetwork: StateFlow<MidnightNetwork> get() = networkStore.selected
+
+    /** Persist + publish a network switch durably (commit, survives a kill). See [selectedNetwork]. */
+    fun selectNetwork(network: MidnightNetwork) = networkStore.set(network)
+
+    /**
+     * Seed a host's first-run network, only if the user has never chosen one (a no-op
+     * thereafter — the user's selection always wins). See [NetworkPreferenceStore.seedDefaultIfUnset].
+     */
+    fun seedNetworkDefault(network: MidnightNetwork) = networkStore.seedDefaultIfUnset(network)
 
     /**
      * Build the SDK for [config], or reuse the live one if [config] is
