@@ -67,6 +67,26 @@ class ZswapLocalState private constructor(
     }
 
     /**
+     * Replay blockchain events from a file, discovering shielded coins.
+     *
+     * The cold/full shielded sync at PreProd scale must not pass the entire event
+     * log as one giant hex String — that JVM allocation spike triggers GC pauses
+     * that freeze the UI. The caller streams events to [filePath] (one hex event
+     * per line) and the native side reads them back and replays in 500-event chunks,
+     * keeping peak memory bounded. Mirrors [com.midnight.kuira.core.crypto.dust.DustLocalState.replayEventsFromFile].
+     *
+     * @param seed 32-byte zswap seed (derived at m/44'/2400'/0'/3/0)
+     * @param filePath Absolute path to the hex events file (one event per line)
+     * @return New state with discovered coins, or null on error
+     */
+    fun replayEventsFromFile(seed: ByteArray, filePath: String): ZswapLocalState? {
+        require(nativePtr != 0L) { "State already closed" }
+        require(seed.size == 32) { "Seed must be 32 bytes" }
+        val ptr = nativeReplayEventsFromFile(nativePtr, seed, filePath)
+        return if (ptr != 0L) ZswapLocalState(ptr) else null
+    }
+
+    /**
      * Get shielded balances by token type.
      *
      * @return Map of token type hex → balance (e.g. "0000...00" → 5000000)
@@ -119,6 +139,7 @@ class ZswapLocalState private constructor(
 
     private external fun nativeFree(statePtr: Long)
     private external fun nativeReplayEvents(statePtr: Long, seed: ByteArray, eventsHex: String): Long
+    private external fun nativeReplayEventsFromFile(statePtr: Long, seed: ByteArray, filePath: String): Long
     private external fun nativeGetBalances(statePtr: Long): String?
     private external fun nativeGetCoinCount(statePtr: Long): Int
     private external fun nativeGetFirstFree(statePtr: Long): Long

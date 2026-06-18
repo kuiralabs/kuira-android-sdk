@@ -22,13 +22,13 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import java.io.File
 import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -132,26 +132,30 @@ open class ShieldedRepository @Inject constructor(
 
     /** Replay every zswap event from genesis into a fresh state and checkpoint it. */
     private suspend fun fullSync(address: String, zswapSeed: ByteArray): Boolean {
-        val stream = streamZswapEvents(fromId = null)
-        if (stream.count == 0) {
+        val stream = streamZswapEventsToFile(fromId = null)
+        val file = stream.file ?: run {
             Log.d(TAG, "No zswap events found")
             return false
         }
-        Log.d(TAG, "Full sync from genesis: ${stream.count} events (${stream.eventsHex.length / 2} bytes)")
-        val base = ZswapLocalState.create() ?: run {
-            Log.e(TAG, "Failed to create ZswapLocalState")
-            return false
-        }
-        val state = try {
-            base.replayEvents(zswapSeed, stream.eventsHex)
+        try {
+            Log.d(TAG, "Full sync from genesis: ${stream.count} events (${file.length()} bytes)")
+            val base = ZswapLocalState.create() ?: run {
+                Log.e(TAG, "Failed to create ZswapLocalState")
+                return false
+            }
+            val state = try {
+                base.replayEventsFromFile(zswapSeed, file.absolutePath)
+            } finally {
+                base.close()
+            }
+            if (state == null) {
+                Log.e(TAG, "Failed to replay zswap events")
+                return false
+            }
+            return persistAndReport(address, state, stream.lastEventId, "Full sync")
         } finally {
-            base.close()
+            file.delete()
         }
-        if (state == null) {
-            Log.e(TAG, "Failed to replay zswap events")
-            return false
-        }
-        return persistAndReport(address, state, stream.lastEventId, "Full sync")
     }
 
     /**
@@ -160,26 +164,30 @@ open class ShieldedRepository @Inject constructor(
      * the same `NonLinearInsertion` safety net the dust side relies on).
      */
     private suspend fun deltaSync(address: String, zswapSeed: ByteArray, checkpoint: ZswapCheckpoint): Boolean {
-        val stream = streamZswapEvents(fromId = checkpoint.cursor + 1)
-        if (stream.count == 0) {
+        val stream = streamZswapEventsToFile(fromId = checkpoint.cursor + 1)
+        val file = stream.file ?: run {
             // Nothing new arrived between the probe and the stream — keep the checkpoint.
             val coinCount = checkpoint.state.getCoinCount()
             checkpoint.state.close()
             Log.d(TAG, "Delta sync: no new events past ${checkpoint.cursor}, keeping checkpoint")
             return coinCount > 0
         }
-        Log.d(TAG, "Delta sync: resuming from event ${checkpoint.cursor}, replaying ${stream.count} events")
-        val newState = try {
-            checkpoint.state.replayEvents(zswapSeed, stream.eventsHex)
+        try {
+            Log.d(TAG, "Delta sync: resuming from event ${checkpoint.cursor}, replaying ${stream.count} events")
+            val newState = try {
+                checkpoint.state.replayEventsFromFile(zswapSeed, file.absolutePath)
+            } finally {
+                checkpoint.state.close()
+            }
+            if (newState == null) {
+                Log.w(TAG, "Delta replay rejected (misaligned resume) — rebuilding from genesis")
+                deleteState(address)
+                return fullSync(address, zswapSeed)
+            }
+            return persistAndReport(address, newState, stream.lastEventId, "Delta sync")
         } finally {
-            checkpoint.state.close()
+            file.delete()
         }
-        if (newState == null) {
-            Log.w(TAG, "Delta replay rejected (misaligned resume) — rebuilding from genesis")
-            deleteState(address)
-            return fullSync(address, zswapSeed)
-        }
-        return persistAndReport(address, newState, stream.lastEventId, "Delta sync")
     }
 
     /** Checkpoint [state] at [cursor] (best-effort) and report has-coins. Closes [state]. */
@@ -283,31 +291,49 @@ open class ShieldedRepository @Inject constructor(
     }
 
     /** Result of streaming zswap events: the concatenated hex, the last applied event id, and a count. */
-    private data class ZswapStreamResult(val eventsHex: String, val lastEventId: Long, val count: Int)
+    private data class ZswapStreamResult(val file: File?, val lastEventId: Long, val count: Int)
 
     /**
      * Stream zswap events from [fromId] (null = genesis) until caught up to the chain tip, in id
-     * order. Returns the concatenated raw hex (the form [ZswapLocalState.replayEvents] expects)
-     * plus the highest applied event id — the cursor to checkpoint. Same WebSocket pattern as
+     * order, into a temp file — one hex event per line, the form
+     * [ZswapLocalState.replayEventsFromFile] expects. Returns the file (null when no events arrived)
+     * plus the highest applied event id (the cursor to checkpoint). Same WebSocket pattern as
      * `IndexerClientImpl.queryDustEvents`.
+     *
+     * **Why a file, not a concatenated String.** A cold PreProd shielded sync replays the whole
+     * event log; concatenating it into one multi-MB String (the old path) is a JVM allocation spike
+     * that triggers GC pauses, freezing the UI thread mid-sync. Streaming to a file keeps peak heap
+     * flat, and the native side reads it back in 500-event chunks. Mirrors `DustRepository`. The
+     * caller owns the returned file and must delete it. Events are written in arrival order, which
+     * the id-ordered subscription already guarantees (same as the dust side — no in-memory re-sort).
      */
-    private suspend fun streamZswapEvents(fromId: Long?): ZswapStreamResult {
-        val events = subscribeToZswapEvents(fromId = fromId)
-            .transformWhile { event ->
-                emit(event)
-                event.id < event.maxId
+    private suspend fun streamZswapEventsToFile(fromId: Long?): ZswapStreamResult {
+        val tempFile = File.createTempFile("zswap_events_", ".hex")
+        var lastEventId = (fromId ?: 0L) - 1
+        var count = 0
+        try {
+            tempFile.bufferedWriter().use { writer ->
+                subscribeToZswapEvents(fromId = fromId)
+                    .transformWhile { event ->
+                        emit(event)
+                        event.id < event.maxId
+                    }
+                    .collect { event ->
+                        writer.write(event.rawHex)
+                        writer.newLine()
+                        lastEventId = maxOf(lastEventId, event.id)
+                        count++
+                    }
             }
-            .toList()
-
-        if (events.isEmpty()) {
-            return ZswapStreamResult(eventsHex = "", lastEventId = (fromId ?: 0L) - 1, count = 0)
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw e
         }
-        val sorted = events.sortedBy { it.id }
-        return ZswapStreamResult(
-            eventsHex = sorted.joinToString("") { it.rawHex },
-            lastEventId = sorted.last().id,
-            count = sorted.size,
-        )
+        if (count == 0) {
+            tempFile.delete()
+            return ZswapStreamResult(file = null, lastEventId = (fromId ?: 0L) - 1, count = 0)
+        }
+        return ZswapStreamResult(file = tempFile, lastEventId = lastEventId, count = count)
     }
 
     /** Check if cached shielded state exists. */

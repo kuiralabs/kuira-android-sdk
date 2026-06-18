@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * Proves the correctness claim the shielded *incremental* (checkpoint + delta) sync depends
@@ -136,6 +137,59 @@ class ZswapCheckpointResumeTest {
         resumed?.close()
         restored.close()
         assertNull("a torn/misaligned resume must be rejected, not silently wrong", resumed)
+    }
+
+    /**
+     * #290: the streamed, 500-event-chunked file replay
+     * ([ZswapLocalState.replayEventsFromFile]) must land on the IDENTICAL state as the
+     * in-memory single-pass [ZswapLocalState.replayEvents]. This is the device-level proof of
+     * the cold-shielded-sync rewrite that removed the giant-hex-String GC freeze: the events
+     * are streamed to a file (one hex per line — the form `ShieldedRepository` writes), then
+     * replayed back. Byte-identical serialized state is the strongest check (full commitment
+     * tree). The chunk-boundary crossing itself (>500 events) is proven in the Rust unit test
+     * `test_zswap_chunked_and_file_replay_match_single_pass`; this asserts the on-device
+     * native + JNI + file-parse path agrees with the historical in-memory path.
+     */
+    @Test
+    fun replayFromFileEqualsGenesisReplay() {
+        val events = loadFixtureEvents() ?: return skip("events fixture")
+        val seed = loadFixtureSeed() ?: return skip("seed fixture")
+
+        // Reference: in-memory genesis replay (concatenated hex → single replayEvents).
+        val genesis = replayAll(seed, events)
+        val genSerialized = genesis.serialize()
+        val genFirstFree = genesis.getFirstFree()
+        val genCoins = genesis.getCoinCount()
+        val genBalances = genesis.getBalances()
+        assertNotNull("genesis serializes", genSerialized)
+        genesis.close()
+
+        // Under test: stream events to a file (one hex per line) and replay via the file path.
+        val ctx = InstrumentationRegistry.getInstrumentation().context
+        val file = File.createTempFile("zswap_replay_from_file", ".hex", ctx.cacheDir)
+        try {
+            file.bufferedWriter().use { w -> events.forEach { w.write(it); w.newLine() } }
+
+            val base = ZswapLocalState.create() ?: error("create() returned null")
+            val fromFile = try {
+                base.replayEventsFromFile(seed, file.absolutePath)
+                    ?: error("replayEventsFromFile returned null")
+            } finally {
+                base.close()
+            }
+
+            assertEquals("firstFree (tree position)", genFirstFree, fromFile.getFirstFree())
+            assertEquals("coin count", genCoins, fromFile.getCoinCount())
+            assertEquals("balances", genBalances, fromFile.getBalances())
+            assertEquals(
+                "serialized state (full tree) is byte-identical to genesis replay",
+                genSerialized,
+                fromFile.serialize(),
+            )
+            fromFile.close()
+        } finally {
+            file.delete()
+        }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
