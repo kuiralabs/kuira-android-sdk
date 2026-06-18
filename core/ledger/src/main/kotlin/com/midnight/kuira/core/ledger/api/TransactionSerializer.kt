@@ -146,7 +146,14 @@ class FfiTransactionSerializer(
         dustState: com.midnight.kuira.core.crypto.dust.DustLocalState,
         seed: ByteArray,
         dustUtxosJson: String,
-        ttl: Long
+        ttl: Long,
+        // The dust spend's ctime. MUST be the latest INDEXED block timestamp, not
+        // wall-clock: the node validates a dust spend via `dust.root_history.get(ctime)`
+        // (predecessor lookup keyed by block time). A wall-clock ctime ahead of the
+        // indexed tip makes the node return its tip root, which won't match our
+        // locally-replayed root → rejected with InvalidDustSpendProof (error 170).
+        // Mirrors MidnightWallet's balance path (#287).
+        currentTimeMs: Long,
     ): String {
         // Validate
         require(seed.size == 32) { "Seed must be 32 bytes" }
@@ -178,7 +185,7 @@ class FfiTransactionSerializer(
             dustState.getStatePointer(),
             seed,
             dustUtxosJson,
-            System.currentTimeMillis(),
+            currentTimeMs,
             ttl,
             commitment,
             networkId,

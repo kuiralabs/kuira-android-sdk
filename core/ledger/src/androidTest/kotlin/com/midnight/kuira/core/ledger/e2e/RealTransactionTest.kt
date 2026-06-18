@@ -366,7 +366,8 @@ class RealTransactionTest {
                 dustState = dustState!!,
                 seed = seed,
                 dustUtxosJson = dustUtxoSelections,
-                ttl = ttl
+                ttl = ttl,
+                currentTimeMs = System.currentTimeMillis(),
             )
         } else {
             println("No dust UTXOs available, submitting without dust (will likely be rejected)")

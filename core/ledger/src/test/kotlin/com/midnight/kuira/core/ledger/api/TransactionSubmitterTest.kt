@@ -13,6 +13,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
@@ -124,6 +125,49 @@ class TransactionSubmitterTest {
         val failed = result as TransactionSubmitter.SubmissionResult.Failed
         assertEquals(null, failed.txHash)
         assertTrue(failed.reason.contains("rejected"))
+    }
+
+    // #287: error 170 (stale dust spend root) must be detectable so the send path can
+    // re-sync dust and retry, rather than surfacing a dead "Invalid Transaction".
+    @Test
+    fun `TransactionRejected isDustSpendProof matches node error 170 only`() {
+        assertEquals(170, TransactionRejected.ERROR_INVALID_DUST_SPEND_PROOF)
+        assertTrue(TransactionRejected("Invalid Transaction", customErrorCode = 170).isDustSpendProof)
+        assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = 115).isDustSpendProof)
+        assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = null).isDustSpendProof)
+    }
+
+    @Test
+    fun `submitAndWait surfaces node error 170 as customErrorCode for dust-root recovery`() = runTest {
+        val nodeClient = mockk<NodeRpcClient>()
+        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } throws TransactionRejected(
+            reason = "Invalid Transaction",
+            txHash = null,
+            customErrorCode = 170,
+        )
+        val proofServerClient = mockk<ProofServerClient>()
+        coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
+        val indexerClient = mockk<IndexerClient>(relaxed = true)
+        val serializer = mockk<TransactionSerializer>()
+        every { serializer.serialize(any()) } returns "unproven_tx_hex"
+        every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
+        val utxoManager = mockk<UtxoManager>(relaxed = true)
+        val submitter = TransactionSubmitter(
+            nodeRpcClient = nodeClient,
+            proofServerClient = proofServerClient,
+            indexerClient = indexerClient,
+            serializer = serializer,
+            utxoManager = utxoManager,
+            provingMode = ProvingMode.REMOTE,
+        )
+
+        val result = submitter.submitAndWait(
+            signedIntent = createTestIntent(),
+            fromAddress = "mn_addr_test",
+        )
+
+        assertTrue(result is TransactionSubmitter.SubmissionResult.Failed)
+        assertEquals(170, (result as TransactionSubmitter.SubmissionResult.Failed).customErrorCode)
     }
 
     @Test

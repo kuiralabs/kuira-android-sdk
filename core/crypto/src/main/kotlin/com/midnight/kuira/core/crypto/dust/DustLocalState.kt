@@ -312,6 +312,19 @@ class DustLocalState private constructor(
     }
 
     /**
+     * The block time this state has replayed up to, in milliseconds (or -1 if null).
+     *
+     * A dust spend's `ctime` must anchor to THIS, not the chain tip: the node validates
+     * a spend via `dust.root_history.get(ctime)`, so using our own synced block time
+     * makes the looked-up root equal our local commitment root regardless of how far the
+     * tip has advanced past us — preventing the intermittent error 170 (#287).
+     */
+    fun syncTimeMs(): Long {
+        checkNotClosed()
+        return nativeDustSyncTime(nativePtr)
+    }
+
+    /**
      * Serializes the DustLocalState to bytes for persistent storage.
      *
      * **Serialization Format:**
@@ -666,6 +679,8 @@ class DustLocalState private constructor(
     private external fun nativeDustCommitmentRoot(statePtr: Long): String?
 
     private external fun nativeDustGenerationRoot(statePtr: Long): String?
+
+    private external fun nativeDustSyncTime(statePtr: Long): Long
 
     /**
      * Lists current dust UTXO nullifiers (lowercase hex, comma-separated; empty
