@@ -2,12 +2,19 @@ package com.midnight.kuira.core.indexer.sync
 
 import android.util.Log
 import com.midnight.kuira.core.indexer.api.IndexerClient
+import com.midnight.kuira.core.indexer.model.ReceiptEvent
+import com.midnight.kuira.core.indexer.model.TokenTypeMapper
+import com.midnight.kuira.core.indexer.model.TransactionStatus
 import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emitAll
@@ -16,6 +23,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import java.io.IOException
+import java.math.BigInteger
 import kotlin.math.min
 
 /**
@@ -79,10 +87,70 @@ class SubscriptionManager(
         // Auto-sync timeout: If no new transactions arrive for this duration,
         // assume we're synced (don't wait for server's slow Progress updates)
         private const val SYNC_TIMEOUT_MS = 5000L // 5 seconds
+
+        // Buffer for the replay-0 receipts SharedFlow: lets the sync keep classifying without
+        // blocking on a slow collector. A whole sync's worth of receipts fits comfortably; a
+        // dropped emission (collector far behind) is recovered via the persisted sync cursor.
+        private const val RECEIPT_BUFFER_CAPACITY = 64
+
+        /**
+         * Classify a transaction as an inbound NIGHT receipt for [selfAddress], or null if it
+         * isn't one (#284). The provenance rule, pure and testable:
+         *
+         * - A FAILURE transaction created nothing on-chain → not a receipt.
+         * - A transaction that spent ANY of our UTXOs is OUR OWN send; the NIGHT it created
+         *   back to us is CHANGE, not a receipt → null. This is what stops a user from being
+         *   told they "received" their own NIGHT.
+         * - Otherwise the receipt amount is the sum of NIGHT outputs created to us IN THIS
+         *   transaction — the true per-transaction amount, not a balance delta.
+         */
+        internal fun classifyReceipt(
+            selfAddress: String,
+            tx: UnshieldedTransactionUpdate.Transaction,
+        ): ReceiptEvent? {
+            if (tx.status() == TransactionStatus.FAILURE) return null
+            // Spent one of ours → our own transaction → any output back to us is change.
+            if (tx.spentUtxos.any { it.owner == selfAddress }) return null
+            val receivedNight = tx.createdUtxos
+                .filter {
+                    it.owner == selfAddress &&
+                        TokenTypeMapper.toDisplaySymbol(it.tokenType) == TokenTypeMapper.NIGHT_SYMBOL
+                }
+                .fold(BigInteger.ZERO) { acc, utxo -> acc + utxo.valueBigInt() }
+            if (receivedNight <= BigInteger.ZERO) return null
+            return ReceiptEvent(
+                transactionId = tx.transaction.id,
+                transactionHash = tx.transaction.hash,
+                amount = receivedNight,
+            )
+        }
+
+        /**
+         * Whether a receipt at [txId] is past the announce [baseline] (#284). Null baseline
+         * (first sync before reaching tip) suppresses, so pre-existing history isn't announced.
+         */
+        internal fun isNewReceipt(baseline: Int?, txId: Int): Boolean =
+            baseline != null && txId > baseline
     }
 
     // Track last save time per address for throttling
     private val lastSaveTimestamps = mutableMapOf<String, Long>()
+
+    // #284: per-transaction inbound NIGHT receipts, classified by UTXO-set provenance.
+    // Emits ONLY genuine receipts (a tx that created NIGHT to us without spending any of our
+    // UTXOs) — never our own change — and only for transactions past the sync baseline, so a
+    // first sync / resync doesn't re-announce pre-existing history. Replaces the old scalar
+    // balance-delta detection. Hot + buffered so a slow collector can't stall the sync; a
+    // missed emission is recovered by the persisted sync cursor (the next catch-up re-derives).
+    private val _receipts = MutableSharedFlow<ReceiptEvent>(extraBufferCapacity = RECEIPT_BUFFER_CAPACITY)
+    val receipts: SharedFlow<ReceiptEvent> = _receipts.asSharedFlow()
+
+    /**
+     * Active collector count on [receipts]. [receipts] is replay-0, so an emission with no
+     * subscriber is dropped; a one-shot consumer ([BackgroundReceiveChecker]) awaits this > 0
+     * to confirm it's attached before driving the subscription.
+     */
+    val receiptSubscriberCount: StateFlow<Int> get() = _receipts.subscriptionCount
 
     /**
      * Wipe sync state + UTXOs for a given address and start over from genesis.
@@ -248,13 +316,29 @@ class SubscriptionManager(
         } else {
             Log.i(TAG, "⏩ INCREMENTAL: Resuming $address from transaction id $lastId")
         }
+
+        // #284 receipt baseline. A receipt is announced only for transactions PAST this
+        // baseline, so a first sync / resync (which replays history from genesis) doesn't
+        // re-announce pre-existing receipts. On an incremental resume we've synced before,
+        // so the resume cursor IS the baseline and new txs announce immediately. On a first
+        // sync the cursor is null, so we absorb genesis→tip silently and set the baseline to
+        // the tip the moment we first reach Synced; receipts after that announce.
+        val resumeBaseline: Int? = lastId
+        var firstSyncTipBaseline: Int? = null
+        suspend fun emitSynced(tipId: Int) {
+            if (resumeBaseline == null && firstSyncTipBaseline == null) {
+                firstSyncTipBaseline = tipId
+            }
+            send(SyncState.Synced(tipId))
+        }
+
         send(SyncState.Connecting)
 
         // Start initial sync timeout: if no transactions arrive at all
         // (e.g. 0-balance address with no history), emit Synced after timeout
         syncTimeoutJob = launch {
             delay(SYNC_TIMEOUT_MS)
-            send(SyncState.Synced(lastId ?: 0))
+            emitSynced(lastId ?: 0)
         }
 
         try {
@@ -285,6 +369,17 @@ class SubscriptionManager(
                         latestTransactionId = result.transactionId
                         highestSeenBySession = maxOf(highestSeenBySession, result.transactionId)
 
+                        // #284: classify this transaction by UTXO-set provenance and emit a
+                        // receipt for genuine inbound NIGHT — never for our own change (a tx that
+                        // spends our UTXOs). Gated by the baseline so history isn't re-announced.
+                        (update as? UnshieldedTransactionUpdate.Transaction)?.let { tx ->
+                            classifyReceipt(address, tx)?.let { receipt ->
+                                if (isNewReceipt(resumeBaseline ?: firstSyncTipBaseline, receipt.transactionId)) {
+                                    _receipts.tryEmit(receipt)
+                                }
+                            }
+                        }
+
                         // Emit syncing state
                         send(SyncState.Syncing(processedCount, result.transactionId))
 
@@ -295,7 +390,7 @@ class SubscriptionManager(
                         // assume we're synced (don't wait for server's slow Progress updates)
                         syncTimeoutJob = launch {
                             delay(SYNC_TIMEOUT_MS)
-                            send(SyncState.Synced(result.transactionId))
+                            emitSynced(result.transactionId)
                         }
                     }
                     is UtxoManager.ProcessingResult.ProgressUpdate -> {
@@ -352,13 +447,13 @@ class SubscriptionManager(
                         // This prevents a race condition where Progress arrives before
                         // transaction data, causing the collector to stop prematurely
                         if (processedCount > 0) {
-                            send(SyncState.Synced(result.highestTransactionId))
+                            emitSynced(result.highestTransactionId)
                         } else {
                             // No transactions processed yet - wait for actual data or timeout
                             syncTimeoutJob?.cancel()
                             syncTimeoutJob = launch {
                                 delay(SYNC_TIMEOUT_MS)
-                                send(SyncState.Synced(result.highestTransactionId))
+                                emitSynced(result.highestTransactionId)
                             }
                         }
                     }

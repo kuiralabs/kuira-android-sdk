@@ -334,44 +334,44 @@ class WalletForegroundService : Service() {
                     }
             }
 
-            // Incoming-funds alert (#264 inbound): tell the user when NIGHT ARRIVES — even while
-            // they're USING the app. Being in the app (mid-game, on another screen) is not the
-            // same as watching the wallet balance, so a receipt should still surface. SUPPRESS
-            // only when one of OUR OWN ops is in flight (a send / claim moves the balance — that
-            // is not a receipt). Cold-start absorption and dedup against the background poll come
-            // from the SHARED persisted checkpoint, not a foreground gate: only a balance ABOVE
-            // the recorded high fires (so launching with an existing balance is silent), and
-            // whichever path — this observer or the worker — records the high first leaves the
-            // other with no delta. [label] is host-overridable (the SDK emits no English of its own).
+            // Incoming-funds alert (#264 inbound, #284): tell the user when NIGHT ARRIVES — even
+            // while they're USING the app, since being in the app (mid-game, on another screen) is
+            // not the same as watching the wallet balance.
             //
-            // UNSHIELDED only (`unshieldedNight`, NOT `totalNight`): the seed-free worker can read
-            // only the unshielded balance, and the two share one checkpoint — mixing in shielded
-            // here would write a different number into that checkpoint and report a wrong delta.
-            // Shielded receipts are the #280 carve-out.
+            // Each event is a GENUINE per-transaction receipt. The indexer's UTXO-set provenance
+            // classification (SubscriptionManager) emits only transactions that created NIGHT to us
+            // WITHOUT spending any of our UTXOs — so our OWN change is never announced as "received"
+            // (the old balance-delta heuristic, suppressed only while an op was in flight, could
+            // misfire on the post-submit settle). The amount is exactly what arrived in that
+            // transaction, not a balance delta. The persisted cursor dedups against the background
+            // poll and across process death; the upstream baseline keeps a first sync / resync from
+            // re-announcing pre-existing history.
+            //
+            // UNSHIELDED only: shielded receipts need the seed-derived viewing key (#280 carve-out).
             scope.launch {
                 val checkpoint = ReceiveCheckpointStore(application)
                 provider.sdk
                     .flatMapLatest { sdk ->
-                        sdk?.let { s -> s.wallet.balanceFlow().map { s to it.unshieldedNight } } ?: emptyFlow()
+                        sdk?.let { s -> s.wallet.receipts.map { s to it } } ?: emptyFlow()
                     }
-                    .collect { (sdk, current) ->
-                        // Our own send/claim is moving the balance — not an incoming receipt.
-                        if (provider.sdk.value?.operations?.active?.value?.isNotEmpty() == true) return@collect
+                    .collect { (sdk, receipt) ->
                         val network = provider.activeConfig.value?.network ?: return@collect
                         val address = sdk.walletAddress
-                        val stored = checkpoint.lastHigh(network, address)
-                        ReceiveCheckpointStore.receivedDelta(stored, current)?.let { delta ->
-                            runCatching {
-                                alerter.postReceived(
-                                    application.getString(R.string.kuira_alert_received_fmt, formatNight(delta)),
-                                    application.getString(R.string.kuira_alert_received_body),
-                                    walletContentIntent,
-                                )
-                            }
+                        if (!ReceiveCheckpointStore.shouldAnnounce(
+                                checkpoint.lastAnnouncedTxId(network, address),
+                                receipt.transactionId,
+                            )
+                        ) {
+                            return@collect
                         }
-                        if (ReceiveCheckpointStore.shouldRecord(stored, current)) {
-                            checkpoint.recordHigh(network, address, current)
+                        runCatching {
+                            alerter.postReceived(
+                                application.getString(R.string.kuira_alert_received_fmt, formatNight(receipt.amount)),
+                                application.getString(R.string.kuira_alert_received_body),
+                                walletContentIntent,
+                            )
                         }
+                        checkpoint.recordAnnouncedTxId(network, address, receipt.transactionId)
                     }
             }
         }

@@ -27,8 +27,16 @@ import java.math.BigInteger
  * Thread-safe: All operations are suspend functions using Room's built-in thread safety.
  */
 class UtxoManager(
-    private val utxoDao: UnshieldedUtxoDao
+    private val utxoDao: UnshieldedUtxoDao,
+    /**
+     * Runs the given block in a single DB transaction. Production wires this to
+     * `RoomDatabase.withTransaction` (see IndexerModule / the SDK builders) so a confirmed
+     * transaction's UTXO writes commit atomically (#284). Defaults to a pass-through so unit
+     * tests with a mocked DAO observe the same DAO calls without a real database.
+     */
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { block -> block() },
 ) {
+
     /**
      * Process transaction update from subscription.
      *
@@ -77,20 +85,18 @@ class UtxoManager(
         // Handle based on transaction status
         when (status) {
             TransactionStatus.SUCCESS, TransactionStatus.PARTIAL_SUCCESS -> {
-                // STEP 1: Insert created UTXOs as AVAILABLE
+                // STEP 1: decide which created UTXOs to insert as AVAILABLE.
                 //
-                // IMPORTANT: Do NOT restore SPENT UTXOs to AVAILABLE!
-                // If we locally marked a UTXO as SPENT (after node accepted our transaction),
-                // we should NOT restore it just because the indexer replayed the creating TX.
-                // The indexer may be behind the blockchain - it hasn't seen our spending TX yet.
+                // IMPORTANT: Do NOT restore SPENT/PENDING UTXOs to AVAILABLE! If we locally
+                // marked a UTXO SPENT (after the node accepted our tx), we must NOT restore it
+                // just because the indexer replayed the creating TX — the indexer may be behind
+                // the chain and hasn't seen our spending TX yet. Trusting local SPENT over stale
+                // indexer data is what prevents the error-115 loop (re-spending a spent UTXO).
                 //
-                // Trust local SPENT state over stale indexer data. This prevents error 115
-                // loops where we keep trying to spend already-spent UTXOs.
-                //
-                // The subscription delivers transactions in order, so for NEW UTXOs:
-                // - TX 52 creates UTXO A → INSERT as AVAILABLE
-                // - TX 53 spends A, creates B → We mark A as SPENT (step 2), INSERT B as AVAILABLE
-                if (createdCount > 0) {
+                // The subscription delivers transactions in order, so for a created-then-spent
+                // UTXO the creating TX inserts it AVAILABLE and the later spending TX marks it
+                // SPENT. Decisions are computed here (reads); the writes happen atomically below.
+                val entitiesToInsert: List<UnshieldedUtxoEntity> = if (createdCount > 0) {
                     // Per-UTXO raw dump — off by default (no spam during a full
                     // sync). Enable with: adb shell setprop log.tag.UtxoManager VERBOSE
                     if (Log.isLoggable("UtxoManager", Log.VERBOSE)) {
@@ -98,18 +104,7 @@ class UtxoManager(
                             Log.v("UtxoManager", "[SYNC] Created UTXO intentHash=${utxo.intentHash} (len=${utxo.intentHash.length}) outputIndex=${utxo.outputIndex} value=${utxo.value} txHash=${utxo.transactionHash}")
                         }
                     }
-
-                    // UTXO state handling during sync:
-                    //
-                    // - SPENT = Already spent (by indexer OR by our local tx) → KEEP
-                    // - PENDING = Our transaction is in flight → KEEP
-                    // - AVAILABLE = Normal state → UPDATE with latest data
-                    // - Not in DB = New UTXO → INSERT as AVAILABLE
-                    //
-                    // We mark SPENT immediately when node accepts our transaction
-                    // (with spentByLocalTx=true). This prevents issues when indexer
-                    // lags behind the blockchain.
-                    val entitiesToInsert = createdUtxosWithTxHash.mapNotNull { utxo ->
+                    createdUtxosWithTxHash.mapNotNull { utxo ->
                         val entity = UnshieldedUtxoEntity.fromUtxo(utxo, state = UtxoState.AVAILABLE)
                         val existing = utxoDao.getUtxoById(entity.id)
 
@@ -121,44 +116,48 @@ class UtxoManager(
                                 entity // Insert new UTXO
                             }
                             existing.state == UtxoState.SPENT -> {
-                                // SPENT by indexer = confirmed spent by a later transaction
-                                // A later tx in the sync will mark this as spent, which is correct
                                 if (trace) Log.v("UtxoManager", "SKIP: UTXO ${entity.id} already SPENT (confirmed by indexer)")
                                 null // Keep SPENT - it was legitimately spent
                             }
                             existing.state == UtxoState.PENDING -> {
-                                // PENDING = our transaction is in flight
-                                // Don't overwrite - our tx might still confirm
                                 if (trace) Log.v("UtxoManager", "SKIP: UTXO ${entity.id} is PENDING (tx in flight)")
                                 null // Keep PENDING - wait for our tx to confirm or fail
                             }
                             else -> {
-                                // AVAILABLE - update with latest data from indexer
                                 if (trace) Log.v("UtxoManager", "UPDATE: UTXO ${entity.id} state=${existing.state}")
-                                entity
+                                entity // AVAILABLE - update with latest data from indexer
                             }
                         }
                     }
-
-                    // Insert/update UTXOs
-                    if (entitiesToInsert.isNotEmpty()) {
-                        utxoDao.insertUtxos(entitiesToInsert)
-                    }
+                } else {
+                    emptyList()
                 }
 
-                // STEP 2: Mark spent UTXOs as SPENT (permanent)
-                // This runs AFTER inserting created UTXOs, so order is correct:
-                // If a UTXO was both created and spent in different TXs, we first insert it
-                // as AVAILABLE (from the creating TX), then mark it SPENT (from the spending TX).
-                // For spent UTXOs, we need to find them by intentHash (what the subscription returns)
-                // then mark them by their id (which is transactionHash:outputIndex)
-                if (spentCount > 0) {
-                    val utxoIds = update.spentUtxos.mapNotNull { spentUtxo ->
+                // STEP 2: resolve our spent UTXOs' ids. The subscription returns them by
+                // intentHash; we mark them by local id (transactionHash:outputIndex).
+                val spentUtxoIds: List<String> = if (spentCount > 0) {
+                    update.spentUtxos.mapNotNull { spentUtxo ->
                         utxoDao.getUtxoByIntentHash(spentUtxo.intentHash, spentUtxo.outputIndex)?.id
                     }
-                    if (utxoIds.isNotEmpty()) {
-                        Log.d("UtxoManager", "SPENT: Marking ${utxoIds.size} UTXOs as SPENT: ${utxoIds.take(3)}...")
-                        utxoDao.markAsSpent(utxoIds)
+                } else {
+                    emptyList()
+                }
+
+                // Apply BOTH writes in ONE transaction (#284). Insert-the-change and
+                // mark-the-input-spent must commit together — otherwise observeUnspentUtxos
+                // can emit the in-between state where the spent input AND the new change are
+                // both AVAILABLE, a transient that overstates the balance by the change amount
+                // (and made the old balance-delta detector announce a user's own change as a
+                // "received" notification, and flickers the balance UI during a send).
+                if (entitiesToInsert.isNotEmpty() || spentUtxoIds.isNotEmpty()) {
+                    inTransaction {
+                        if (entitiesToInsert.isNotEmpty()) {
+                            utxoDao.insertUtxos(entitiesToInsert)
+                        }
+                        if (spentUtxoIds.isNotEmpty()) {
+                            Log.d("UtxoManager", "SPENT: Marking ${spentUtxoIds.size} UTXOs as SPENT: ${spentUtxoIds.take(3)}...")
+                            utxoDao.markAsSpent(spentUtxoIds)
+                        }
                     }
                 }
             }

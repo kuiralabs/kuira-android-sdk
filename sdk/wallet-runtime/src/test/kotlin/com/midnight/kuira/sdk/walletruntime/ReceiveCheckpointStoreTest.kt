@@ -1,57 +1,39 @@
 package com.midnight.kuira.sdk.walletruntime
 
-import com.midnight.kuira.sdk.walletruntime.ReceiveCheckpointStore.Companion.receivedDelta
-import com.midnight.kuira.sdk.walletruntime.ReceiveCheckpointStore.Companion.shouldRecord
-import org.junit.Assert.assertEquals
+import com.midnight.kuira.sdk.walletruntime.ReceiveCheckpointStore.Companion.shouldAnnounce
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.math.BigInteger
 
 /**
- * Pure tests for [ReceiveCheckpointStore]'s receipt-delta logic — what the background
- * receive poll uses to tell a genuine new receipt from a spend / resync dip.
+ * Pure tests for [ReceiveCheckpointStore]'s announce cursor (#284) — the idempotency guard that
+ * makes a per-transaction receipt announce at most once across the live observer and the
+ * background poll (and across process death). Provenance + amount are decided upstream; this is
+ * purely "have we already announced this transaction id?".
  */
 class ReceiveCheckpointStoreTest {
 
-    private fun bi(v: Long) = BigInteger.valueOf(v)
-
     @Test
-    fun `first observation is the baseline — no receipt, but recorded`() {
-        assertNull(receivedDelta(storedHigh = null, current = bi(100)))
-        assertTrue(shouldRecord(storedHigh = null, current = bi(100)))
-        assertTrue("even a zero baseline is recorded", shouldRecord(storedHigh = null, current = BigInteger.ZERO))
+    fun `first ever receipt (null cursor) is announced`() {
+        assertTrue(shouldAnnounce(lastAnnouncedTxId = null, txId = 100))
+        assertTrue("even tx id 0 is announceable on a fresh cursor", shouldAnnounce(lastAnnouncedTxId = null, txId = 0))
     }
 
     @Test
-    fun `a balance increase is a receipt of the difference, and is recorded`() {
-        assertEquals(bi(30), receivedDelta(storedHigh = bi(100), current = bi(130)))
-        assertTrue(shouldRecord(storedHigh = bi(100), current = bi(130)))
+    fun `a newer transaction id is announced`() {
+        assertTrue(shouldAnnounce(lastAnnouncedTxId = 100, txId = 101))
+        assertTrue(shouldAnnounce(lastAnnouncedTxId = 100, txId = 5000))
     }
 
     @Test
-    fun `a dip (spend or resync transient) is not a receipt and not recorded`() {
-        assertNull(receivedDelta(storedHigh = bi(100), current = bi(70)))
-        assertFalse(shouldRecord(storedHigh = bi(100), current = bi(70)))
+    fun `the already-announced transaction id is not re-announced`() {
+        // The other path beat us, or the same event arrived twice.
+        assertFalse(shouldAnnounce(lastAnnouncedTxId = 100, txId = 100))
     }
 
     @Test
-    fun `an unchanged balance is not a receipt and not recorded`() {
-        assertNull(receivedDelta(storedHigh = bi(100), current = bi(100)))
-        assertFalse(shouldRecord(storedHigh = bi(100), current = bi(100)))
-    }
-
-    @Test
-    fun `dip-then-recover to the same high does not re-fire as a receipt`() {
-        // high stays 100 through a dip to 70; recovering back to 100 is still <= high.
-        assertNull(receivedDelta(storedHigh = bi(100), current = bi(70)))
-        assertNull(receivedDelta(storedHigh = bi(100), current = bi(100)))
-    }
-
-    @Test
-    fun `recovering ABOVE the prior high fires only the genuinely new amount`() {
-        // high=100, dip to 70 (not recorded), then 120 → receipt of 20, not 50.
-        assertEquals(bi(20), receivedDelta(storedHigh = bi(100), current = bi(120)))
+    fun `an older transaction id (replay or resync) is not announced`() {
+        // A first sync / resync replays history; those ids are at or below the cursor.
+        assertFalse(shouldAnnounce(lastAnnouncedTxId = 100, txId = 70))
     }
 }

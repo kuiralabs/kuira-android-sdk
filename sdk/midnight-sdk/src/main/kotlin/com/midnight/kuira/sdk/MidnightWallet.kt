@@ -5,6 +5,7 @@ import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
+import com.midnight.kuira.core.indexer.model.ReceiptEvent
 import com.midnight.kuira.core.indexer.model.TokenTypeMapper
 import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
@@ -20,6 +21,7 @@ import com.midnight.kuira.core.identity.backup.DriveConsentRequiredException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -56,7 +58,18 @@ class MidnightWallet internal constructor(
     private val spentDustNullifierStore: SpentDustNullifierStore,
     private val dustCloudBackup: DustCloudBackup? = null,
     private val appStateCloudBackup: AppStateCloudBackup? = null,
+    receiptEvents: Flow<ReceiptEvent> = emptyFlow(),
 ) : TransactionBalancer {
+
+    /**
+     * Per-transaction inbound NIGHT receipts (#284), classified by UTXO-set provenance in the
+     * indexer subscription: a genuine receipt is a transaction that created NIGHT to us without
+     * spending any of our UTXOs. Our own sends (which return change to us) are NEVER receipts,
+     * so a consumer wiring this to a notification will never tell the user they "received" their
+     * own change. Each event carries the exact amount received IN THAT transaction — not a
+     * balance delta. Cold by default ([emptyFlow]) when no subscription is wired (e.g. tests).
+     */
+    val receipts: Flow<ReceiptEvent> = receiptEvents
 
     private val balanceMutex = Mutex()
 

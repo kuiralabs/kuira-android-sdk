@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import androidx.room.withTransaction
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
 import com.midnight.kuira.core.indexer.database.UtxoDatabase
@@ -108,7 +109,10 @@ object IndexerModule {
     @Provides
     @Singleton
     fun provideUtxoManager(database: UtxoDatabase): UtxoManager {
-        return UtxoManager(database.unshieldedUtxoDao())
+        return UtxoManager(
+            utxoDao = database.unshieldedUtxoDao(),
+            inTransaction = { block -> database.withTransaction { block() } },
+        )
     }
 
     /**

@@ -675,6 +675,21 @@ public final class com/midnight/kuira/core/indexer/model/RawLedgerEvent$Companio
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/midnight/kuira/core/indexer/model/ReceiptEvent {
+	public fun <init> (ILjava/lang/String;Ljava/math/BigInteger;)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/math/BigInteger;
+	public final fun copy (ILjava/lang/String;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/indexer/model/ReceiptEvent;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/indexer/model/ReceiptEvent;ILjava/lang/String;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/indexer/model/ReceiptEvent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAmount ()Ljava/math/BigInteger;
+	public final fun getTransactionHash ()Ljava/lang/String;
+	public final fun getTransactionId ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/indexer/model/TokenBalance {
 	public fun <init> (Ljava/lang/String;Ljava/math/BigInteger;I)V
 	public final fun component1 ()Ljava/lang/String;
@@ -1294,6 +1309,8 @@ public final class com/midnight/kuira/core/indexer/sync/ReorgDetectedException :
 public final class com/midnight/kuira/core/indexer/sync/SubscriptionManager {
 	public static final field Companion Lcom/midnight/kuira/core/indexer/sync/SubscriptionManager$Companion;
 	public fun <init> (Landroid/content/Context;Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/indexer/sync/SyncStateManager;)V
+	public final fun getReceiptSubscriberCount ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getReceipts ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun startSubscription (Ljava/lang/String;Z)Lkotlinx/coroutines/flow/Flow;
 	public static synthetic fun startSubscription$default (Lcom/midnight/kuira/core/indexer/sync/SubscriptionManager;Ljava/lang/String;ZILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
 }
@@ -1357,7 +1374,8 @@ public final class com/midnight/kuira/core/indexer/sync/SyncStateManager$Compani
 }
 
 public final class com/midnight/kuira/core/indexer/utxo/UtxoManager {
-	public fun <init> (Lcom/midnight/kuira/core/indexer/database/UnshieldedUtxoDao;)V
+	public fun <init> (Lcom/midnight/kuira/core/indexer/database/UnshieldedUtxoDao;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/indexer/database/UnshieldedUtxoDao;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun calculateBalance (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun clearUtxos (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun debugDumpAllUtxos (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

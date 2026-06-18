@@ -2,59 +2,55 @@ package com.midnight.kuira.sdk.walletruntime
 
 import android.content.Context
 import com.midnight.kuira.core.network.MidnightNetwork
-import java.math.BigInteger
 
 /**
- * Persists the highest unshielded NIGHT balance seen per (network, address), so the
- * background receive poll ([ReceivePollWorker]) — which is short-lived and re-runs
- * across process deaths — can tell a genuine NEW receipt from a balance it has already
- * accounted for.
+ * Idempotency cursor for inbound-receipt notifications (#284): the highest receipt transaction
+ * id already announced per (network, address). Two paths can see the same receipt — the live
+ * in-app observer ([WalletForegroundService]) and the background poll ([ReceivePollWorker]) —
+ * and both run across process deaths; this persisted id makes a receipt announce at most once.
+ * Whichever path announces first records the id; the other then sees it as already handled.
  *
- * "Highest seen", not "last seen": the balance dips on a spend (and on a flaky resync
- * transient), and a dip-then-recover must NOT re-fire as a receipt — only a balance that
- * EXCEEDS the recorded high is a new receipt. Both the in-app observer and the background
- * worker diff against this same persisted high, so a receipt is announced once: whichever
- * path sees it first records the high, and the other then finds no delta.
+ * Provenance (is this a genuine receipt, and how much?) is decided upstream in the indexer's
+ * SubscriptionManager by diffing the transaction's UTXO set — so a user's own change is never a
+ * receipt and never reaches here. This store is therefore a pure dedup cursor; it no longer
+ * reasons about balances. (That balance high-water was what the old delta detector used, and
+ * what occasionally announced a spend's change as a "receipt".)
  *
- * Plain prefs: the NIGHT total is public chain data (an unshielded balance), not a secret.
+ * Plain prefs: a transaction id is public chain metadata, not a secret. A dedicated prefs file
+ * ([PREFS]) — the old balance-watermark store wrote String values under a different file, so
+ * there's no type collision on upgrade.
  */
 class ReceiveCheckpointStore(context: Context) {
 
     private val prefs =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Highest NIGHT recorded for [network] + [address], or null if never recorded. */
-    fun lastHigh(network: MidnightNetwork, address: String): BigInteger? =
-        prefs.getString(key(network, address), null)?.let { runCatching { BigInteger(it) }.getOrNull() }
+    /** Highest receipt tx id announced for [network] + [address], or null if none yet. */
+    fun lastAnnouncedTxId(network: MidnightNetwork, address: String): Int? {
+        val key = key(network, address)
+        return if (prefs.contains(key)) prefs.getInt(key, 0) else null
+    }
 
-    /** Record [value] as the new high for [network] + [address]. */
-    fun recordHigh(network: MidnightNetwork, address: String, value: BigInteger) {
-        prefs.edit().putString(key(network, address), value.toString()).apply()
+    /** Record [txId] as the highest receipt announced for [network] + [address]. */
+    fun recordAnnouncedTxId(network: MidnightNetwork, address: String, txId: Int) {
+        prefs.edit().putInt(key(network, address), txId).apply()
     }
 
     private fun key(network: MidnightNetwork, address: String) = "${network.name}:$address"
 
     companion object {
-        private const val PREFS = "kuira_receive_checkpoint"
+        private const val PREFS = "kuira_receive_cursor"
 
         /**
-         * The positive amount to notify as "received", or null for no new receipt.
+         * Whether a receipt at [txId] is not-yet-announced for this (network, address).
          *
-         * - `storedHigh == null` (first observation — a freshly set-up wallet, or the
-         *   cold-start `0 → balance` ramp): the BASELINE. Notify nothing (don't announce
-         *   the pre-existing balance as a receipt); the caller records it as the high.
-         * - `current > storedHigh`: a genuine receipt — notify the difference.
-         * - `current <= storedHigh`: a spend or a flaky-resync dip — no receipt; the
-         *   recorded high is retained so the recovery back up isn't re-counted.
+         * - `lastAnnouncedTxId == null` (nothing announced yet) → announce. The upstream
+         *   baseline already suppressed pre-existing history, so the first event that reaches
+         *   here is a genuine new receipt.
+         * - `txId > lastAnnouncedTxId` → a newer receipt → announce.
+         * - otherwise → already announced (a replay or the other path beat us) → skip.
          */
-        fun receivedDelta(storedHigh: BigInteger?, current: BigInteger): BigInteger? = when {
-            storedHigh == null -> null
-            current > storedHigh -> current - storedHigh
-            else -> null
-        }
-
-        /** Whether [current] should be written as the new high (baseline or a fresh increase). */
-        fun shouldRecord(storedHigh: BigInteger?, current: BigInteger): Boolean =
-            storedHigh == null || current > storedHigh
+        fun shouldAnnounce(lastAnnouncedTxId: Int?, txId: Int): Boolean =
+            lastAnnouncedTxId == null || txId > lastAnnouncedTxId
     }
 }

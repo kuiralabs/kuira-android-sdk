@@ -15,7 +15,7 @@ public abstract interface class com/midnight/kuira/sdk/AppStateCloudBackup {
 public final class com/midnight/kuira/sdk/BackgroundReceiveChecker {
 	public static final field Companion Lcom/midnight/kuira/sdk/BackgroundReceiveChecker$Companion;
 	public fun <init> (Landroid/content/Context;)V
-	public final fun currentUnshieldedNight (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun newReceipts (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/sdk/BackgroundReceiveChecker$Companion {
@@ -262,6 +262,7 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public final fun getBackupStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getDustBackupEnabled ()Z
 	public final fun getNightUtxoJsonProvider ()Lkotlin/jvm/functions/Function1;
+	public final fun getReceipts ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getSyncStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setAppStateBackupEnabled (Z)V

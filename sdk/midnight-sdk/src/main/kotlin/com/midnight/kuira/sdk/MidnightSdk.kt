@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import androidx.room.withTransaction
 import com.midnight.kuira.core.compact.ContractOperationListener
 import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
@@ -866,7 +867,10 @@ class MidnightSdk private constructor(
             // for the Flow-based balance API. Nothing duplicated — see
             // core/indexer/sync/SubscriptionManager.kt header for the same pattern
             // used by the parent app.
-            val utxoManager = UtxoManager(database.unshieldedUtxoDao())
+            val utxoManager = UtxoManager(
+                utxoDao = database.unshieldedUtxoDao(),
+                inTransaction = { block -> database.withTransaction { block() } },
+            )
             val syncStateManager = SyncStateManager(appContext)
             val subscriptionManager = SubscriptionManager(
                 context = appContext,
@@ -937,6 +941,9 @@ class MidnightSdk private constructor(
                 spentDustNullifierStore = spentDustNullifierStore,
                 dustCloudBackup = dustCloudBackup,
                 appStateCloudBackup = appStateCloudBackup,
+                // #284: per-transaction inbound NIGHT receipts, classified by UTXO-set
+                // provenance in the live subscription (own change is never a receipt).
+                receiptEvents = subscriptionManager.receipts,
             )
 
             // ── Proactive dust tracker (#235) — opt-in ──
