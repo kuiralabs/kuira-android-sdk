@@ -104,6 +104,14 @@ class TransactionRejected(
         /** The ZK proof failed verification (wrong/stale public inputs or key mismatch). */
         const val ERROR_INVALID_PROOF = 115
 
+        /**
+         * The dust spend proof is invalid because the dust commitment root it commits
+         * to isn't one the node accepts — a stale/lagging local root, or a `ctime` that
+         * resolved to a different root via the node's `dust.root_history.get(ctime)`
+         * predecessor lookup. Recovery: re-sync dust to the chain tip and retry. See #287.
+         */
+        const val ERROR_INVALID_DUST_SPEND_PROOF = 170
+
         /** A contract effects check failed. */
         const val ERROR_EFFECTS_CHECK_FAILURE = 186
 
@@ -113,6 +121,9 @@ class TransactionRejected(
 
     /** True if the node rejected the transaction's ZK proof (node error 115). */
     val isInvalidProof: Boolean get() = customErrorCode == ERROR_INVALID_PROOF
+
+    /** True if the dust spend's root was stale / rejected (node error 170). */
+    val isDustSpendProof: Boolean get() = customErrorCode == ERROR_INVALID_DUST_SPEND_PROOF
 
     /** True if an unshielded UTXO input was already spent / missing (node error 195). */
     val isStaleUtxo: Boolean get() = customErrorCode == ERROR_INPUT_NOT_IN_UTXOS

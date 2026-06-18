@@ -343,7 +343,8 @@ class RealDustFeePaymentTest {
             dustState = dustState!!,
             seed = seed,
             dustUtxosJson = dustUtxoSelections,
-            ttl = System.currentTimeMillis() + 300_000
+            ttl = System.currentTimeMillis() + 300_000,
+            currentTimeMs = System.currentTimeMillis(),
         )
 
         assertNotNull("Serialization with dust failed", scaleHex)

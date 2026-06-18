@@ -29,6 +29,7 @@ import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
 import com.midnight.kuira.core.ledger.api.ProofServerClientImpl
+import com.midnight.kuira.core.ledger.api.TransactionRejected
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.core.ledger.api.TransactionSubmitter.SubmissionResult
 import com.midnight.kuira.core.ledger.builder.UnshieldedTransactionBuilder
@@ -367,7 +368,24 @@ class MidnightSdk private constructor(
         }
 
         onProgress?.invoke(SendProgress.SUBMITTING)
-        val result = submitTransfer(toAddress, amount, senderPublicKey)
+        var result = submitTransfer(toAddress, amount, senderPublicKey)
+
+        // #287: node error 170 (InvalidDustSpendProof) means our local dust commitment
+        // root lagged the chain at submit time (the indexer advanced between our
+        // block-time anchor and the node's validation). Re-sync dust to the tip and
+        // retry ONCE — the rebuild re-anchors ctime to the now-current indexed block,
+        // so the node's `dust.root_history.get(ctime)` resolves to a root we hold.
+        // (The chain-anchored ctime in serializeWithDust prevents most 170s; this is
+        // the safety net for the residual indexer-lag race.)
+        if (result is SubmissionResult.Failed &&
+            result.customErrorCode == TransactionRejected.ERROR_INVALID_DUST_SPEND_PROOF
+        ) {
+            Log.w(TAG, "Send rejected with error 170 (stale dust root) — re-syncing dust and retrying once")
+            runCatching { wallet.refresh() }
+                .onFailure { Log.w(TAG, "pre-retry dust refresh failed: ${it.message}") }
+            result = submitTransfer(toAddress, amount, senderPublicKey)
+        }
+
         when (result) {
             is SubmissionResult.Success, is SubmissionResult.Pending, is SubmissionResult.StaleUtxo ->
                 runCatching { wallet.refresh() }

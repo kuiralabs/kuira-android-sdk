@@ -235,7 +235,8 @@ class TransactionSubmitter(
 
             return SubmissionResult.Failed(
                 txHash = e.txHash,
-                reason = "Transaction rejected by node: ${e.reason}"
+                reason = "Transaction rejected by node: ${e.reason}",
+                customErrorCode = e.customErrorCode,
             )
         } catch (e: NodeRpcException) {
             return SubmissionResult.Failed(
@@ -574,6 +575,22 @@ class TransactionSubmitter(
             //
             // The stored binding_randomness will be automatically used by serializeWithDust().
 
+            // Chain-anchored dust ctime (#287): the node validates the dust spend via
+            // `dust.root_history.get(ctime)`, so ctime must resolve to the SAME dust root
+            // our proof commits to. That root is whatever block our local dust state has
+            // synced to — NOT the chain tip. Anchoring to the indexer's *current* tip
+            // failed intermittently: the loaded checkpoint lags the tip, so the node
+            // resolved a newer root than ours → InvalidDustSpendProof (error 170). Anchor
+            // to the state's own sync_time instead: `get(sync_time)` always returns our
+            // root, however far the tip has advanced. Fall back to the indexer tip only
+            // if the state reports no sync_time (shouldn't happen for a spendable state).
+            val dustSyncTimeMs = dustState.syncTimeMs()
+            val chainTimeMs = if (dustSyncTimeMs > 0L) {
+                dustSyncTimeMs
+            } else {
+                resolveClients().indexer.getCurrentBlockWithParams().timestamp
+            }
+
             val unprovenTxHex = ffiSerializer.serializeWithDust(
                 inputs = inputs,
                 outputs = outputs,
@@ -581,7 +598,8 @@ class TransactionSubmitter(
                 dustState = dustState,
                 seed = seed,
                 dustUtxosJson = dustUtxosJson,
-                ttl = signedIntent.ttl
+                ttl = signedIntent.ttl,
+                currentTimeMs = chainTimeMs,
             )
 
             // NOTE: Do NOT save dust state here!
@@ -629,7 +647,8 @@ class TransactionSubmitter(
                 }
                 return SubmissionResult.Failed(
                     txHash = e.txHash,
-                    reason = "Transaction rejected by node: ${e.reason}"
+                    reason = "Transaction rejected by node: ${e.reason}",
+                    customErrorCode = e.customErrorCode,
                 )
             } catch (e: NodeRpcException) {
                 return SubmissionResult.Failed(
@@ -776,10 +795,14 @@ class TransactionSubmitter(
          *
          * @property txHash Transaction hash (null if never submitted)
          * @property reason Human-readable failure reason
+         * @property customErrorCode The node's ledger error code when the node rejected
+         *   the tx (e.g. 170 = stale dust spend root), else null. Lets callers apply a
+         *   targeted recovery (re-sync + retry) without parsing [reason]. See #287.
          */
         data class Failed(
             val txHash: String?,
-            val reason: String
+            val reason: String,
+            val customErrorCode: Int? = null,
         ) : SubmissionResult()
 
         /**
