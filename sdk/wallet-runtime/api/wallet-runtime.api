@@ -174,10 +174,12 @@ public final class com/midnight/kuira/sdk/walletruntime/ReceiveTargetStore$Targe
 public final class com/midnight/kuira/sdk/walletruntime/SessionLock {
 	public static final field Companion Lcom/midnight/kuira/sdk/walletruntime/SessionLock$Companion;
 	public static final field DEFAULT_BACKGROUND_GRACE_MS J
+	public static final field DEFAULT_BACKGROUND_LIFETIME_MS J
 	public static final field DEFAULT_IDLE_TIMEOUT_MS J
 	public fun <init> (Lcom/midnight/kuira/sdk/walletruntime/MidnightSdkProvider;Lcom/midnight/kuira/sdk/walletseed/WalletSeedSource;)V
 	public final fun acquireHold ()Ljava/lang/AutoCloseable;
 	public final fun getBackgroundGraceMs ()J
+	public final fun getBackgroundLifetimeMs ()J
 	public final fun getHardLocked ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getIdleTimeoutMs ()J
 	public final fun getInForeground ()Lkotlinx/coroutines/flow/StateFlow;
@@ -189,6 +191,7 @@ public final class com/midnight/kuira/sdk/walletruntime/SessionLock {
 	public final fun onScreenOff ()V
 	public final fun onUserActivity ()V
 	public final fun setBackgroundGraceMs (J)V
+	public final fun setBackgroundLifetimeMs (J)V
 	public final fun setIdleTimeoutMs (J)V
 	public final fun unlock (Landroidx/fragment/app/FragmentActivity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun withHold (Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

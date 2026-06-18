@@ -32,6 +32,7 @@ class SessionLockTest {
     private fun newLock() = SessionLock(provider, walletSeedSource).apply {
         idleTimeoutMs = 1_000
         backgroundGraceMs = 500
+        backgroundLifetimeMs = 5_000   // background seed-lifetime ceiling (#276)
     }
 
     @Test
@@ -152,18 +153,56 @@ class SessionLockTest {
         verify(exactly = 0) { provider.close() }
     }
 
+    // ── Background seed-lifetime ceiling (#276) ──
+
     @Test
-    fun `a backgrounded soft-lock never self-wipes, even long past the idle timeout (Kicks plays the whole match backgrounded)`() = runTest {
+    fun `a held backgrounded session (Kicks match) never wipes past the lifetime ceiling — the hold defers it`() = runTest {
         // REGRESSION GUARD: a dual-process consumer (Midnight Kicks) backgrounds the main process
-        // for the ENTIRE match. A background idle-wipe would tear the SDK out from under an
-        // in-flight game. Backgrounding must keep the SDK alive indefinitely — only screen-off /
-        // foreground-idle / manual locks wipe.
+        // for the ENTIRE match and holds the session (MatchManager.acquireHold). The background
+        // lifetime ceiling MUST defer on that hold — never tear the SDK out from under an in-flight
+        // game — and fire only once the match releases the hold.
         val lock = newLock().also { it.scope = this }
+        val hold = lock.acquireHold()
+
         lock.onBackground()
         advanceTimeBy(501); runCurrent()
         assertTrue("soft-locked after the grace", lock.locked.value)
 
-        advanceTimeBy(10 * 1_000); runCurrent() // 10× the idle timeout, still backgrounded
+        advanceTimeBy(10 * 5_000); runCurrent() // far past the ceiling, still held (match running)
+        verify(exactly = 0) { provider.close() } // deferred while held — match safe
+
+        hold.close() // match ends → the deferred ceiling lock now fires
+        verify(exactly = 1) { provider.close() }
+    }
+
+    @Test
+    fun `an idle, unheld backgrounded session hard-wipes at the lifetime ceiling`() = runTest {
+        // The seed must not sit decrypted in memory forever just because the screen never turned
+        // off. With nothing held, the ceiling bounds the backgrounded lifetime with a real wipe.
+        val lock = newLock().also { it.scope = this }
+        lock.onBackground()
+
+        advanceTimeBy(501); runCurrent()
+        assertTrue("soft-locked after the grace", lock.locked.value)
+        verify(exactly = 0) { provider.close() } // still alive — within the ceiling
+
+        advanceTimeBy(5_000); runCurrent() // cross the 5_000 ceiling
+        verify(exactly = 1) { provider.close() } // bounded — hard wipe
+    }
+
+    @Test
+    fun `returning to foreground cancels the lifetime ceiling`() = runTest {
+        // An actively-used app must never be wiped by the backgrounded-lifetime bound; foregrounding
+        // cancels the pending ceiling. (Idle-while-foreground is the separate idleTimeout path.)
+        val lock = newLock().also { it.scope = this }
+        lock.onBackground()
+        advanceTimeBy(1_000); runCurrent() // backgrounded a while (past grace, before ceiling)
+
+        lock.onForeground() // cancels the ceiling + re-arms idle
+        // Stay actively foregrounded well past where the ceiling (5_000 from background) would fire,
+        // resetting idle each tick so the foreground idle path can't fire instead.
+        repeat(8) { advanceTimeBy(900); runCurrent(); lock.onUserActivity() }
+
         verify(exactly = 0) { provider.close() }
     }
 

@@ -73,6 +73,16 @@ class SessionLock @Inject constructor(
     var backgroundGraceMs: Long = DEFAULT_BACKGROUND_GRACE_MS
 
     /**
+     * Ceiling on how long the decrypted seed may stay alive while the app is backgrounded.
+     * Backgrounding only soft-locks (UI gated, SDK kept alive for monitoring), so without this a
+     * seed could sit decrypted in memory indefinitely on a device whose screen never turns off.
+     * When the ceiling elapses it routes through the hold-aware [lock] — so an in-flight operation
+     * or a backgrounded Kicks match (which holds the session) DEFERS the wipe until it finishes,
+     * never gets torn out mid-flight; an idle, unheld session is wiped. Mutable so hosts can tune it.
+     */
+    var backgroundLifetimeMs: Long = DEFAULT_BACKGROUND_LIFETIME_MS
+
+    /**
      * Scope the timers run on. `internal` so tests can substitute a
      * `TestScope` and drive virtual time; nothing launches at construction, so
      * replacing it before the first trigger is safe.
@@ -113,6 +123,7 @@ class SessionLock @Inject constructor(
 
     private var idleJob: Job? = null
     private var backgroundJob: Job? = null
+    private var lifetimeJob: Job? = null
     private var foregroundActivityCount = 0
     private var installed = false
 
@@ -130,10 +141,11 @@ class SessionLock @Inject constructor(
     /** Reset the idle countdown — call on any user interaction. */
     fun onUserActivity() = restartIdleTimer()
 
-    /** App returned to foreground: cancel the pending background lock, re-arm idle. */
+    /** App returned to foreground: cancel the pending background lock + lifetime ceiling, re-arm idle. */
     fun onForeground() {
         _inForeground.value = true
         backgroundJob?.cancel()
+        lifetimeJob?.cancel()
         restartIdleTimer()
     }
 
@@ -151,6 +163,15 @@ class SessionLock @Inject constructor(
         backgroundJob = scope.launch {
             delay(backgroundGraceMs)
             softLock("backgrounded")
+        }
+        // Bound the backgrounded seed lifetime (#276): a soft-lock keeps the SDK alive for
+        // monitoring, but not forever. After the ceiling, route through the hold-aware [lock] —
+        // a held op / Kicks match DEFERS the wipe; an idle, unheld session is torn down. Never a
+        // blind wipe (the earlier naive version killed in-flight matches; the hold gate is the fix).
+        lifetimeJob?.cancel()
+        lifetimeJob = scope.launch {
+            delay(backgroundLifetimeMs)
+            lock("background lifetime cap")
         }
     }
 
@@ -331,6 +352,11 @@ class SessionLock @Inject constructor(
     /** The actual lock: drop the cached SDK + force re-auth. Bypasses holds. */
     private fun doLock(reason: String) {
         Log.i(TAG, "Locking session ($reason) — dropping cached SDK + forcing re-auth")
+        // A real wipe clears every pending timer — including the background lifetime ceiling — so
+        // none can fire a redundant second lock afterward (e.g. screen-off wiped, then the ceiling).
+        idleJob?.cancel()
+        backgroundJob?.cancel()
+        lifetimeJob?.cancel()
         _locked.value = true
         // A hard lock genuinely tears the SDK down — distinct from a soft-lock that keeps it
         // alive. The foreground service reads [hardLocked] to know it may stop immediately.
@@ -449,7 +475,7 @@ class SessionLock @Inject constructor(
                 }
             }
         }
-        Log.i(TAG, "SessionLock installed (idle=${idleTimeoutMs}ms, bgGrace=${backgroundGraceMs}ms)")
+        Log.i(TAG, "SessionLock installed (idle=${idleTimeoutMs}ms, bgGrace=${backgroundGraceMs}ms, bgLifetime=${backgroundLifetimeMs}ms)")
     }
 
     @EntryPoint
@@ -466,6 +492,14 @@ class SessionLock @Inject constructor(
 
         /** 30s grace after backgrounding (survives brief app-switches). */
         const val DEFAULT_BACKGROUND_GRACE_MS = 30 * 1000L
+
+        /**
+         * 30 minutes: the longest the decrypted seed may live while backgrounded before the
+         * hold-aware lifetime ceiling (#276) wipes an idle, unheld session. A held op / Kicks match
+         * defers it. Long enough not to disrupt a quick app-switch or a backgrounded match; short
+         * enough that a forgotten, backgrounded app doesn't hold the seed in memory all day.
+         */
+        const val DEFAULT_BACKGROUND_LIFETIME_MS = 30 * 60 * 1000L
 
         /**
          * Linger after a sync settles before releasing the [bindSyncHold] hold —
