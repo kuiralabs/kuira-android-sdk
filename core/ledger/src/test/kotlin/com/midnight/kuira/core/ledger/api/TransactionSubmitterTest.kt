@@ -1,7 +1,9 @@
 package com.midnight.kuira.core.ledger.api
 
 import com.midnight.kuira.core.indexer.api.IndexerClient
+import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
+import com.midnight.kuira.core.ledger.fee.DustActionsBuilder
 import com.midnight.kuira.core.ledger.model.Intent
 import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
@@ -216,6 +218,67 @@ class TransactionSubmitterTest {
     }
 
     // ==================== Test Helpers ====================
+
+    /**
+     * #291: the dust-fee send must load the dust state ONCE, not twice. Pre-#291,
+     * `buildDustActions` deserialized the multi-MB dust state internally AND `submitWithFees`
+     * deserialized it again — ~2s/~350MB each, back-to-back, starving the UI (the PreProd
+     * send-screen freeze). Now `submitWithFees` loads it once, BEFORE `buildDustActions`, and
+     * passes it in.
+     *
+     * Driven via the no-state path (loadState → null): the send fails fast having called
+     * loadState exactly once and WITHOUT calling buildDustActions — which only holds for the
+     * new ordering. On the old code buildDustActions ran first (and loaded internally), so the
+     * `exactly = 0` buildDustActions check would fail. (FfiTransactionSerializer is mocked;
+     * mockk bypasses its `init { loadLibrary }` via Objenesis, so no native lib is needed.)
+     */
+    @Test
+    fun `submitWithFees loads dust state once and before buildDustActions`() = runTest {
+        val nodeClient = mockk<NodeRpcClient>(relaxed = true)
+        val proofServerClient = mockk<ProofServerClient>()
+        coEvery { proofServerClient.proveTransaction(any()) } returns "base_proven_hex"
+        val indexerClient = mockk<IndexerClient>(relaxed = true)
+
+        val serializer = mockk<FfiTransactionSerializer>()
+        every { serializer.serialize(any()) } returns "base_unproven_hex"
+        every { serializer.sealProvenTransaction(any()) } returns "base_sealed_hex"
+
+        val utxoManager = mockk<UtxoManager>(relaxed = true)
+        val dustActionsBuilder = mockk<DustActionsBuilder>(relaxed = true)
+        val dustRepository = mockk<DustRepository>(relaxed = true)
+        // No dust state available → submitWithFees must fail fast after a single load.
+        coEvery { dustRepository.loadState(any()) } returns null
+
+        val submitter = TransactionSubmitter(
+            nodeRpcClient = nodeClient,
+            proofServerClient = proofServerClient,
+            indexerClient = indexerClient,
+            serializer = serializer,
+            utxoManager = utxoManager,
+            dustActionsBuilder = dustActionsBuilder,
+            dustRepository = dustRepository,
+            provingMode = ProvingMode.REMOTE,
+        )
+
+        val result = submitter.submitWithFees(
+            signedIntent = createTestIntent(),
+            ledgerParamsHex = "00",
+            fromAddress = "mn_addr_test",
+            seed = ByteArray(32),
+        )
+
+        assertTrue(
+            "Absent dust state must fail fast",
+            result is TransactionSubmitter.SubmissionResult.Failed,
+        )
+        // Loaded exactly once (was twice pre-#291).
+        coVerify(exactly = 1) { dustRepository.loadState(any()) }
+        // The load now happens BEFORE buildDustActions, so the fail-fast skips it entirely
+        // (pre-#291 buildDustActions ran first and loaded internally → this would be >= 1).
+        coVerify(exactly = 0) {
+            dustActionsBuilder.buildDustActions(any(), any(), any(), any(), any(), any())
+        }
+    }
 
     private fun createTestIntent(): Intent {
         val input = UtxoSpend(

@@ -22,6 +22,27 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * Decode a hex string to bytes, streaming directly into the output array.
+ *
+ * The previous `hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()` allocated a List
+ * of ~N/2 two-char Strings plus a List of boxed Bytes for an N-char hex string — tens of MB
+ * of churn for a multi-MB dust checkpoint. This allocates only the result array. Top-level +
+ * internal so it's unit-testable (decode correctness gates the dust-state deserialize). Two
+ * hex chars per byte; assumes even length + valid hex digits.
+ */
+internal fun decodeHexToBytes(hex: String): ByteArray {
+    val out = ByteArray(hex.length / 2)
+    var i = 0
+    while (i < out.size) {
+        val hi = Character.digit(hex[i * 2], 16)
+        val lo = Character.digit(hex[i * 2 + 1], 16)
+        out[i] = ((hi shl 4) or lo).toByte()
+        i++
+    }
+    return out
+}
+
+/**
  * Repository for dust wallet operations.
  *
  * **Responsibilities:**
@@ -935,9 +956,7 @@ class DustRepository @Inject constructor(
     /**
      * Convert hex string to bytes.
      */
-    private fun hexStringToBytes(hex: String): ByteArray {
-        return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-    }
+    private fun hexStringToBytes(hex: String): ByteArray = decodeHexToBytes(hex)
 }
 
 /** What a delta-sync attempt should do, given the chain dust-event tip vs our checkpoint cursor. */

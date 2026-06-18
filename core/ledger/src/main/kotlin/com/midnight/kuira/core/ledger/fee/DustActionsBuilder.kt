@@ -5,6 +5,7 @@
 package com.midnight.kuira.core.ledger.fee
 
 import android.util.Log
+import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.database.DustTokenEntity
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import java.math.BigInteger
@@ -108,6 +109,7 @@ class DustActionsBuilder @Inject constructor(
         ledgerParamsHex: String,
         address: String,
         seed: ByteArray,
+        dustState: DustLocalState,
         feeBlocksMargin: Int = 5
     ): DustActions? {
         // Step 1: Calculate transaction fee
@@ -122,47 +124,38 @@ class DustActionsBuilder @Inject constructor(
             return null
         }
 
-        // Step 2: Load DustLocalState
-        val state = dustRepository.loadState(address) ?: run {
-            Log.e(TAG, "Failed to load dust state")
+        // Step 2: Use the caller-provided dust state — do NOT load or close it here. The
+        // caller (TransactionSubmitter) loads the dust state once and reuses it for both the
+        // fee/UTXO selection here and the dust spend, avoiding a second expensive deserialize.
+        // The caller owns the state and closes it.
+        val utxoCount = dustState.getUtxoCount()
+
+        if (utxoCount == 0) {
+            Log.e(TAG, "No dust UTXOs available")
             return null
         }
 
-        try {
-            val statePtr = state.getStatePointer()
-            val utxoCount = state.getUtxoCount()
+        // Step 3: Select UTXOs for fee payment
+        val selectedIndices = (0 until utxoCount).toList()
+        val totalBalance = dustState.getBalance(System.currentTimeMillis())
 
-            if (utxoCount == 0) {
-                Log.e(TAG, "No dust UTXOs available")
-                return null
-            }
-
-            // Step 3: Select UTXOs for fee payment
-            val selectedIndices = (0 until utxoCount).toList()
-            val totalBalance = state.getBalance(System.currentTimeMillis())
-
-            if (totalBalance < fee) {
-                Log.e(TAG, "Insufficient dust: $totalBalance < $fee Specks")
-                return null
-            }
-
-            // NOTE: Do NOT call createDustSpend here!
-            // The Rust FFI will call state.spend() when serializing the transaction.
-            // Calling it here would double-spend the UTXOs.
-
-            // Return DustActions with UTXO indices (spends will be created in Rust FFI)
-            return DustActions(
-                spends = emptyList(), // Spends created in Rust FFI, not here
-                selectedCoins = emptyList(), // No longer tracking individual coins
-                totalFee = fee,
-                change = BigInteger.ZERO, // No change calculation for MVP
-                utxoIndices = selectedIndices
-            )
-
-        } finally {
-            // Always close state
-            state.close()
+        if (totalBalance < fee) {
+            Log.e(TAG, "Insufficient dust: $totalBalance < $fee Specks")
+            return null
         }
+
+        // NOTE: Do NOT call createDustSpend here!
+        // The Rust FFI will call state.spend() when serializing the transaction.
+        // Calling it here would double-spend the UTXOs.
+
+        // Return DustActions with UTXO indices (spends will be created in Rust FFI)
+        return DustActions(
+            spends = emptyList(), // Spends created in Rust FFI, not here
+            selectedCoins = emptyList(), // No longer tracking individual coins
+            totalFee = fee,
+            change = BigInteger.ZERO, // No change calculation for MVP
+            utxoIndices = selectedIndices
+        )
     }
 
     /**

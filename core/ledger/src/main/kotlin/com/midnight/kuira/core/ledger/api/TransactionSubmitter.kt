@@ -519,31 +519,12 @@ class TransactionSubmitter(
         val baseSealedHex = ffiSerializer.sealProvenTransaction(baseProvenHex)
             ?: throw IllegalStateException("Sealing failed")
 
-        // Step 3: Calculate fee on sealed transaction
-        val dustActions = try {
-            dustActionsBuilder.buildDustActions(
-                transactionHex = baseSealedHex,  // Use SEALED transaction
-                ledgerParamsHex = ledgerParamsHex,
-                address = fromAddress,
-                seed = seed
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to build dust actions", e)
-            return SubmissionResult.Failed(
-                txHash = null,
-                reason = "Failed to build dust actions: ${e.message}"
-            )
-        }
-
-        if (dustActions == null || !dustActions.isSuccess()) {
-            Log.e(TAG, "Insufficient dust balance (required: ${dustActions?.totalFee} Specks)")
-            return SubmissionResult.Failed(
-                txHash = null,
-                reason = "Insufficient dust balance to cover fee (required: ${dustActions?.totalFee} Specks)"
-            )
-        }
-
-        // Step 3: Load DustLocalState
+        // Step 3: Load the dust state ONCE and reuse it for both fee/UTXO selection
+        // (buildDustActions) and the dust spend (serializeWithDust). Deserializing the
+        // dust state is expensive (it rebuilds the full commitment tree — seconds of CPU +
+        // a large transient allocation at scale), so loading it twice per send doubled that
+        // cost for no reason. The finally below closes it on every path (incl. the early
+        // returns inside the try).
         val dustState = dustRepository.loadState(fromAddress)
         if (dustState == null) {
             Log.e(TAG, "Failed to load dust state for $fromAddress")
@@ -554,6 +535,30 @@ class TransactionSubmitter(
         }
 
         try {
+            // Step 3a: Calculate fee + select fee UTXOs against the already-loaded state
+            val dustActions = try {
+                dustActionsBuilder.buildDustActions(
+                    transactionHex = baseSealedHex,  // Use SEALED transaction
+                    ledgerParamsHex = ledgerParamsHex,
+                    address = fromAddress,
+                    seed = seed,
+                    dustState = dustState,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to build dust actions", e)
+                return SubmissionResult.Failed(
+                    txHash = null,
+                    reason = "Failed to build dust actions: ${e.message}"
+                )
+            }
+
+            if (dustActions == null || !dustActions.isSuccess()) {
+                Log.e(TAG, "Insufficient dust balance (required: ${dustActions?.totalFee} Specks)")
+                return SubmissionResult.Failed(
+                    txHash = null,
+                    reason = "Insufficient dust balance to cover fee (required: ${dustActions?.totalFee} Specks)"
+                )
+            }
             // Step 4: Build JSON for selected dust UTXOs
             val dustUtxosJson = buildDustUtxosJson(dustActions.utxoIndices, dustActions.totalFee)
 
