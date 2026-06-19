@@ -1,8 +1,10 @@
 <resources>
-    <!-- Sync notification accent. Monochrome per the Kuira design standard (no accent hue —
-         contrast/weight carry meaning; was SuccessText green). White reads as the progress fill on
-         the dark notification + Live-Update chip; the runner large icon carries the brand. -->
-    <color name="kuira_sync_accent">#FFFFFFFF</color>
-    <!-- Milestone dots on the Live-Update progress bar — soft white ticks on the track. -->
-    <color name="kuira_sync_point">#CCFFFFFF</color>
+    <!-- Sync-notification accent (progress fill, milestone points, header tint, the runner tracker).
+         Theme-adaptive, NOT a brand hue: the notification shade follows the system day/night, so on a
+         LIGHT shade this resolves to the brand void (near-black) for high contrast; the values-night
+         variant flips to white for a DARK shade. (A single white value was invisible on a light
+         shade — the runner and the progress simply disappeared.) -->
+    <color name="kuira_sync_accent">#FF111114</color>
+    <!-- Milestone dots on the Live-Update progress bar — soft ticks on the track (dark on light). -->
+    <color name="kuira_sync_point">#CC111114</color>
 </resources>

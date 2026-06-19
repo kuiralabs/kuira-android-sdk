@@ -1,0 +1,6 @@
+<resources>
+    <!-- Dark notification shade: flip the sync accent to white so the runner, progress fill, and
+         header tint read against the dark surface (the light-shade values live in values/colors.xml). -->
+    <color name="kuira_sync_accent">#FFFFFFFF</color>
+    <color name="kuira_sync_point">#CCFFFFFF</color>
+</resources>
