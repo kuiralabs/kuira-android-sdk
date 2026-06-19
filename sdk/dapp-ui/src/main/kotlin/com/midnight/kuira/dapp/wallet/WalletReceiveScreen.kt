@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -164,16 +165,17 @@ private fun ReceiveTopBar(colors: WalletPanelColors, onBack: () -> Unit) {
             .height(ReceiveDimens.TopBarHeight)
             .padding(horizontal = ReceiveDimens.HorizontalPadding),
     ) {
-        // Back chevron — plain text glyph to avoid a Material-Icons dependency.
-        Text(
-            text = "←",
-            color = colors.onSheet,
-            fontSize = ReceiveType.BackGlyph,
+        // Back chevron — plain text glyph to avoid a Material-Icons dependency,
+        // in a 48dp box so the touch target meets the HIG minimum.
+        Box(
             modifier = Modifier
+                .size(ReceiveDimens.BackTouchTarget)
                 .clip(RoundedCornerShape(ReceiveDimens.BackHitRadius))
-                .clickable(onClick = onBack)
-                .padding(ReceiveDimens.BackHitPadding),
-        )
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "←", color = colors.onSheet, fontSize = ReceiveType.BackGlyph)
+        }
         Spacer(modifier = Modifier.size(ReceiveDimens.TopBarTitleGap))
         Text(
             text = "Receive",
@@ -274,6 +276,7 @@ private fun ReceiveTabRow(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = ReceiveDimens.TabPillMinHeight) // HIG touch target
                     .clip(RoundedCornerShape(ReceiveDimens.TabPillCornerRadius))
                     .background(if (isActive) colors.onSheet else Color.Transparent)
                     .clickable { onSelect(tab) }
@@ -335,8 +338,8 @@ private fun FundCommandBlock(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(ReceiveDimens.AirdropCornerRadius))
                 .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
-                .padding(ReceiveDimens.AirdropPadding)
-                .clickable { onCopy(cmd) },
+                .clickable { onCopy(cmd) }
+                .padding(ReceiveDimens.AirdropPadding),
         )
     }
 }
@@ -364,7 +367,7 @@ private object ReceiveDimens {
     val TopBarHeight = 56.dp
     val TopBarTitleGap = 16.dp
     val BackHitRadius = 20.dp
-    val BackHitPadding = 8.dp
+    val BackTouchTarget = 48.dp  // HIG minimum touch target (glyph is 24sp, centered)
 
     // Header.
     val HeaderTopGap = 24.dp
@@ -391,6 +394,7 @@ private object ReceiveDimens {
     val TabGap = 4.dp
     val TabPillCornerRadius = 10.dp
     val TabPillVerticalPadding = 12.dp
+    val TabPillMinHeight = 48.dp  // HIG minimum touch target
 
     // Airdrop block.
     val AirdropLabelGap = 8.dp

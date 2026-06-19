@@ -202,6 +202,35 @@ internal fun SendButtonRow(
     }
 }
 
+/**
+ * A top-bar text action (e.g. "Continue", "Done") — larger label than body text and a full 48dp
+ * touch target (the bare clickable Text it replaces was ~20dp tall, well under the HIG minimum).
+ */
+@Composable
+internal fun WizardTopBarAction(
+    text: String,
+    palette: SendPalette,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .heightIn(min = SendDimens.RowMinHeightAccessibility)
+            .clip(RoundedCornerShape(SendDimens.RadiusFull))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space8),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = if (enabled) palette.textSoft else palette.hairline,
+            fontSize = SendType.TopBarAction,
+            fontWeight = FontWeight.W400,
+        )
+    }
+}
+
 // ── Recipient input (bordered field with a trailing action slot) ──
 
 @Composable

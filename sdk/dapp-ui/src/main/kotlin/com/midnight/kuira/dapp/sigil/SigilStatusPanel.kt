@@ -629,7 +629,7 @@ private object SigilDimens {
     val RunnerMarkSize = 40.dp   // static runner brand mark on the forged identity card
 
     // Buttons inside the sheet.
-    val ButtonHeight = 48.dp
+    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
 }
 
@@ -640,7 +640,7 @@ private object SigilType {
     val Body = 13.sp
     val FieldLabel = 11.sp
     val FieldValue = 13.sp
-    val ButtonText = 13.sp
+    val ButtonText = 15.sp
 }
 
 // ── Color palette ──

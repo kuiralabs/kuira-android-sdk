@@ -94,7 +94,7 @@ private object PanelDimens {
     val SheetBottomGap = 8.dp
 
     // Action buttons.
-    val ButtonHeight = 48.dp
+    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
     val ButtonHorizontalPadding = 8.dp
 }
@@ -102,7 +102,7 @@ private object PanelDimens {
 private object PanelType {
     val PillText = 14.sp
     val SectionLabel = 11.sp           // Small uppercase: "address", "balance", etc.
-    val ButtonText = 13.sp
+    val ButtonText = 15.sp
     val Body = 14.sp                   // Address, balance row.
     val Caption = 13.sp                // Busy + message lines.
     val LoadingText = 16.sp

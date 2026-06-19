@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -331,13 +332,7 @@ private fun AmountStep(
         palette = palette,
         onBack = onBack,
         trailing = {
-            Text(
-                text = "Continue",
-                color = if (canReview) palette.textSoft else palette.hairline,
-                fontSize = SendType.Title,
-                fontWeight = FontWeight.W300,
-                modifier = Modifier.clickable(enabled = canReview, onClick = onReview),
-            )
+            WizardTopBarAction(text = "Continue", palette = palette, enabled = canReview, onClick = onReview)
         },
     )
     Column(
@@ -359,7 +354,9 @@ private fun AmountStep(
             }
             Spacer(modifier = Modifier.weight(1f))
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
+                    .heightIn(min = SendDimens.RowMinHeightAccessibility) // 48dp HIG touch target
                     .clip(RoundedCornerShape(SendDimens.RadiusFull))
                     .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
                     .clickable(onClick = onMax)
@@ -535,6 +532,7 @@ private fun SuccessScreen(
     onSendAnother: () -> Unit,
     onDone: () -> Unit,
 ) {
+    // Title left, "Done" as the top-right action (standard placement) — not crammed beside the title.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -542,15 +540,9 @@ private fun SuccessScreen(
             .height(SendDimens.TopBarHeight)
             .padding(horizontal = SendDimens.Space16),
     ) {
-        Text(
-            text = "Done",
-            color = palette.text,
-            fontSize = SendType.Title,
-            fontWeight = FontWeight.W300,
-            modifier = Modifier.clickable(onClick = onDone),
-        )
-        Spacer(modifier = Modifier.width(SendDimens.Space16))
         Text("Sent", color = palette.text, fontSize = SendType.Title, fontWeight = FontWeight.W400)
+        Spacer(modifier = Modifier.weight(1f))
+        WizardTopBarAction(text = "Done", palette = palette, onClick = onDone)
     }
     HorizontalDivider(color = palette.hairline, thickness = SendDimens.DividerThickness)
 
@@ -616,9 +608,10 @@ private fun WizardTopBar(
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(SendDimens.RadiusLg))
-                .clickable(enabled = backEnabled, onClick = onBack)
-                .padding(SendDimens.GlyphHit),
+                .size(SendDimens.RowMinHeightAccessibility) // 48dp HIG touch target (glyph is 24dp, centered)
+                .clip(RoundedCornerShape(SendDimens.RadiusFull))
+                .clickable(enabled = backEnabled, onClick = onBack),
+            contentAlignment = Alignment.Center,
         ) {
             BackGlyph(color = if (backEnabled) palette.text else palette.textMuted)
         }

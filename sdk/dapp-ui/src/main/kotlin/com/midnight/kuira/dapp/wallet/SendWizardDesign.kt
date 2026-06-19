@@ -52,7 +52,7 @@ internal object SendDimens {
     val RadiusFull: Dp = 9999.dp
 
     val TopBarHeight: Dp = 56.dp
-    val ButtonHeight: Dp = 48.dp
+    val ButtonHeight: Dp = 54.dp   // prominent CTA — above the 48dp HIG floor
     val RowMinHeight: Dp = 56.dp
     val RowMinHeightAccessibility: Dp = 48.dp
 
@@ -76,7 +76,8 @@ internal object SendType {
     val Caption = 13.sp
     val Hint = 12.sp
     val Badge = 11.sp
-    val Button = 13.sp
+    val Button = 15.sp           // was 13 — readable CTA label (Material labelLarge is 14, iOS 17pt)
+    val TopBarAction = 16.sp     // top-bar text actions (Continue / Done) — bigger, in a 48dp target
     val Max = 11.sp
     val SuccessHeadline = 18.sp
 
