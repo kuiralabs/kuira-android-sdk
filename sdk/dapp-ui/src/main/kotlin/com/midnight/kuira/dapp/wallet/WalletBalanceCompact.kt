@@ -110,7 +110,7 @@ fun WalletBalanceCompact(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     PoolAmount(label = "unshielded", amount = ui.publicNight, colors = colors)
                     Spacer(Modifier.width(18.dp))
-                    PoolAmount(label = "shielded", amount = ui.privateNight, colors = colors, shielded = true)
+                    PoolAmount(label = "shielded", amount = ui.privateNight, colors = colors)
                 }
             }
             if (syncProgress != null) {
@@ -187,7 +187,8 @@ private fun BalanceCard(
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) = GlassPanel(
-    tint = colors.button,
+    // Frosted: a translucent fill so the star field shows faintly through the card.
+    tint = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
     border = colors.onSheetSubtle,
     modifier = modifier,
     contentPadding = contentPadding,
@@ -196,12 +197,9 @@ private fun BalanceCard(
 
 /** One pool figure — small label, bright amount; private gets a shield. Equal weight to its sibling. */
 @Composable
-private fun PoolAmount(label: String, amount: String, colors: WalletPanelColors, shielded: Boolean = false) {
+private fun PoolAmount(label: String, amount: String, colors: WalletPanelColors) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (shielded) {
-            Text("🛡", fontSize = 13.sp)
-            Spacer(Modifier.width(4.dp))
-        }
+        // "shielded" / "unshielded" label carries the distinction — no emoji.
         Text(label, color = colors.onSheetDim, fontSize = 12.sp)
         Spacer(Modifier.width(6.dp))
         Text(amount, color = colors.onSheet, fontSize = 15.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
@@ -252,7 +250,7 @@ private fun QuickAction(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(colors.button)
+                .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
                 .border(1.dp, colors.onSheetSubtle, CircleShape),
         ) {
             Text(glyph, color = tint, fontSize = 20.sp)

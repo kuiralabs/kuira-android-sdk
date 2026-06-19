@@ -904,7 +904,7 @@ private fun <T> PanelSelector(
                     .fillMaxWidth()
                     .height(PanelDimens.ButtonHeight)
                     .clip(shape)
-                    .background(colors.button)
+                    .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA)) // frosted selector
                     .border(1.dp, colors.pillBorder, shape)
                     .dappPressable(shape = shape) { expanded = true }
                     .padding(horizontal = 14.dp),

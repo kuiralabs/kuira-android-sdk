@@ -35,14 +35,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.DustTrail
 import com.midnight.kuira.core.designsystem.effect.LottieRunner
+import com.midnight.kuira.dapp.wallet.CloudGlyph
+import com.midnight.kuira.dapp.wallet.DustGlyph
 import com.midnight.kuira.dapp.wallet.Eyebrow
+import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
+import com.midnight.kuira.dapp.wallet.KeyGlyph
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -119,19 +124,18 @@ fun BackupSection(
     Column(modifier.fillMaxWidth()) {
         Eyebrow("BACKUP & RECOVERY", colors)
         Spacer(Modifier.height(12.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .border(1.dp, colors.onSheetSubtle, RoundedCornerShape(14.dp))
-                .padding(vertical = 4.dp),
+        GlassPanel(
+            tint = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
+            border = colors.onSheetSubtle,
+            cornerRadius = 14.dp,
+            contentPadding = 4.dp,
         ) {
-            Lane(icon = "🛡", title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors)
+            Lane(glyph = { KeyGlyph(it) }, title = "Wallet identity", tooltip = TIP_IDENTITY, state = state.identity, colors = colors)
             Divider(colors)
-            Lane(icon = "✨", title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = dustToggle)
+            Lane(glyph = { DustGlyph(it) }, title = "Dust · balance sync", tooltip = TIP_DUST, state = state.dust, colors = colors, onToggle = dustToggle)
             state.appData?.let { appData ->
                 Divider(colors)
-                Lane(icon = "☁", title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)
+                Lane(glyph = { CloudGlyph(it) }, title = "App data", tooltip = TIP_APP_DATA, state = appData, colors = colors, onAction = onAppDataAction)
             }
         }
     }
@@ -187,7 +191,7 @@ private const val TIP_APP_DATA =
 
 @Composable
 private fun Lane(
-    icon: String,
+    glyph: @Composable (Color) -> Unit,
     title: String,
     tooltip: String,
     state: BackupLaneState,
@@ -197,7 +201,7 @@ private fun Lane(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, fontSize = 15.sp, modifier = Modifier.width(22.dp))
+            Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) { glyph(colors.onSheet) }
             Spacer(Modifier.width(14.dp))
             Text(title, color = colors.onSheet, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.width(6.dp))

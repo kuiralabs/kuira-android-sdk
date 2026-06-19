@@ -132,6 +132,14 @@ internal const val STAR_COUNT = 60
 internal const val STAR_ALPHA_LIGHT = 0.55f
 internal const val STAR_ALPHA_DARK = 1f
 
+/**
+ * Frosted-glass fill alpha — the translucency that lets the star field show faintly through a
+ * [com.midnight.kuira.core.designsystem.component.GlassPanel]. Applied as `onSheet.copy(alpha = …)`
+ * so it inverts correctly per mode (white frost on dark, black frost on light). One value → every
+ * SDK panel frosts identically.
+ */
+internal const val GLASS_FILL_ALPHA = 0.055f
+
 // ── Vector icons (Canvas, no material-icons dependency) ──
 //
 // Paths use normalized 0..1 canvas coordinates scaled by the draw size — the

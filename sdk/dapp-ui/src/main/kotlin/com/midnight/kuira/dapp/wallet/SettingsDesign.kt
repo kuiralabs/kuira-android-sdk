@@ -224,6 +224,30 @@ internal fun EyeOffGlyph(color: Color, size: Dp = SendDimens.Icon20, modifier: M
     }
 }
 
+/** Dust — a loose cluster of particles (the brand's dust motif), no emoji. */
+@Composable
+internal fun DustGlyph(color: Color, size: Dp = SendDimens.Icon20, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val w = this.size.width; val h = this.size.height
+        drawCircle(color, radius = w * 0.075f, center = Offset(w * 0.34f, h * 0.40f))
+        drawCircle(color, radius = w * 0.060f, center = Offset(w * 0.58f, h * 0.30f))
+        drawCircle(color, radius = w * 0.050f, center = Offset(w * 0.48f, h * 0.60f))
+        drawCircle(color, radius = w * 0.045f, center = Offset(w * 0.72f, h * 0.56f))
+        drawCircle(color, radius = w * 0.040f, center = Offset(w * 0.30f, h * 0.66f))
+    }
+}
+
+/** App data — a cloud: two stroked puffs over a baseline. */
+@Composable
+internal fun CloudGlyph(color: Color, size: Dp = SendDimens.Icon20, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val w = this.size.width; val h = this.size.height; val sw = w * SETTINGS_STROKE
+        drawLine(color, Offset(w * 0.26f, h * 0.66f), Offset(w * 0.74f, h * 0.66f), sw, StrokeCap.Round)
+        drawArc(color, 70f, 200f, false, Offset(w * 0.18f, h * 0.42f), Size(w * 0.28f, h * 0.30f), style = Stroke(sw, cap = StrokeCap.Round))
+        drawArc(color, 150f, 240f, false, Offset(w * 0.38f, h * 0.30f), Size(w * 0.38f, h * 0.42f), style = Stroke(sw, cap = StrokeCap.Round))
+    }
+}
+
 /** Network — a globe: circle + equator + meridian oval. */
 @Composable
 internal fun GlobeGlyph(color: Color, size: Dp = SendDimens.Icon24, modifier: Modifier = Modifier) {

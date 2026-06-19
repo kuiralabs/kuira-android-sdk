@@ -131,10 +131,13 @@ public final class com/midnight/kuira/dapp/backup/BackupSectionState {
 public final class com/midnight/kuira/dapp/backup/ComposableSingletons$BackupSectionKt {
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/backup/ComposableSingletons$BackupSectionKt;
 	public fun <init> ()V
+	public final fun getLambda$-1112619616$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-1805081364$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-728442146$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-744995784$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$-82891522$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$1794377373$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1925268247$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
 public abstract class com/midnight/kuira/dapp/di/AppDataBackupModule {
