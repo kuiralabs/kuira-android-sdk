@@ -516,7 +516,7 @@ private fun PendingScreen(stage: String, palette: SendPalette) {
         Text(stage, color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
         Spacer(modifier = Modifier.height(SendDimens.Space8))
         Text(
-            text = "This usually takes a few seconds.",
+            text = "This can take a few seconds, sometimes longer. It keeps running if you leave.",
             color = palette.textMuted,
             fontSize = SendType.Hint,
             fontWeight = FontWeight.W400,
