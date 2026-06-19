@@ -685,7 +685,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : c
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
-	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILkotlin/jvm/functions/Function0;ZLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletSyncIndicatorKt {

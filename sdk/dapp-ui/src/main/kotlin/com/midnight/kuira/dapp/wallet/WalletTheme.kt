@@ -79,7 +79,7 @@ object WalletThemes {
             base = Color(0xFF282A36),     // background
             surface = Color(0xFF44475A),  // selection / current line
             text = Color(0xFFF8F8F2),     // foreground
-            muted = Color(0xFF6272A4),    // comment
+            muted = Color(0xFF8B93C7),    // lightened comment (raw #6272A4 is 3.03:1 on bg — fails AA)
             faint = Color(0xFF44475A),    // selection
             accent = Color(0xFFBD93F9),   // purple
             error = Color(0xFFFF5555),    // red
@@ -94,8 +94,8 @@ object WalletThemes {
             base = Color(0xFF1A1B26),     // bg
             surface = Color(0xFF292E42),  // bg_highlight
             text = Color(0xFFC0CAF5),     // fg
-            muted = Color(0xFF565F89),    // comment
-            faint = Color(0xFF3B4261),    // fg_gutter
+            muted = Color(0xFFA9B1D6),    // fg_dark (secondary text — comment #565f89 fails AA on bg)
+            faint = Color(0xFF565F89),    // comment (decorative hairline)
             accent = Color(0xFF7AA2F7),   // blue
             error = Color(0xFFF7768E),    // red
             positive = Color(0xFF9ECE6A), // green
@@ -129,8 +129,8 @@ object WalletThemes {
 /**
  * Maps a small set of palette roles onto the 14-field [WalletPanelColors]. The pill and the sheet
  * share one [base] surface (matching the monochrome default's flat elevation); [surface] is the
- * slightly-lifted fill behind frosted panels and buttons. Status poles ([error]/[positive]) are
- * kept distinct so the success-check / error semantics read in each palette's own green/red.
+ * slightly-lifted fill behind frosted panels and ENABLED buttons. Status poles ([error]/[positive])
+ * are kept distinct so the success-check / error semantics read in each palette's own green/red.
  */
 private fun darkTheme(
     base: Color,
@@ -154,10 +154,14 @@ private fun darkTheme(
     error = error,
     button = surface,
     onButton = text,
-    buttonDisabled = surface,
+    // Must read clearly dimmer than [surface] (the enabled fill) so a disabled button isn't
+    // mistaken for an active one — a faint translucent tint, mirroring the monochrome LightBarely.
+    buttonDisabled = text.copy(alpha = THEME_DISABLED_FILL_ALPHA),
     onButtonDisabled = muted,
     positive = positive,
 )
+
+private const val THEME_DISABLED_FILL_ALPHA = 0.10f
 
 /**
  * Durable store for the chosen appearance theme — a single id in the wallet's existing

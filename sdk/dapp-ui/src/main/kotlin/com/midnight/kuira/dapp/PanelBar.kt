@@ -129,6 +129,11 @@ fun PanelBar(
     val themedWalletColors = remember(selectedThemeId, walletColors) {
         if (selectedThemeId == WalletThemes.Default.id) walletColors else WalletThemes.byId(selectedThemeId).colors
     }
+    // Light/dark is hoisted too so the pill, sheet, AND the overlays below resolve to ONE palette
+    // (the pill self-resolves the same flip from the controlled lightMode). Light mode shows the
+    // Kuira light palette and takes precedence over a chosen color theme.
+    var lightMode by rememberSaveable { mutableStateOf(false) }
+    val activeWalletColors = if (lightMode) WalletPanelColors.Light else themedWalletColors
 
     // Settings + recovery-reveal overlays live at the bar level (above both panels) so a single
     // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
@@ -211,6 +216,8 @@ fun PanelBar(
             },
             openSheetSignal = openWalletSignal,
             onOpenSettings = { settingsOpen = true },
+            lightMode = lightMode,
+            onToggleLightMode = { lightMode = !lightMode },
         )
     }
 
@@ -239,7 +246,7 @@ fun PanelBar(
                     settingsOpen = false
                 },
                 versionLabel = appVersion.ifBlank { null },
-                colors = themedWalletColors,
+                colors = activeWalletColors,
                 selectedThemeId = selectedThemeId,
                 onSelectTheme = { id ->
                     selectedThemeId = id
@@ -266,7 +273,7 @@ fun PanelBar(
             WalletRecoveryScreen(
                 phrase = revealedPhrase,
                 error = recoveryError,
-                colors = themedWalletColors,
+                colors = activeWalletColors,
                 onReveal = { activity?.let { walletViewModel.revealRecoveryPhrase(it) } },
                 onConfirmSaved = {
                     walletViewModel.markRecoveryPhraseSaved()

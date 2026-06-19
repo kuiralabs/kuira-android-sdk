@@ -195,6 +195,14 @@ fun WalletStatusPanel(
      * unchanged and a host can hide the gear by leaving it unset.
      */
     onOpenSettings: () -> Unit = {},
+    /**
+     * Light/dark mode, hoisted so a host (e.g. [PanelBar]) can keep the pill, sheet, and its
+     * Settings/recovery overlays on ONE palette. CONTROLLED when [onToggleLightMode] is non-null
+     * ([lightMode] is then authoritative); UNCONTROLLED otherwise — the panel self-manages the
+     * sun/moon toggle as before, so standalone call sites are unaffected.
+     */
+    lightMode: Boolean = false,
+    onToggleLightMode: (() -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -240,11 +248,14 @@ fun WalletStatusPanel(
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
 
-    // Light/dark mode is panel-local (rememberSaveable); the toggle lives in the
-    // sheet. The host-supplied [colors] is the dark base; light flips to the
-    // SDK's light dusk palette. Both pill and sheet render with the result.
-    var lightMode by rememberSaveable { mutableStateOf(false) }
-    val activeColors = if (lightMode) WalletPanelColors.Light else colors
+    // Light/dark mode: controlled by the host when [onToggleLightMode] is supplied, else
+    // panel-local (rememberSaveable). The host-supplied [colors] is the dark base; light flips to
+    // the SDK's light dusk palette. Both pill and sheet render with the result — and a controlling
+    // host applies the SAME flip to its overlays, so nothing diverges.
+    var internalLightMode by rememberSaveable { mutableStateOf(false) }
+    val effectiveLightMode = if (onToggleLightMode != null) lightMode else internalLightMode
+    val toggleLightMode = onToggleLightMode ?: { internalLightMode = !internalLightMode }
+    val activeColors = if (effectiveLightMode) WalletPanelColors.Light else colors
 
     // The pill — always rendered. Tap opens the sheet. dappPressable gives it
     // the pressed/hover/focus state layer + press scale the rest of the app has.
@@ -323,8 +334,8 @@ fun WalletStatusPanel(
                 config = config,
                 formatter = formatter,
                 colors = activeColors,
-                lightMode = lightMode,
-                onToggleLightMode = { lightMode = !lightMode },
+                lightMode = effectiveLightMode,
+                onToggleLightMode = toggleLightMode,
                 onNetworkChange = {
                     viewModel.selectNetwork(it)
                     onNetworkChange(it)
