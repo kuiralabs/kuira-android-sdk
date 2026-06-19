@@ -90,7 +90,7 @@ internal fun SettingsSection(
         letterSpacing = 3.sp,
     )
     Spacer(Modifier.size(SendDimens.Space12))
-    GlassPanel(tint = palette.panel, border = palette.hairline, contentPadding = SendDimens.Space4) {
+    GlassPanel(tint = palette.text.copy(alpha = GLASS_FILL_ALPHA), border = palette.hairline, contentPadding = SendDimens.Space4) {
         content()
     }
 }

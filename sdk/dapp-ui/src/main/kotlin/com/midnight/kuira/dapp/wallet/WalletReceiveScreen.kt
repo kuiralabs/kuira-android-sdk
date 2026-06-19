@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.network.MidnightNetwork
 
 /**
@@ -85,6 +87,12 @@ internal fun WalletReceiveScreen(
             .fillMaxSize()
             .background(colors.sheetBackground),
     ) {
+        StarField(
+            modifier = Modifier.fillMaxSize(),
+            color = colors.onSheet,
+            alpha = if (colors.sheetBackground.luminance() > 0.5f) STAR_ALPHA_LIGHT else STAR_ALPHA_DARK,
+            starCount = STAR_COUNT,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -181,7 +189,7 @@ private fun NetworkBadge(network: MidnightNetwork, colors: WalletPanelColors) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(ReceiveDimens.BadgeCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .padding(
                 horizontal = ReceiveDimens.BadgeHorizontalPadding,
                 vertical = ReceiveDimens.BadgeVerticalPadding,
@@ -208,7 +216,7 @@ private fun QrAddressCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ReceiveDimens.CardCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .border(
                 width = ReceiveDimens.CardBorderWidth,
                 color = colors.pillBorder,
@@ -256,7 +264,7 @@ private fun ReceiveTabRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ReceiveDimens.TabCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .padding(ReceiveDimens.TabPadding),
         horizontalArrangement = Arrangement.spacedBy(ReceiveDimens.TabGap),
     ) {
@@ -326,7 +334,7 @@ private fun FundCommandBlock(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(ReceiveDimens.AirdropCornerRadius))
-                .background(colors.button)
+                .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
                 .padding(ReceiveDimens.AirdropPadding)
                 .clickable { onCopy(cmd) },
         )

@@ -195,7 +195,7 @@ private fun PhraseStep(phrase: List<String>, palette: SendPalette, onConfirmSave
     Spacer(Modifier.height(SendDimens.Space24))
 
     // The words in one card — a numbered 3-column grid (BIP-39 words are ≤ 8 chars, so three fit).
-    GlassPanel(tint = palette.panel, border = palette.hairline, contentPadding = SendDimens.Space16) {
+    GlassPanel(tint = palette.text.copy(alpha = GLASS_FILL_ALPHA), border = palette.hairline, contentPadding = SendDimens.Space16) {
         val rows = (phrase.size + WORD_COLUMNS - 1) / WORD_COLUMNS
         for (r in 0 until rows) {
             if (r > 0) Spacer(Modifier.height(SendDimens.Space12))
