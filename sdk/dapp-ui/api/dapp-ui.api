@@ -225,6 +225,7 @@ public final class com/midnight/kuira/dapp/sigil/SigilPanelColors {
 }
 
 public final class com/midnight/kuira/dapp/sigil/SigilPanelColors$Companion {
+	public final fun from (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;)Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;
 	public final fun getDefault ()Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;
 }
 

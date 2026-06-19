@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.test.core.app.ApplicationProvider
+import com.midnight.kuira.dapp.sigil.SigilPanelColors
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -94,6 +95,20 @@ class WalletThemeTest {
             assertTrue("${theme.label}: body text $bodyContrast < 4.5", bodyContrast >= 4.5)
             assertTrue("${theme.label}: secondary text $secondaryContrast < 4.5", secondaryContrast >= 4.5)
         }
+    }
+
+    @Test
+    fun `sigil palette derives from the wallet theme so both pills retheme together`() {
+        val w = WalletThemes.Dracula.colors
+        val s = SigilPanelColors.from(w)
+        // Shared poles carry through verbatim.
+        assertEquals(w.accent, s.accent)
+        assertEquals(w.error, s.error)
+        assertEquals(w.sheetBackground, s.sheetBackground)
+        assertEquals(w.onSheet, s.onSheet)
+        // And the result actually differs from the monochrome default — i.e. the sigil pill
+        // visibly changes when a color theme is picked (the reported bug).
+        assertNotEquals(SigilPanelColors.Default.accent, s.accent)
     }
 
     /** WCAG 2.x contrast ratio of [fg] (composited over [bg]) against [bg]. */

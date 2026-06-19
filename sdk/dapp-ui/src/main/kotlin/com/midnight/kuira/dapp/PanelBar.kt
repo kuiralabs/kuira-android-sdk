@@ -135,6 +135,17 @@ fun PanelBar(
     var lightMode by rememberSaveable { mutableStateOf(false) }
     val activeWalletColors = if (lightMode) WalletPanelColors.Light else themedWalletColors
 
+    // The sigil pill rethemes in lockstep with the wallet — both pills are "one themed unit".
+    // Its palette is derived from the SAME appearance theme (Default defers to the host-supplied
+    // [sigilColors]); light mode maps the Kuira light wallet palette into the sigil's vocabulary.
+    val themedSigilColors = remember(selectedThemeId, sigilColors) {
+        if (selectedThemeId == WalletThemes.Default.id) sigilColors
+        else SigilPanelColors.from(WalletThemes.byId(selectedThemeId).colors)
+    }
+    val activeSigilColors = remember(lightMode, themedSigilColors) {
+        if (lightMode) SigilPanelColors.from(WalletPanelColors.Light) else themedSigilColors
+    }
+
     // Settings + recovery-reveal overlays live at the bar level (above both panels) so a single
     // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -180,7 +191,7 @@ fun PanelBar(
     ) {
         SigilStatusPanel(
             viewModel = sigilViewModel,
-            colors = sigilColors,
+            colors = activeSigilColors,
             onStatusChange = {
                 currentSigilStatus = it
                 onSigilStatusChange(it)

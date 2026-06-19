@@ -10,6 +10,7 @@ import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
+import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -685,11 +686,35 @@ data class SigilPanelColors(
             onSheet = MidnightColors.Light,
             onSheetDim = MidnightColors.LightMuted,
             onSheetSubtle = MidnightColors.LightFaint,
-            scrim = Color.Black.copy(alpha = 0.55f),
+            scrim = Color.Black.copy(alpha = SCRIM_ALPHA),
             accent = MidnightColors.Light, // monochrome brand (was SuccessText green)
             error = MidnightColors.ErrorText,
             button = MidnightColors.ButtonSurface,
             onButton = MidnightColors.Light,
         )
+
+        /**
+         * Adapts an appearance-theme [WalletPanelColors] into the sigil pill's vocabulary so both
+         * PanelBar pills retheme as ONE unit. The two palettes share every pole except the sigil's
+         * avatar-placeholder fill (→ the wallet's button surface) and [scrim] (a fixed dim overlay).
+         */
+        fun from(w: WalletPanelColors): SigilPanelColors = SigilPanelColors(
+            pillBackground = w.pillBackground,
+            pillBorder = w.pillBorder,
+            onPill = w.onPill,
+            onPillDim = w.onPillDim,
+            avatarPlaceholderBg = w.button,
+            sheetBackground = w.sheetBackground,
+            onSheet = w.onSheet,
+            onSheetDim = w.onSheetDim,
+            onSheetSubtle = w.onSheetSubtle,
+            scrim = Color.Black.copy(alpha = SCRIM_ALPHA),
+            accent = w.accent,
+            error = w.error,
+            button = w.button,
+            onButton = w.onButton,
+        )
+
+        private const val SCRIM_ALPHA = 0.55f
     }
 }
