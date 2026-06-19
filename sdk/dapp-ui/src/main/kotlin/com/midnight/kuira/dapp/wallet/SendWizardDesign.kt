@@ -68,6 +68,7 @@ internal object SendDimens {
 
 internal object SendType {
     val HeroNumber = 44.sp
+    val HeroNumberLg = 60.sp     // amount square + review hero — extra prominence
     val HeroDenom = 18.sp
     val Title = 14.sp
     val SectionLabel = 11.sp

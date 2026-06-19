@@ -60,7 +60,7 @@ import com.midnight.kuira.core.designsystem.component.GlassPanel
 
 // ── Panel ──
 
-/** GlassPanel pre-bound to the wizard palette (fill = panel, hairline border). */
+/** Frosted GlassPanel pre-bound to the wizard palette — translucent fill (stars show through) + hairline. */
 @Composable
 internal fun SendPanel(
     palette: SendPalette,
@@ -69,7 +69,7 @@ internal fun SendPanel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     GlassPanel(
-        tint = palette.panel,
+        tint = palette.text.copy(alpha = GLASS_FILL_ALPHA),
         border = palette.hairline,
         modifier = modifier,
         cornerRadius = SendDimens.RadiusMd,
@@ -300,6 +300,7 @@ internal fun AmountHero(
     error: String?,
     palette: SendPalette,
     modifier: Modifier = Modifier,
+    numberSize: androidx.compose.ui.unit.TextUnit = SendType.HeroNumber,
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val numberColor = if (error != null) palette.error else palette.text
@@ -327,7 +328,7 @@ internal fun AmountHero(
                 Text(
                     text = value.ifEmpty { "0" },
                     color = if (value.isEmpty()) palette.hairline else numberColor,
-                    fontSize = SendType.HeroNumber,
+                    fontSize = numberSize,
                     fontWeight = FontWeight.W200,
                     letterSpacing = SendType.HeroTracking,
                 )

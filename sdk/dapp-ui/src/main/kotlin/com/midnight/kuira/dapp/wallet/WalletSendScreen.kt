@@ -1,6 +1,9 @@
 package com.midnight.kuira.dapp.wallet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -201,6 +204,12 @@ internal fun WalletSendScreen(
                         onEditRecipient = { step = SendStep.RECIPIENT },
                         onChange = { amountText = sanitizeNightAmount(it); clearFailure() },
                         onMax = { amountText = baseUnitsToNight(spendableNightRaw); clearFailure() },
+                        onPreset = { pct ->
+                            // pct% of the spendable balance, in base units → formatted NIGHT.
+                            val part = spendableNightRaw.multiply(BigInteger.valueOf(pct.toLong())).divide(BigInteger.valueOf(100))
+                            amountText = baseUnitsToNight(part)
+                            clearFailure()
+                        },
                         onReview = { step = SendStep.REVIEW },
                         onFocusChanged = { fieldFocused = it },
                     )
@@ -313,6 +322,7 @@ private fun AmountStep(
     onEditRecipient: () -> Unit,
     onChange: (String) -> Unit,
     onMax: () -> Unit,
+    onPreset: (Int) -> Unit,
     onReview: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
 ) {
@@ -338,24 +348,9 @@ private fun AmountStep(
         Spacer(modifier = Modifier.height(SendDimens.Space4))
         RecipientChip(addressShort = shortAddress(recipient), palette = palette, onEdit = onEditRecipient)
 
-        Spacer(modifier = Modifier.weight(1f))
-        SendPanel(palette = palette, contentPadding = SendDimens.PanelPaddingHero) {
-            AmountHero(
-                value = amountText,
-                onValueChange = onChange,
-                error = if (overBalance) "Insufficient balance" else null,
-                palette = palette,
-                onFocusChanged = onFocusChanged,
-            )
-        }
-        Spacer(modifier = Modifier.weight(1f))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16),
-        ) {
+        // Available + MAX live at the TOP so the soft keyboard never hides them.
+        Spacer(modifier = Modifier.height(SendDimens.Space12))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column {
                 Text("Available", color = palette.textMuted, fontSize = SendType.Hint, fontWeight = FontWeight.W400)
                 Text("$availableNight NIGHT", color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
@@ -364,13 +359,59 @@ private fun AmountStep(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(SendDimens.RadiusFull))
-                    .background(palette.barely)
+                    .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
                     .clickable(onClick = onMax)
-                    .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space8),
+                    .padding(horizontal = SendDimens.Space16, vertical = SendDimens.Space8),
             ) {
                 Text("MAX", color = palette.textSoft, fontSize = SendType.Max, letterSpacing = SendType.TrackMax)
             }
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+        // Big, near-square frosted hero — the amount dominates the screen.
+        SendPanel(
+            palette = palette,
+            contentPadding = SendDimens.PanelPaddingHero,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1.25f),
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AmountHero(
+                    value = amountText,
+                    onValueChange = onChange,
+                    error = if (overBalance) "Insufficient balance" else null,
+                    palette = palette,
+                    numberSize = SendType.HeroNumberLg,
+                    onFocusChanged = onFocusChanged,
+                )
+            }
+        }
+
+        // Three quick-amount presets — fractions of the spendable balance.
+        Spacer(modifier = Modifier.height(SendDimens.Space16))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(SendDimens.Space8)) {
+            PresetChip("25%", palette, Modifier.weight(1f)) { onPreset(25) }
+            PresetChip("50%", palette, Modifier.weight(1f)) { onPreset(50) }
+            PresetChip("75%", palette, Modifier.weight(1f)) { onPreset(75) }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16))
+    }
+}
+
+/** A frosted-glass quick-amount preset chip (25% / 50% / 75%). */
+@Composable
+private fun PresetChip(label: String, palette: SendPalette, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .height(SendDimens.ButtonHeight)
+            .clip(RoundedCornerShape(SendDimens.RadiusMd))
+            .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
+            .border(1.dp, palette.hairline, RoundedCornerShape(SendDimens.RadiusMd))
+            .clickable(onClick = onClick),
+    ) {
+        Text(label, color = palette.textSoft, fontSize = SendType.Body, fontWeight = FontWeight.W300)
     }
 }
 
@@ -406,7 +447,7 @@ private fun ReviewStep(
                     Text(
                         text = amountText.ifEmpty { "0" },
                         color = palette.text,
-                        fontSize = SendType.HeroNumber,
+                        fontSize = SendType.HeroNumberLg,
                         fontWeight = FontWeight.W200,
                         letterSpacing = SendType.HeroTracking,
                     )
@@ -458,11 +499,11 @@ private fun ReviewStep(
 private fun PendingScreen(stage: String, palette: SendPalette) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center, // center the runner + text in the screen
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = SendDimens.Space16),
     ) {
-        Spacer(modifier = Modifier.height(SendDimens.Space48))
         RunnerWithDust(
             modifier = Modifier
                 .fillMaxWidth(RUNNER_WIDTH_FRACTION)
