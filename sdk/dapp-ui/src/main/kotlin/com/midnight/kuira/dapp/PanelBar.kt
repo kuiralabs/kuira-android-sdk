@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -240,7 +241,9 @@ fun PanelBar(
     if (floating) {
         // Full-screen, pass-through overlay: only the chips themselves consume touches, so the
         // host's content stays interactive everywhere else. Each chip drags + docks independently.
-        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // systemBarsPadding keeps the float/dock range within the safe area (clear of the status
+        // and navigation bars), so a chip can't hide behind a system bar.
+        BoxWithConstraints(modifier = modifier.fillMaxSize().systemBarsPadding()) {
             val widthPx = constraints.maxWidth
             val heightPx = constraints.maxHeight
             FloatingChip(
