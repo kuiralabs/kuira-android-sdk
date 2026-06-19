@@ -49,6 +49,7 @@ import com.midnight.kuira.dapp.wallet.Eyebrow
 import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.KeyGlyph
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
+import com.midnight.kuira.dapp.wallet.positive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -261,7 +262,8 @@ private fun Trailing(
         is BackupLaneState.Ok ->
             Text(
                 if (state.confirm) "${state.label} ✓" else state.label,
-                color = if (state.confirm) colors.accent else colors.onSheetDim,
+                // Confirmed/protected → the reserved success green; otherwise neutral.
+                color = if (state.confirm) colors.positive else colors.onSheetDim,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -287,11 +289,11 @@ private fun Trailing(
                     onCheckedChange = { want -> onToggle(want) },
                     enabled = !state.busy,
                     colors = SwitchDefaults.colors(
-                        // Monochrome ON: a filled track in the emphasis pole (accent) with the knob
-                        // in the SURFACE pole so it reads as a cut-out — not the same color as the
-                        // track (which turned the toggle into a solid blob once accent went mono).
+                        // ON = backup protected, a positive status → the reserved success green,
+                        // with the knob in the SURFACE pole so it reads as a cut-out (not a solid
+                        // blob — the failure mode when track and thumb share a color).
                         checkedThumbColor = colors.sheetBackground,
-                        checkedTrackColor = colors.accent,
+                        checkedTrackColor = colors.positive,
                         uncheckedThumbColor = colors.onSheetDim,
                         uncheckedTrackColor = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
                         uncheckedBorderColor = colors.onSheetSubtle,

@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -1043,3 +1044,22 @@ data class WalletPanelColors(
         )
     }
 }
+
+/**
+ * The semantic POSITIVE / success color for status surfaces. Green is reserved
+ * (per the brand standard) for the narrow success-check / confirmed /
+ * sync-complete cases — never general emphasis, which stays monochrome via
+ * [WalletPanelColors.accent]. Not a themeable pole (so the public
+ * [WalletPanelColors] surface is unchanged); it mirrors how `error` darkens on a
+ * light surface — the base [MidnightColors.SuccessText] (#4CAF50) drops below
+ * WCAG-AA on the panel's light background, so it darkens there.
+ */
+internal val WalletPanelColors.positive: Color
+    get() = if (sheetBackground.luminance() > POSITIVE_LUMINANCE_MIDPOINT) {
+        SUCCESS_ON_LIGHT
+    } else {
+        MidnightColors.SuccessText
+    }
+
+private val SUCCESS_ON_LIGHT = Color(0xFF2E7D32) // darkened green — keeps AA contrast on the light surface
+private const val POSITIVE_LUMINANCE_MIDPOINT = 0.5f

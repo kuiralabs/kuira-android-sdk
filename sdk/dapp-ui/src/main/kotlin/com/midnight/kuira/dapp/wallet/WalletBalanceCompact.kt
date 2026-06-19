@@ -22,8 +22,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -102,7 +105,18 @@ fun WalletBalanceCompact(
                 lineHeight = 36.sp,
             )
             Spacer(Modifier.height(2.dp))
-            Text("NIGHT · ${ui.statusLabel}", color = colors.onSheetDim, fontSize = 13.sp)
+            // "Synced" is the one sync-complete status → green; "Syncing…" and the
+            // "NIGHT ·" prefix stay monochrome (progress is never green mid-flight).
+            val synced = syncProgress == null
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
+                    withStyle(SpanStyle(color = if (synced) colors.positive else colors.onSheetDim)) {
+                        append(ui.statusLabel)
+                    }
+                },
+                fontSize = 13.sp,
+            )
             // Equal-weight public / private split — both are real balances, both
             // rendered bright (private is NOT a dim afterthought).
             if (ui.privateNight != null) {
@@ -149,7 +163,8 @@ fun WalletBalanceCompact(
                         // contradict). The ✓ returns once the sync settles.
                         ui.dustRegistered && syncProgress == null -> {
                             Spacer(Modifier.width(10.dp))
-                            Text("✓", color = colors.accent, fontSize = 14.sp)
+                            // Settled confirmation → the reserved success green.
+                            Text("✓", color = colors.positive, fontSize = 14.sp)
                         }
                         !ui.dustRegistered -> {
                             Spacer(Modifier.width(10.dp))

@@ -123,7 +123,8 @@ internal class SendPalette(
             confirm = c.onSheet,
             onConfirm = c.sheetBackground,
             error = c.error,
-            success = c.accent,
+            // Success-check hero stays green (a status), not the monochrome accent.
+            success = c.positive,
             isLight = c.sheetBackground.luminance() > LUMINANCE_MIDPOINT,
         )
     }
