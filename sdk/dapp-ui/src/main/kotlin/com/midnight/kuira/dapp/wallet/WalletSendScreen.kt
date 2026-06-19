@@ -3,7 +3,7 @@ package com.midnight.kuira.dapp.wallet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -343,7 +343,9 @@ private fun AmountStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = SendDimens.Space16),
+            .padding(horizontal = SendDimens.Space16)
+            // Reserve the keyboard's height so the hero + presets always sit ABOVE the IME.
+            .imePadding(),
     ) {
         Spacer(modifier = Modifier.height(SendDimens.Space4))
         RecipientChip(addressShort = shortAddress(recipient), palette = palette, onEdit = onEditRecipient)
@@ -367,12 +369,13 @@ private fun AmountStep(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-        // Big, near-square frosted hero — the amount dominates the screen.
+        // Big frosted hero — fills the space between the available row and the presets, so it stays
+        // prominent yet always fits above the keyboard (tall, near-square when the keyboard is down).
+        Spacer(modifier = Modifier.height(SendDimens.Space16))
         SendPanel(
             palette = palette,
             contentPadding = SendDimens.PanelPaddingHero,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1.25f),
+            modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AmountHero(
@@ -394,7 +397,6 @@ private fun AmountStep(
             PresetChip("75%", palette, Modifier.weight(1f)) { onPreset(75) }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16))
     }
 }
