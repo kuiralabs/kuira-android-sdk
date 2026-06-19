@@ -332,7 +332,7 @@ private fun AmountStep(
         onBack = onBack,
         trailing = {
             Text(
-                text = "Review",
+                text = "Continue",
                 color = if (canReview) palette.textSoft else palette.hairline,
                 fontSize = SendType.Title,
                 fontWeight = FontWeight.W300,
