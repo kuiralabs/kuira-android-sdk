@@ -1,21 +1,30 @@
 package com.midnight.kuira.dapp.wallet
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -30,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.dapp.dappPressable
@@ -160,6 +170,92 @@ internal fun SettingsDivider(palette: SendPalette) {
         modifier = Modifier.padding(horizontal = SendDimens.Space16),
     )
 }
+
+// ── Appearance theme picker ──────────────────────────────────────────────────
+
+/**
+ * Horizontally-scrolling row of theme swatches. Each swatch previews a [WalletTheme]'s own surface
+ * + text + accent (not the active palette), so the user picks by eye; the selected one is ringed.
+ * Tapping applies immediately (the panel re-themes live).
+ */
+@Composable
+internal fun ThemeSwatchRow(
+    themes: List<WalletTheme>,
+    selectedId: String,
+    palette: SendPalette,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space12),
+        horizontalArrangement = Arrangement.spacedBy(SendDimens.Space16),
+    ) {
+        themes.forEach { theme ->
+            ThemeSwatch(
+                theme = theme,
+                selected = theme.id == selectedId,
+                palette = palette,
+                onClick = { onSelect(theme.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSwatch(
+    theme: WalletTheme,
+    selected: Boolean,
+    palette: SendPalette,
+    onClick: () -> Unit,
+) {
+    val c = theme.colors
+    val swatchShape = RoundedCornerShape(SendDimens.RadiusMd)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(swatchShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "Theme ${theme.label}" }
+            .padding(SendDimens.Space4),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(THEME_SWATCH_SIZE)
+                .clip(swatchShape)
+                .background(c.sheetBackground)
+                .border(
+                    width = if (selected) THEME_SWATCH_RING else SendDimens.DividerThickness,
+                    color = if (selected) palette.text else palette.hairline,
+                    shape = swatchShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Miniature "card": a text-tone bar over an accent bar — the same hierarchy the
+            // real surface uses, so the swatch reads as a tiny preview rather than a color chip.
+            Column(verticalArrangement = Arrangement.spacedBy(THEME_SWATCH_BAR_GAP)) {
+                Box(Modifier.width(THEME_SWATCH_BAR_TEXT).height(THEME_SWATCH_BAR_HEIGHT).clip(CircleShape).background(c.onSheet))
+                Box(Modifier.width(THEME_SWATCH_BAR_ACCENT).height(THEME_SWATCH_BAR_HEIGHT).clip(CircleShape).background(c.accent))
+            }
+        }
+        Spacer(Modifier.height(SendDimens.Space8))
+        Text(
+            text = theme.label,
+            color = if (selected) palette.text else palette.textMuted,
+            fontSize = SendType.Hint,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        )
+    }
+}
+
+private val THEME_SWATCH_SIZE = 56.dp
+private val THEME_SWATCH_RING = 2.dp
+private val THEME_SWATCH_BAR_TEXT = 28.dp
+private val THEME_SWATCH_BAR_ACCENT = 18.dp
+private val THEME_SWATCH_BAR_HEIGHT = 5.dp
+private val THEME_SWATCH_BAR_GAP = 6.dp
 
 // ── Original glyphs (Dusk line-art) ─────────────────────────────────────────
 

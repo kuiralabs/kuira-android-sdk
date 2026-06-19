@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -998,6 +997,10 @@ data class WalletPanelColors(
     val onButton: Color,
     val buttonDisabled: Color,
     val onButtonDisabled: Color,
+    // Reserved success/positive pole — green for the narrow success-check / confirmed /
+    // sync-complete cases only (never general emphasis, which stays monochrome via [accent]).
+    // Trailing + defaulted so existing host construction is unaffected; each theme sets its own.
+    val positive: Color = MidnightColors.SuccessText,
 ) {
     companion object {
         // On-brand "dusk" dark default, sourced from the shared brand palette
@@ -1021,6 +1024,7 @@ data class WalletPanelColors(
             onButton = MidnightColors.Light,
             buttonDisabled = MidnightColors.LightBarely,
             onButtonDisabled = MidnightColors.LightFaint,
+            positive = MidnightColors.SuccessText,
         )
 
         // Light "dusk" variant (mirrors DuskPalette.LightMode) — the panel's
@@ -1041,25 +1045,9 @@ data class WalletPanelColors(
             onButton = Color(0xFF000000),
             buttonDisabled = Color(0x0A000000),
             onButtonDisabled = Color(0x33000000),
+            // Darkened green — keeps WCAG-AA contrast on the light surface (the base
+            // #4CAF50 drops below AA there), mirroring how `error` darkens.
+            positive = Color(0xFF2E7D32),
         )
     }
 }
-
-/**
- * The semantic POSITIVE / success color for status surfaces. Green is reserved
- * (per the brand standard) for the narrow success-check / confirmed /
- * sync-complete cases — never general emphasis, which stays monochrome via
- * [WalletPanelColors.accent]. Not a themeable pole (so the public
- * [WalletPanelColors] surface is unchanged); it mirrors how `error` darkens on a
- * light surface — the base [MidnightColors.SuccessText] (#4CAF50) drops below
- * WCAG-AA on the panel's light background, so it darkens there.
- */
-internal val WalletPanelColors.positive: Color
-    get() = if (sheetBackground.luminance() > POSITIVE_LUMINANCE_MIDPOINT) {
-        SUCCESS_ON_LIGHT
-    } else {
-        MidnightColors.SuccessText
-    }
-
-private val SUCCESS_ON_LIGHT = Color(0xFF2E7D32) // darkened green — keeps AA contrast on the light surface
-private const val POSITIVE_LUMINANCE_MIDPOINT = 0.5f

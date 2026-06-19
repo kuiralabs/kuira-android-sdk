@@ -49,7 +49,6 @@ import com.midnight.kuira.dapp.wallet.Eyebrow
 import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.KeyGlyph
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
-import com.midnight.kuira.dapp.wallet.positive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
