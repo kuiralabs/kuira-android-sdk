@@ -596,20 +596,24 @@ class MidnightWallet internal constructor(
 
         onProgress?.invoke(BalanceProgress.ProvingDust)
 
-        // Use the indexer's view of the latest chain block timestamp, NOT wall-clock.
-        // Reason: the node validates a dust spend by looking up
-        // `dust.utxo.root_history.get(ctime)` (predecessor lookup keyed by block
-        // timestamps). If we send wall-clock ahead of the latest indexed block, the
-        // chain returns the tip root which won't match our locally-replayed root,
-        // and rejects with `MalformedError::InvalidDustSpendProof` (Custom error 170).
-        // The TS wallet does the same: see midnight-wallet/.../RunningV1Variant.ts
-        // (`currentTime ?? blockData.timestamp`).
+        // Chain-anchored dust ctime (#287): the node validates the dust spend via
+        // `dust.root_history.get(ctime)`, so ctime must resolve to the SAME dust root our
+        // proof commits to — the block our local dust state synced to, NOT the chain tip.
+        // On an active chain (PreProd) the tip races ahead of the replayed state between
+        // sync and balance, so anchoring to the tip resolves a newer root than ours →
+        // InvalidDustSpendProof (170) → futile delta re-sync → genesis rebuild. The send
+        // path (TransactionSubmitter) already anchors to sync_time; the contract-call
+        // balancer (deploy / contract calls) did not — this completes #287 for it.
+        // Fall back to the indexer tip only if the state reports no sync_time.
+        val dustSyncTimeMs = dustState.syncTimeMs()
+        val chainTimeMs = if (dustSyncTimeMs > 0L) dustSyncTimeMs else blockInfo.timestamp
+
         val raw = TransactionBalancerNative.nativeBalanceProvenTransaction(
             provenTxHex = provenTxHex,
             dustStatePtr = dustState.getStatePointer(),
             seed = dustSeed,
             ledgerParamsHex = ledgerParamsHex,
-            currentTimeMs = blockInfo.timestamp,
+            currentTimeMs = chainTimeMs,
             keysDir = provingKeysDir,
             networkId = networkId,
             excludeNullifiers = excludeNullifiers.joinToString(","),
