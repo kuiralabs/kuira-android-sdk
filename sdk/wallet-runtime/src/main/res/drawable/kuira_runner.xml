@@ -1,0 +1,32 @@
+<!--
+  Rarámuri runner — the Kuira brand mark, used as the notification large icon for every wallet
+  sync/operation. Line-art (white) on a dark rounded backdrop so it reads on any notification
+  surface and survives the system's circular mask. Geometry mirrors the in-app LottieRunner pose.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Dark backdrop (the brand void). -->
+    <path
+        android:fillColor="#111114"
+        android:pathData="M0,0 h24 v24 h-24 z" />
+
+    <!-- Head — a stroked ring. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.1"
+        android:pathData="M13.4,4.8 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+
+    <!-- Body: spine, both arms, both legs (leaning forward, mid-stride). -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,6.6 L10.4,12.8 M12.8,8.2 L17.2,7.2 M12.8,8.2 L9.2,10 M10.4,12.8 L14,14.4 L14.8,18 M10.4,12.8 L8,16.8 L10.4,19.2" />
+</vector>
