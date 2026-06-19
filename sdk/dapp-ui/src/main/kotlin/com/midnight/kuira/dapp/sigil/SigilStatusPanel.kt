@@ -209,17 +209,19 @@ private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
         )
         return
     }
+    // Monochrome per the brand: a frosted disc, never a colored hue. Identity is carried by the
+    // monogram letter (deterministic per DID) + the truncated DID label beside it — not color.
     val (bg, fg, glyph) = when (status) {
         is SigilStatus.None -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, null)
         // Same neutral avatar as None, plus a "?" glyph hinting that an
         // action is pending. The sheet body explains the choice.
         is SigilStatus.BackupAvailable -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, "?")
         is SigilStatus.Forged -> Triple(
-            avatarColorFromDid(status.did),
-            Color.White,
+            colors.onPill.copy(alpha = AVATAR_FILL_ALPHA),
+            colors.onPill,
             avatarGlyphFromDid(status.did),
         )
-        is SigilStatus.Error -> Triple(colors.error, Color.White, "!")
+        is SigilStatus.Error -> Triple(colors.onPill.copy(alpha = AVATAR_FILL_ALPHA), colors.onPill, "!")
         is SigilStatus.Creating, is SigilStatus.Initializing ->
             error("unreachable — handled above")
     }
@@ -241,21 +243,8 @@ private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
     }
 }
 
-/**
- * Deterministic background hue for a DID's placeholder avatar. Hashes the
- * multibase tail (skip the always-identical `did:key:` prefix) and reduces
- * to one of a small palette of pre-picked colors that read well against
- * the dark pill background.
- *
- * The palette is intentionally small (8 entries) — collisions are fine
- * because the colored circle is paired with the glyph + the truncated DID
- * label; ambiguity in the color alone won't matter at a glance.
- */
-internal fun avatarColorFromDid(did: String): Color {
-    val tail = did.removePrefix("did:key:")
-    val idx = (tail.hashCode().rem(AVATAR_PALETTE.size) + AVATAR_PALETTE.size) % AVATAR_PALETTE.size
-    return AVATAR_PALETTE[idx]
-}
+/** Frosted-disc fill for the (monochrome) forged/error avatar — translucent so the pill reads as glass. */
+private const val AVATAR_FILL_ALPHA = 0.20f
 
 /**
  * First uppercase letter of the DID's multibase tail. We skip the `z`
@@ -271,17 +260,6 @@ internal fun avatarGlyphFromDid(did: String): String {
     val candidate = tail.drop(1).firstOrNull()?.uppercaseChar() ?: '?'
     return candidate.toString()
 }
-
-private val AVATAR_PALETTE = listOf(
-    Color(0xFF64B5F6), // blue (matches the accent color for visual continuity)
-    Color(0xFF81C784), // green
-    Color(0xFFFFB74D), // amber
-    Color(0xFFBA68C8), // purple
-    Color(0xFFE57373), // soft red
-    Color(0xFF4DB6AC), // teal
-    Color(0xFFF06292), // pink
-    Color(0xFFFFD54F), // yellow
-)
 
 internal fun pillLabel(status: SigilStatus): String = when (status) {
     is SigilStatus.None -> "no sigil"

@@ -287,10 +287,13 @@ private fun Trailing(
                     onCheckedChange = { want -> onToggle(want) },
                     enabled = !state.busy,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = colors.onButton,
+                        // Monochrome ON: a filled track in the emphasis pole (accent) with the knob
+                        // in the SURFACE pole so it reads as a cut-out — not the same color as the
+                        // track (which turned the toggle into a solid blob once accent went mono).
+                        checkedThumbColor = colors.sheetBackground,
                         checkedTrackColor = colors.accent,
                         uncheckedThumbColor = colors.onSheetDim,
-                        uncheckedTrackColor = colors.button,
+                        uncheckedTrackColor = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
                         uncheckedBorderColor = colors.onSheetSubtle,
                     ),
                 )
