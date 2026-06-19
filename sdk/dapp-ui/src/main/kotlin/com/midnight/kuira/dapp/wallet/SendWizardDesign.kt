@@ -52,7 +52,7 @@ internal object SendDimens {
     val RadiusFull: Dp = 9999.dp
 
     val TopBarHeight: Dp = 56.dp
-    val ButtonHeight: Dp = 48.dp
+    val ButtonHeight: Dp = 54.dp   // prominent CTA — above the 48dp HIG floor
     val RowMinHeight: Dp = 56.dp
     val RowMinHeightAccessibility: Dp = 48.dp
 
@@ -68,6 +68,7 @@ internal object SendDimens {
 
 internal object SendType {
     val HeroNumber = 44.sp
+    val HeroNumberLg = 60.sp     // amount square + review hero — extra prominence
     val HeroDenom = 18.sp
     val Title = 14.sp
     val SectionLabel = 11.sp
@@ -75,7 +76,8 @@ internal object SendType {
     val Caption = 13.sp
     val Hint = 12.sp
     val Badge = 11.sp
-    val Button = 13.sp
+    val Button = 15.sp           // was 13 — readable CTA label (Material labelLarge is 14, iOS 17pt)
+    val TopBarAction = 16.sp     // top-bar text actions (Continue / Done) — bigger, in a 48dp target
     val Max = 11.sp
     val SuccessHeadline = 18.sp
 
@@ -121,7 +123,8 @@ internal class SendPalette(
             confirm = c.onSheet,
             onConfirm = c.sheetBackground,
             error = c.error,
-            success = c.accent,
+            // Success-check hero stays green (a status), not the monochrome accent.
+            success = c.positive,
             isLight = c.sheetBackground.luminance() > LUMINANCE_MIDPOINT,
         )
     }
@@ -131,6 +134,14 @@ internal class SendPalette(
 internal const val STAR_COUNT = 60
 internal const val STAR_ALPHA_LIGHT = 0.55f
 internal const val STAR_ALPHA_DARK = 1f
+
+/**
+ * Frosted-glass fill alpha — the translucency that lets the star field show faintly through a
+ * [com.midnight.kuira.core.designsystem.component.GlassPanel]. Applied as `onSheet.copy(alpha = …)`
+ * so it inverts correctly per mode (white frost on dark, black frost on light). One value → every
+ * SDK panel frosts identically.
+ */
+internal const val GLASS_FILL_ALPHA = 0.055f
 
 // ── Vector icons (Canvas, no material-icons dependency) ──
 //

@@ -31,14 +31,23 @@ import com.midnight.kuira.core.designsystem.R
 fun LottieRunner(
     modifier: Modifier = Modifier,
     color: Color = Color.White,
+    /**
+     * `true` (default) loops the run cycle — a "please wait" indicator. `false`
+     * freezes a mid-stride frame, turning the runner into a STATIC brand mark
+     * (lock screen, sigil identity) with no battery cost or motion distraction.
+     */
+    animate: Boolean = true,
 ) {
     val composition by rememberLottieComposition(
         LottieCompositionSpec.RawRes(R.raw.run_man_run),
     )
-    val progress by animateLottieCompositionAsState(
+    val animatedProgress by animateLottieCompositionAsState(
         composition = composition,
         iterations = LottieConstants.IterateForever,
+        isPlaying = animate,
     )
+    // Looping → the live progress; static mark → a frozen mid-stride frame.
+    val progress = if (animate) animatedProgress else RUNNER_STATIC_FRAME
 
     // Tint with Lottie's native COLOR_FILTER on every layer ("**") instead of an
     // offscreen graphics layer + per-frame SrcIn blend. The offscreen path allocated
@@ -62,3 +71,6 @@ fun LottieRunner(
         modifier = modifier,
     )
 }
+
+/** A mid-stride frame — the runner reads as "in motion" even when frozen as a mark. */
+private const val RUNNER_STATIC_FRAME = 0.5f

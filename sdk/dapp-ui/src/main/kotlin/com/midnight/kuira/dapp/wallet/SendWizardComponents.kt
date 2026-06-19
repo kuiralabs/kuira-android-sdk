@@ -60,7 +60,7 @@ import com.midnight.kuira.core.designsystem.component.GlassPanel
 
 // ── Panel ──
 
-/** GlassPanel pre-bound to the wizard palette (fill = panel, hairline border). */
+/** Frosted GlassPanel pre-bound to the wizard palette — translucent fill (stars show through) + hairline. */
 @Composable
 internal fun SendPanel(
     palette: SendPalette,
@@ -69,7 +69,7 @@ internal fun SendPanel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     GlassPanel(
-        tint = palette.panel,
+        tint = palette.text.copy(alpha = GLASS_FILL_ALPHA),
         border = palette.hairline,
         modifier = modifier,
         cornerRadius = SendDimens.RadiusMd,
@@ -202,6 +202,35 @@ internal fun SendButtonRow(
     }
 }
 
+/**
+ * A top-bar text action (e.g. "Continue", "Done") — larger label than body text and a full 48dp
+ * touch target (the bare clickable Text it replaces was ~20dp tall, well under the HIG minimum).
+ */
+@Composable
+internal fun WizardTopBarAction(
+    text: String,
+    palette: SendPalette,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .heightIn(min = SendDimens.RowMinHeightAccessibility)
+            .clip(RoundedCornerShape(SendDimens.RadiusFull))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space8),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = if (enabled) palette.textSoft else palette.hairline,
+            fontSize = SendType.TopBarAction,
+            fontWeight = FontWeight.W400,
+        )
+    }
+}
+
 // ── Recipient input (bordered field with a trailing action slot) ──
 
 @Composable
@@ -300,6 +329,7 @@ internal fun AmountHero(
     error: String?,
     palette: SendPalette,
     modifier: Modifier = Modifier,
+    numberSize: androidx.compose.ui.unit.TextUnit = SendType.HeroNumber,
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val numberColor = if (error != null) palette.error else palette.text
@@ -327,7 +357,7 @@ internal fun AmountHero(
                 Text(
                     text = value.ifEmpty { "0" },
                     color = if (value.isEmpty()) palette.hairline else numberColor,
-                    fontSize = SendType.HeroNumber,
+                    fontSize = numberSize,
                     fontWeight = FontWeight.W200,
                     letterSpacing = SendType.HeroTracking,
                 )

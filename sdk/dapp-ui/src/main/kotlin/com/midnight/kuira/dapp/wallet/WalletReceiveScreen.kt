@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.network.MidnightNetwork
 
 /**
@@ -85,6 +88,12 @@ internal fun WalletReceiveScreen(
             .fillMaxSize()
             .background(colors.sheetBackground),
     ) {
+        StarField(
+            modifier = Modifier.fillMaxSize(),
+            color = colors.onSheet,
+            alpha = if (colors.sheetBackground.luminance() > 0.5f) STAR_ALPHA_LIGHT else STAR_ALPHA_DARK,
+            starCount = STAR_COUNT,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -156,16 +165,17 @@ private fun ReceiveTopBar(colors: WalletPanelColors, onBack: () -> Unit) {
             .height(ReceiveDimens.TopBarHeight)
             .padding(horizontal = ReceiveDimens.HorizontalPadding),
     ) {
-        // Back chevron — plain text glyph to avoid a Material-Icons dependency.
-        Text(
-            text = "←",
-            color = colors.onSheet,
-            fontSize = ReceiveType.BackGlyph,
+        // Back chevron — plain text glyph to avoid a Material-Icons dependency,
+        // in a 48dp box so the touch target meets the HIG minimum.
+        Box(
             modifier = Modifier
+                .size(ReceiveDimens.BackTouchTarget)
                 .clip(RoundedCornerShape(ReceiveDimens.BackHitRadius))
-                .clickable(onClick = onBack)
-                .padding(ReceiveDimens.BackHitPadding),
-        )
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "←", color = colors.onSheet, fontSize = ReceiveType.BackGlyph)
+        }
         Spacer(modifier = Modifier.size(ReceiveDimens.TopBarTitleGap))
         Text(
             text = "Receive",
@@ -181,7 +191,7 @@ private fun NetworkBadge(network: MidnightNetwork, colors: WalletPanelColors) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(ReceiveDimens.BadgeCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .padding(
                 horizontal = ReceiveDimens.BadgeHorizontalPadding,
                 vertical = ReceiveDimens.BadgeVerticalPadding,
@@ -208,7 +218,7 @@ private fun QrAddressCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ReceiveDimens.CardCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .border(
                 width = ReceiveDimens.CardBorderWidth,
                 color = colors.pillBorder,
@@ -256,7 +266,7 @@ private fun ReceiveTabRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ReceiveDimens.TabCornerRadius))
-            .background(colors.button)
+            .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
             .padding(ReceiveDimens.TabPadding),
         horizontalArrangement = Arrangement.spacedBy(ReceiveDimens.TabGap),
     ) {
@@ -266,6 +276,7 @@ private fun ReceiveTabRow(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = ReceiveDimens.TabPillMinHeight) // HIG touch target
                     .clip(RoundedCornerShape(ReceiveDimens.TabPillCornerRadius))
                     .background(if (isActive) colors.onSheet else Color.Transparent)
                     .clickable { onSelect(tab) }
@@ -326,9 +337,9 @@ private fun FundCommandBlock(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(ReceiveDimens.AirdropCornerRadius))
-                .background(colors.button)
-                .padding(ReceiveDimens.AirdropPadding)
-                .clickable { onCopy(cmd) },
+                .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
+                .clickable { onCopy(cmd) }
+                .padding(ReceiveDimens.AirdropPadding),
         )
     }
 }
@@ -356,7 +367,7 @@ private object ReceiveDimens {
     val TopBarHeight = 56.dp
     val TopBarTitleGap = 16.dp
     val BackHitRadius = 20.dp
-    val BackHitPadding = 8.dp
+    val BackTouchTarget = 48.dp  // HIG minimum touch target (glyph is 24sp, centered)
 
     // Header.
     val HeaderTopGap = 24.dp
@@ -383,6 +394,7 @@ private object ReceiveDimens {
     val TabGap = 4.dp
     val TabPillCornerRadius = 10.dp
     val TabPillVerticalPadding = 12.dp
+    val TabPillMinHeight = 48.dp  // HIG minimum touch target
 
     // Airdrop block.
     val AirdropLabelGap = 8.dp

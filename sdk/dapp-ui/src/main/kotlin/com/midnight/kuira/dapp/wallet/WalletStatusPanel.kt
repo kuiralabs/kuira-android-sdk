@@ -94,7 +94,7 @@ private object PanelDimens {
     val SheetBottomGap = 8.dp
 
     // Action buttons.
-    val ButtonHeight = 48.dp
+    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
     val ButtonHorizontalPadding = 8.dp
 }
@@ -102,7 +102,7 @@ private object PanelDimens {
 private object PanelType {
     val PillText = 14.sp
     val SectionLabel = 11.sp           // Small uppercase: "address", "balance", etc.
-    val ButtonText = 13.sp
+    val ButtonText = 15.sp
     val Body = 14.sp                   // Address, balance row.
     val Caption = 13.sp                // Busy + message lines.
     val LoadingText = 16.sp
@@ -195,6 +195,14 @@ fun WalletStatusPanel(
      * unchanged and a host can hide the gear by leaving it unset.
      */
     onOpenSettings: () -> Unit = {},
+    /**
+     * Light/dark mode, hoisted so a host (e.g. [PanelBar]) can keep the pill, sheet, and its
+     * Settings/recovery overlays on ONE palette. CONTROLLED when [onToggleLightMode] is non-null
+     * ([lightMode] is then authoritative); UNCONTROLLED otherwise — the panel self-manages the
+     * sun/moon toggle as before, so standalone call sites are unaffected.
+     */
+    lightMode: Boolean = false,
+    onToggleLightMode: (() -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -240,11 +248,14 @@ fun WalletStatusPanel(
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
 
-    // Light/dark mode is panel-local (rememberSaveable); the toggle lives in the
-    // sheet. The host-supplied [colors] is the dark base; light flips to the
-    // SDK's light dusk palette. Both pill and sheet render with the result.
-    var lightMode by rememberSaveable { mutableStateOf(false) }
-    val activeColors = if (lightMode) WalletPanelColors.Light else colors
+    // Light/dark mode: controlled by the host when [onToggleLightMode] is supplied, else
+    // panel-local (rememberSaveable). The host-supplied [colors] is the dark base; light flips to
+    // the SDK's light dusk palette. Both pill and sheet render with the result — and a controlling
+    // host applies the SAME flip to its overlays, so nothing diverges.
+    var internalLightMode by rememberSaveable { mutableStateOf(false) }
+    val effectiveLightMode = if (onToggleLightMode != null) lightMode else internalLightMode
+    val toggleLightMode = onToggleLightMode ?: { internalLightMode = !internalLightMode }
+    val activeColors = if (effectiveLightMode) WalletPanelColors.Light else colors
 
     // The pill — always rendered. Tap opens the sheet. dappPressable gives it
     // the pressed/hover/focus state layer + press scale the rest of the app has.
@@ -323,8 +334,8 @@ fun WalletStatusPanel(
                 config = config,
                 formatter = formatter,
                 colors = activeColors,
-                lightMode = lightMode,
-                onToggleLightMode = { lightMode = !lightMode },
+                lightMode = effectiveLightMode,
+                onToggleLightMode = toggleLightMode,
                 onNetworkChange = {
                     viewModel.selectNetwork(it)
                     onNetworkChange(it)
@@ -904,7 +915,7 @@ private fun <T> PanelSelector(
                     .fillMaxWidth()
                     .height(PanelDimens.ButtonHeight)
                     .clip(shape)
-                    .background(colors.button)
+                    .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA)) // frosted selector
                     .border(1.dp, colors.pillBorder, shape)
                     .dappPressable(shape = shape) { expanded = true }
                     .padding(horizontal = 14.dp),
@@ -997,6 +1008,10 @@ data class WalletPanelColors(
     val onButton: Color,
     val buttonDisabled: Color,
     val onButtonDisabled: Color,
+    // Reserved success/positive pole — green for the narrow success-check / confirmed /
+    // sync-complete cases only (never general emphasis, which stays monochrome via [accent]).
+    // Trailing + defaulted so existing host construction is unaffected; each theme sets its own.
+    val positive: Color = MidnightColors.SuccessText,
 ) {
     companion object {
         // On-brand "dusk" dark default, sourced from the shared brand palette
@@ -1011,12 +1026,16 @@ data class WalletPanelColors(
             onSheet = MidnightColors.Light,
             onSheetDim = MidnightColors.LightMuted,
             onSheetSubtle = MidnightColors.LightFaint,
-            accent = MidnightColors.SuccessText,
+            // Monochrome brand: emphasis is carried by weight + contrast, not an accent
+            // hue. (Was SuccessText green; the design standard reserves green for the
+            // narrow success-check / confirmed / sync-complete cases only.)
+            accent = MidnightColors.Light,
             error = MidnightColors.ErrorText,
             button = MidnightColors.ButtonSurface,
             onButton = MidnightColors.Light,
             buttonDisabled = MidnightColors.LightBarely,
             onButtonDisabled = MidnightColors.LightFaint,
+            positive = MidnightColors.SuccessText,
         )
 
         // Light "dusk" variant (mirrors DuskPalette.LightMode) — the panel's
@@ -1031,12 +1050,15 @@ data class WalletPanelColors(
             onSheet = Color(0xFF000000),
             onSheetDim = Color(0x80000000),
             onSheetSubtle = Color(0x33000000),
-            accent = Color(0xFF2E7D32),
+            accent = Color(0xFF000000), // monochrome (was green 0xFF2E7D32) — see Default
             error = Color(0xFFCC0000),
             button = Color(0xFFFFFFFF),
             onButton = Color(0xFF000000),
             buttonDisabled = Color(0x0A000000),
             onButtonDisabled = Color(0x33000000),
+            // Darkened green — keeps WCAG-AA contrast on the light surface (the base
+            // #4CAF50 drops below AA there), mirroring how `error` darkens.
+            positive = Color(0xFF2E7D32),
         )
     }
 }

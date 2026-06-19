@@ -39,6 +39,10 @@ internal fun WalletSettingsScreen(
     // Host-supplied app version; null hides the ABOUT section rather than show a fabricated value.
     versionLabel: String? = null,
     colors: WalletPanelColors = WalletPanelColors.Default,
+    // Appearance: the pickable themes + current selection. Selecting one re-themes the whole panel.
+    themes: List<WalletTheme> = WalletThemes.all,
+    selectedThemeId: String = WalletThemes.Default.id,
+    onSelectTheme: (String) -> Unit = {},
     backup: (@Composable () -> Unit)? = null,
     onBack: () -> Unit,
 ) {
@@ -73,6 +77,16 @@ internal fun WalletSettingsScreen(
                     )
                     SettingsDivider(palette)
                     SettingsRow(label = "Sync", palette = palette, rightValue = syncLabel, readOnly = true)
+                }
+                Spacer(Modifier.height(SendDimens.Space32))
+
+                SettingsSection("APPEARANCE", palette) {
+                    ThemeSwatchRow(
+                        themes = themes,
+                        selectedId = selectedThemeId,
+                        palette = palette,
+                        onSelect = onSelectTheme,
+                    )
                 }
                 Spacer(Modifier.height(SendDimens.Space32))
 

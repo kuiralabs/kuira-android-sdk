@@ -13,7 +13,7 @@ public final class com/midnight/kuira/core/designsystem/component/DuskScaffoldKt
 }
 
 public final class com/midnight/kuira/core/designsystem/component/GlassPanelKt {
-	public static final fun GlassPanel-CDg_14w (JJLandroidx/compose/ui/Modifier;FFLkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
+	public static final fun GlassPanel-ncVrl6w (JJLandroidx/compose/ui/Modifier;ZFFLkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/core/designsystem/devportal/ComposableSingletons$DevPortalModalKt {
@@ -46,7 +46,7 @@ public final class com/midnight/kuira/core/designsystem/effect/DustVortexKt {
 }
 
 public final class com/midnight/kuira/core/designsystem/effect/LottieRunnerKt {
-	public static final fun LottieRunner-iJQMabo (Landroidx/compose/ui/Modifier;JLandroidx/compose/runtime/Composer;II)V
+	public static final fun LottieRunner-3IgeMak (Landroidx/compose/ui/Modifier;JZLandroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/core/designsystem/effect/MaterializeEffectKt {

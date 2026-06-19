@@ -1,6 +1,9 @@
 package com.midnight.kuira.dapp.wallet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -201,6 +205,12 @@ internal fun WalletSendScreen(
                         onEditRecipient = { step = SendStep.RECIPIENT },
                         onChange = { amountText = sanitizeNightAmount(it); clearFailure() },
                         onMax = { amountText = baseUnitsToNight(spendableNightRaw); clearFailure() },
+                        onPreset = { pct ->
+                            // pct% of the spendable balance, in base units → formatted NIGHT.
+                            val part = spendableNightRaw.multiply(BigInteger.valueOf(pct.toLong())).divide(BigInteger.valueOf(100))
+                            amountText = baseUnitsToNight(part)
+                            clearFailure()
+                        },
                         onReview = { step = SendStep.REVIEW },
                         onFocusChanged = { fieldFocused = it },
                     )
@@ -313,6 +323,7 @@ private fun AmountStep(
     onEditRecipient: () -> Unit,
     onChange: (String) -> Unit,
     onMax: () -> Unit,
+    onPreset: (Int) -> Unit,
     onReview: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
 ) {
@@ -321,56 +332,85 @@ private fun AmountStep(
         palette = palette,
         onBack = onBack,
         trailing = {
-            Text(
-                text = "Review",
-                color = if (canReview) palette.textSoft else palette.hairline,
-                fontSize = SendType.Title,
-                fontWeight = FontWeight.W300,
-                modifier = Modifier.clickable(enabled = canReview, onClick = onReview),
-            )
+            WizardTopBarAction(text = "Continue", palette = palette, enabled = canReview, onClick = onReview)
         },
     )
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = SendDimens.Space16),
+            .padding(horizontal = SendDimens.Space16)
+            // Reserve the keyboard's height so the hero + presets always sit ABOVE the IME.
+            .imePadding(),
     ) {
         Spacer(modifier = Modifier.height(SendDimens.Space4))
         RecipientChip(addressShort = shortAddress(recipient), palette = palette, onEdit = onEditRecipient)
 
-        Spacer(modifier = Modifier.weight(1f))
-        SendPanel(palette = palette, contentPadding = SendDimens.PanelPaddingHero) {
-            AmountHero(
-                value = amountText,
-                onValueChange = onChange,
-                error = if (overBalance) "Insufficient balance" else null,
-                palette = palette,
-                onFocusChanged = onFocusChanged,
-            )
-        }
-        Spacer(modifier = Modifier.weight(1f))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16),
-        ) {
+        // Available + MAX live at the TOP so the soft keyboard never hides them.
+        Spacer(modifier = Modifier.height(SendDimens.Space12))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column {
                 Text("Available", color = palette.textMuted, fontSize = SendType.Hint, fontWeight = FontWeight.W400)
                 Text("$availableNight NIGHT", color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
             }
             Spacer(modifier = Modifier.weight(1f))
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
+                    .heightIn(min = SendDimens.RowMinHeightAccessibility) // 48dp HIG touch target
                     .clip(RoundedCornerShape(SendDimens.RadiusFull))
-                    .background(palette.barely)
+                    .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
                     .clickable(onClick = onMax)
-                    .padding(horizontal = SendDimens.Space12, vertical = SendDimens.Space8),
+                    .padding(horizontal = SendDimens.Space16, vertical = SendDimens.Space8),
             ) {
                 Text("MAX", color = palette.textSoft, fontSize = SendType.Max, letterSpacing = SendType.TrackMax)
             }
         }
+
+        // Big frosted hero — fills the space between the available row and the presets, so it stays
+        // prominent yet always fits above the keyboard (tall, near-square when the keyboard is down).
+        Spacer(modifier = Modifier.height(SendDimens.Space16))
+        SendPanel(
+            palette = palette,
+            contentPadding = SendDimens.PanelPaddingHero,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AmountHero(
+                    value = amountText,
+                    onValueChange = onChange,
+                    error = if (overBalance) "Insufficient balance" else null,
+                    palette = palette,
+                    numberSize = SendType.HeroNumberLg,
+                    onFocusChanged = onFocusChanged,
+                )
+            }
+        }
+
+        // Three quick-amount presets — fractions of the spendable balance.
+        Spacer(modifier = Modifier.height(SendDimens.Space16))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(SendDimens.Space8)) {
+            PresetChip("25%", palette, Modifier.weight(1f)) { onPreset(25) }
+            PresetChip("50%", palette, Modifier.weight(1f)) { onPreset(50) }
+            PresetChip("75%", palette, Modifier.weight(1f)) { onPreset(75) }
+        }
+
+        Spacer(modifier = Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space16))
+    }
+}
+
+/** A frosted-glass quick-amount preset chip (25% / 50% / 75%). */
+@Composable
+private fun PresetChip(label: String, palette: SendPalette, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .height(SendDimens.ButtonHeight)
+            .clip(RoundedCornerShape(SendDimens.RadiusMd))
+            .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
+            .border(1.dp, palette.hairline, RoundedCornerShape(SendDimens.RadiusMd))
+            .clickable(onClick = onClick),
+    ) {
+        Text(label, color = palette.textSoft, fontSize = SendType.Body, fontWeight = FontWeight.W300)
     }
 }
 
@@ -406,7 +446,7 @@ private fun ReviewStep(
                     Text(
                         text = amountText.ifEmpty { "0" },
                         color = palette.text,
-                        fontSize = SendType.HeroNumber,
+                        fontSize = SendType.HeroNumberLg,
                         fontWeight = FontWeight.W200,
                         letterSpacing = SendType.HeroTracking,
                     )
@@ -458,11 +498,11 @@ private fun ReviewStep(
 private fun PendingScreen(stage: String, palette: SendPalette) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center, // center the runner + text in the screen
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = SendDimens.Space16),
     ) {
-        Spacer(modifier = Modifier.height(SendDimens.Space48))
         RunnerWithDust(
             modifier = Modifier
                 .fillMaxWidth(RUNNER_WIDTH_FRACTION)
@@ -473,7 +513,7 @@ private fun PendingScreen(stage: String, palette: SendPalette) {
         Text(stage, color = palette.text, fontSize = SendType.Body, fontWeight = FontWeight.W300)
         Spacer(modifier = Modifier.height(SendDimens.Space8))
         Text(
-            text = "This usually takes a few seconds.",
+            text = "This can take a few seconds, sometimes longer. It keeps running if you leave.",
             color = palette.textMuted,
             fontSize = SendType.Hint,
             fontWeight = FontWeight.W400,
@@ -492,6 +532,7 @@ private fun SuccessScreen(
     onSendAnother: () -> Unit,
     onDone: () -> Unit,
 ) {
+    // Title left, "Done" as the top-right action (standard placement) — not crammed beside the title.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -499,15 +540,9 @@ private fun SuccessScreen(
             .height(SendDimens.TopBarHeight)
             .padding(horizontal = SendDimens.Space16),
     ) {
-        Text(
-            text = "Done",
-            color = palette.text,
-            fontSize = SendType.Title,
-            fontWeight = FontWeight.W300,
-            modifier = Modifier.clickable(onClick = onDone),
-        )
-        Spacer(modifier = Modifier.width(SendDimens.Space16))
         Text("Sent", color = palette.text, fontSize = SendType.Title, fontWeight = FontWeight.W400)
+        Spacer(modifier = Modifier.weight(1f))
+        WizardTopBarAction(text = "Done", palette = palette, onClick = onDone)
     }
     HorizontalDivider(color = palette.hairline, thickness = SendDimens.DividerThickness)
 
@@ -573,9 +608,10 @@ private fun WizardTopBar(
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(SendDimens.RadiusLg))
-                .clickable(enabled = backEnabled, onClick = onBack)
-                .padding(SendDimens.GlyphHit),
+                .size(SendDimens.RowMinHeightAccessibility) // 48dp HIG touch target (glyph is 24dp, centered)
+                .clip(RoundedCornerShape(SendDimens.RadiusFull))
+                .clickable(enabled = backEnabled, onClick = onBack),
+            contentAlignment = Alignment.Center,
         ) {
             BackGlyph(color = if (backEnabled) palette.text else palette.textMuted)
         }

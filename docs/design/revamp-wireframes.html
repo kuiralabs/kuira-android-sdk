@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuira — UI revamp wireframes (preview)</title>
+<style>
+  :root{
+    --void:#000; --void-soft:#0a0a0a; --void-elev:#111;
+    --light:#fff; --l80:rgba(255,255,255,.80); --l50:rgba(255,255,255,.50);
+    --l20:rgba(255,255,255,.20); --l12:rgba(255,255,255,.12); --l08:rgba(255,255,255,.08);
+    --glass:rgba(255,255,255,.055); --glass-strong:rgba(255,255,255,.085);
+    --glass-border:rgba(255,255,255,.14);
+    --r-md:14px; --r-lg:22px; --r-full:999px;
+    --font:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Roboto,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#050506;color:var(--light);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  header{padding:30px 34px 24px;border-bottom:1px solid var(--l08)}
+  header h1{margin:0;font-weight:300;letter-spacing:-.6px;font-size:23px}
+  header p{margin:8px 0 0;color:var(--l50);font-size:13px;max-width:820px;line-height:1.6}
+  header .legend{margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--l50);letter-spacing:.3px}
+  header .legend b{color:var(--l80);font-weight:400}
+  .board{display:flex;flex-wrap:wrap;gap:46px 38px;padding:42px 34px 90px}
+  .col{width:300px}
+  .col>.cap{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--l50);margin:0 0 11px 3px}
+  .col>.note{font-size:12px;color:var(--l50);margin:12px 3px 0;line-height:1.55}
+  .col>.note b{color:var(--l80);font-weight:400}
+
+  .phone{position:relative;width:300px;height:648px;border-radius:38px;background:var(--void);
+    overflow:hidden;border:1px solid #1b1b1d;box-shadow:0 24px 70px rgba(0,0,0,.65)}
+  .screen{position:absolute;inset:0;padding:0 16px;display:flex;flex-direction:column}
+  .stars{position:absolute;inset:0;pointer-events:none;z-index:0}
+  .stars i{position:absolute;border-radius:50%;background:#fff}
+  .z{position:relative;z-index:1}
+
+  /* glass */
+  .glass{position:relative;background:var(--glass);backdrop-filter:blur(20px) saturate(150%);
+    -webkit-backdrop-filter:blur(20px) saturate(150%);border:1px solid var(--glass-border);
+    border-radius:var(--r-lg);overflow:hidden}
+  .glass::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(170deg,rgba(255,255,255,.12),rgba(255,255,255,0) 38%)}
+  .glass.flat{border-radius:var(--r-md)}
+
+  .topbar{height:52px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--l08)}
+  .topbar .t{font-size:15px;font-weight:300;color:var(--light)}
+  .topbar .r{margin-left:auto;font-size:14px;color:var(--l50)}
+  .label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--l50);font-weight:400}
+  .hero{font-weight:200;letter-spacing:-1px;line-height:1}
+  .muted{color:var(--l50)} .soft{color:var(--l80)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .row{display:flex;align-items:center}
+  .sb{justify-content:space-between}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:var(--r-full);
+    background:var(--glass);border:1px solid var(--glass-border);font-size:12px;color:var(--l80);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .chip{display:flex;align-items:center;justify-content:center;padding:11px 0;border-radius:var(--r-md);
+    background:var(--glass);border:1px solid var(--glass-border);font-size:13px;color:var(--l80);flex:1}
+  .btn{display:flex;align-items:center;justify-content:center;height:48px;border-radius:var(--r-lg);font-size:14px;letter-spacing:.4px}
+  .btn-primary{background:#fff;color:#000;font-weight:500}
+  .btn-ghost{background:var(--glass);border:1px solid var(--glass-border);color:var(--light);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  svg{display:block}
+  .glyph{stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .glyph.dim{stroke:rgba(255,255,255,.55)}
+  .toggle{width:42px;height:25px;border-radius:999px;background:var(--l12);border:1px solid var(--glass-border);position:relative}
+  .toggle.on{background:rgba(255,255,255,.22)}
+  .toggle i{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff}
+  .toggle.on i{left:auto;right:2.5px}
+  .divider{height:1px;background:var(--l08)}
+
+  /* the runner mark */
+  .runner{filter:drop-shadow(0 0 8px rgba(255,255,255,.25))}
+</style>
+</head>
+<body>
+<header>
+  <h1>Kuira — UI revamp · wireframe preview</h1>
+  <p>Proposed direction: <b style="color:var(--l80)">frosted glass (real blur over the starfield)</b>, strict monochrome per your STANDARDS (no yellow, no stray red/green, no emoji), and the Rarámuri runner as the recurring brand mark. These are HTML mock-ups so the glassiness is real — once you approve the feel, I build the Compose to match. React to anything; nothing here is locked.</p>
+  <div class="legend">
+    <span><b>Glass</b> = backdrop-blur + sheen + hairline (no drop-shadow)</span>
+    <span><b>Color</b> = white at 100/80/50/20/10% only</span>
+    <span><b>Mark</b> = line-art runner + glyphs (no emoji / Material icons)</span>
+  </div>
+</header>
+
+<div class="board">
+
+  <!-- ============ 1 · MAIN WALLET PANEL ============ -->
+  <div class="col">
+    <p class="cap">1 · Main wallet panel</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z" style="padding-top:14px;gap:14px">
+        <!-- pills -->
+        <div class="row" style="gap:8px">
+          <span class="pill" style="flex:1;min-width:0"><svg width="14" height="14" viewBox="0 0 24 24"><path class="glyph" d="M12 3 L20 12 L12 21 L4 12 Z"/></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">did:z6Mkw…Xc7</span></span>
+          <span class="pill" style="flex:1;min-width:0">preprod · 999 · 2.4KD ▾</span>
+        </div>
+        <!-- balance hero -->
+        <div class="glass" style="padding:18px 18px 16px">
+          <div class="row sb"><span class="label">Balance</span>
+            <svg width="20" height="20" viewBox="0 0 24 24"><path class="glyph dim" d="M20 11a8 8 0 1 0-2 6"/><path class="glyph dim" d="M20 5v6h-6"/></svg></div>
+          <div class="row" style="align-items:flex-end;gap:10px;margin-top:8px">
+            <span class="hero" style="font-size:50px">999</span>
+            <span class="muted" style="font-size:15px;padding-bottom:7px">NIGHT · Synced</span>
+          </div>
+        </div>
+        <!-- dust -->
+        <div class="glass flat row sb" style="padding:15px 16px">
+          <span class="label">Dust</span>
+          <span class="row" style="gap:8px"><span class="mono" style="font-size:15px">2,440.64</span>
+            <svg width="15" height="15" viewBox="0 0 24 24"><path class="glyph" d="M5 13l4 4L19 7"/></svg></span>
+        </div>
+        <!-- send / receive -->
+        <div class="row" style="justify-content:center;gap:34px;margin-top:2px">
+          <div style="text-align:center"><div class="glass" style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:auto">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+            <div class="muted" style="font-size:12px;margin-top:7px">Send</div></div>
+          <div style="text-align:center"><div class="glass" style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:auto">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M12 5v14M5 12l7 7 7-7"/></svg></div>
+            <div class="muted" style="font-size:12px;margin-top:7px">Receive</div></div>
+        </div>
+        <!-- backup -->
+        <div class="label" style="margin-top:4px">Backup &amp; recovery</div>
+        <div class="glass" style="padding:4px 0">
+          <div class="row sb" style="padding:13px 15px">
+            <span class="row" style="gap:11px"><svg width="18" height="18" viewBox="0 0 24 24"><circle class="glyph" cx="8" cy="12" r="4"/><path class="glyph" d="M11.5 12H20M17 12v3M20 12v3"/></svg><span style="font-size:13px">Wallet identity</span></span>
+            <span class="soft" style="font-size:12px">Protected</span></div>
+          <div class="divider" style="margin:0 15px"></div>
+          <div class="row sb" style="padding:13px 15px">
+            <span class="row" style="gap:11px"><svg width="18" height="18" viewBox="0 0 24 24"><circle class="glyph" cx="12" cy="12" r="2.3"/><path class="glyph" d="M12 4v3M12 17v3M4 12h3M17 12h3M6.5 6.5l2 2M15.5 15.5l2 2M17.5 6.5l-2 2M8.5 15.5l-2 2"/></svg><span style="font-size:13px">Dust · balance sync</span></span>
+            <span class="toggle"><i></i></span></div>
+          <div class="divider" style="margin:0 15px"></div>
+          <div class="row sb" style="padding:13px 15px">
+            <span class="row" style="gap:11px"><svg width="18" height="18" viewBox="0 0 24 24"><path class="glyph" d="M7 18a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.2A3.5 3.5 0 0 1 16.5 18Z"/></svg><span style="font-size:13px">App data</span></span>
+            <span class="soft" style="font-size:12px">On</span></div>
+        </div>
+        <div class="muted" style="text-align:center;font-size:12px;margin-top:auto;margin-bottom:8px">lock now</div>
+        <div class="btn btn-ghost" style="margin-bottom:14px">close</div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> glass everything · green checks → monochrome "Protected/On" · ✨ emoji → line-art dust glyph · yellow sigil dot → monochrome sigil diamond · refresh/arrows/key/cloud = line-art.</p>
+  </div>
+
+  <!-- ============ 2 · LOCK SCREEN ============ -->
+  <div class="col">
+    <p class="cap">2 · Lock screen</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z" style="align-items:center;justify-content:center;text-align:center;padding:0 26px">
+        <svg width="58" height="58" viewBox="0 0 24 24" class="runner"><rect class="glyph" x="5.5" y="10.5" width="13" height="9.5" rx="2.2"/><path class="glyph" d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><circle class="glyph" cx="12" cy="15" r="1.4"/></svg>
+        <div class="label" style="margin-top:26px;letter-spacing:6px">Locked</div>
+        <p class="muted" style="font-size:13.5px;line-height:1.6;margin:16px 0 0">Your session is locked. Unlock with your device biometric to continue. Your identity stays signed in.</p>
+        <div class="glass" style="margin-top:32px;width:100%;padding:22px 20px">
+          <p class="muted" style="font-size:12.5px;margin:0 0 16px">Authentication didn't complete — tap to try again.</p>
+          <div class="btn btn-primary">Unlock</div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> 🔒 emoji → line-art lock · the retry line goes <b>monochrome</b> (it isn't a financial-danger signal, so no red) · glass unlock card · runner could replace the lock here if you'd rather lead with the brand mark.</p>
+  </div>
+
+  <!-- ============ 3 · NOTIFICATION ============ -->
+  <div class="col">
+    <p class="cap">3 · Notification (dust sync)</p>
+    <div class="phone" style="background:#0d0e12">
+      <div style="position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 0,#1a1c24,#08080a)"></div>
+      <div class="screen z" style="justify-content:center;padding:0 14px">
+        <div class="glass" style="padding:15px 15px;border-radius:26px">
+          <div class="row" style="gap:12px">
+            <div style="width:34px;height:34px;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:18px">K</div>
+            <div style="flex:1;min-width:0">
+              <div class="row sb"><span style="font-size:13px;color:var(--l80)">Kuira</span><span class="muted" style="font-size:12px">now</span></div>
+              <div style="font-size:13px;margin-top:2px">Updating dust… · 81%</div>
+            </div>
+            <!-- LARGE ICON = runner -->
+            <div style="width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center">
+              <svg width="30" height="30" viewBox="0 0 120 120" class="runner glyph" style="stroke-width:5"><circle cx="74" cy="24" r="7"/><path d="M70 33 L52 64"/><path d="M64 41 L86 36"/><path d="M64 41 L46 50"/><path d="M52 64 L70 72 L74 90"/><path d="M52 64 L40 84 L52 96"/></svg>
+            </div>
+          </div>
+          <!-- progress -->
+          <div style="margin-top:13px;height:4px;border-radius:99px;background:var(--l12);overflow:hidden">
+            <div style="width:81%;height:100%;background:#fff"></div>
+          </div>
+        </div>
+        <p class="muted" style="text-align:center;font-size:11px;margin-top:14px;letter-spacing:.4px">large icon = the runner · monochrome progress · K mono icon</p>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> the generic green-dot square → the <b>Rarámuri runner</b> as the notification large-icon · monochrome progress bar · the small status icon stays the K mark.</p>
+  </div>
+
+  <!-- ============ 4 · SEND · AMOUNT ============ -->
+  <div class="col">
+    <p class="cap">4 · Send · enter amount</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z">
+        <div class="topbar"><svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M15 5l-7 7 7 7"/></svg><span class="t">Enter amount</span><span class="r">Review</span></div>
+        <!-- recipient -->
+        <div class="glass flat row sb" style="padding:13px 15px;margin-top:14px">
+          <span class="muted" style="font-size:13px">To: <span class="mono soft">mn_addr…s4klex</span></span>
+          <span class="soft" style="font-size:13px">Edit</span></div>
+        <!-- AVAILABLE + MAX moved to TOP -->
+        <div class="row sb" style="margin-top:14px;padding:0 3px">
+          <span class="muted" style="font-size:12px">Available <span class="soft mono">999 NIGHT</span></span>
+          <span class="pill" style="padding:6px 14px;font-size:12px">MAX</span></div>
+        <!-- BIG SQUARE hero -->
+        <div class="glass" style="margin-top:18px;aspect-ratio:1/.82;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:26px">
+          <div class="hero" style="font-size:74px">0</div>
+          <div class="label" style="margin-top:6px;letter-spacing:4px">NIGHT</div>
+        </div>
+        <!-- THREE presets -->
+        <div class="row" style="gap:10px;margin-top:16px">
+          <div class="chip">25%</div><div class="chip">50%</div><div class="chip">75%</div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> <b>Available + MAX moved to the top</b> (keyboard no longer hides them) · amount is a <b>big square</b> hero with much larger numerals · <b>three quick-amount presets</b> added.</p>
+  </div>
+
+  <!-- ============ 5 · SEND · REVIEW ============ -->
+  <div class="col">
+    <p class="cap">5 · Send · review</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z">
+        <div class="topbar"><svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M15 5l-7 7 7 7"/></svg><span class="t">Review</span></div>
+        <!-- big prominent hero -->
+        <div class="glass" style="margin-top:22px;padding:34px 18px 28px;display:flex;flex-direction:column;align-items:center;border-radius:26px">
+          <div class="row" style="align-items:flex-end;gap:10px"><span class="hero" style="font-size:66px">1</span><span class="muted" style="font-size:20px;padding-bottom:9px">NIGHT</span></div>
+          <span class="label" style="margin-top:16px;padding:7px 16px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border)">Unshielded</span>
+        </div>
+        <!-- detail -->
+        <div class="glass" style="margin-top:16px;padding:2px 0">
+          <div class="row sb" style="padding:15px 16px"><span class="muted" style="font-size:13px">To</span><span class="mono soft" style="font-size:13px">mn_addr…s4klex</span></div>
+          <div class="divider" style="margin:0 16px"></div>
+          <div class="row sb" style="padding:15px 16px"><span class="muted" style="font-size:13px">Amount</span><span style="font-size:13px">1 NIGHT</span></div>
+        </div>
+        <p class="muted" style="font-size:12.5px;margin:14px 3px 0">Network fees are paid automatically from your Dust.</p>
+        <div class="row" style="gap:10px;margin-top:auto;margin-bottom:14px">
+          <div class="btn btn-ghost" style="flex:1">Cancel</div>
+          <div class="btn btn-primary" style="flex:1.4">Confirm</div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> hero given <b>more prominence</b> (bigger, glass, fills the dead space) · tighter vertical rhythm so the card stack reads as one block, not floating.</p>
+  </div>
+
+  <!-- ============ 6 · SEND · SENDING ============ -->
+  <div class="col">
+    <p class="cap">6 · Send · sending</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z">
+        <div class="topbar"><svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M15 5l-7 7 7 7"/></svg><span class="t">Sending</span></div>
+        <!-- CENTERED -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+          <svg width="84" height="84" viewBox="0 0 120 120" class="runner glyph" style="stroke-width:3.4"><circle cx="74" cy="24" r="7"/><path d="M70 33 L52 64"/><path d="M64 41 L86 36"/><path d="M64 41 L46 50"/><path d="M52 64 L70 72 L74 90"/><path d="M52 64 L40 84 L52 96"/></svg>
+          <!-- dust trail -->
+          <div style="margin-top:-6px;height:10px"></div>
+          <div style="font-size:17px;margin-top:18px">Submitting transaction…</div>
+          <div class="muted" style="font-size:13px;margin-top:7px">This usually takes a few seconds.</div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> runner + text block <b>vertically centered</b> (was pinned to the upper third) · same runner mark, kept consistent with the notification icon.</p>
+  </div>
+
+  <!-- ============ 7 · SIGIL PANEL ============ -->
+  <div class="col">
+    <p class="cap">7 · Sigil identity panel</p>
+    <div class="phone"><div class="stars"></div>
+      <div class="screen z" style="padding-top:16px;gap:16px">
+        <div class="row sb">
+          <span class="label" style="letter-spacing:3px">Sigil identity</span>
+          <svg width="22" height="22" viewBox="0 0 24 24"><path class="glyph" d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h6M14 17h6"/><circle class="glyph" cx="16" cy="7" r="2.2"/><circle class="glyph" cx="8" cy="12" r="2.2"/><circle class="glyph" cx="12" cy="17" r="2.2"/></svg>
+        </div>
+        <!-- branded identity card -->
+        <div class="glass" style="padding:24px 18px;display:flex;flex-direction:column;align-items:center">
+          <svg width="46" height="46" viewBox="0 0 120 120" class="runner glyph" style="stroke-width:5"><circle cx="74" cy="24" r="7"/><path d="M70 33 L52 64"/><path d="M64 41 L86 36"/><path d="M64 41 L46 50"/><path d="M52 64 L70 72 L74 90"/><path d="M52 64 L40 84 L52 96"/></svg>
+          <div class="label" style="margin-top:18px">did</div>
+          <div class="mono soft" style="font-size:12px;margin-top:8px;text-align:center;line-height:1.6;word-break:break-all">did:key:z6MkhHbY424TeeiY4yEbYg7fJwhWGyUdFpP5R4ieFVLGCUnG</div>
+        </div>
+        <!-- future rows (branding placeholders) -->
+        <div class="glass" style="padding:2px 0">
+          <div class="row sb" style="padding:15px 16px"><span class="muted" style="font-size:13px">Connected apps</span><span class="muted" style="font-size:13px">—</span></div>
+          <div class="divider" style="margin:0 16px"></div>
+          <div class="row sb" style="padding:15px 16px"><span class="muted" style="font-size:13px">Sigil state</span><span class="soft" style="font-size:13px">Active</span></div>
+        </div>
+        <div class="muted" style="font-size:13px;margin-top:4px">sign out</div>
+      </div>
+    </div>
+    <p class="note"><b>Changes:</b> branded glass identity card led by the <b>runner mark</b> · red "sign out" → <b>monochrome</b> · added quiet placeholder rows so the sparse panel reads as a real surface, not a stub.</p>
+  </div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.stars').forEach(function(s){
+    var n=44, html='';
+    for(var i=0;i<n;i++){
+      var x=(Math.random()*100).toFixed(2), y=(Math.random()*100).toFixed(2);
+      var sz=(Math.random()*1.9+0.5).toFixed(1);
+      var op=(Math.random()*0.55+0.18).toFixed(2);
+      html+='<i style="left:'+x+'%;top:'+y+'%;width:'+sz+'px;height:'+sz+'px;opacity:'+op+'"></i>';
+    }
+    s.innerHTML=html;
+  });
+</script>
+</body>
+</html>

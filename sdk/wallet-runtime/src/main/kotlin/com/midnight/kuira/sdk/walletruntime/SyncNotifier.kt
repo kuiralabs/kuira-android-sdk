@@ -135,7 +135,9 @@ class SyncNotifier(private val context: Context) {
                     PROGRESS_POINTS.map { Notification.ProgressStyle.Point(it).setColor(pointColor) },
                 )
                 .setProgress(percent)
-                .setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.kuira_sync_tracker))
+                // Tint the runner with the day/night-resolved accent so it reads dark on a light
+                // shade and white on a dark one — the bare drawable is white and vanished on light.
+                .setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.kuira_sync_tracker).setTint(accent))
         } else {
             style.setProgressIndeterminate(true)
         }

@@ -23,16 +23,15 @@ fun SyncPhase.labelRes(): Int = when (this) {
 }
 
 /**
- * Per-phase notification large-icon (#235) — the right-side thumbnail that
- * represents the CURRENT sync state (dust motes / refresh arrows / stacked
- * layers), distinct from the left-side brand K (app identity). Exhaustive `when`
- * keeps it honest as phases are added. Themed via `@color/kuira_sync_accent`.
+ * Notification large-icon — the right-side thumbnail. The Rarámuri runner is the brand mark for
+ * every wallet sync/operation (the UI revamp's "feel the branding" on the notification), so all
+ * phases share it; the differentiation between phases is the text + percent, not the icon. The
+ * left-side small icon stays the brand K (app identity).
  */
 @DrawableRes
 fun SyncPhase.largeIconRes(): Int = when (this) {
-    SyncPhase.DustFull, SyncPhase.DustDelta, SyncPhase.Finalizing -> R.drawable.kuira_phase_dust
-    SyncPhase.ShieldedRefresh -> R.drawable.kuira_phase_refresh
-    SyncPhase.GenesisRebuild -> R.drawable.kuira_phase_genesis
+    SyncPhase.DustFull, SyncPhase.DustDelta, SyncPhase.Finalizing,
+    SyncPhase.ShieldedRefresh, SyncPhase.GenesisRebuild -> R.drawable.kuira_runner
 }
 
 /**

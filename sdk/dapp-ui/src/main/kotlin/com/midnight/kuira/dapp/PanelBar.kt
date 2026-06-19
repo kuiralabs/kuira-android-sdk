@@ -27,12 +27,14 @@ import com.midnight.kuira.dapp.sigil.SigilPanelColors
 import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.dapp.sigil.SigilStatusPanel
+import com.midnight.kuira.dapp.wallet.ThemeStore
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.WalletPanelViewModel
 import com.midnight.kuira.dapp.wallet.WalletRecoveryScreen
 import com.midnight.kuira.dapp.wallet.WalletSettingsScreen
 import com.midnight.kuira.dapp.wallet.WalletStatus
 import com.midnight.kuira.dapp.wallet.WalletStatusPanel
+import com.midnight.kuira.dapp.wallet.WalletThemes
 import com.midnight.kuira.dapp.wallet.pillName
 import com.midnight.kuira.core.network.MidnightNetwork
 
@@ -113,7 +115,36 @@ fun PanelBar(
     // activity-scoped instance; passing them in makes that identity explicit rather than implicit).
     val walletViewModel: WalletPanelViewModel = hiltViewModel()
     val sigilViewModel: SigilPanelViewModel = hiltViewModel()
-    val activity = LocalContext.current as? FragmentActivity
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+
+    // Appearance theme is hoisted here so the pill, its sheet, and the Settings/recovery overlays
+    // all render from ONE resolved palette. Persisted in [ThemeStore] (durable across restart);
+    // rememberSaveable mirrors it for instant recomposition. Picking "Monochrome" (the brand
+    // default) falls back to the host-supplied [walletColors] so a host's own theming still wins;
+    // any other pick overrides with that theme's palette.
+    var selectedThemeId by rememberSaveable {
+        mutableStateOf(ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id)
+    }
+    val themedWalletColors = remember(selectedThemeId, walletColors) {
+        if (selectedThemeId == WalletThemes.Default.id) walletColors else WalletThemes.byId(selectedThemeId).colors
+    }
+    // Light/dark is hoisted too so the pill, sheet, AND the overlays below resolve to ONE palette
+    // (the pill self-resolves the same flip from the controlled lightMode). Light mode shows the
+    // Kuira light palette and takes precedence over a chosen color theme.
+    var lightMode by rememberSaveable { mutableStateOf(false) }
+    val activeWalletColors = if (lightMode) WalletPanelColors.Light else themedWalletColors
+
+    // The sigil pill rethemes in lockstep with the wallet — both pills are "one themed unit".
+    // Its palette is derived from the SAME appearance theme (Default defers to the host-supplied
+    // [sigilColors]); light mode maps the Kuira light wallet palette into the sigil's vocabulary.
+    val themedSigilColors = remember(selectedThemeId, sigilColors) {
+        if (selectedThemeId == WalletThemes.Default.id) sigilColors
+        else SigilPanelColors.from(WalletThemes.byId(selectedThemeId).colors)
+    }
+    val activeSigilColors = remember(lightMode, themedSigilColors) {
+        if (lightMode) SigilPanelColors.from(WalletPanelColors.Light) else themedSigilColors
+    }
 
     // Settings + recovery-reveal overlays live at the bar level (above both panels) so a single
     // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
@@ -160,7 +191,7 @@ fun PanelBar(
     ) {
         SigilStatusPanel(
             viewModel = sigilViewModel,
-            colors = sigilColors,
+            colors = activeSigilColors,
             onStatusChange = {
                 currentSigilStatus = it
                 onSigilStatusChange(it)
@@ -170,7 +201,7 @@ fun PanelBar(
         WalletStatusPanel(
             viewModel = walletViewModel,
             initialNetwork = network,
-            colors = walletColors,
+            colors = themedWalletColors,
             onNetworkChange = onNetworkChange,
             // Sealed-when so adding a new SigilStatus variant later
             // forces an explicit yes/no decision at compile time
@@ -196,6 +227,8 @@ fun PanelBar(
             },
             openSheetSignal = openWalletSignal,
             onOpenSettings = { settingsOpen = true },
+            lightMode = lightMode,
+            onToggleLightMode = { lightMode = !lightMode },
         )
     }
 
@@ -224,7 +257,12 @@ fun PanelBar(
                     settingsOpen = false
                 },
                 versionLabel = appVersion.ifBlank { null },
-                colors = walletColors,
+                colors = activeWalletColors,
+                selectedThemeId = selectedThemeId,
+                onSelectTheme = { id ->
+                    selectedThemeId = id
+                    ThemeStore.setSelectedThemeId(context, id)
+                },
                 onBack = { settingsOpen = false },
             )
         }
@@ -246,7 +284,7 @@ fun PanelBar(
             WalletRecoveryScreen(
                 phrase = revealedPhrase,
                 error = recoveryError,
-                colors = walletColors,
+                colors = activeWalletColors,
                 onReveal = { activity?.let { walletViewModel.revealRecoveryPhrase(it) } },
                 onConfirmSaved = {
                     walletViewModel.markRecoveryPhraseSaved()

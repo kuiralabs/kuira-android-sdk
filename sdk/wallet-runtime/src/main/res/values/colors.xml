@@ -1,9 +1,10 @@
 <resources>
-    <!-- Sync notification accent (#235). Matches MidnightColors.SuccessText — the
-         app's progress/success green (the unlock spinner uses it) — so the
-         notification + Live-Update chip read as part of the Kuira theme. -->
-    <color name="kuira_sync_accent">#FF4CAF50</color>
-    <!-- Milestone dots on the Live-Update progress bar — soft white ticks that
-         read on both the filled (green) and unfilled track. -->
-    <color name="kuira_sync_point">#CCFFFFFF</color>
+    <!-- Sync-notification accent (progress fill, milestone points, header tint, the runner tracker).
+         Theme-adaptive, NOT a brand hue: the notification shade follows the system day/night, so on a
+         LIGHT shade this resolves to the brand void (near-black) for high contrast; the values-night
+         variant flips to white for a DARK shade. (A single white value was invisible on a light
+         shade — the runner and the progress simply disappeared.) -->
+    <color name="kuira_sync_accent">#FF111114</color>
+    <!-- Milestone dots on the Live-Update progress bar — soft ticks on the track (dark on light). -->
+    <color name="kuira_sync_point">#CC111114</color>
 </resources>

@@ -3,10 +3,14 @@ package com.midnight.kuira.dapp.sigil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.dappPressable
+import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
+import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -209,17 +213,19 @@ private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
         )
         return
     }
+    // Monochrome per the brand: a frosted disc, never a colored hue. Identity is carried by the
+    // monogram letter (deterministic per DID) + the truncated DID label beside it — not color.
     val (bg, fg, glyph) = when (status) {
         is SigilStatus.None -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, null)
         // Same neutral avatar as None, plus a "?" glyph hinting that an
         // action is pending. The sheet body explains the choice.
         is SigilStatus.BackupAvailable -> Triple(colors.avatarPlaceholderBg, colors.onPillDim, "?")
         is SigilStatus.Forged -> Triple(
-            avatarColorFromDid(status.did),
-            Color.White,
+            colors.onPill.copy(alpha = AVATAR_FILL_ALPHA),
+            colors.onPill,
             avatarGlyphFromDid(status.did),
         )
-        is SigilStatus.Error -> Triple(colors.error, Color.White, "!")
+        is SigilStatus.Error -> Triple(colors.onPill.copy(alpha = AVATAR_FILL_ALPHA), colors.onPill, "!")
         is SigilStatus.Creating, is SigilStatus.Initializing ->
             error("unreachable — handled above")
     }
@@ -241,21 +247,8 @@ private fun PillAvatar(status: SigilStatus, colors: SigilPanelColors) {
     }
 }
 
-/**
- * Deterministic background hue for a DID's placeholder avatar. Hashes the
- * multibase tail (skip the always-identical `did:key:` prefix) and reduces
- * to one of a small palette of pre-picked colors that read well against
- * the dark pill background.
- *
- * The palette is intentionally small (8 entries) — collisions are fine
- * because the colored circle is paired with the glyph + the truncated DID
- * label; ambiguity in the color alone won't matter at a glance.
- */
-internal fun avatarColorFromDid(did: String): Color {
-    val tail = did.removePrefix("did:key:")
-    val idx = (tail.hashCode().rem(AVATAR_PALETTE.size) + AVATAR_PALETTE.size) % AVATAR_PALETTE.size
-    return AVATAR_PALETTE[idx]
-}
+/** Frosted-disc fill for the (monochrome) forged/error avatar — translucent so the pill reads as glass. */
+private const val AVATAR_FILL_ALPHA = 0.20f
 
 /**
  * First uppercase letter of the DID's multibase tail. We skip the `z`
@@ -271,17 +264,6 @@ internal fun avatarGlyphFromDid(did: String): String {
     val candidate = tail.drop(1).firstOrNull()?.uppercaseChar() ?: '?'
     return candidate.toString()
 }
-
-private val AVATAR_PALETTE = listOf(
-    Color(0xFF64B5F6), // blue (matches the accent color for visual continuity)
-    Color(0xFF81C784), // green
-    Color(0xFFFFB74D), // amber
-    Color(0xFFBA68C8), // purple
-    Color(0xFFE57373), // soft red
-    Color(0xFF4DB6AC), // teal
-    Color(0xFFF06292), // pink
-    Color(0xFFFFD54F), // yellow
-)
 
 internal fun pillLabel(status: SigilStatus): String = when (status) {
     is SigilStatus.None -> "no sigil"
@@ -503,16 +485,29 @@ private fun ForgedBody(
     // it's automatic, so there's no manual backup/restore action here. The
     // P-256 root key stays out of the UI (raw jargon); hosts that need it —
     // e.g. BBoard's authorizeAccessKey — read it from SigilStatus.Forged.
-    MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
+    //
+    // Branded identity card: the runner mark over the DID, frosted — so the sparse
+    // panel reads as a real surface, not a stub.
+    GlassPanel(
+        tint = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
+        border = colors.onSheetSubtle,
+        contentPadding = SigilDimens.SheetVerticalPadding,
+    ) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            LottieRunner(modifier = Modifier.size(SigilDimens.RunnerMarkSize), color = colors.onSheet, animate = false)
+        }
+        Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+        MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
+    }
 
     var showSignOutConfirm by remember { mutableStateOf(false) }
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    // Danger zone — deliberately understated (not a primary SheetButton) so it's
-    // discoverable but not a mis-tap magnet. The confirm + biometric (in the VM)
-    // are the real guards.
+    // Danger zone — deliberately understated (monochrome, not red: sign-out is
+    // recoverable, not a financial-danger signal). The confirm + biometric (in the
+    // VM) are the real guards.
     Text(
         text = "sign out",
-        color = colors.error,
+        color = colors.onSheetDim,
         fontSize = SigilType.Body,
         modifier = Modifier
             .clickable { showSignOutConfirm = true }
@@ -533,7 +528,7 @@ private fun ForgedBody(
                 TextButton(onClick = {
                     showSignOutConfirm = false
                     onSignOut()
-                }) { Text("Sign out", color = colors.error) }
+                }) { Text("Sign out", color = colors.onSheet) }
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
@@ -632,9 +627,10 @@ private object SigilDimens {
     val SheetSmallGap = 8.dp
     val SheetLabelGap = 4.dp
     val SheetSpinnerSize = 16.dp
+    val RunnerMarkSize = 40.dp   // static runner brand mark on the forged identity card
 
     // Buttons inside the sheet.
-    val ButtonHeight = 48.dp
+    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
 }
 
@@ -645,7 +641,7 @@ private object SigilType {
     val Body = 13.sp
     val FieldLabel = 11.sp
     val FieldValue = 13.sp
-    val ButtonText = 13.sp
+    val ButtonText = 15.sp
 }
 
 // ── Color palette ──
@@ -690,11 +686,35 @@ data class SigilPanelColors(
             onSheet = MidnightColors.Light,
             onSheetDim = MidnightColors.LightMuted,
             onSheetSubtle = MidnightColors.LightFaint,
-            scrim = Color.Black.copy(alpha = 0.55f),
-            accent = MidnightColors.SuccessText,
+            scrim = Color.Black.copy(alpha = SCRIM_ALPHA),
+            accent = MidnightColors.Light, // monochrome brand (was SuccessText green)
             error = MidnightColors.ErrorText,
             button = MidnightColors.ButtonSurface,
             onButton = MidnightColors.Light,
         )
+
+        /**
+         * Adapts an appearance-theme [WalletPanelColors] into the sigil pill's vocabulary so both
+         * PanelBar pills retheme as ONE unit. The two palettes share every pole except the sigil's
+         * avatar-placeholder fill (→ the wallet's button surface) and [scrim] (a fixed dim overlay).
+         */
+        fun from(w: WalletPanelColors): SigilPanelColors = SigilPanelColors(
+            pillBackground = w.pillBackground,
+            pillBorder = w.pillBorder,
+            onPill = w.onPill,
+            onPillDim = w.onPillDim,
+            avatarPlaceholderBg = w.button,
+            sheetBackground = w.sheetBackground,
+            onSheet = w.onSheet,
+            onSheetDim = w.onSheetDim,
+            onSheetSubtle = w.onSheetSubtle,
+            scrim = Color.Black.copy(alpha = SCRIM_ALPHA),
+            accent = w.accent,
+            error = w.error,
+            button = w.button,
+            onButton = w.onButton,
+        )
+
+        private const val SCRIM_ALPHA = 0.55f
     }
 }
