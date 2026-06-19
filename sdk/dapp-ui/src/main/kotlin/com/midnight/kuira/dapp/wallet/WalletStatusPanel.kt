@@ -1011,7 +1011,10 @@ data class WalletPanelColors(
             onSheet = MidnightColors.Light,
             onSheetDim = MidnightColors.LightMuted,
             onSheetSubtle = MidnightColors.LightFaint,
-            accent = MidnightColors.SuccessText,
+            // Monochrome brand: emphasis is carried by weight + contrast, not an accent
+            // hue. (Was SuccessText green; the design standard reserves green for the
+            // narrow success-check / confirmed / sync-complete cases only.)
+            accent = MidnightColors.Light,
             error = MidnightColors.ErrorText,
             button = MidnightColors.ButtonSurface,
             onButton = MidnightColors.Light,
@@ -1031,7 +1034,7 @@ data class WalletPanelColors(
             onSheet = Color(0xFF000000),
             onSheetDim = Color(0x80000000),
             onSheetSubtle = Color(0x33000000),
-            accent = Color(0xFF2E7D32),
+            accent = Color(0xFF000000), // monochrome (was green 0xFF2E7D32) — see Default
             error = Color(0xFFCC0000),
             button = Color(0xFFFFFFFF),
             onButton = Color(0xFF000000),

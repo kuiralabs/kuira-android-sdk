@@ -167,7 +167,7 @@ public final class com/midnight/kuira/dapp/di/DappUiModule_ProvideBlockStoreBack
 public final class com/midnight/kuira/dapp/lock/ComposableSingletons$SessionLockGateKt {
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/lock/ComposableSingletons$SessionLockGateKt;
 	public fun <init> ()V
-	public final fun getLambda$77306036$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1258067693$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/midnight/kuira/dapp/lock/SessionLockGateKt {

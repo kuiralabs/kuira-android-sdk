@@ -691,7 +691,7 @@ data class SigilPanelColors(
             onSheetDim = MidnightColors.LightMuted,
             onSheetSubtle = MidnightColors.LightFaint,
             scrim = Color.Black.copy(alpha = 0.55f),
-            accent = MidnightColors.SuccessText,
+            accent = MidnightColors.Light, // monochrome brand (was SuccessText green)
             error = MidnightColors.ErrorText,
             button = MidnightColors.ButtonSurface,
             onButton = MidnightColors.Light,
