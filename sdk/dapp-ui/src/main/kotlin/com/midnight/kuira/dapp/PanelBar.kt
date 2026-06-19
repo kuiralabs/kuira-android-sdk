@@ -1,6 +1,8 @@
 package com.midnight.kuira.dapp
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -107,6 +109,15 @@ fun PanelBar(
      * a host passes its own `BuildConfig.VERSION_NAME`. Blank (default) hides the ABOUT section.
      */
     appVersion: String = "",
+    /**
+     * Opt-in floating mode (Phase 1): instead of a fixed top row, the sigil + wallet chips become
+     * independent draggable floaters the user can place anywhere and dock to a screen edge as a
+     * peek tab (tap to restore). IN-APP only — they float over the host's own content, so the host
+     * must place this PanelBar as the LAST child of a `Box` that wraps its content (it renders a
+     * full-screen, pass-through overlay). Default `false` keeps the classic fixed top bar, and
+     * existing `Column { PanelBar(); content }` call sites are unaffected.
+     */
+    floating: Boolean = false,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -178,17 +189,9 @@ fun PanelBar(
     // the few-hundred-ms window before the probe settles.
     var currentSigilStatus by remember { mutableStateOf<SigilStatus>(SigilStatus.Initializing) }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                top = statusBarPadding + PanelBarDimens.TopGap,
-                start = PanelBarDimens.HorizontalPadding,
-                end = PanelBarDimens.HorizontalPadding,
-            ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    // The two chips, defined once and laid out either as a fixed top row (default) or as
+    // independent floaters (opt-in). Same VM / theme / overlay wiring drives both layouts.
+    val sigilPill = @Composable {
         SigilStatusPanel(
             viewModel = sigilViewModel,
             colors = activeSigilColors,
@@ -198,6 +201,8 @@ fun PanelBar(
             },
             onOpenSettings = { settingsOpen = true },
         )
+    }
+    val walletPill = @Composable {
         WalletStatusPanel(
             viewModel = walletViewModel,
             initialNetwork = network,
@@ -230,6 +235,44 @@ fun PanelBar(
             lightMode = lightMode,
             onToggleLightMode = { lightMode = !lightMode },
         )
+    }
+
+    if (floating) {
+        // Full-screen, pass-through overlay: only the chips themselves consume touches, so the
+        // host's content stays interactive everywhere else. Each chip drags + docks independently.
+        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+            val widthPx = constraints.maxWidth
+            val heightPx = constraints.maxHeight
+            FloatingChip(
+                persistKey = "kuira_chip_sigil",
+                containerWidthPx = widthPx,
+                containerHeightPx = heightPx,
+                initialCorner = FloatingCorner.TopStart,
+                content = sigilPill,
+            )
+            FloatingChip(
+                persistKey = "kuira_chip_wallet",
+                containerWidthPx = widthPx,
+                containerHeightPx = heightPx,
+                initialCorner = FloatingCorner.TopEnd,
+                content = walletPill,
+            )
+        }
+    } else {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(
+                    top = statusBarPadding + PanelBarDimens.TopGap,
+                    start = PanelBarDimens.HorizontalPadding,
+                    end = PanelBarDimens.HorizontalPadding,
+                ),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            sigilPill()
+            walletPill()
+        }
     }
 
     // ── Settings overlay ──

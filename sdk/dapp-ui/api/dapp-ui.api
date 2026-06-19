@@ -33,7 +33,7 @@ public final class com/midnight/kuira/dapp/DappPressableKt {
 }
 
 public final class com/midnight/kuira/dapp/PanelBarKt {
-	public static final fun PanelBar (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;ILjava/lang/String;Landroidx/compose/runtime/Composer;II)V
+	public static final fun PanelBar (Lcom/midnight/kuira/core/network/MidnightNetwork;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;ILjava/lang/String;ZLandroidx/compose/runtime/Composer;II)V
 }
 
 public abstract interface class com/midnight/kuira/dapp/backup/AppDataBackupProvider {
