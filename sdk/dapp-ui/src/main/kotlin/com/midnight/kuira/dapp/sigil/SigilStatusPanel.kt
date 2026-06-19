@@ -3,8 +3,11 @@ package com.midnight.kuira.dapp.sigil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.midnight.kuira.core.designsystem.component.GlassPanel
+import com.midnight.kuira.core.designsystem.effect.LottieRunner
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.dappPressable
+import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -481,16 +484,29 @@ private fun ForgedBody(
     // it's automatic, so there's no manual backup/restore action here. The
     // P-256 root key stays out of the UI (raw jargon); hosts that need it —
     // e.g. BBoard's authorizeAccessKey — read it from SigilStatus.Forged.
-    MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
+    //
+    // Branded identity card: the runner mark over the DID, frosted — so the sparse
+    // panel reads as a real surface, not a stub.
+    GlassPanel(
+        tint = colors.onSheet.copy(alpha = GLASS_FILL_ALPHA),
+        border = colors.onSheetSubtle,
+        contentPadding = SigilDimens.SheetVerticalPadding,
+    ) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            LottieRunner(modifier = Modifier.size(SigilDimens.RunnerMarkSize), color = colors.onSheet, animate = false)
+        }
+        Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
+        MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
+    }
 
     var showSignOutConfirm by remember { mutableStateOf(false) }
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    // Danger zone — deliberately understated (not a primary SheetButton) so it's
-    // discoverable but not a mis-tap magnet. The confirm + biometric (in the VM)
-    // are the real guards.
+    // Danger zone — deliberately understated (monochrome, not red: sign-out is
+    // recoverable, not a financial-danger signal). The confirm + biometric (in the
+    // VM) are the real guards.
     Text(
         text = "sign out",
-        color = colors.error,
+        color = colors.onSheetDim,
         fontSize = SigilType.Body,
         modifier = Modifier
             .clickable { showSignOutConfirm = true }
@@ -511,7 +527,7 @@ private fun ForgedBody(
                 TextButton(onClick = {
                     showSignOutConfirm = false
                     onSignOut()
-                }) { Text("Sign out", color = colors.error) }
+                }) { Text("Sign out", color = colors.onSheet) }
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
@@ -610,6 +626,7 @@ private object SigilDimens {
     val SheetSmallGap = 8.dp
     val SheetLabelGap = 4.dp
     val SheetSpinnerSize = 16.dp
+    val RunnerMarkSize = 40.dp   // static runner brand mark on the forged identity card
 
     // Buttons inside the sheet.
     val ButtonHeight = 48.dp

@@ -40,6 +40,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
+import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
+import com.midnight.kuira.dapp.wallet.LockGlyph
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
@@ -172,7 +174,7 @@ private fun SessionLockScreen(
                 .padding(horizontal = LOCK_SCREEN_HPADDING),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("🔒", fontSize = LOCK_ICON_SIZE)
+            LockGlyph(color = MidnightColors.Light, size = LOCK_ICON_SIZE)
             Spacer(modifier = Modifier.height(LOCK_GAP_ICON_TITLE))
             Text(
                 "LOCKED",
@@ -192,21 +194,22 @@ private fun SessionLockScreen(
             )
             Spacer(modifier = Modifier.height(LOCK_GAP_BODY_PANEL))
             GlassPanel(
-                tint = MidnightColors.ButtonSurface,
+                tint = MidnightColors.Light.copy(alpha = GLASS_FILL_ALPHA),
                 border = MidnightColors.LightFaint,
             ) {
                 if (unlocking) {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
-                            color = MidnightColors.SuccessText,
+                            color = MidnightColors.Light,
                             modifier = Modifier.height(LOCK_SPINNER_SIZE),
                         )
                     }
                 } else {
                     if (failed) {
+                        // Auth retry is NOT a financial-danger signal → monochrome, not red.
                         Text(
                             "Authentication didn't complete — tap to try again.",
-                            color = MidnightColors.ErrorText,
+                            color = MidnightColors.LightSoft,
                             fontSize = LOCK_HINT_SIZE,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
@@ -218,7 +221,7 @@ private fun SessionLockScreen(
                         enabled = activity != null,
                         modifier = Modifier.fillMaxWidth().height(LOCK_BUTTON_HEIGHT),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MidnightColors.ButtonSurface,
+                            containerColor = MidnightColors.Light.copy(alpha = GLASS_FILL_ALPHA),
                             contentColor = MidnightColors.Light,
                         ),
                     ) {
@@ -236,7 +239,7 @@ private fun SessionLockScreen(
 private const val UNLOCK_TIMEOUT_MS = 60_000L // biometric can take a while; cap so the spinner never traps
 private val LOCK_PANEL_MAX_WIDTH = 360.dp   // keep readable on tablets / landscape
 private val LOCK_SCREEN_HPADDING = 28.dp
-private val LOCK_ICON_SIZE = 44.sp
+private val LOCK_ICON_SIZE = 48.dp   // line-art LockGlyph (was a 🔒 emoji at 44.sp)
 private val LOCK_TITLE_SIZE = 13.sp
 private val LOCK_TITLE_TRACKING = 4.sp
 private val LOCK_BODY_SIZE = 14.sp
