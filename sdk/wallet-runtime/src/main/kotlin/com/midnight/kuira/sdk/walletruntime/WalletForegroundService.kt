@@ -244,6 +244,12 @@ class WalletForegroundService : Service() {
          */
         @OptIn(ExperimentalCoroutinesApi::class)
         fun attach(application: Application, walletContentIntent: PendingIntent? = null) {
+            // The wallet, this foreground service, and WorkManager's auto-init all live in the
+            // host's MAIN process. A multi-process host (e.g. one running Unity in a ":unity"
+            // process) runs Application.onCreate in EVERY process — and WorkManager.getInstance()
+            // throws in a non-main process because its init ContentProvider only runs in main.
+            // Attach is main-process-only; other processes have no wallet to observe anyway.
+            if (Application.getProcessName() != application.packageName) return
             if (attached) return
             attached = true
             val ep = EntryPointAccessors.fromApplication(application, WalletForegroundEntryPoint::class.java)
