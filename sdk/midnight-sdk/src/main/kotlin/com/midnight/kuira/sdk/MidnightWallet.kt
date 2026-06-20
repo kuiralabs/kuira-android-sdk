@@ -617,6 +617,10 @@ class MidnightWallet internal constructor(
             keysDir = provingKeysDir,
             networkId = networkId,
             excludeNullifiers = excludeNullifiers.joinToString(","),
+            // The dust intent's TTL anchors to the CHAIN TIP, not the dust sync time (currentTimeMs):
+            // the sync time lags the chain when dust events are sparse, so a sync-anchored TTL is
+            // already expired → node rejects the whole tx (custom error 182 / IntentTtlExpired).
+            ttlAnchorMs = blockInfo.timestamp,
         ) ?: return null
         return BalanceEnvelope.parse(raw)
     }

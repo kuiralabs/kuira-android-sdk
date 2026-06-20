@@ -33,7 +33,7 @@ public final class com/midnight/kuira/core/designsystem/effect/DuskEffectKt {
 	public static final fun AnimatedDuskBackground (Landroidx/compose/ui/Modifier;ILandroidx/compose/runtime/Composer;II)V
 	public static final fun DuskTransitionBackground (Landroidx/compose/ui/Modifier;FLandroidx/compose/runtime/Composer;II)V
 	public static final fun HorizonGlow (Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
-	public static final fun StarField-sW7UJKQ (Landroidx/compose/ui/Modifier;JFILandroidx/compose/runtime/Composer;II)V
+	public static final fun StarField-OadGlvw (Landroidx/compose/ui/Modifier;JFIFZLandroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/core/designsystem/effect/DustTrailKt {

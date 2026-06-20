@@ -109,7 +109,15 @@ class UnshieldedTransactionBuilder(
         tokenType: String,
         senderPublicKey: String,
         ttlMinutes: Int = DEFAULT_TTL_MINUTES,
-        largestFirst: Boolean = false
+        largestFirst: Boolean = false,
+        // Anchor the TTL to the CHAIN block time (ms), not device wall-clock: the node validates the
+        // intent TTL against its chain time, which can sit outside a wall-clock window on a network
+        // where the two diverge (localnet). Default = wall-clock so standalone/test callers compile.
+        nowMs: Long = System.currentTimeMillis(),
+        // When set, overrides ttlMinutes with an exact TTL window in seconds. The SDK sizes this to
+        // the chain's global_ttl so a fixed minute-granular window can't overshoot a tight node and
+        // get the tx rejected (custom error 182 / IntentTtlTooFarInFuture).
+        ttlSecondsOverride: Long? = null,
     ): BuildResult {
         // Step 1: Validate inputs
         require(from.isNotBlank()) { "Sender address cannot be blank" }
@@ -119,6 +127,9 @@ class UnshieldedTransactionBuilder(
         require(senderPublicKey.isNotBlank()) { "Sender public key cannot be blank" }
         require(senderPublicKey.length == 64) { "Sender public key must be 64 hex chars (32 bytes BIP-340 x-only), got: ${senderPublicKey.length}" }
         require(ttlMinutes > 0) { "TTL minutes must be positive, got: $ttlMinutes" }
+        require(ttlSecondsOverride == null || ttlSecondsOverride > 0) {
+            "TTL seconds override must be positive, got: $ttlSecondsOverride"
+        }
 
         // Step 2: Select and lock UTXOs
         val selectionResult = utxoManager.selectAndLockUtxos(
@@ -176,8 +187,12 @@ class UnshieldedTransactionBuilder(
             signatures = emptyList()  // Empty - signatures added during signing
         )
 
-        // Step 7: Calculate TTL (current time + ttlMinutes)
-        val ttl = System.currentTimeMillis() + (ttlMinutes * 60 * 1000)
+        // Step 7: Calculate TTL — anchored to the CHAIN block time (nowMs), not wall-clock.
+        // An explicit seconds override (the SDK sizes it to the chain's global_ttl) wins over the
+        // minute-granular ttlMinutes default.
+        val windowMillis = ttlSecondsOverride?.let { it * MILLIS_PER_SECOND }
+            ?: (ttlMinutes.toLong() * SECONDS_PER_MINUTE * MILLIS_PER_SECOND)
+        val ttl = nowMs + windowMillis
 
         // Step 8: Create Intent
         val intent = Intent(
@@ -225,6 +240,9 @@ class UnshieldedTransactionBuilder(
          * Matches the Midnight SDK default.
          */
         const val DEFAULT_TTL_MINUTES = 30
+
+        private const val SECONDS_PER_MINUTE = 60L
+        private const val MILLIS_PER_SECOND = 1000L
     }
 }
 

@@ -22,7 +22,11 @@ internal object TransactionBalancerNative {
      * @param dustStatePtr Native pointer to DustLocalState (from DustRepository)
      * @param seed 32-byte dust seed (derived from HD wallet)
      * @param ledgerParamsHex Tagged-SCALE hex of ledger parameters (from indexer)
-     * @param currentTimeMs Current time in milliseconds
+     * @param currentTimeMs Dust SYNC time (ms) — used for the dust ctime + spend, which must
+     *   resolve to the synced dust root (#287).
+     * @param ttlAnchorMs Chain-tip time (ms) for the dust-fee intent's TTL. Distinct from the
+     *   sync time, which lags the chain when dust events are sparse → a sync-anchored TTL is
+     *   already expired and the node rejects it (custom error 182 / IntentTtlExpired).
      * @param keysDir Path to cached proving keys directory
      * @param networkId Network ID string (e.g., "undeployed", "preview", "preprod")
      * @param excludeNullifiers Comma-separated lowercase-hex dust nullifiers to skip
@@ -43,5 +47,6 @@ internal object TransactionBalancerNative {
         keysDir: String,
         networkId: String,
         excludeNullifiers: String,
+        ttlAnchorMs: Long,
     ): String?
 }

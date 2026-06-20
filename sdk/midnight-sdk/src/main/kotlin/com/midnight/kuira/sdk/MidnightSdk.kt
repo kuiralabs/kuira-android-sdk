@@ -7,6 +7,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.midnight.kuira.core.compact.ContractOperationListener
+import com.midnight.kuira.core.compact.ContractRuntime
+import com.midnight.kuira.core.compact.IntentTtl
 import com.midnight.kuira.core.compact.MidnightConfig
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.crypto.address.Bech32m
@@ -214,6 +216,20 @@ class MidnightSdk private constructor(
         var lastResult: SubmissionResult? = null
         val maxRegistrations = currentNight().size + 2
 
+        // Size the registration TTL to the chain's global_ttl — a fixed 30-min window overshoots a
+        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182). The ceiling
+        // doesn't change between iterations, so read it once.
+        val registrationGlobalTtlSecs = try {
+            indexerClient.getCurrentBlockWithParams().ledgerParameters
+                ?.let { ContractRuntime.ledgerGlobalTtlSeconds(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "global_ttl fetch for registration failed, using default window: ${e.message}")
+            null
+        }
+        val registrationWindowMs = MILLIS_PER_SECOND * IntentTtl.windowSeconds(registrationGlobalTtlSecs)
+
         repeat(maxRegistrations) { iteration ->
             runCatching { wallet.refresh() }.onFailure { Log.w(TAG, "pre-filter refresh failed: ${it.message}") }
 
@@ -237,7 +253,7 @@ class MidnightSdk private constructor(
                 nightPrivateKey = nightPrivateKey,
                 dustPublicKeyHex = dustPublicKeyHex,
                 utxosJson = unregisteredJson, // builder picks the highest-dust UTXO from this set
-                ttlMillis = blockTimestamp + REGISTRATION_TTL_MS,
+                ttlMillis = blockTimestamp + registrationWindowMs,
                 networkId = networkId,
                 currentTimeMillis = blockTimestamp,
             ) ?: return SubmissionResult.Failed(txHash = null, reason = "DustRegistrationBuilder.build returned null")
@@ -424,6 +440,14 @@ class MidnightSdk private constructor(
         amount: BigInteger,
         senderPublicKey: String,
     ): SubmissionResult {
+        // Fetch ledger params up front (before locking UTXOs): used to size the intent TTL to the
+        // chain's global_ttl, and reused for balancing at submit. One round-trip, fail fast.
+        val ledgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
+            ?: return SubmissionResult.Failed(txHash = null, reason = "Indexer returned no ledger parameters.")
+        val ttlSecondsOverride = IntentTtl.windowSeconds(
+            ContractRuntime.ledgerGlobalTtlSeconds(ledgerParamsHex),
+        )
+
         val built = when (
             val build = UnshieldedTransactionBuilder(utxoManager).buildTransfer(
                 from = walletAddress,
@@ -432,6 +456,11 @@ class MidnightSdk private constructor(
                 tokenType = UtxoSpend.NATIVE_TOKEN_TYPE,
                 senderPublicKey = senderPublicKey,
                 largestFirst = true,
+                // Chain-anchor the intent TTL (matches the dust-registration path) — wall-clock can
+                // fall outside the node's TTL window where chain time diverges (localnet).
+                nowMs = wallet.indexerBlockTimestampMs().takeIf { it > 0L } ?: System.currentTimeMillis(),
+                // Size the window to the chain's global_ttl so 30 min can't overshoot a tight node.
+                ttlSecondsOverride = ttlSecondsOverride,
             )
         ) {
             is UnshieldedTransactionBuilder.BuildResult.InsufficientFunds ->
@@ -458,11 +487,6 @@ class MidnightSdk private constructor(
         }
 
         return try {
-            val ledgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
-                ?: run {
-                    releaseLocks()
-                    return SubmissionResult.Failed(txHash = null, reason = "Indexer returned no ledger parameters.")
-                }
             val submission = transactionSubmitter.signAndSubmitTransfer(
                 intent = built.intent,
                 nightPrivateKey = nightPrivateKey,
@@ -1084,13 +1108,8 @@ class MidnightSdk private constructor(
             return null
         }
 
-        /**
-         * TTL for the dust registration transaction. 30 minutes mirrors the SDK's
-         * default contract-call TTL — long enough that a sluggish indexer or
-         * slow user interaction (e.g. waiting for a faucet) doesn't expire it,
-         * short enough that a forgotten tx doesn't linger in the mempool.
-         */
-        private const val REGISTRATION_TTL_MS = 30L * 60L * 1_000L
+        /** Millisecond conversion for TTL windows that [IntentTtl] computes in seconds. */
+        private const val MILLIS_PER_SECOND = 1_000L
 
         /**
          * Per-registration wait for the new dust generation to sync from the chain

@@ -118,6 +118,21 @@ object ContractRuntime {
         return nativeAssembleDeployTx(paramsJson)
     }
 
+    /**
+     * The chain's `global_ttl` (in seconds) — the maximum a transaction's TTL may
+     * sit ahead of chain time before the node rejects it (custom error 182 /
+     * `IntentTtlTooFarInFuture`). Decoded from the SCALE-encoded ledger parameters.
+     *
+     * Networks differ wildly (a localnet runs ~100s, PreProd ~1h), so callers use
+     * this live value via [IntentTtl] to size a tx TTL instead of a fixed window.
+     *
+     * @return the seconds value, or `null` if the parameters can't be decoded.
+     */
+    fun ledgerGlobalTtlSeconds(ledgerParamsHex: String): Long? {
+        ensureLoaded()
+        return nativeGlobalTtlSecs(ledgerParamsHex).takeIf { it > 0L }
+    }
+
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativePersistentCommitAligned(inputJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
@@ -132,4 +147,5 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStateReadFields(handle: Long): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
     @JvmStatic private external fun nativeAssembleDeployTx(paramsJson: String): String?
+    @JvmStatic private external fun nativeGlobalTtlSecs(paramsHex: String): Long
 }

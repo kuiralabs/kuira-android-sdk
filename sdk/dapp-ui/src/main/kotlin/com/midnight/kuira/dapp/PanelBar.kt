@@ -21,8 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,8 +36,7 @@ import com.midnight.kuira.dapp.wallet.WalletChip
 import com.midnight.kuira.dapp.wallet.WalletChipUi
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.WalletPanelViewModel
-import com.midnight.kuira.dapp.wallet.WalletRecoveryScreen
-import com.midnight.kuira.dapp.wallet.WalletSettingsScreen
+import com.midnight.kuira.dapp.wallet.WalletSettingsOverlay
 import com.midnight.kuira.dapp.wallet.WalletStatus
 import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.dapp.wallet.WalletThemes
@@ -166,7 +163,6 @@ fun PanelBar(
     // Settings + recovery-reveal overlays live at the bar level (above both panels) so a single
     // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    var recoveryRevealOpen by rememberSaveable { mutableStateOf(false) }
 
     // A session lock drops the SDK and must hide EVERYTHING. These overlays are Popups, which
     // render in their own windows ABOVE the host's SessionLockGate cover — so on lock (which also
@@ -175,9 +171,9 @@ fun PanelBar(
     val walletStatus by walletViewModel.status.collectAsStateWithLifecycle()
     LaunchedEffect(walletStatus) {
         if (walletStatus is WalletStatus.Locked) {
-            recoveryRevealOpen = false
+            // Hiding the overlay makes it self-close its recovery reveal + scrub the phrase
+            // (see WalletSettingsOverlay's visibility guard).
             settingsOpen = false
-            walletViewModel.clearRevealedPhrase()
         }
     }
 
@@ -294,86 +290,22 @@ fun PanelBar(
         }
     }
 
-    // ── Settings overlay ──
-    // Full-screen Popup (escapes the bar's Row) hosting the bundled WalletSettingsScreen.
-    if (settingsOpen) {
-        val selectedNetwork by walletViewModel.selectedNetwork.collectAsStateWithLifecycle()
-        val syncProgress by walletViewModel.syncProgress.collectAsStateWithLifecycle()
-        val recoveryPhraseSaved by walletViewModel.recoveryPhraseSaved.collectAsStateWithLifecycle()
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = { settingsOpen = false },
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
-        ) {
-            WalletSettingsScreen(
-                networkLabel = selectedNetwork.pillName.replaceFirstChar { it.uppercase() },
-                syncLabel = settingsSyncLabel(walletStatus, syncing = syncProgress != null),
-                recoveryPhraseSaved = recoveryPhraseSaved,
-                onViewRecoveryPhrase = { recoveryRevealOpen = true },
-                onLockNow = {
-                    walletViewModel.lockNow()
-                    settingsOpen = false
-                },
-                onSignOut = {
-                    activity?.let { sigilViewModel.signOut(it) }
-                    settingsOpen = false
-                },
-                versionLabel = appVersion.ifBlank { null },
-                colors = activeWalletColors,
-                selectedThemeId = selectedThemeId,
-                onSelectTheme = { id ->
-                    selectedThemeId = id
-                    ThemeStore.setSelectedThemeId(context, id)
-                },
-                onBack = { settingsOpen = false },
-            )
-        }
-    }
-
-    // ── Recovery-phrase reveal overlay ──
-    // Nested above Settings (own focusable Popup) so Back returns to Settings, not host content.
-    if (recoveryRevealOpen) {
-        val revealedPhrase by walletViewModel.revealedPhrase.collectAsStateWithLifecycle()
-        val recoveryError by walletViewModel.recoveryError.collectAsStateWithLifecycle()
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = {
-                walletViewModel.clearRevealedPhrase()
-                recoveryRevealOpen = false
-            },
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
-        ) {
-            WalletRecoveryScreen(
-                phrase = revealedPhrase,
-                error = recoveryError,
-                colors = activeWalletColors,
-                onReveal = { activity?.let { walletViewModel.revealRecoveryPhrase(it) } },
-                onConfirmSaved = {
-                    walletViewModel.markRecoveryPhraseSaved()
-                    walletViewModel.clearRevealedPhrase()
-                    recoveryRevealOpen = false
-                },
-                onBack = {
-                    walletViewModel.clearRevealedPhrase()
-                    recoveryRevealOpen = false
-                },
-            )
-        }
-    }
-}
-
-/**
- * Coarse, truthful sync state for the Settings NETWORK section. Intentionally a STATE, not a
- * fabricated "5 min ago" timestamp (the VM tracks no sync clock) — mirrors the sheet's own
- * Synced/Syncing… derivation.
- */
-private fun settingsSyncLabel(status: WalletStatus, syncing: Boolean): String = when (status) {
-    is WalletStatus.Ready -> if (syncing || status.busy != null) "Syncing…" else "Synced"
-    is WalletStatus.Loading -> "Syncing…"
-    is WalletStatus.Locked -> "Locked"
-    is WalletStatus.Error -> "Error"
-    is WalletStatus.SigilRequired -> "Sigil required"
-    is WalletStatus.None -> "Idle"
+    // ── Settings (+ nested recovery reveal) ── via the shared host, also used by standalone panels.
+    WalletSettingsOverlay(
+        visible = settingsOpen,
+        viewModel = walletViewModel,
+        status = walletStatus,
+        activity = activity,
+        colors = activeWalletColors,
+        selectedThemeId = selectedThemeId,
+        onSelectTheme = { id ->
+            selectedThemeId = id
+            ThemeStore.setSelectedThemeId(context, id)
+        },
+        versionLabel = appVersion.ifBlank { null },
+        onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
+        onDismiss = { settingsOpen = false },
+    )
 }
 
 private object PanelBarDimens {

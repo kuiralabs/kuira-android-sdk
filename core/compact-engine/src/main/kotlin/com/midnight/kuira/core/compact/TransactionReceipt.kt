@@ -39,4 +39,11 @@ data class PreparedTransaction(
     val contractAddress: String,
     val circuitName: String,
     val timings: PipelineTimings,
+    /**
+     * The on-chain contract state the circuit ran against. [MidnightContract.call] uses it as the
+     * "before" snapshot to confirm the call has been indexed before returning, so a rapid follow-up
+     * call reads the updated state instead of rebuilding the identical intent (which the chain's
+     * replay guard rejects as `IntentAlreadyExists` / custom error 182).
+     */
+    val onChainStateHex: String? = null,
 )

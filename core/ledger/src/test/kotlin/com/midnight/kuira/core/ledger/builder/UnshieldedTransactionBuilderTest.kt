@@ -356,6 +356,74 @@ class UnshieldedTransactionBuilderTest {
     }
 
     @Test
+    fun `given chain-block time when building transfer then TTL anchors to it not wall-clock`() = runTest {
+        // REGRESSION GUARD — node error 182 (TransactionApplicationError / IntentTtlTooFarInFuture).
+        // The intent TTL MUST be computed from the supplied CHAIN block time, never the device's
+        // System.currentTimeMillis(): a node validates the TTL against its chain time, and on a
+        // network where the two diverge (localnet) a wall-clock TTL lands outside the accepted
+        // window. A fixed timestamp years from "now" makes this fail the instant the build reverts
+        // to wall-clock. See UnshieldedTransactionBuilder + the dust-registration anchoring.
+        val selectedUtxo = createUtxo(100)
+        coEvery {
+            utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"))
+        } returns UtxoSelector.SelectionResult.Success(
+            selectedUtxos = listOf(selectedUtxo),
+            totalSelected = BigInteger("100"),
+            change = BigInteger.ZERO,
+        )
+
+        val chainNowMs = 1_700_000_000_000L // fixed (~Nov 2023), deliberately far from System.now()
+        val ttlMinutes = 30
+
+        val result = builder.buildTransfer(
+            from = senderAddress,
+            to = recipientAddress,
+            amount = BigInteger("100"),
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey,
+            ttlMinutes = ttlMinutes,
+            nowMs = chainNowMs,
+        )
+
+        assertTrue(result is UnshieldedTransactionBuilder.BuildResult.Success)
+        val ttl = (result as UnshieldedTransactionBuilder.BuildResult.Success).intent.ttl
+        // EXACT — anchored to chainNowMs with no wall-clock leakage.
+        assertEquals(chainNowMs + ttlMinutes * 60 * 1000L, ttl)
+    }
+
+    @Test
+    fun `given ttlSecondsOverride when building transfer then exact seconds window wins over ttlMinutes`() = runTest {
+        // The SDK sizes ttlSecondsOverride to the chain's global_ttl; it must win over the coarse
+        // ttlMinutes default so a 30-min window can't overshoot a tight node (custom error 182).
+        val selectedUtxo = createUtxo(100)
+        coEvery {
+            utxoManager.selectAndLockUtxos(senderAddress, tokenType, BigInteger("100"))
+        } returns UtxoSelector.SelectionResult.Success(
+            selectedUtxos = listOf(selectedUtxo),
+            totalSelected = BigInteger("100"),
+            change = BigInteger.ZERO,
+        )
+
+        val chainNowMs = 1_700_000_000_000L
+        val overrideSecs = 85L // e.g. a localnet global_ttl of 100s minus margin
+
+        val result = builder.buildTransfer(
+            from = senderAddress,
+            to = recipientAddress,
+            amount = BigInteger("100"),
+            tokenType = tokenType,
+            senderPublicKey = senderPublicKey,
+            ttlMinutes = 30, // deliberately large — must be ignored when the override is set
+            nowMs = chainNowMs,
+            ttlSecondsOverride = overrideSecs,
+        )
+
+        assertTrue(result is UnshieldedTransactionBuilder.BuildResult.Success)
+        val ttl = (result as UnshieldedTransactionBuilder.BuildResult.Success).intent.ttl
+        assertEquals(chainNowMs + overrideSecs * 1000L, ttl)
+    }
+
+    @Test
     fun `given zero amount when building transfer then throws IllegalArgumentException`() {
         // When/Then
         val exception = assertThrows(IllegalArgumentException::class.java) {

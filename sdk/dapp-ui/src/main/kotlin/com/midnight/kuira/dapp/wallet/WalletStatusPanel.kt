@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,6 +60,7 @@ import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.backup.BackupSection
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
@@ -190,12 +192,14 @@ fun WalletStatusPanel(
      */
     openSheetSignal: Int = 0,
     /**
-     * Opens the host's Settings surface — fired by the gear in the expanded sheet (shown only
-     * when the wallet is Ready, since the settings act on a live wallet). [PanelBar] wires this
-     * to its bundled [WalletSettingsScreen]; default no-op so standalone call sites compile
-     * unchanged and a host can hide the gear by leaving it unset.
+     * Routes the sheet's settings gear. NON-NULL → the host surfaces Settings itself (e.g.
+     * [PanelBar]). NULL (default) → the panel SELF-HOSTS the bundled Settings + recovery overlays,
+     * so a standalone `WalletStatusPanel()` (no PanelBar) still reaches them. The gear shows only
+     * when the wallet is Ready.
      */
-    onOpenSettings: () -> Unit = {},
+    onOpenSettings: (() -> Unit)? = null,
+    /** App version for the self-hosted Settings ABOUT section; null hides it. */
+    appVersion: String? = null,
     /**
      * Light/dark mode, hoisted so a host (e.g. [PanelBar]) can keep the pill, sheet, and its
      * Settings/recovery overlays on ONE palette. CONTROLLED when [onToggleLightMode] is non-null
@@ -221,6 +225,14 @@ fun WalletStatusPanel(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
+    // Standalone (no host-routed settings) self-host needs the bits PanelBar otherwise supplies:
+    // its own open-state, the sigil VM (sign-out), the theme store, and a context.
+    val context = LocalContext.current
+    val sigilViewModel: SigilPanelViewModel = hiltViewModel()
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var selectedThemeId by rememberSaveable {
+        mutableStateOf(ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id)
+    }
 
     // Open the expanded panel when a host fires [openSheetSignal] (e.g. routing a
     // received-funds notification tap to the wallet). Keyed on the value so each new
@@ -263,7 +275,14 @@ fun WalletStatusPanel(
     var internalLightMode by rememberSaveable { mutableStateOf(false) }
     val effectiveLightMode = if (onToggleLightMode != null) lightMode else internalLightMode
     val toggleLightMode = onToggleLightMode ?: { internalLightMode = !internalLightMode }
-    val activeColors = if (effectiveLightMode) WalletPanelColors.Light else colors
+    // Standalone self-hosted settings can re-theme via the appearance picker; a host (onOpenSettings
+    // set) themes externally and passes `colors` already resolved, so don't double-apply.
+    val themedColors = if (onOpenSettings == null && selectedThemeId != WalletThemes.Default.id) {
+        WalletThemes.byId(selectedThemeId).colors
+    } else {
+        colors
+    }
+    val activeColors = if (effectiveLightMode) WalletPanelColors.Light else themedColors
 
     // The pill. A floating host can swap its visual via [pill] (e.g. the resizable widget), fed the
     // live balance; otherwise the built-in WalletPill. Either way, a tap opens the sheet.
@@ -349,6 +368,24 @@ fun WalletStatusPanel(
         viewModel.consentRequests.collect { request -> consentLauncher.launch(request) }
     }
 
+    // Standalone self-host: route the gear to the bundled Settings (+ recovery) when the host
+    // doesn't surface it. Inert (visible = false) under a host like PanelBar that wires onOpenSettings.
+    WalletSettingsOverlay(
+        visible = settingsOpen,
+        viewModel = viewModel,
+        status = status,
+        activity = activity,
+        colors = activeColors,
+        selectedThemeId = selectedThemeId,
+        onSelectTheme = { id ->
+            selectedThemeId = id
+            ThemeStore.setSelectedThemeId(context, id)
+        },
+        versionLabel = appVersion,
+        onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
+        onDismiss = { settingsOpen = false },
+    )
+
     if (sheetOpen) {
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },
@@ -404,13 +441,11 @@ fun WalletStatusPanel(
                     }
                 },
                 onSettings = {
-                    // Close the sheet, then surface Settings (a full-screen overlay the host
-                    // hosts above us) — same sheet→overlay handoff as Receive/Send/Lock.
-                    coroutineScope.launch {
-                        sheetState.hide()
-                        sheetOpen = false
-                    }
-                    onOpenSettings()
+                    // Keep the sheet OPEN underneath: Settings is a focusable Popup that renders ABOVE
+                    // it, so Back from Settings returns to the sheet (respect the stack) instead of
+                    // exiting the whole flow. (Receive/Send differ — they're non-Popup screens that
+                    // must close the sheet first to avoid rendering under its scrim.)
+                    if (onOpenSettings != null) onOpenSettings() else settingsOpen = true
                 },
                 onClose = {
                     coroutineScope.launch {
@@ -666,8 +701,17 @@ private fun WalletSheetContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (status is WalletStatus.Ready) {
-                    GlyphButton(onClick = onSettings, contentDescription = "Settings") {
-                        GearGlyph(color = colors.onSheetDim)
+                    // Prominent, accessible affordance: a clear circular button (faint fill +
+                    // hairline rim) with a full-contrast glyph, atop GlyphButton's 48dp touch target.
+                    GlyphButton(
+                        onClick = onSettings,
+                        contentDescription = "Settings",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(colors.onSheet.copy(alpha = 0.08f))
+                            .border(1.dp, colors.onSheetSubtle, CircleShape),
+                    ) {
+                        GearGlyph(color = colors.onSheet)
                     }
                 } else {
                     // Empty left slot — SpaceBetween still holds the toggle to the right.

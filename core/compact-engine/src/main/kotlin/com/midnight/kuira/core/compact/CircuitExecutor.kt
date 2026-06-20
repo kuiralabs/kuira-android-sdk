@@ -75,6 +75,9 @@ class CircuitExecutor(
         networkId: String = "undeployed",
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
+        // Absolute intent TTL (seconds since epoch). Sized to the chain's global_ttl by the
+        // caller; null lets the native fall back to its own (over-wide) default — see IntentTtl.
+        ttlSecs: Long? = null,
     ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -99,7 +102,7 @@ class CircuitExecutor(
             ledgerParametersHex = ledgerParametersHex,
         )
 
-        assembleTransaction(params)
+        assembleTransaction(params, ttlSecs)
     }
 
     /**
@@ -129,6 +132,9 @@ class CircuitExecutor(
         coinPublicKey: ByteArray,
         networkId: String = "undeployed",
         verifierKeys: Map<String, String> = emptyMap(),
+        // Absolute intent TTL (seconds since epoch), sized to the chain's global_ttl by the
+        // caller; null lets the native fall back to its own (over-wide) default — see IntentTtl.
+        ttlSecs: Long? = null,
     ): DeployExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(networkId, "networkId")
 
@@ -173,19 +179,22 @@ class CircuitExecutor(
         val handle = stateHandle?.toLongOrNull()
             ?: throw CircuitExecutionException("Constructor produced no state handle")
 
-        assembleDeployTransaction(handle, networkId, verifierKeys)
+        assembleDeployTransaction(handle, networkId, verifierKeys, ttlSecs)
     }
 
     private fun assembleDeployTransaction(
         stateHandle: Long,
         networkId: String,
         verifierKeys: Map<String, String>,
+        ttlSecs: Long?,
     ): DeployExecutionResult {
         val vkJson = if (verifierKeys.isNotEmpty()) {
             val entries = verifierKeys.entries.joinToString(",") { (k, v) -> "\"$k\":\"$v\"" }
             ",\"verifier_keys\":{$entries}"
         } else ""
-        val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle$vkJson}"""
+        // Stamp the chain-sized TTL, else the native deploy assembler defaults to now + 1h.
+        val ttlJson = if (ttlSecs != null) ",\"ttl_secs\":$ttlSecs" else ""
+        val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle$vkJson$ttlJson}"""
         val resultJson = ContractRuntime.assembleDeployTx(paramsJson)
             ?: throw CircuitExecutionException("Deploy assembly returned null")
 
@@ -246,19 +255,27 @@ class CircuitExecutor(
             ?: throw CircuitExecutionException("Circuit produced no output")
     }
 
-    private fun assembleTransaction(txParamsJson: String): ExecutionResult {
-        val txHex = ContractRuntime.assembleContractCallTx(txParamsJson)
+    private fun assembleTransaction(txParamsJson: String, ttlSecs: Long?): ExecutionResult {
+        // The call's params JSON is produced by the JS runtime (no TTL); stamp the
+        // chain-sized TTL before the native assembler, else it defaults to now + 1h.
+        val params = if (ttlSecs != null) {
+            JSONObject(txParamsJson).put("ttl_secs", ttlSecs).toString()
+        } else {
+            txParamsJson
+        }
+
+        val txHex = ContractRuntime.assembleContractCallTx(params)
             ?: throw CircuitExecutionException("Transaction assembly returned null")
 
         if (txHex.startsWith("{\"error")) {
             throw CircuitExecutionException("Transaction assembly failed: $txHex")
         }
 
-        freeStateHandles(txParamsJson)
+        freeStateHandles(params)
 
         return ExecutionResult(
             unprovenTxHex = txHex,
-            txParamsJson = txParamsJson,
+            txParamsJson = params,
         )
     }
 

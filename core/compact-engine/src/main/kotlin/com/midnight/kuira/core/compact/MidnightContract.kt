@@ -1,7 +1,10 @@
 package com.midnight.kuira.core.compact
 
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
@@ -67,34 +70,82 @@ class MidnightContract private constructor(
     ): TransactionReceipt = config.runTracked(circuitName) {
         requireWriteCapable()
         requireAddress("call")
-        val prepared = prepare(circuitName, *args, onProgress = onProgress)
-
-        onProgress?.invoke(ContractCallStage.Balancing)
         val balancer = config.getBalancer()
-        val balanceAndSubmitStart = System.currentTimeMillis()
-        try {
-            balancer.balanceAndSubmit(prepared.provenTxHex) { balanceProgress ->
-                onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
-            }
-        } catch (e: Exception) {
-            // Classify the error based on the stage it occurred in
-            val message = e.message ?: ""
-            if (message.contains("Balance failed") || message.contains("balance")) {
-                throw ContractCallException.BalancingFailed("Balance failed: $message", e)
-            }
-            throw ContractCallException.SubmissionFailed("Submit failed: $message", e)
-        }
-        val balanceAndSubmitMs = System.currentTimeMillis() - balanceAndSubmitStart
+        var lastError: Exception? = null
 
-        TransactionReceipt(
-            txHash = null,
-            status = TransactionStatus.SUBMITTED,
-            timings = prepared.timings.copy(
-                balanceMs = balanceAndSubmitMs,
-                submitMs = 0, // Included in balanceMs (combined operation)
-            ),
-            provenTxHex = prepared.provenTxHex,
+        repeat(CALL_MAX_ATTEMPTS) { attempt ->
+            if (attempt > 0) {
+                // The prior attempt was rejected as a DUPLICATE intent — built against stale contract
+                // state (the indexer lagged the chain). Pause for the indexer to catch up, then
+                // re-read + rebuild against fresher state.
+                Log.i(TAG, "'$circuitName' rejected as a duplicate (stale state); retry ${attempt + 1}/$CALL_MAX_ATTEMPTS")
+                delay(CALL_DUPLICATE_RETRY_MS)
+            }
+
+            val prepared = prepare(circuitName, *args, onProgress = onProgress)
+
+            onProgress?.invoke(ContractCallStage.Balancing)
+            val balanceStart = System.currentTimeMillis()
+            try {
+                balancer.balanceAndSubmit(prepared.provenTxHex) { balanceProgress ->
+                    onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
+                }
+            } catch (e: Exception) {
+                lastError = e
+                // On a healthy chain a contract-call rejection with the replay/TTL code means the
+                // intent was built from STALE state — re-read + rebuild fixes it. Else it's fatal.
+                if (isDuplicateIntentRejection(e)) return@repeat
+                val message = e.message ?: ""
+                if (message.contains("Balance failed") || message.contains("balance")) {
+                    throw ContractCallException.BalancingFailed("Balance failed: $message", e)
+                }
+                throw ContractCallException.SubmissionFailed("Submit failed: $message", e)
+            }
+            val balanceMs = System.currentTimeMillis() - balanceStart
+
+            // Submitted OK → wait for the indexer to reflect this call so the NEXT call reads fresh
+            // state and doesn't rebuild the identical (replay-rejected) intent.
+            prepared.onChainStateHex?.let { before ->
+                onProgress?.invoke(ContractCallStage.Submitting)
+                awaitContractStateIndexed(before)
+            }
+
+            return@runTracked TransactionReceipt(
+                txHash = null,
+                status = TransactionStatus.SUBMITTED,
+                timings = prepared.timings.copy(balanceMs = balanceMs, submitMs = 0),
+                provenTxHex = prepared.provenTxHex,
+            )
+        }
+
+        throw ContractCallException.SubmissionFailed(
+            "'$circuitName' still rejected as a duplicate after $CALL_MAX_ATTEMPTS attempts — the indexer's contract state may be lagging the chain.",
+            lastError,
         )
+    }
+
+    /**
+     * Whether a [balanceAndSubmit] failure is the node's replay/TTL rejection (custom error 182).
+     * On a healthy chain that means the call's intent was built from stale contract state, so a
+     * re-read + rebuild can clear it (see [call]'s retry loop).
+     */
+    private fun isDuplicateIntentRejection(e: Exception): Boolean =
+        (e.message ?: "").contains(DUPLICATE_INTENT_NODE_ERROR)
+
+    /**
+     * Poll the indexer until the contract state reflects a just-submitted call (i.e. differs from
+     * [beforeStateHex]), so the NEXT call reads fresh state instead of rebuilding the identical
+     * intent (which the chain's replay guard rejects as `IntentAlreadyExists` / custom error 182).
+     * Best-effort: returns after [STATE_INDEX_TIMEOUT_MS] even if unchanged (e.g. a no-op call or a
+     * stalled indexer), so a stuck indexer can't hang the call forever.
+     */
+    private suspend fun awaitContractStateIndexed(beforeStateHex: String) {
+        val indexed = pollUntilChanged(beforeStateHex, STATE_INDEX_TIMEOUT_MS, STATE_INDEX_POLL_MS) {
+            config.fetchContractState(contractAddress)
+        }
+        if (!indexed) {
+            Log.w(TAG, "contract state not indexed within ${STATE_INDEX_TIMEOUT_MS}ms; a rapid next call may read stale state")
+        }
     }
 
     /**
@@ -147,6 +198,13 @@ class MidnightContract private constructor(
         }
         val fetchMs = System.currentTimeMillis() - fetchStart
 
+        // Size the intent TTL to the chain's global_ttl — a fixed window overshoots a
+        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182).
+        val ttlSecs = IntentTtl.ttlSeconds(
+            nowMs = System.currentTimeMillis(),
+            globalTtlSecs = ContractRuntime.ledgerGlobalTtlSeconds(ledgerParamsHex),
+        )
+
         // Step 2: Execute circuit
         onProgress?.invoke(ContractCallStage.Executing)
         val executeStart = System.currentTimeMillis()
@@ -162,6 +220,7 @@ class MidnightContract private constructor(
                 networkId = config.networkId,
                 onChainStateHex = onChainStateHex,
                 ledgerParametersHex = ledgerParamsHex,
+                ttlSecs = ttlSecs,
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
@@ -189,6 +248,7 @@ class MidnightContract private constructor(
                 executeMs = executeMs,
                 proveMs = proveMs,
             ),
+            onChainStateHex = onChainStateHex,
         )
     }
 
@@ -263,6 +323,19 @@ class MidnightContract private constructor(
         requireWriteCapable()
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
+        // Size the deploy intent TTL to the chain's global_ttl — a fixed window overshoots a
+        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182). Falls back
+        // to the default window if the indexer is unreachable (balancing would fail later anyway).
+        val globalTtlSecs = try {
+            ContractRuntime.ledgerGlobalTtlSeconds(config.fetchLedgerParameters())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "global_ttl fetch failed, using default TTL window: ${e.message}")
+            null
+        }
+        val ttlSecs = IntentTtl.ttlSeconds(System.currentTimeMillis(), globalTtlSecs)
+
         // Step 1: Execute constructor
         onProgress?.invoke(ContractCallStage.Executing)
         val executeStart = System.currentTimeMillis()
@@ -276,6 +349,7 @@ class MidnightContract private constructor(
                 verifierKeys = circuitVerifierKeys.mapValues { (_, bytes) ->
                     bytes.joinToString("") { "%02x".format(it) }
                 },
+                ttlSecs = ttlSecs,
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
@@ -424,10 +498,28 @@ class MidnightContract private constructor(
     }
 
     companion object {
+        private const val TAG = "MidnightContract"
         private const val CONTRACT_ADDRESS_HEX_LENGTH = 64
 
         /** Informational op name for a deploy (no circuit name); see [ContractOperationListener]. */
         private const val DEPLOY_OP_NAME = "deploy"
+
+        /** Bound on waiting for a call to be indexed before [call] returns (see [awaitContractStateIndexed]). */
+        private const val STATE_INDEX_TIMEOUT_MS = 30_000L
+        private const val STATE_INDEX_POLL_MS = 1_000L
+
+        /** Attempts [call] makes when the node rejects the intent as a stale-state duplicate. */
+        private const val CALL_MAX_ATTEMPTS = 4
+
+        /** Pause before a retry so the indexer can index the prior tx and expose fresh state. */
+        private const val CALL_DUPLICATE_RETRY_MS = 6_000L
+
+        /**
+         * Node custom error for `TransactionApplicationError` (replay guard / TTL). On a healthy
+         * chain a contract-call rejection with this code means the intent was built from stale
+         * contract state — re-reading and rebuilding clears it.
+         */
+        private const val DUPLICATE_INTENT_NODE_ERROR = "182"
 
         /** Create a contract handle using the DSL builder. */
         fun create(config: MidnightConfig, block: ContractBuilder.() -> Unit): MidnightContract {
@@ -495,3 +587,29 @@ internal fun ledgerStateHexSignals(
             }
         }
         .distinctUntilChanged()
+
+/**
+ * Poll [fetch] every [pollMs] until it returns a value different from [before], or [timeoutMs]
+ * elapses. Returns true if a change was observed, false on timeout. A fetch that throws is treated
+ * as "no change yet" (keep polling); cancellation propagates. Independent of [MidnightContract]
+ * state so it's unit-testable under virtual time (coroutine-time [withTimeoutOrNull], not wall-clock).
+ */
+internal suspend fun pollUntilChanged(
+    before: String,
+    timeoutMs: Long,
+    pollMs: Long,
+    fetch: suspend () -> String?,
+): Boolean = withTimeoutOrNull(timeoutMs) {
+    while (true) {
+        delay(pollMs)
+        val latest = try {
+            fetch()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (latest != null && latest != before) break
+    }
+    true
+} ?: false
