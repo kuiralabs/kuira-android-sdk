@@ -111,6 +111,13 @@ class WalletPanelViewModel @Inject constructor(
     /** True → the user disabled dust cloud backup (we stop uploading). */
     private val _dustOptedOut = MutableStateFlow(backupPrefs.getBoolean(KEY_DUST_OPTED_OUT, false))
 
+    /**
+     * True → the user has dust cloud backup ENABLED — a durable choice, persisted across launches.
+     * Drives the toggle's on/off position so the live sync status (which churns on every balance
+     * refresh) never moves the Switch. Set on a successful enable+sync, cleared on opt-out/disable.
+     */
+    private val _dustBackupEnabled = MutableStateFlow(backupPrefs.getBoolean(KEY_DUST_BACKUP_ENABLED, false))
+
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
 
@@ -161,19 +168,14 @@ class WalletPanelViewModel @Inject constructor(
         sdkProvider.sdk.flatMapLatest { it?.wallet?.backupStatus ?: flowOf(BackupStatusSnapshot()) },
         sigilStateStore.snapshotFlow,
         _dustEnabling,
-        _dustOptedOut,
-    ) { backup, sigil, dustEnabling, optedOut ->
+        _dustBackupEnabled,
+    ) { backup, sigil, dustEnabling, enabled ->
         BackupSectionState(
             identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
             else BackupLaneState.Ok("Not set up"),
-            // Opt-out wins (immediate "off"); else the optimistic pending wins
-            // until the real status arrives (switch on + spinner, no dead re-tap);
-            // else the wallet's real status.
-            dust = when {
-                optedOut -> BackupLaneState.Toggle(on = false)
-                dustEnabling -> BackupLaneState.Toggle(on = true, busy = true)
-                else -> backup.dust.toDustLane()
-            },
+            // [dustToggleLane] keeps the Switch on the user's DURABLE choice, never the live sync
+            // status — so a balance refresh's status churn can't move or spin it.
+            dust = dustToggleLane(enabled = enabled, enabling = dustEnabling, status = backup.dust),
             appData = backup.appData.toAppDataLane(),
         )
     }.stateIn(
@@ -731,7 +733,13 @@ class WalletPanelViewModel @Inject constructor(
      */
     fun setDustBackup(enabled: Boolean, config: WalletConfig, activity: FragmentActivity) {
         _dustOptedOut.value = !enabled
-        backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, !enabled).apply()
+        // Turning OFF is durable immediately; turning ON only commits [_dustBackupEnabled] once the
+        // enable+sync actually succeeds (see [cloudSyncNow]) — until then [_dustEnabling] drives the
+        // optimistic on+spinner, and a failed enable falls back to off.
+        if (!enabled) _dustBackupEnabled.value = false
+        val edit = backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, !enabled)
+        if (!enabled) edit.putBoolean(KEY_DUST_BACKUP_ENABLED, false)
+        edit.apply()
         sdkProvider.sdk.value?.wallet?.let { it.dustBackupEnabled = enabled }
         if (enabled) {
             enableCloudBackup(config, activity)
@@ -778,7 +786,11 @@ class WalletPanelViewModel @Inject constructor(
             bestEffortDisable("app-state blob delete") { built.wallet.disableAppStateCloudBackup() }
             // Opt out locally (re-applied on every rebuild to gate BOTH blobs — see ensureSdk above).
             _dustOptedOut.value = true
-            backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, true).apply()
+            _dustBackupEnabled.value = false
+            backupPrefs.edit()
+                .putBoolean(KEY_DUST_OPTED_OUT, true)
+                .putBoolean(KEY_DUST_BACKUP_ENABLED, false)
+                .apply()
             Log.i(TAG, "disableBackup: deleted both cloud blobs, opted out (Drive grant kept for instant re-enable)")
         }
     }
@@ -862,6 +874,10 @@ class WalletPanelViewModel @Inject constructor(
         val built = sdkProvider.ensureSdk(activity, config)
         built.wallet.dustBackupEnabled = true  // enabling — make sure uploads are on
         built.wallet.refresh()
+        // The enable+sync succeeded — commit the durable ON so the toggle stays on through later
+        // background-sync status churn (a balance refresh must not flip it).
+        _dustBackupEnabled.value = true
+        backupPrefs.edit().putBoolean(KEY_DUST_BACKUP_ENABLED, true).apply()
         Log.i(TAG, "cloudSyncNow: Drive sync complete")
     }
 
@@ -870,6 +886,9 @@ class WalletPanelViewModel @Inject constructor(
 
         /** Prefs key: true → user opted out of dust cloud backup. */
         private const val KEY_DUST_OPTED_OUT = "dust_backup_opted_out"
+
+        /** Prefs key: true → user has dust cloud backup enabled (durable toggle position). */
+        private const val KEY_DUST_BACKUP_ENABLED = "dust_backup_enabled"
 
         /** Upper bound on the post-registration Dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L
@@ -927,22 +946,29 @@ sealed interface SendUiState {
 data class WalletSyncProgress(val fraction: Float?, val label: String)
 
 /**
- * Maps the **dust** lane's [CloudBackupStatus]. Dust cloud sync is **opt-in** —
- * it needs the one-time Drive `drive.appdata` grant — so the pre-setup default
- * ([CloudBackupStatus.Idle]) and [CloudBackupStatus.NeedsConsent] both surface
- * the same "Off · Enable" call-to-action, not a passive "done" label. (A neutral
- * dash here read as "already on" — the exact confusion #243 removes.)
+ * Pure derivation of the dust-backup **Switch** state — extracted so it's unit-testable, and so the
+ * Switch reflects the user's DURABLE choice rather than the live sync status.
+ *
+ * - [enabling] (the user just tapped to enable) → on + spinner. This is the ONLY busy state, so a
+ *   background/refresh-triggered sync never spins the Switch.
+ * - else [enabled] (the persisted choice) → on, stable across refreshes: when the live [status]
+ *   churns UpToDate→Syncing→Idle during a balance refresh, the Switch does NOT off→on snap. A
+ *   persistent [status] failure surfaces as a quiet detail — no spinner, no off-flip.
+ * - else → off.
+ *
+ * The live [status] deliberately does NOT decide on/off or busy; it only contributes a failure detail.
  */
-private fun CloudBackupStatus.toDustLane(): BackupLaneState = when (this) {
-    // Rendered as a Switch — unambiguous on/off (a label read as already-enabled).
-    CloudBackupStatus.Idle -> BackupLaneState.Toggle(on = false)
-    CloudBackupStatus.NeedsConsent -> BackupLaneState.Toggle(on = false)
-    CloudBackupStatus.Syncing -> BackupLaneState.Toggle(on = true, busy = true)
-    is CloudBackupStatus.UpToDate -> BackupLaneState.Toggle(on = true)
-    // Offline = enabled + healthy, just a transient connectivity blip. Keep it ON
-    // with NO red error — the next sync retries when the network is back.
-    CloudBackupStatus.Offline -> BackupLaneState.Toggle(on = true)
-    is CloudBackupStatus.Failed -> BackupLaneState.Toggle(on = false, detail = friendlyBackupError(message))
+internal fun dustToggleLane(
+    enabled: Boolean,
+    enabling: Boolean,
+    status: CloudBackupStatus,
+): BackupLaneState = when {
+    enabling -> BackupLaneState.Toggle(on = true, busy = true)
+    enabled -> BackupLaneState.Toggle(
+        on = true,
+        detail = (status as? CloudBackupStatus.Failed)?.let { friendlyBackupError(it.message) },
+    )
+    else -> BackupLaneState.Toggle(on = false)
 }
 
 /**
