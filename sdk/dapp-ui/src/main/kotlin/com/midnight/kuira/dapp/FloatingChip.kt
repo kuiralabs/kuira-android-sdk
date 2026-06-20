@@ -3,6 +3,7 @@ package com.midnight.kuira.dapp
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -87,16 +89,17 @@ internal fun FloatingChip(
         } else savedX.coerceIn(0f, maxX)
         return Offset(x, clampedY())
     }
-    fun peekTarget(side: Int): Offset {
-        // Slide the chip mostly off-screen, leaving a [peekPx] sliver visible past the edge.
-        val x = if (side < 0) -(chipSize.width - peekPx) else (containerWidthPx - peekPx)
-        return Offset(x, clampedY())
-    }
+    // Docked → a thin peek tab sitting flush at the edge (fixed size, independent of the chip).
+    fun peekTarget(side: Int): Offset =
+        Offset(if (side < 0) 0f else (containerWidthPx - peekPx), clampedY())
 
-    // Resolve the position once we know both the chip and overlay sizes (and re-clamp on rotation).
+    // Resolve position once sizes are known: SNAP on first placement / rotation, ANIMATE on dock &
+    // undock so the tuck-to-edge and the spring-back read smoothly.
+    var placed by remember { mutableStateOf(false) }
     LaunchedEffect(ready, maxX, maxY, dockedSide) {
         if (!ready) return@LaunchedEffect
-        pos.snapTo(if (dockedSide != 0) peekTarget(dockedSide) else freeTarget())
+        val target = if (dockedSide != 0) peekTarget(dockedSide) else freeTarget()
+        if (placed) pos.animateTo(target) else { pos.snapTo(target); placed = true }
     }
 
     Box(
@@ -111,7 +114,10 @@ internal fun FloatingChip(
                 onClick = { dockedSide = 0 }, // LaunchedEffect animates it back to freeTarget()
             )
         } else {
-            // Free → the chip is draggable; tap falls through to the chip (which expands itself).
+            // Free → drag to move; PULL a chip past the left/right edge to dock it as a peek tab
+            // (YouTube-PiP style). The drag may overshoot the edge so the tuck is visible; a release
+            // that didn't overshoot enough springs the chip back on-screen.
+            val overshoot = chipSize.width * FLOAT_DOCK_OVERSHOOT
             Box(
                 modifier = Modifier.pointerInput(ready, maxX, maxY) {
                     if (!ready) return@pointerInput
@@ -121,25 +127,22 @@ internal fun FloatingChip(
                             scope.launch {
                                 pos.snapTo(
                                     Offset(
-                                        (pos.value.x + delta.x).coerceIn(0f, maxX),
+                                        (pos.value.x + delta.x).coerceIn(-overshoot, maxX + overshoot),
                                         (pos.value.y + delta.y).coerceIn(0f, maxY),
                                     ),
                                 )
                             }
                         },
                         onDragEnd = {
-                            val centerX = pos.value.x + chipSize.width / 2f
-                            val side = when {
-                                centerX < containerWidthPx * FLOAT_DOCK_ZONE -> -1
-                                centerX > containerWidthPx * (1f - FLOAT_DOCK_ZONE) -> 1
-                                else -> 0
-                            }
                             savedY = pos.value.y
-                            if (side == 0) {
-                                savedX = pos.value.x
-                                scope.launch { pos.animateTo(freeTarget()) }
-                            } else {
-                                dockedSide = side // LaunchedEffect animates to the peek position
+                            val trigger = chipSize.width * FLOAT_DOCK_TRIGGER
+                            when {
+                                pos.value.x < -trigger -> dockedSide = -1            // pulled off the left
+                                pos.value.x > maxX + trigger -> dockedSide = 1       // pulled off the right
+                                else -> {                                            // not far enough → snap back
+                                    savedX = pos.value.x.coerceIn(0f, maxX)
+                                    scope.launch { pos.animateTo(freeTarget()) }
+                                }
                             }
                         },
                     )
@@ -151,36 +154,52 @@ internal fun FloatingChip(
     }
 }
 
-/** The thin peek handle shown when a chip is docked to an edge — tap to restore. */
+/**
+ * The peek handle shown when a chip is docked — a pull-tab attached to the edge (flat on the docked
+ * side, rounded on the inner side), solid elevated surface + frosted sheen + hairline so it reads
+ * clearly against the void. Tap to restore the chip.
+ */
 @Composable
 private fun FloatingPeekTab(side: Int, onClick: () -> Unit) {
-    val innerEdge = if (side < 0) Alignment.CenterEnd else Alignment.CenterStart
+    // Round only the inner corners so it looks anchored to the screen edge, not a floating pill.
+    val shape = if (side < 0) {
+        RoundedCornerShape(topEnd = FLOAT_PEEK_RADIUS, bottomEnd = FLOAT_PEEK_RADIUS)
+    } else {
+        RoundedCornerShape(topStart = FLOAT_PEEK_RADIUS, bottomStart = FLOAT_PEEK_RADIUS)
+    }
     Box(
         modifier = Modifier
             .width(FLOAT_PEEK_WIDTH)
             .height(FLOAT_PEEK_HEIGHT)
-            .clip(RoundedCornerShape(FLOAT_PEEK_RADIUS))
-            .background(MidnightColors.Light.copy(alpha = FLOAT_PEEK_FILL_ALPHA))
+            .clip(shape)
+            .background(MidnightColors.VoidElevated)
+            .background(FLOAT_PEEK_SHEEN)
+            .border(1.dp, MidnightColors.LightFaint, shape)
             .pointerInput(Unit) { detectTapGestures { onClick() } }
             .semantics {
                 contentDescription = "Show Kuira chip"
                 role = Role.Button
             },
-        contentAlignment = innerEdge,
+        contentAlignment = Alignment.Center,
     ) {
-        // A small chevron pointing back on-screen ("›" when docked left, "‹" when docked right).
+        // Chevron points back on-screen ("›" when docked left, "‹" when docked right).
         Text(
             text = if (side < 0) "›" else "‹",
-            color = MidnightColors.Light,
+            color = MidnightColors.LightSoft,
             fontSize = FLOAT_PEEK_CHEVRON,
         )
     }
 }
 
-private val FLOAT_PEEK_WIDTH = 26.dp
-private val FLOAT_PEEK_HEIGHT = 52.dp
-private val FLOAT_PEEK_RADIUS = 13.dp
+private val FLOAT_PEEK_WIDTH = 28.dp
+private val FLOAT_PEEK_HEIGHT = 56.dp
+private val FLOAT_PEEK_RADIUS = 14.dp
 private val FLOAT_EDGE_MARGIN = 12.dp
 private val FLOAT_PEEK_CHEVRON = 18.sp
-private const val FLOAT_PEEK_FILL_ALPHA = 0.14f
-private const val FLOAT_DOCK_ZONE = 0.12f // outer 12% of either side → dock on release
+private val FLOAT_PEEK_SHEEN = Brush.verticalGradient(
+    0f to Color.White.copy(alpha = 0.10f),
+    0.5f to Color.Transparent,
+    1f to Color.Transparent,
+)
+private const val FLOAT_DOCK_OVERSHOOT = 0.55f // a drag may pull this fraction of the chip past the edge
+private const val FLOAT_DOCK_TRIGGER = 0.30f   // released ≥ this fraction past the edge → dock to a peek tab

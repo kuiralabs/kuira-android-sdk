@@ -30,7 +30,12 @@ import com.midnight.kuira.dapp.sigil.SigilPanelColors
 import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.dapp.sigil.SigilStatus
 import com.midnight.kuira.dapp.sigil.SigilStatusPanel
+import com.midnight.kuira.dapp.wallet.ResizableChip
+import com.midnight.kuira.dapp.wallet.SigilChip
+import com.midnight.kuira.dapp.wallet.SigilChipUi
 import com.midnight.kuira.dapp.wallet.ThemeStore
+import com.midnight.kuira.dapp.wallet.WalletChip
+import com.midnight.kuira.dapp.wallet.WalletChipUi
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.WalletPanelViewModel
 import com.midnight.kuira.dapp.wallet.WalletRecoveryScreen
@@ -192,7 +197,9 @@ fun PanelBar(
 
     // The two chips, defined once and laid out either as a fixed top row (default) or as
     // independent floaters (opt-in). Same VM / theme / overlay wiring drives both layouts.
-    val sigilPill = @Composable {
+    // Each panel takes an optional `pill` slot: docked mode passes null (built-in pill); floating
+    // mode passes the live resizable widget. The panel keeps its sheet/bootstrap either way.
+    val sigilPanel: @Composable (pill: (@Composable (SigilChipUi, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         SigilStatusPanel(
             viewModel = sigilViewModel,
             colors = activeSigilColors,
@@ -201,9 +208,10 @@ fun PanelBar(
                 onSigilStatusChange(it)
             },
             onOpenSettings = { settingsOpen = true },
+            pill = pillSlot,
         )
     }
-    val walletPill = @Composable {
+    val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         WalletStatusPanel(
             viewModel = walletViewModel,
             initialNetwork = network,
@@ -235,14 +243,16 @@ fun PanelBar(
             onOpenSettings = { settingsOpen = true },
             lightMode = lightMode,
             onToggleLightMode = { lightMode = !lightMode },
+            pill = pillSlot,
         )
     }
 
     if (floating) {
         // Full-screen, pass-through overlay: only the chips themselves consume touches, so the
-        // host's content stays interactive everywhere else. Each chip drags + docks independently.
-        // systemBarsPadding keeps the float/dock range within the safe area (clear of the status
-        // and navigation bars), so a chip can't hide behind a system bar.
+        // host's content stays interactive everywhere else. Each chip drags + docks independently
+        // and resizes (long-press the grip). systemBarsPadding keeps the float/dock range within
+        // the safe area. Both widgets use the wallet palette so they read as one themed unit; each
+        // panel still themes its own SHEET. Tap → the panel's sheet; the panel keeps state/bootstrap.
         BoxWithConstraints(modifier = modifier.fillMaxSize().systemBarsPadding()) {
             val widthPx = constraints.maxWidth
             val heightPx = constraints.maxHeight
@@ -251,15 +261,21 @@ fun PanelBar(
                 containerWidthPx = widthPx,
                 containerHeightPx = heightPx,
                 initialCorner = FloatingCorner.TopStart,
-                content = sigilPill,
-            )
+            ) {
+                sigilPanel { ui, onTap ->
+                    ResizableChip(activeWalletColors, onTap) { tier, w -> SigilChip(tier, ui, activeWalletColors, width = w) }
+                }
+            }
             FloatingChip(
                 persistKey = "kuira_chip_wallet",
                 containerWidthPx = widthPx,
                 containerHeightPx = heightPx,
                 initialCorner = FloatingCorner.TopEnd,
-                content = walletPill,
-            )
+            ) {
+                walletPanel { ui, onTap ->
+                    ResizableChip(activeWalletColors, onTap) { tier, w -> WalletChip(tier, ui, activeWalletColors, width = w) }
+                }
+            }
         }
     } else {
         Row(
@@ -273,8 +289,8 @@ fun PanelBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            sigilPill()
-            walletPill()
+            sigilPanel(null)
+            walletPanel(null)
         }
     }
 

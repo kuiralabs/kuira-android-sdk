@@ -203,6 +203,13 @@ fun WalletStatusPanel(
      */
     lightMode: Boolean = false,
     onToggleLightMode: (() -> Unit)? = null,
+    /**
+     * Custom pill slot (floating mode): when non-null it replaces the default pill with the host's
+     * own surface (e.g. the resizable floating widget), receiving the live [WalletChipUi] and an
+     * `onTap` that opens the sheet. The panel keeps owning the sheet, bootstrap, and lock — only the
+     * pill's visual is delegated. Null → the classic built-in pill.
+     */
+    pill: (@Composable (WalletChipUi, onTap: () -> Unit) -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -257,17 +264,37 @@ fun WalletStatusPanel(
     val toggleLightMode = onToggleLightMode ?: { internalLightMode = !internalLightMode }
     val activeColors = if (effectiveLightMode) WalletPanelColors.Light else colors
 
-    // The pill — always rendered. Tap opens the sheet. dappPressable gives it
-    // the pressed/hover/focus state layer + press scale the rest of the app has.
-    WalletPill(
-        status = status,
-        network = network,
-        formatter = formatter,
-        colors = activeColors,
-        modifier = modifier.dappPressable(
-            shape = RoundedCornerShape(PanelDimens.PillCornerRadius),
-        ) { sheetOpen = true },
-    )
+    // The pill. A floating host can swap its visual via [pill] (e.g. the resizable widget), fed the
+    // live balance; otherwise the built-in WalletPill. Either way, a tap opens the sheet.
+    if (pill != null) {
+        val net = network.pillName.replaceFirstChar { it.uppercase() }
+        val chipUi = (status as? WalletStatus.Ready)?.let { s ->
+            val b = s.balance
+            WalletChipUi(
+                night = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
+                unshielded = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
+                shielded = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else "—",
+                // formatAbbreviated is the tight-surface form (integer below 1K, K/M above) — dust
+                // carries 15 decimals, so formatCompact left it 18 chars long and overflowed the chip.
+                dust = formatter.formatAbbreviated(b.dust, "DUST"),
+                dustRegistered = b.dustRegistered,
+                synced = syncProgress == null && s.busy == null,
+                network = net,
+            )
+        } ?: WalletChipUi("—", "—", "—", "—", dustRegistered = false, synced = false, network = net)
+        pill(chipUi) { sheetOpen = true }
+    } else {
+        // dappPressable gives the pressed/hover/focus state layer + press scale.
+        WalletPill(
+            status = status,
+            network = network,
+            formatter = formatter,
+            colors = activeColors,
+            modifier = modifier.dappPressable(
+                shape = RoundedCornerShape(PanelDimens.PillCornerRadius),
+            ) { sheetOpen = true },
+        )
+    }
 
     // FragmentActivity is required by SeedVault.loadSeed / storeSeed for the
     // biometric prompt. ComponentActivity (the AppCompat base) extends it, but

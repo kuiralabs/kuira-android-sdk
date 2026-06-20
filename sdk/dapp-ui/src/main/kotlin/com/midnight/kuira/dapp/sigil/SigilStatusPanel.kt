@@ -10,6 +10,7 @@ import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
+import com.midnight.kuira.dapp.wallet.SigilChipUi
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -95,10 +96,19 @@ fun SigilStatusPanel(
      * so the gear is one entry point from either panel. Default no-op hides the gear.
      */
     onOpenSettings: () -> Unit = {},
+    /** One-shot: each new non-zero value opens the sheet (a floating host taps the chip → here). */
+    openSheetSignal: Int = 0,
+    /**
+     * Custom pill slot (floating mode): replaces the default pill with the host's surface (e.g. the
+     * resizable floating widget), fed the live [SigilChipUi] + an `onTap` that opens the sheet. The
+     * panel keeps the sheet + state machine; only the pill's visual is delegated. Null → built-in.
+     */
+    pill: (@Composable (SigilChipUi, onTap: () -> Unit) -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     LaunchedEffect(status) { onStatusChange(status) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(openSheetSignal) { if (openSheetSignal > 0) sheetOpen = true }
 
     // Activity is required by PasskeyManager.createPasskey — the Credential
     // Manager prompt hangs off it. Same reachability constraint as the
@@ -106,15 +116,19 @@ fun SigilStatusPanel(
     // ComponentActivity-based apps do).
     val activity = LocalContext.current as? FragmentActivity
 
-    SigilPill(
-        status = status,
-        colors = colors,
-        // dappPressable gives the pill the pressed/hover/focus state layer +
-        // press scale, matching the rest of the app's interactive surfaces.
-        modifier = modifier.dappPressable(
-            shape = RoundedCornerShape(SigilDimens.PillCornerRadius),
-        ) { sheetOpen = true },
-    )
+    if (pill != null) {
+        pill(status.toSigilChipUi()) { sheetOpen = true }
+    } else {
+        SigilPill(
+            status = status,
+            colors = colors,
+            // dappPressable gives the pill the pressed/hover/focus state layer +
+            // press scale, matching the rest of the app's interactive surfaces.
+            modifier = modifier.dappPressable(
+                shape = RoundedCornerShape(SigilDimens.PillCornerRadius),
+            ) { sheetOpen = true },
+        )
+    }
 
     if (sheetOpen) {
         TopSheet(
@@ -139,6 +153,19 @@ fun SigilStatusPanel(
         }
     }
 }
+
+/** Maps the sigil state machine to the floating widget's display model (all states representable). */
+private fun SigilStatus.toSigilChipUi(): SigilChipUi = when (this) {
+    is SigilStatus.Forged -> SigilChipUi("Sigil", "Forged · Protected", shortDid(did), did)
+    is SigilStatus.Creating -> SigilChipUi("Sigil", "Creating…", "", "")
+    is SigilStatus.None -> SigilChipUi("Sigil", "Tap to create", "", "")
+    is SigilStatus.BackupAvailable -> SigilChipUi("Sigil", "Restore available", "", "")
+    is SigilStatus.Initializing -> SigilChipUi("Sigil", "…", "", "")
+    is SigilStatus.Error -> SigilChipUi("Sigil", "Error", "", "")
+}
+
+private fun shortDid(did: String): String =
+    if (did.length <= 22) did else "${did.take(14)}…${did.takeLast(4)}"
 
 // ── Pill ──
 

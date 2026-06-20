@@ -348,7 +348,33 @@ public final class com/midnight/kuira/dapp/sigil/SigilStatus$None : com/midnight
 }
 
 public final class com/midnight/kuira/dapp/sigil/SigilStatusPanelKt {
-	public static final fun SigilStatusPanel (Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+	public static final fun SigilStatusPanel (Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/sigil/SigilPanelColors;Lcom/midnight/kuira/dapp/sigil/SigilPanelViewModel;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/functions/Function4;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$FloatingChipResizeKt {
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$FloatingChipResizeKt;
+	public fun <init> ()V
+	public final fun getLambda$-1655942830$dapp_ui_release ()Lkotlin/jvm/functions/Function4;
+	public final fun getLambda$-338743143$dapp_ui_release ()Lkotlin/jvm/functions/Function4;
+	public final fun getLambda$-929625981$dapp_ui_release ()Lkotlin/jvm/functions/Function4;
+	public final fun getLambda$1113470533$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$528827216$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$701564635$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$973758146$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+}
+
+public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$FloatingChipTiersKt {
+	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$FloatingChipTiersKt;
+	public fun <init> ()V
+	public final fun getLambda$-1056342587$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-1675860126$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-657634531$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-732565527$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-742587262$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1189947838$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1292608998$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1612158240$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$901511903$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 }
 
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletBalanceCompactKt {
@@ -456,6 +482,29 @@ public final class com/midnight/kuira/dapp/wallet/SendUiState$Success : com/midn
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/midnight/kuira/dapp/wallet/SigilChipUi {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/wallet/SigilChipUi$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/dapp/wallet/SigilChipUi;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/SigilChipUi;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/SigilChipUi;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDidFull ()Ljava/lang/String;
+	public final fun getDidShort ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getStatus ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/SigilChipUi$Companion {
+	public final fun getSample ()Lcom/midnight/kuira/dapp/wallet/SigilChipUi;
+}
+
 public final class com/midnight/kuira/dapp/wallet/ThemeStore {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ThemeStore;
@@ -489,6 +538,35 @@ public final class com/midnight/kuira/dapp/wallet/WalletBalanceUi {
 	public final fun getStatusLabel ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletChipUi {
+	public static final field $stable I
+	public static final field Companion Lcom/midnight/kuira/dapp/wallet/WalletChipUi$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Z
+	public final fun component6 ()Z
+	public final fun component7 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)Lcom/midnight/kuira/dapp/wallet/WalletChipUi;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/WalletChipUi;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletChipUi;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDust ()Ljava/lang/String;
+	public final fun getDustRegistered ()Z
+	public final fun getNetwork ()Ljava/lang/String;
+	public final fun getNight ()Ljava/lang/String;
+	public final fun getShielded ()Ljava/lang/String;
+	public final fun getSynced ()Z
+	public final fun getUnshielded ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletChipUi$Companion {
+	public final fun getSample ()Lcom/midnight/kuira/dapp/wallet/WalletChipUi;
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletPanelColors {
@@ -686,7 +764,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : c
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
-	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILkotlin/jvm/functions/Function0;ZLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZILkotlin/jvm/functions/Function0;ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function4;Landroidx/compose/runtime/Composer;III)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletSyncIndicatorKt {
