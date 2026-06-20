@@ -544,6 +544,13 @@ private fun ForgedBody(
     if (showSignOutConfirm) {
         AlertDialog(
             onDismissRequest = { showSignOutConfirm = false },
+            // Theme to the sigil panel's (dark) palette. A bare AlertDialog falls back to the host's
+            // default Material scheme — a light container — which left the "Sign out" label
+            // (colors.onSheet, a light tone) as white-on-light and unreadable, and clashed with the
+            // dark app. Mirrors BackupSection's themed dialog.
+            containerColor = colors.sheetBackground,
+            titleContentColor = colors.onSheet,
+            textContentColor = colors.onSheetDim,
             title = { Text("Sign out?") },
             text = {
                 Text(
@@ -558,7 +565,7 @@ private fun ForgedBody(
                 }) { Text("Sign out", color = colors.onSheet) }
             },
             dismissButton = {
-                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel", color = colors.onSheetDim) }
             },
         )
     }

@@ -69,7 +69,8 @@ internal fun ResizableChip(
     val scope = rememberCoroutineScope()
     val minPx = with(density) { MIN_WIDTH.toPx() }
     val maxPx = with(density) { MAX_WIDTH.toPx() }
-    val widthPx = remember { Animatable(with(density) { ChipTier.Card.naturalWidth().toPx() }) }
+    // Default to the small Pill (also the resize floor); the user grows it by long-pressing the grip.
+    val widthPx = remember { Animatable(with(density) { ChipTier.Pill.naturalWidth().toPx() }) }
     var armed by remember { mutableStateOf(false) }
 
     val widthDp = with(density) { widthPx.value.toDp() }
