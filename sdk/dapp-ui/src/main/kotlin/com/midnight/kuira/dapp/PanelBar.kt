@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -164,6 +165,15 @@ fun PanelBar(
     // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Which panel's gear opened Settings, so dismissing it returns to THAT panel's sheet. Settings
+    // is hosted here (above both panels) but each panel owns its own sheet; the gear closes that
+    // sheet to surface Settings (a Popup renders UNDER the sheet's window), so on dismiss the sheet
+    // must re-open — else Back from Settings drops the user on the bare app. These reopen counters
+    // layer on top of the host's [openWalletSignal] to re-fire each panel's open-sheet effect.
+    var settingsSource by remember { mutableStateOf<SettingsLaunchSource?>(null) }
+    var walletReopenSignal by remember { mutableIntStateOf(0) }
+    var sigilReopenSignal by remember { mutableIntStateOf(0) }
+
     // A session lock drops the SDK and must hide EVERYTHING. These overlays are Popups, which
     // render in their own windows ABOVE the host's SessionLockGate cover — so on lock (which also
     // fires on backgrounding, #251) we must close them ourselves and scrub any revealed phrase
@@ -172,8 +182,10 @@ fun PanelBar(
     LaunchedEffect(walletStatus) {
         if (walletStatus is WalletStatus.Locked) {
             // Hiding the overlay makes it self-close its recovery reveal + scrub the phrase
-            // (see WalletSettingsOverlay's visibility guard).
+            // (see WalletSettingsOverlay's visibility guard). Drop the launch source too so a lock
+            // can't trigger a spurious sheet re-open on the next dismiss.
             settingsOpen = false
+            settingsSource = null
         }
     }
 
@@ -203,7 +215,8 @@ fun PanelBar(
                 currentSigilStatus = it
                 onSigilStatusChange(it)
             },
-            onOpenSettings = { settingsOpen = true },
+            onOpenSettings = { settingsSource = SettingsLaunchSource.Sigil; settingsOpen = true },
+            openSheetSignal = sigilReopenSignal,
             pill = pillSlot,
         )
     }
@@ -235,8 +248,8 @@ fun PanelBar(
                 is SigilStatus.Creating,
                 is SigilStatus.Error -> false
             },
-            openSheetSignal = openWalletSignal,
-            onOpenSettings = { settingsOpen = true },
+            openSheetSignal = openWalletSignal + walletReopenSignal,
+            onOpenSettings = { settingsSource = SettingsLaunchSource.Wallet; settingsOpen = true },
             lightMode = lightMode,
             onToggleLightMode = { lightMode = !lightMode },
             pill = pillSlot,
@@ -304,9 +317,22 @@ fun PanelBar(
         },
         versionLabel = appVersion.ifBlank { null },
         onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
-        onDismiss = { settingsOpen = false },
+        onDismiss = {
+            settingsOpen = false
+            // Return to the panel whose gear opened Settings — its sheet was closed to surface
+            // Settings, so Back must re-open it instead of dropping the user on the bare app.
+            when (settingsSource) {
+                SettingsLaunchSource.Wallet -> walletReopenSignal++
+                SettingsLaunchSource.Sigil -> sigilReopenSignal++
+                null -> {}
+            }
+            settingsSource = null
+        },
     )
 }
+
+/** Which panel's gear opened the shared Settings overlay, so dismiss returns to that panel's sheet. */
+private enum class SettingsLaunchSource { Wallet, Sigil }
 
 private object PanelBarDimens {
     /** Gap below the system status bar before the chips. Same value the wallet panel used to use solo. */

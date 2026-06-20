@@ -383,7 +383,12 @@ fun WalletStatusPanel(
         },
         versionLabel = appVersion,
         onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
-        onDismiss = { settingsOpen = false },
+        onDismiss = {
+            settingsOpen = false
+            // Re-open the sheet the gear came from — the same return-to-previous-screen handoff
+            // Receive/Send use — so Back from Settings lands on the wallet panel, not the bare app.
+            sheetOpen = true
+        },
     )
 
     if (sheetOpen) {
