@@ -3,6 +3,7 @@ package com.midnight.kuira.sdk
 import android.util.Log
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.repository.DustRepository
+import com.midnight.kuira.core.indexer.sync.ChainResetGuard
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,6 +29,7 @@ class DustSyncManager(
     private val walletAddress: String,
     private val dustSeed: ByteArray,
     private val cloudBackupSource: DustCloudBackupSource? = null,
+    private val chainResetGuard: ChainResetGuard? = null,
 ) {
     private val mutex = Mutex()
     private var state: DustLocalState? = null
@@ -49,6 +51,12 @@ class DustSyncManager(
     suspend fun ensureSynced(
         onSyncProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): DustLocalState = mutex.withLock {
+        // If the chain was reset under us (localnet docker restart), the guard wiped the persisted
+        // dust caches; also drop the in-memory state so we don't hand back the stale (old-chain)
+        // DustLocalState via the cache short-circuit below — instead fall through to a fresh sync.
+        if (chainResetGuard?.ensureFreshChain(walletAddress) == true) {
+            state = null
+        }
         state?.let { return@withLock it }
 
         // Cold start with no local checkpoint → try to seed one from the cloud

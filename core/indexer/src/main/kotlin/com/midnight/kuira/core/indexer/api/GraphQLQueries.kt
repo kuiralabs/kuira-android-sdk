@@ -114,6 +114,21 @@ object GraphQLQueries {
     """
 
     /**
+     * Query the GENESIS block (height 0). Its hash is a stable per-chain identity: a fresh
+     * localnet (after a `docker` reset) has a different genesis hash, so a mismatch against the
+     * pinned value flags a chain reset. The `block` field takes an optional `offset`;
+     * `{ height: 0 }` pins it to genesis (no offset = latest block).
+     */
+    const val QUERY_GENESIS_BLOCK = """
+        query {
+          block(offset: { height: 0 }) {
+            height
+            hash
+          }
+        }
+    """
+
+    /**
      * Query zswap ledger events in range.
      *
      * Variables:

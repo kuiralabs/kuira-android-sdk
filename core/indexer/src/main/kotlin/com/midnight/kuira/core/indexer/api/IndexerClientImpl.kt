@@ -19,6 +19,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -419,6 +420,33 @@ class IndexerClientImpl(
             throw e // Re-throw our custom exceptions
         } catch (e: Exception) {
             throw InvalidResponseException("Unexpected error: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Genesis (height-0) block hash — FAILURE-TOLERANT. Any error (network, GraphQL, parse, missing
+     * field) returns null rather than throwing, so the chain-reset check SKIPS on a transient
+     * indexer hiccup instead of risking a wipe of a healthy wallet. CancellationException is
+     * rethrown so coroutine cancellation isn't swallowed.
+     */
+    override suspend fun getGenesisBlockHash(): String? {
+        return try {
+            val response = httpClient.post(graphqlEndpoint) {
+                contentType(ContentType.Application.Json)
+                setBody(GraphQLRequest(GraphQLQueries.QUERY_GENESIS_BLOCK))
+            }
+            val jsonResponse = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            // GraphQL errors → null ("can't determine", never treated as a reset).
+            val errors = jsonResponse["errors"]?.jsonArray
+            if (errors != null && errors.isNotEmpty()) return null
+            jsonResponse["data"]?.jsonObject
+                ?.get("block")?.jsonObject
+                ?.get("hash")?.jsonPrimitive?.content
+                ?.takeIf { it.isNotBlank() } // a blank hash → null → UNKNOWN, never a false reset
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
         }
     }
 

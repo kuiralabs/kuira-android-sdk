@@ -63,7 +63,8 @@ class SubscriptionManager(
     private val context: android.content.Context,
     private val indexerClient: IndexerClient,
     private val utxoManager: UtxoManager,
-    private val syncStateManager: SyncStateManager
+    private val syncStateManager: SyncStateManager,
+    private val chainResetGuard: ChainResetGuard? = null,
 ) {
     companion object {
         private const val TAG = "SubscriptionManager"
@@ -303,9 +304,15 @@ class SubscriptionManager(
         var latestTransactionId: Int? = null // Track latest for final save
         var syncTimeoutJob: Job? = null // Job for auto-sync timeout
 
-        // Resume-point lookup. Any wipe that needed to happen was already done
-        // by startSubscription (forceFullResync=true path). Here we simply read
-        // whatever sync state exists and pass it to the indexer.
+        // Chain-reset guard: if the chain was replaced (e.g. a localnet docker restart), wipe the
+        // stale cursor + UTXOs so the resume below reads a null cursor and re-syncs from genesis.
+        // Runs on every (re)connect — safe inside the retry loop because it only wipes on a genuine
+        // genesis-hash mismatch; a transient reconnect on the SAME chain is just a no-op query.
+        chainResetGuard?.ensureFreshChain(address)
+
+        // Resume-point lookup. Any wipe that needed to happen was already done by the guard above or
+        // by startSubscription (forceFullResync=true path). Here we simply read whatever sync state
+        // exists and pass it to the indexer.
         val lastId = syncStateManager.getLastProcessedTransactionId(address)
         // Snapshot at subscription start — used by the reorg check below to
         // detect when the indexer reports a max txId lower than what we have

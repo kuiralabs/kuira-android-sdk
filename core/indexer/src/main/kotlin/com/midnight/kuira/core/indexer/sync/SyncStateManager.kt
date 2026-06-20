@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -133,7 +134,31 @@ class SyncStateManager(private val context: Context) {
         }
     }
 
+    /**
+     * The GENESIS block hash the persisted checkpoints were built against — a per-chain identity
+     * for detecting a chain RESET (a fresh localnet has a different genesis hash). Lives in the
+     * same "sync_state" DataStore as the tx cursor but is NOT touched by [clearSyncState] (which
+     * clears only the cursor), so [com.midnight.kuira.core.indexer.sync.ChainResetGuard] can re-pin
+     * it to the new chain after wiping the stale caches. [clearAllSyncState] does clear it.
+     *
+     * @return the pinned genesis hash, or null if this address has never been pinned.
+     */
+    suspend fun getPinnedGenesisHash(address: String): String? {
+        return dataStore.data.first()[genesisHashKey(address)]
+    }
+
+    /** Pin [genesisHash] as the chain identity the checkpoints for [address] were built against. */
+    suspend fun setPinnedGenesisHash(address: String, genesisHash: String) {
+        dataStore.edit { preferences ->
+            preferences[genesisHashKey(address)] = genesisHash
+        }
+    }
+
     private fun lastTxIdKey(address: String): Preferences.Key<Int> {
         return intPreferencesKey("last_tx_id_$address")
+    }
+
+    private fun genesisHashKey(address: String): Preferences.Key<String> {
+        return stringPreferencesKey("genesis_hash_$address")
     }
 }

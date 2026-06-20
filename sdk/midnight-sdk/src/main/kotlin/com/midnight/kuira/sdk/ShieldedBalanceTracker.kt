@@ -2,6 +2,7 @@ package com.midnight.kuira.sdk
 
 import android.util.Log
 import com.midnight.kuira.core.indexer.repository.ShieldedRepository
+import com.midnight.kuira.core.indexer.sync.ChainResetGuard
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +55,7 @@ internal class ShieldedBalanceTracker(
     private val shieldedRepository: ShieldedRepository,
     private val walletAddress: String,
     private val zswapSeed: ByteArray,
+    private val chainResetGuard: ChainResetGuard? = null,
 ) {
     private val mutex = Mutex()
 
@@ -80,6 +82,9 @@ internal class ShieldedBalanceTracker(
      * the persisted state.
      */
     suspend fun resync() = mutex.withLock {
+        // Wipe stale caches first if the chain was reset under us (e.g. a localnet docker restart),
+        // so the sync below runs from genesis instead of trusting a count-matched stale checkpoint.
+        chainResetGuard?.ensureFreshChain(walletAddress)
         val hasCoins = shieldedRepository.syncFromBlockchain(walletAddress, zswapSeed)
         val night = if (hasCoins) {
             val balances = shieldedRepository.getBalances(walletAddress)

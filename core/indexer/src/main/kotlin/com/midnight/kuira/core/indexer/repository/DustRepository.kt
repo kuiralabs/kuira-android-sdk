@@ -102,8 +102,9 @@ class DustRepository @Inject constructor(
     /** Get the live in-memory state from the last sync (no deserialization). */
     fun getLastSyncedState(): DustLocalState? = lastSyncedState
 
-    /** Clear the live state (for force-resync). Caller should close it. */
+    /** Clear AND close the live in-memory state (force-resync / chain-reset wipe). */
     fun clearLastSyncedState() {
+        lastSyncedState?.close()
         lastSyncedState = null
     }
 
@@ -869,6 +870,10 @@ class DustRepository @Inject constructor(
             prefs.remove(eventKey)
         }
         dustDao.deleteTokensForAddress(address)
+        // Drop the live in-memory pointer too — otherwise a chain-reset wipe clears the persisted
+        // checkpoint but leaves the OLD-chain DustLocalState warm, which the fee balancer would then
+        // spend against (stale dust root → error-170 family). "State is gone" must mean all of it.
+        clearLastSyncedState()
         Log.d(TAG, "Deleted dust state + event ID for $address")
     }
 

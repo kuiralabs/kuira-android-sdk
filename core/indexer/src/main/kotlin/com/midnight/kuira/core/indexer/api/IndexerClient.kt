@@ -137,6 +137,24 @@ interface IndexerClient {
     suspend fun getCurrentBlockWithParams(): BlockInfo
 
     /**
+     * The chain's GENESIS block hash — a stable per-chain identity used to detect a chain RESET
+     * (a localnet `docker` down/up replaces the chain with a fresh genesis). The wallet pins this
+     * next to each checkpoint; a mismatch on the next sync means the chain was replaced, so the
+     * cached balance / UTXOs must be wiped and re-synced from genesis. Block height + event/tx IDs
+     * all restart at 0 on a reset, so they can't be the discriminator — the genesis hash is the one
+     * value stable within a chain but different across one.
+     *
+     * **GraphQL Query:** `query { block(offset: { height: 0 }) { hash } }`
+     *
+     * Defaults to null — a "can't determine" signal callers MUST treat as "skip the reset check"
+     * (never as a reset), so a transient indexer failure can't nuke a healthy wallet, and in-memory
+     * test doubles needn't implement it.
+     *
+     * @return the genesis block hash (hex), or null if it can't be queried.
+     */
+    suspend fun getGenesisBlockHash(): String? = null
+
+    /**
      * Get historical events in range.
      *
      * **GraphQL Query:**

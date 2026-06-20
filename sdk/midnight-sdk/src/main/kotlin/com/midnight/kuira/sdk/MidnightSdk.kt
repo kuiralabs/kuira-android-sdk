@@ -26,6 +26,7 @@ import com.midnight.kuira.core.indexer.repository.BalanceRepository
 import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.repository.ShieldedRepository
 import com.midnight.kuira.core.indexer.repository.SpentDustNullifierStore
+import com.midnight.kuira.core.indexer.sync.ChainResetGuard
 import com.midnight.kuira.core.indexer.sync.SubscriptionManager
 import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
@@ -896,11 +897,37 @@ class MidnightSdk private constructor(
                 inTransaction = { block -> database.withTransaction { block() } },
             )
             val syncStateManager = SyncStateManager(appContext)
+
+            // Shielded state repo — built here (moved up from the tracker section below) so the
+            // chain-reset guard, which needs it, can be constructed before the sync managers.
+            val shieldedRepository = ShieldedRepository(
+                dataStore = sdkShieldedStateDataStore(appContext),
+                indexerClient = indexerClient,
+                networkConfig = networkConfig,
+            )
+
+            // Detects a chain reset (a localnet docker restart replaces the chain with a fresh
+            // genesis) and wipes the stale shielded + dust + unshielded caches so every layer
+            // re-syncs from genesis instead of trusting a count-matched checkpoint. One instance,
+            // consulted at the start of all three sync entry points.
+            val chainResetGuard = ChainResetGuard(
+                indexerClient = indexerClient,
+                shieldedRepository = shieldedRepository,
+                dustRepository = dustRepository,
+                syncStateManager = syncStateManager,
+                utxoManager = utxoManager,
+                // Wipe-on-reset ONLY for the local dev chain (developmentMode = localhost localnet),
+                // where resets are a daily dev action and the indexer is local. On remote chains
+                // (PreProd/Preview) a genesis mismatch is treated as an indexer anomaly, never a wipe.
+                wipeOnResetEnabled = networkConfig.developmentMode,
+            )
+
             val subscriptionManager = SubscriptionManager(
                 context = appContext,
                 indexerClient = indexerClient,
                 utxoManager = utxoManager,
                 syncStateManager = syncStateManager,
+                chainResetGuard = chainResetGuard,
             )
             val balanceRepository = BalanceRepository(utxoManager, indexerClient)
 
@@ -918,17 +945,13 @@ class MidnightSdk private constructor(
             // The SDK fully owns shielded balance freshness so dApps don't
             // have to wire ShieldedRepository themselves. ShieldedBalanceTracker
             // runs an initial replay and then re-runs it on chain-tip advance.
-            // Construction is direct (no Hilt) — ShieldedRepository's Hilt
-            // annotations are just metadata, the class is fine to `new` here.
-            val shieldedRepository = ShieldedRepository(
-                dataStore = sdkShieldedStateDataStore(appContext),
-                indexerClient = indexerClient,
-                networkConfig = networkConfig,
-            )
+            // (shieldedRepository is constructed above so the chain-reset guard
+            // can be built before the sync managers consult it.)
             val shieldedTracker = ShieldedBalanceTracker(
                 shieldedRepository = shieldedRepository,
                 walletAddress = keys.address,
                 zswapSeed = keys.zswapSeed,
+                chainResetGuard = chainResetGuard,
             )
             // Launch on the same subscriptionScope so close() cancels it.
             shieldedTracker.start(subscriptionScope)
@@ -949,6 +972,7 @@ class MidnightSdk private constructor(
                 walletAddress = keys.address,
                 dustSeed = keys.dustSeed,
                 cloudBackupSource = dustCloudBackup,
+                chainResetGuard = chainResetGuard,
             )
 
             val wallet = MidnightWallet(
