@@ -166,7 +166,9 @@ private fun SessionLockScreen(
             ) {},
         contentAlignment = Alignment.Center,
     ) {
-        StarField()
+        // Dimmed to a subtle ambient texture (matching the sheet's treatment). At full alpha the
+        // brightest seeded star reads as a lone "dot" in the middle of the otherwise-black screen.
+        StarField(alpha = 0.45f)
         Column(
             modifier = Modifier
                 .safeDrawingPadding()
