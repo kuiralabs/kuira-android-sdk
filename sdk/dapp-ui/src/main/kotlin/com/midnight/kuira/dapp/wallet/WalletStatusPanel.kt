@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
@@ -628,7 +629,10 @@ private fun WalletSheetContent(
 ) {
     val busy = status is WalletStatus.Loading ||
         (status is WalletStatus.Ready && status.busy != null)
-    Box(modifier = Modifier.fillMaxWidth()) {
+    // Pinned to full height: the sheet's height is now constant, so when refresh flips busy/sync
+    // indicators (which change the content height) the ModalBottomSheet no longer re-anchors and
+    // jumps. One consistent anchor — content scrolls within. (Bottom-sheet design unchanged.)
+    Box(modifier = Modifier.fillMaxSize()) {
         // Ambient star field — the brand texture ("stars against void") behind
         // the whole sheet, the same treatment the balance wireframe uses.
         StarField(
@@ -641,8 +645,11 @@ private fun WalletSheetContent(
             modifier = Modifier
                 .fillMaxWidth()
                 // Scrollable so nothing (esp. the close button) is ever clipped,
-                // regardless of content height / device size.
-                .verticalScroll(rememberScrollState())
+                // regardless of content height / device size. Over-scroll is OFF: when the content
+                // fits, a swipe-up has nowhere to go (the sheet is clamped at Expanded) and would
+                // otherwise rubber-band against the sheet and bounce endlessly. Real scrolling still
+                // works when the content overflows.
+                .verticalScroll(rememberScrollState(), overscrollEffect = null)
                 .padding(
                     start = PanelDimens.SheetHorizontalPadding,
                     end = PanelDimens.SheetHorizontalPadding,
