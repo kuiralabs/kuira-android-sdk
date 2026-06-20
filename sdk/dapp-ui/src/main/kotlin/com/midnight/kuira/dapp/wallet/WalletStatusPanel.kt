@@ -441,11 +441,16 @@ fun WalletStatusPanel(
                     }
                 },
                 onSettings = {
-                    // Keep the sheet OPEN underneath: Settings is a focusable Popup that renders ABOVE
-                    // it, so Back from Settings returns to the sheet (respect the stack) instead of
-                    // exiting the whole flow. (Receive/Send differ — they're non-Popup screens that
-                    // must close the sheet first to avoid rendering under its scrim.)
-                    if (onOpenSettings != null) onOpenSettings() else settingsOpen = true
+                    // Settings is a focusable Popup hosted at the panel/bar level, which sits UNDER
+                    // the sheet's window — NOT above it. (The earlier "renders above" assumption was
+                    // wrong: tapping Settings looked like a no-op, and the screen only surfaced after
+                    // dismissing the sheet — a stack-consistency bug.) So dismiss the sheet FIRST,
+                    // the same sheet→screen handoff as Receive/Send/LockNow, then open Settings.
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        sheetOpen = false
+                        if (onOpenSettings != null) onOpenSettings() else settingsOpen = true
+                    }
                 },
                 onClose = {
                     coroutineScope.launch {
