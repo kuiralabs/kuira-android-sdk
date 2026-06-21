@@ -2,6 +2,7 @@ package com.midnight.kuira.sdk
 
 import android.util.Log
 import com.midnight.kuira.core.compact.BalanceProgress
+import com.midnight.kuira.core.compact.DustCtime
 import com.midnight.kuira.core.compact.TransactionBalancer
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
@@ -59,6 +60,7 @@ class MidnightWallet internal constructor(
     private val dustCloudBackup: DustCloudBackup? = null,
     private val appStateCloudBackup: AppStateCloudBackup? = null,
     receiptEvents: Flow<ReceiptEvent> = emptyFlow(),
+    private val unshieldedSubscription: UnshieldedSubscription? = null,
 ) : TransactionBalancer {
 
     /**
@@ -436,12 +438,15 @@ class MidnightWallet internal constructor(
     ): Unit = withContext(Dispatchers.IO) { balanceMutex.withLock {
         onProgress?.invoke(BalanceProgress.SyncingDust)
 
-        // Error-170 (stale dust root) recovery escalates: a fast delta re-sync first,
-        // then a full genesis rebuild only if that still 170s. Other failures —
-        // including error 115 — propagate as a clean BalancingFailed (no in-place
-        // loop). With the zero-fee fix in balance_ffi, 0-fee networks spend no dust,
-        // so 115 doesn't arise there; PREPROD's own-fee-spend handling is tracked
-        // separately (it depends on the indexer reflecting contract-tx fee spends).
+        // Dust-state recovery escalates: a fast delta re-sync first, then a full genesis
+        // rebuild only if that still fails. Both error 170 (stale/foreign dust root) and
+        // error 171 (ctime out of the [tblock-grace, tblock] window) are cured the same
+        // way — re-syncing dust advances its sync_time toward the tip, which both refreshes
+        // the root our proof commits to (170) AND pulls the DustCtime anchor back inside the
+        // validity window (171). Other failures — including error 115 — propagate as a clean
+        // BalancingFailed (no in-place loop). With the zero-fee fix in balance_ffi, 0-fee
+        // networks spend no dust, so 115 doesn't arise there; PREPROD's own-fee-spend handling
+        // is tracked separately (it depends on the indexer reflecting contract-tx fee spends).
         val recoveries: List<Pair<String, suspend () -> Unit>> = listOf(
             "delta re-sync" to { dustSyncManager.refreshIncremental(); Unit },
             "genesis rebuild" to { forceFullSync() },
@@ -462,9 +467,11 @@ class MidnightWallet internal constructor(
                 dustSyncManager.invalidateMemo()
                 return@withLock
             } catch (e: NodeRpcException) {
-                if (!isDustSpendProofError(e) || attempt >= recoveries.size) throw e
+                val recoverable = isDustSpendProofError(e) || isOutOfDustValidityWindowError(e)
+                if (!recoverable || attempt >= recoveries.size) throw e
                 val (label, recover) = recoveries[attempt++]
-                Log.w(TAG, "Error 170 — $label and retry ($attempt/${recoveries.size})")
+                val code = if (isOutOfDustValidityWindowError(e)) "171" else "170"
+                Log.w(TAG, "Error $code — $label and retry ($attempt/${recoveries.size})")
                 onProgress?.invoke(BalanceProgress.RetryingDustSync)
                 recover()
             }
@@ -596,17 +603,21 @@ class MidnightWallet internal constructor(
 
         onProgress?.invoke(BalanceProgress.ProvingDust)
 
-        // Chain-anchored dust ctime (#287): the node validates the dust spend via
-        // `dust.root_history.get(ctime)`, so ctime must resolve to the SAME dust root our
-        // proof commits to — the block our local dust state synced to, NOT the chain tip.
-        // On an active chain (PreProd) the tip races ahead of the replayed state between
-        // sync and balance, so anchoring to the tip resolves a newer root than ours →
-        // InvalidDustSpendProof (170) → futile delta re-sync → genesis rebuild. The send
-        // path (TransactionSubmitter) already anchors to sync_time; the contract-call
-        // balancer (deploy / contract calls) did not — this completes #287 for it.
-        // Fall back to the indexer tip only if the state reports no sync_time.
+        // Chain-anchored dust ctime: the node validates the dust spend both via
+        // `dust.root_history.get(ctime)` (must resolve to OUR committed root) AND via the
+        // window `ctime ∈ [tblock - grace, tblock]`. Two failure modes pull ctime opposite
+        // ways, so [DustCtime] balances them:
+        //  - Anchoring to the tip races ahead of the replayed state on an active chain →
+        //    resolves a newer root than ours → InvalidDustSpendProof (170). #287 anchored to
+        //    sync_time to fix this.
+        //  - But anchoring to sync_time freezes ctime hours behind the tip when dust events
+        //    are sparse (idle wallet, long chain) → drifts past `grace` → OutOfDustValidity-
+        //    Window (171). DustCtime keeps a RECENT sync_time (170 protection intact) and
+        //    clamps toward the tip only once it has drifted (idle), where our replayed root
+        //    is already the current dust root so the clamped ctime still resolves to it.
+        // The residual indexer-lag race is the caller's 171 re-sync-and-retry (balanceAndSubmit).
         val dustSyncTimeMs = dustState.syncTimeMs()
-        val chainTimeMs = if (dustSyncTimeMs > 0L) dustSyncTimeMs else blockInfo.timestamp
+        val chainTimeMs = DustCtime.anchorMs(dustSyncTimeMs = dustSyncTimeMs, tipMs = blockInfo.timestamp)
 
         val raw = TransactionBalancerNative.nativeBalanceProvenTransaction(
             provenTxHex = provenTxHex,
@@ -710,6 +721,43 @@ class MidnightWallet internal constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Force-rebuild the unshielded UTXO cache from genesis to self-heal a stale NIGHT balance.
+     *
+     * **What it fixes (roadmap #52).** The unshielded UTXO cache is event-driven — it applies
+     * created / spent deltas from the indexer's tx subscription with no reconcile against the
+     * indexer's *current* set. If a spent-event is ever missed — a sibling app on the same shared
+     * wallet spent a coin while this app was backgrounded, or a subscription gap — the spent UTXO
+     * lingers as a ghost AVAILABLE coin and the balance over-counts (e.g. shows 20k NIGHT while the
+     * real spendable is 10k). Replaying the whole tx history from genesis rebuilds the UTXO set from
+     * the indexer's truth, so the ghosts drop out.
+     *
+     * **Cancels + re-launches** the long-lived subscription with a one-shot genesis wipe
+     * ([com.midnight.kuira.core.indexer.sync.SubscriptionManager.startSubscription] `forceFullResync = true`):
+     * the cache is cleared, then re-populated as the indexer replays. So the **unshielded NIGHT
+     * balance momentarily drops toward 0, then climbs back** as events arrive — the
+     * [balanceFlow] emits the rebuild live, so a UI bound to it shows the correction without a
+     * second action.
+     *
+     * **UTXO-cache only — does NOT touch the dust checkpoint or shielded state.** Those are separate
+     * replay models; wiping them would force a heavy dust genesis replay (fatal on PreProd). This is
+     * deliberately narrower than a full chain-reset wipe — it heals exactly the unshielded ledger and
+     * nothing else.
+     *
+     * A deliberate, user-triggered recovery action (a "Re-sync balance" affordance), NOT something to
+     * run on every refresh — the routine [refresh] / live subscription already keep NIGHT current.
+     * No-op when no subscription controller is wired (e.g. unit tests building the wallet directly).
+     */
+    suspend fun forceResyncUnshielded() = withContext(Dispatchers.IO) {
+        val controller = unshieldedSubscription
+        if (controller == null) {
+            Log.w(TAG, "forceResyncUnshielded: no subscription controller wired — skipping")
+            return@withContext
+        }
+        Log.i(TAG, "forceResyncUnshielded: rebuilding the unshielded UTXO cache from genesis")
+        controller.start(forceFullResync = true)
     }
 
     /**
@@ -853,6 +901,16 @@ class MidnightWallet internal constructor(
     internal fun isDustSpendProofError(e: NodeRpcException): Boolean = when (e) {
         is TransactionRejected -> e.customErrorCode == 170
         is NodeRpcError -> e.data?.contains("Custom error: 170") == true
+        else -> false
+    }
+
+    /** Node error 171 = OutOfDustValidityWindow (the dust spend's ctime fell outside the
+     *  node's [tblock-grace, tblock] window — an idle dust state on a long chain). Arrives as
+     *  a [TransactionRejected] (customErrorCode) or a raw [NodeRpcError] carrying it in
+     *  [NodeRpcError.data]; both must be detected or the 171 re-sync recovery never fires. */
+    internal fun isOutOfDustValidityWindowError(e: NodeRpcException): Boolean = when (e) {
+        is TransactionRejected -> e.customErrorCode == TransactionRejected.ERROR_OUT_OF_DUST_VALIDITY_WINDOW
+        is NodeRpcError -> e.data?.contains("Custom error: 171") == true
         else -> false
     }
 

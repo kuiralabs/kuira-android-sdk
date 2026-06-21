@@ -360,6 +360,25 @@ internal fun GlobeGlyph(color: Color, size: Dp = SendDimens.Icon24, modifier: Mo
     }
 }
 
+/** Re-sync balance — a circular arrow: a near-closed ring with an arrowhead at its open end. */
+@Composable
+internal fun RefreshGlyph(color: Color, size: Dp = SendDimens.Icon24, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val w = this.size.width; val h = this.size.height; val sw = w * SETTINGS_STROKE
+        // Open ring (gap at top-right) — the "loop" of the resync arrow.
+        drawArc(
+            color = color,
+            startAngle = 300f, sweepAngle = 300f, useCenter = false,
+            topLeft = Offset(w * 0.24f, h * 0.24f),
+            size = Size(w * 0.52f, w * 0.52f),
+            style = Stroke(sw, cap = StrokeCap.Round),
+        )
+        // Arrowhead at the open end (top-right), pointing clockwise into the gap.
+        drawLine(color, Offset(w * 0.72f, h * 0.22f), Offset(w * 0.74f, h * 0.40f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.74f, h * 0.40f), Offset(w * 0.58f, h * 0.34f), sw, StrokeCap.Round)
+    }
+}
+
 /** Trailing nav chevron (›). */
 @Composable
 internal fun ChevronGlyph(color: Color, size: Dp = SendDimens.Icon16, modifier: Modifier = Modifier) {

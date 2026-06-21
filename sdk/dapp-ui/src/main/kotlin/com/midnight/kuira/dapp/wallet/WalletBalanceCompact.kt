@@ -17,8 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.ShimmerBlock
+import kotlinx.coroutines.launch
 
 /**
  * Display model for [WalletBalanceCompact]. Pre-formatted strings keep the
@@ -108,15 +115,22 @@ fun WalletBalanceCompact(
             // "Synced" is the one sync-complete status → green; "Syncing…" and the
             // "NIGHT ·" prefix stay monochrome (progress is never green mid-flight).
             val synced = syncProgress == null
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
-                    withStyle(SpanStyle(color = if (synced) colors.positive else colors.onSheetDim)) {
-                        append(ui.statusLabel)
-                    }
-                },
-                fontSize = 13.sp,
-            )
+            // Status line + the ⓘ pinned bottom-RIGHT on the SAME row, so the ⓘ adds NO vertical space
+            // to the card (it only grows for the sync indicator). The ⓘ explains the live-event NIGHT
+            // count can drift and points at Settings → Re-sync balance; gone once #52 lands.
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
+                        withStyle(SpanStyle(color = if (synced) colors.positive else colors.onSheetDim)) {
+                            append(ui.statusLabel)
+                        }
+                    },
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                BalanceInfoDot(colors)
+            }
             // Equal-weight public / private split — both are real balances, both
             // rendered bright (private is NOT a dim afterthought).
             if (ui.privateNight != null) {
@@ -191,6 +205,39 @@ fun WalletBalanceCompact(
             )
             QuickAction(glyph = "↓", label = "Receive", colors = colors, enabled = true, onClick = onReceive)
         }
+    }
+}
+
+/**
+ * The bottom-left ⓘ on the balance card. Tap → a persistent tooltip explaining the live-event NIGHT
+ * count can drift out of sync, pointing at the Settings → Re-sync balance recovery. Mirrors the
+ * Backup section's InfoDot; extensible (add lines as more wallet info is worth surfacing) and easy to
+ * delete once reconciliation (#52) makes the drift impossible.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BalanceInfoDot(colors: WalletPanelColors, modifier: Modifier = Modifier) {
+    val tooltipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                Text(
+                    "Your NIGHT balance is rebuilt from live chain events, so it can occasionally drift " +
+                        "out of sync. If it looks off, re-sync it from Settings.",
+                )
+            }
+        },
+        state = tooltipState,
+        modifier = modifier,
+    ) {
+        Text(
+            "ⓘ",
+            color = colors.onSheetDim,
+            fontSize = 14.sp,
+            modifier = Modifier.clickable { scope.launch { tooltipState.show() } }.padding(2.dp),
+        )
     }
 }
 

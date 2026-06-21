@@ -52,6 +52,23 @@ class MidnightWalletTest {
         assertTrue(wallet.isDustSpendProofError(NodeRpcError(1010, "Invalid Transaction", "Custom error: 170")))
         assertFalse(wallet.isDustSpendProofError(TransactionRejected("Invalid Transaction", customErrorCode = 115)))
         assertFalse(wallet.isDustSpendProofError(NodeNetworkException("offline")))
+        // 171 is a different recovery gate — must NOT be caught by the 170 detector.
+        assertFalse(wallet.isDustSpendProofError(TransactionRejected("Invalid Transaction", customErrorCode = 171)))
+    }
+
+    // ── Error-171 (OutOfDustValidityWindow) detection drives the same balanceAndSubmit
+    //    re-sync recovery loop as 170 — an idle dust state whose ctime drifted out of the
+    //    node's [tblock-grace, tblock] window. Must be detected as TransactionRejected
+    //    (customErrorCode) AND raw NodeRpcError, and kept distinct from 170/115. ──
+
+    @Test
+    fun `isOutOfDustValidityWindowError detects 171 from TransactionRejected and NodeRpcError, not others`() {
+        val wallet = createWallet()
+        assertTrue(wallet.isOutOfDustValidityWindowError(TransactionRejected("Invalid Transaction", customErrorCode = 171)))
+        assertTrue(wallet.isOutOfDustValidityWindowError(NodeRpcError(1010, "Invalid Transaction", "Custom error: 171")))
+        assertFalse(wallet.isOutOfDustValidityWindowError(TransactionRejected("Invalid Transaction", customErrorCode = 170)))
+        assertFalse(wallet.isOutOfDustValidityWindowError(TransactionRejected("Invalid Transaction", customErrorCode = 115)))
+        assertFalse(wallet.isOutOfDustValidityWindowError(NodeNetworkException("offline")))
     }
 
     // ── submitTransaction delegates to NodeRpcClient ──

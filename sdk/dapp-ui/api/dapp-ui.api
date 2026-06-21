@@ -167,12 +167,6 @@ public final class com/midnight/kuira/dapp/di/DappUiModule_ProvideBlockStoreBack
 	public static fun provideBlockStoreBackupStorage (Landroid/content/Context;)Lcom/midnight/kuira/core/identity/backup/BlockStoreBackupStorage;
 }
 
-public final class com/midnight/kuira/dapp/lock/ComposableSingletons$SessionLockGateKt {
-	public static final field INSTANCE Lcom/midnight/kuira/dapp/lock/ComposableSingletons$SessionLockGateKt;
-	public fun <init> ()V
-	public final fun getLambda$-1258067693$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
-}
-
 public final class com/midnight/kuira/dapp/lock/SessionLockGateKt {
 	public static final fun SessionLockGate (Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
 }
@@ -182,7 +176,6 @@ public final class com/midnight/kuira/dapp/sigil/ComposableSingletons$SigilStatu
 	public fun <init> ()V
 	public final fun getLambda$-1136609435$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$-1859899868$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-1890421921$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/midnight/kuira/dapp/sigil/SigilPanelColors {
@@ -386,10 +379,11 @@ public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletBal
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSettingsScreenKt {
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSettingsScreenKt;
 	public fun <init> ()V
-	public final fun getLambda$-1760000572$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-84289332$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$122556036$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$897651587$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1068621361$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-154110256$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1824387184$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-2104778792$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$726627464$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/midnight/kuira/dapp/wallet/QrCodeKt {
@@ -508,12 +502,14 @@ public final class com/midnight/kuira/dapp/wallet/SigilChipUi$Companion {
 public final class com/midnight/kuira/dapp/wallet/ThemeStore {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ThemeStore;
+	public final fun lightMode (Landroid/content/Context;)Z
 	public final fun selectedThemeId (Landroid/content/Context;)Ljava/lang/String;
+	public final fun setLightMode (Landroid/content/Context;Z)V
 	public final fun setSelectedThemeId (Landroid/content/Context;Ljava/lang/String;)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletBalanceCompactKt {
-	public static final fun WalletBalanceCompact (Lcom/midnight/kuira/dapp/wallet/WalletBalanceUi;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletBalanceCompact (Lcom/midnight/kuira/dapp/wallet/WalletBalanceUi;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
 	public static final fun WalletBalanceError (Ljava/lang/String;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 	public static final fun WalletBalanceLoading (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 }
@@ -623,6 +619,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : android
 	public final fun clearRevealedPhrase ()V
 	public final fun disableBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun enableCloudBackup (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
+	public final fun forceResyncBalance (Landroidx/fragment/app/FragmentActivity;)V
 	public final fun getBackupSection ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getConsentRequests ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getRecoveryError ()Lkotlinx/coroutines/flow/StateFlow;
@@ -638,8 +635,8 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : android
 	public final fun lockNow ()V
 	public final fun markRecoveryPhraseSaved ()V
 	public final fun onConsentResult (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Landroid/content/Intent;)V
-	public final fun refreshBalance (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Z)V
-	public static synthetic fun refreshBalance$default (Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;ZILjava/lang/Object;)V
+	public final fun refreshBalance (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;ZZ)V
+	public static synthetic fun refreshBalance$default (Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;ZZILjava/lang/Object;)V
 	public final fun registerDust (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun resetRestoreState ()V
 	public final fun resetSendState ()V

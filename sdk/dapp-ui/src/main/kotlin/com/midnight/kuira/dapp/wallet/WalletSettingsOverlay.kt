@@ -6,14 +6,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.graphics.luminance
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
- * Hosts the bundled Settings screen (and its nested recovery-phrase reveal) in focusable Popups.
+ * Hosts the bundled Settings screen (and its nested recovery-phrase reveal) in full-screen,
+ * edge-to-edge Dialogs ([EdgeToEdgeOverlay]).
  * [WalletSettingsScreen] is `internal`, so only the SDK can render it — this IS that host, shared by
  * [com.midnight.kuira.dapp.PanelBar] AND the standalone [WalletStatusPanel] self-host path, so a
  * raw-panel integration (no PanelBar) still reaches settings without duplicating the wiring.
@@ -34,7 +33,7 @@ internal fun WalletSettingsOverlay(
     var recoveryRevealOpen by rememberSaveable { mutableStateOf(false) }
 
     // Privacy: when the host hides the overlay (session lock / backgrounding, #251), close the nested
-    // recovery reveal and scrub any revealed phrase from memory. These are own-window Popups that sit
+    // recovery reveal and scrub any revealed phrase from memory. These are own-window Dialogs that sit
     // ABOVE the host's lock cover, so they must self-close.
     LaunchedEffect(visible) {
         if (!visible) {
@@ -47,16 +46,21 @@ internal fun WalletSettingsOverlay(
         val network by viewModel.selectedNetwork.collectAsStateWithLifecycle()
         val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
         val recoveryPhraseSaved by viewModel.recoveryPhraseSaved.collectAsStateWithLifecycle()
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = onDismiss,
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
+        EdgeToEdgeOverlay(
+            isLight = colors.sheetBackground.luminance() > 0.5f,
+            onDismiss = onDismiss,
         ) {
             WalletSettingsScreen(
                 networkLabel = network.pillName.replaceFirstChar { it.uppercase() },
                 syncLabel = settingsSyncLabel(status, syncing = syncProgress != null),
                 recoveryPhraseSaved = recoveryPhraseSaved,
                 onViewRecoveryPhrase = { recoveryRevealOpen = true },
+                onResyncBalance = {
+                    // Rebuild the unshielded UTXO cache from genesis (#52). Dismiss back to the wallet
+                    // panel so the user watches the balance self-correct via the live sync indicator.
+                    activity?.let { viewModel.forceResyncBalance(it) }
+                    onDismiss()
+                },
                 onLockNow = {
                     viewModel.lockNow()
                     onDismiss()
@@ -74,17 +78,16 @@ internal fun WalletSettingsOverlay(
         }
     }
 
-    // Nested above Settings (own focusable Popup) so Back returns to Settings, not host content.
+    // Nested above Settings (own full-screen Dialog) so Back returns to Settings, not host content.
     if (recoveryRevealOpen) {
         val revealedPhrase by viewModel.revealedPhrase.collectAsStateWithLifecycle()
         val recoveryError by viewModel.recoveryError.collectAsStateWithLifecycle()
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = {
+        EdgeToEdgeOverlay(
+            isLight = colors.sheetBackground.luminance() > 0.5f,
+            onDismiss = {
                 viewModel.clearRevealedPhrase()
                 recoveryRevealOpen = false
             },
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
         ) {
             WalletRecoveryScreen(
                 phrase = revealedPhrase,

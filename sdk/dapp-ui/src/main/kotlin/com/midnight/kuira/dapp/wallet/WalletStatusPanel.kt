@@ -44,14 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.midnight.kuira.core.designsystem.component.GlassPanel
@@ -278,6 +277,11 @@ fun WalletStatusPanel(
         internalLightMode = !internalLightMode
         ThemeStore.setLightMode(context, internalLightMode)
     }
+
+    // NOTE: the panel pill is embedded in the HOST's screen, so it must NOT touch the host window's
+    // system bars — that's the host's own surface to theme. Edge-to-edge bar theming is scoped to the
+    // full-screen SDK surfaces only (Send / Receive / Settings / Recovery / Restore / Lock), each of
+    // which sets bars on open and restores on close.
     // Standalone self-hosted settings can re-theme via the appearance picker; a host (onOpenSettings
     // set) themes externally and passes `colors` already resolved, so don't double-apply.
     val themedColors = if (onOpenSettings == null && selectedThemeId != WalletThemes.Default.id) {
@@ -449,11 +453,12 @@ fun WalletStatusPanel(
                     }
                 },
                 onSettings = {
-                    // Settings is a focusable Popup hosted at the panel/bar level, which sits UNDER
-                    // the sheet's window — NOT above it. (The earlier "renders above" assumption was
-                    // wrong: tapping Settings looked like a no-op, and the screen only surfaced after
-                    // dismissing the sheet — a stack-consistency bug.) So dismiss the sheet FIRST,
-                    // the same sheet→screen handoff as Receive/Send/LockNow, then open Settings.
+                    // Settings is a full-screen Dialog (EdgeToEdgeOverlay) hosted at the panel/bar
+                    // level, which sits UNDER the sheet's window — NOT above it. (The earlier
+                    // "renders above" assumption was wrong: tapping Settings looked like a no-op, and
+                    // the screen only surfaced after dismissing the sheet — a stack-consistency bug.)
+                    // So dismiss the sheet FIRST, the same sheet→screen handoff as
+                    // Receive/Send/LockNow, then open Settings.
                     coroutineScope.launch {
                         sheetState.hide()
                         sheetOpen = false
@@ -475,16 +480,18 @@ fun WalletStatusPanel(
     // Ready since we need addresses to display; in other states the sheet's
     // "receive" button is disabled so this branch shouldn't fire.
     //
-    // Wrapped in a Popup so the screen escapes whatever Row/Box cell the
-    // host stuck the panel pill in. Without this, fillMaxSize() in
-    // WalletReceiveScreen resolves to the pill's narrow column and the
-    // header text wraps one character per line.
+    // Hosted in an EdgeToEdgeOverlay (full-screen Dialog) so the screen escapes
+    // whatever Row/Box cell the host stuck the panel pill in AND draws behind the
+    // system bars. A Popup would resolve fillMaxSize() to the pill's narrow column
+    // and couldn't reach the bars (no Window of its own).
     val readyStatus = status as? WalletStatus.Ready
     if (receiveOpen && readyStatus != null) {
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = { receiveOpen = false },
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
+        EdgeToEdgeOverlay(
+            isLight = activeColors.sheetBackground.luminance() > 0.5f,
+            onDismiss = {
+                receiveOpen = false
+                sheetOpen = true
+            },
         ) {
             WalletReceiveScreen(
                 unshieldedAddress = readyStatus.address,
@@ -505,20 +512,19 @@ fun WalletStatusPanel(
     // available when Ready (we need the sender address + spendable balance); the
     // sheet's Send button is disabled otherwise so this branch shouldn't fire.
     if (sendOpen && readyStatus != null) {
-        // A focusable Popup consumes back at the view level (fires onDismissRequest)
-        // before any child BackHandler — so the wizard publishes its back logic here
-        // and we let it walk the steps / hide the keyboard; only an unconsumed back
-        // (first step) closes the Popup.
+        // The full-screen Dialog (EdgeToEdgeOverlay) consumes back at the window level
+        // (fires onDismiss) before any child BackHandler — so the wizard publishes its
+        // back logic here and we let it walk the steps / hide the keyboard; only an
+        // unconsumed back (first step) closes the overlay.
         val sendBack = remember { mutableStateOf<() -> Boolean>({ false }) }
-        Popup(
-            alignment = Alignment.TopStart,
-            onDismissRequest = {
+        EdgeToEdgeOverlay(
+            isLight = activeColors.sheetBackground.luminance() > 0.5f,
+            onDismiss = {
                 if (!sendBack.value()) {
                     sendOpen = false
                     sheetOpen = true
                 }
             },
-            properties = PopupProperties(focusable = true, dismissOnBackPress = true),
         ) {
             WalletSendScreen(
                 // sendNight spends UNSHIELDED NIGHT, so cap the form at that pool.
@@ -751,7 +757,8 @@ private fun WalletSheetContent(
                 is WalletStatus.None,
                 is WalletStatus.Loading -> WalletBalanceLoading(colors)
                 is WalletStatus.Ready -> ReadyBody(
-                    status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust, busy,
+                    status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust,
+                    busy = busy,
                 )
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
                 is WalletStatus.SigilRequired -> SigilPrompt(colors)

@@ -82,6 +82,8 @@ internal fun WalletReceiveScreen(
         ReceiveTab.UNSHIELDED -> unshieldedAddress
         ReceiveTab.SHIELDED -> shieldedAddress
     }
+    // Single light/dark source for this screen — drives both the StarField brightness and the bars.
+    val isLight = colors.sheetBackground.luminance() > 0.5f
 
     Box(
         modifier = Modifier
@@ -91,7 +93,7 @@ internal fun WalletReceiveScreen(
         StarField(
             modifier = Modifier.fillMaxSize(),
             color = colors.onSheet,
-            alpha = if (colors.sheetBackground.luminance() > 0.5f) STAR_ALPHA_LIGHT else STAR_ALPHA_DARK,
+            alpha = if (isLight) STAR_ALPHA_LIGHT else STAR_ALPHA_DARK,
             starCount = STAR_COUNT,
         )
         Column(

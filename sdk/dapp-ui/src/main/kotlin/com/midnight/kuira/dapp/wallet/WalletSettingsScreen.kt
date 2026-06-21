@@ -34,6 +34,7 @@ internal fun WalletSettingsScreen(
     syncLabel: String,
     recoveryPhraseSaved: Boolean,
     onViewRecoveryPhrase: () -> Unit,
+    onResyncBalance: () -> Unit,
     onLockNow: () -> Unit,
     onSignOut: () -> Unit,
     // Host-supplied app version; null hides the ABOUT section rather than show a fabricated value.
@@ -77,6 +78,16 @@ internal fun WalletSettingsScreen(
                     )
                     SettingsDivider(palette)
                     SettingsRow(label = "Sync", palette = palette, rightValue = syncLabel, readOnly = true)
+                    SettingsDivider(palette)
+                    // Recovery for a stale NIGHT count (ghost coins from a missed spent-event / a
+                    // sibling app spending on the shared wallet, roadmap #52). Rebuilds the
+                    // unshielded UTXO cache from the chain; balance dips then climbs back.
+                    SettingsRow(
+                        label = "Re-sync balance",
+                        palette = palette,
+                        leadingGlyph = { RefreshGlyph(it) },
+                        onClick = onResyncBalance,
+                    )
                 }
                 Spacer(Modifier.height(SendDimens.Space32))
 

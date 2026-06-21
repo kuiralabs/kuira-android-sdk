@@ -359,8 +359,21 @@ class WalletPanelViewModel @Inject constructor(
      * Triggers seed unlock (biometric) on first call per session; subsequent
      * calls reuse the existing SDK as long as every field of [config] matches
      * what the SDK was built with.
+     *
+     * @param force bypass the heavy-resync throttle and run [com.midnight.kuira.sdk.MidnightWallet.refresh]
+     *   (shielded + dust delta) now. The sheet's ⟳ button passes this — it's a "sync now", not a wipe.
+     * @param resyncUnshielded ALSO rebuild the unshielded UTXO cache from genesis via
+     *   [com.midnight.kuira.sdk.MidnightWallet.forceResyncUnshielded] — the deliberate "Re-sync
+     *   balance" recovery for a stale NIGHT count (ghost AVAILABLE coins from a missed spent-event /
+     *   cross-app spend, roadmap #52). UTXO-cache only (never touches dust/shielded); the balance
+     *   momentarily drops toward 0 then rebuilds from the indexer. Routine refresh leaves this false.
      */
-    fun refreshBalance(config: WalletConfig, activity: FragmentActivity, force: Boolean = false) {
+    fun refreshBalance(
+        config: WalletConfig,
+        activity: FragmentActivity,
+        force: Boolean = false,
+        resyncUnshielded: Boolean = false,
+    ) {
         lastRequestedConfig = config
         viewModelScope.launch {
             // While the session is locked, the SessionLockGate owns re-auth — it
@@ -424,9 +437,20 @@ class WalletPanelViewModel @Inject constructor(
                 // Phase 2 — heavy zswap + Dust resync, THROTTLED. The observer
                 // keeps the balance live between syncs, so the expensive resync
                 // only runs on a forced/explicit refresh, a wallet change, or once
-                // per FULL_REFRESH_INTERVAL_MS — not on every menu visit.
+                // per FULL_REFRESH_INTERVAL_MS — not on every menu visit. An explicit
+                // unshielded re-sync is always a deliberate "sync now", so it bypasses
+                // the throttle too.
                 val now = System.currentTimeMillis()
-                if (force || walletChanged || now - lastFullRefreshAtMs >= FULL_REFRESH_INTERVAL_MS) {
+                if (force || resyncUnshielded || walletChanged || now - lastFullRefreshAtMs >= FULL_REFRESH_INTERVAL_MS) {
+                    // Deliberate "Re-sync balance": rebuild the unshielded UTXO cache from
+                    // genesis FIRST, so the heavy refresh below and the post-refresh balance
+                    // read see the corrected set. UTXO-cache only — the dust checkpoint stays
+                    // intact (no PreProd-fatal dust genesis replay). The live balance observer
+                    // shows the count drop toward 0 then climb back as the indexer replays.
+                    if (resyncUnshielded) {
+                        Log.i(TAG, "refreshBalance: force-resyncing the unshielded UTXO cache from genesis (#52)")
+                        built.wallet.forceResyncUnshielded()
+                    }
                     // The in-sheet indicator is driven reactively by [syncProgress]
                     // (← wallet.syncStatus), so this no longer choreographs progress
                     // labels by hand — syncDust() and refresh() publish their own
@@ -481,6 +505,24 @@ class WalletPanelViewModel @Inject constructor(
                 hold.close()
             }
         }
+    }
+
+    /**
+     * Deliberate "Re-sync balance" recovery: rebuild the unshielded UTXO cache from genesis to fix a
+     * stale NIGHT count (ghost AVAILABLE coins left by a missed spent-event / cross-app spend on the
+     * shared wallet, roadmap #52). Reuses [lastRequestedConfig] — the config the user last acted on —
+     * so the Settings affordance can fire this without re-threading the config through the overlay.
+     * No-op if no wallet action has run yet (nothing to resync, and no config to bootstrap with).
+     *
+     * Delegates to [refreshBalance] with `resyncUnshielded = true`, so the existing busy state +
+     * [syncProgress] indicator cover the rebuild and the live observer shows the count self-correct.
+     */
+    fun forceResyncBalance(activity: FragmentActivity) {
+        val config = lastRequestedConfig ?: run {
+            Log.i(TAG, "forceResyncBalance: no prior config — nothing to re-sync")
+            return
+        }
+        refreshBalance(config, activity, force = true, resyncUnshielded = true)
     }
 
     /**

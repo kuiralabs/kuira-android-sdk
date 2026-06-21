@@ -100,8 +100,8 @@ public abstract interface class com/midnight/kuira/sdk/DustCloudBackupSource {
 
 public final class com/midnight/kuira/sdk/DustSyncManager {
 	public static final field TAG Ljava/lang/String;
-	public fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;[BLcom/midnight/kuira/sdk/DustCloudBackupSource;)V
-	public synthetic fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;[BLcom/midnight/kuira/sdk/DustCloudBackupSource;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;[BLcom/midnight/kuira/sdk/DustCloudBackupSource;Lcom/midnight/kuira/core/indexer/sync/ChainResetGuard;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/ledger/api/NodeRpcClient;Ljava/lang/String;[BLcom/midnight/kuira/sdk/DustCloudBackupSource;Lcom/midnight/kuira/core/indexer/sync/ChainResetGuard;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
 	public final fun ensureSynced (Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun ensureSynced$default (Lcom/midnight/kuira/sdk/DustSyncManager;Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -120,7 +120,7 @@ public final class com/midnight/kuira/sdk/InsufficientDustException : java/lang/
 
 public final class com/midnight/kuira/sdk/MidnightSdk {
 	public static final field Companion Lcom/midnight/kuira/sdk/MidnightSdk$Companion;
-	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lkotlinx/coroutines/Job;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
 	public final fun getAccessKeyPath ()Ljava/lang/String;
 	public final fun getAccessKeyPublicKey ()[B
@@ -256,6 +256,7 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public final fun disableAppStateCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun disableDustCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun forceResyncUnshielded (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAddress ()Ljava/lang/String;
 	public final fun getAppStateBackupEnabled ()Z
 	public final fun getAppStateProvider ()Lkotlin/jvm/functions/Function1;

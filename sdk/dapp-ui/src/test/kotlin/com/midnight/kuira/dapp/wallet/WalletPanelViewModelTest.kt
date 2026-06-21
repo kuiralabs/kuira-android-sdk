@@ -485,6 +485,47 @@ class WalletPanelViewModelTest {
         coVerify(exactly = 2) { wallet.refresh() }
     }
 
+    // ── Force re-sync (#52 ghost-coin recovery) ──
+
+    @Test
+    fun `forceResyncBalance rebuilds the unshielded UTXO cache and runs a heavy refresh`() = runTest {
+        // The deliberate "Re-sync balance" recovery: rebuild the unshielded UTXO cache from genesis
+        // (forceResyncUnshielded) AND run the heavy refresh, bypassing the throttle. Reuses the
+        // config from the last wallet action.
+        val wallet = stubReadyWallet()
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity) // establishes lastRequestedConfig + bootstraps
+        vm.forceResyncBalance(activity)          // deliberate recovery — even inside the throttle window
+
+        // The unshielded genesis rebuild ran…
+        coVerify(exactly = 1) { wallet.forceResyncUnshielded() }
+        // …and the heavy refresh ran twice (bootstrap + the forced recovery), not throttled.
+        coVerify(exactly = 2) { wallet.refresh() }
+    }
+
+    @Test
+    fun `routine refresh never triggers the unshielded genesis rebuild`() = runTest {
+        // Pull-to-refresh / the ⟳ button stays light: even force=true (sync now) must NOT wipe the
+        // UTXO cache — that's only the deliberate Re-sync balance action's job.
+        val wallet = stubReadyWallet()
+
+        val vm = newVm()
+        vm.refreshBalance(devConfig(), activity)                  // bootstrap
+        vm.refreshBalance(devConfig(), activity, force = true)    // ⟳ button — heavy resync, no wipe
+
+        coVerify(exactly = 0) { wallet.forceResyncUnshielded() }
+    }
+
+    @Test
+    fun `forceResyncBalance with no prior wallet action is a no-op`() = runTest {
+        // Nothing to re-sync and no config to bootstrap with → must not touch the wallet or build an SDK.
+        val vm = newVm()
+        vm.forceResyncBalance(activity)
+
+        coVerify(exactly = 0) { sdkProvider.ensureSdk(any(), any()) }
+    }
+
     @Test
     fun `a different wallet re-syncs even within the interval`() = runTest {
         // A network switch yields a new wallet address. walletChanged must force a

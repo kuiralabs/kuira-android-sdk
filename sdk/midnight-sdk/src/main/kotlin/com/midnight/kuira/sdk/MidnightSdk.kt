@@ -53,7 +53,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.midnight.kuira.core.indexer.database.UnshieldedUtxoEntity
@@ -139,7 +138,6 @@ class MidnightSdk private constructor(
     private val utxoManager: UtxoManager,
     private val transactionSubmitter: TransactionSubmitter,
     private val subscriptionScope: CoroutineScope,
-    private val subscriptionJob: Job,
     private val database: UtxoDatabase,
     private val indexerClient: IndexerClientImpl,
     private val shieldedTracker: ShieldedBalanceTracker,
@@ -788,7 +786,8 @@ class MidnightSdk private constructor(
 
     /** Release all resources. */
     fun close() {
-        subscriptionJob.cancel()
+        // Cancels every job launched on the scope — incl. the unshielded subscription
+        // controller's collect and the shielded tracker — so no separate job handle is needed.
         subscriptionScope.cancel()
         shieldedTracker.close()
         dustTracker?.close()
@@ -990,10 +989,18 @@ class MidnightSdk private constructor(
             // for the SDK's lifetime; close() cancels it. SupervisorJob means a
             // sub-failure (e.g. transient indexer disconnect — already handled
             // with backoff inside SubscriptionManager) doesn't kill sibling work.
+            //
+            // Held as a restartable controller (not a bare launch) so the wallet's
+            // forceResyncUnshielded() can cancel + re-launch this same collect with
+            // forceFullResync = true — a genesis rebuild of the UTXO cache to drop
+            // ghost AVAILABLE coins from a missed spent-event (roadmap #52).
             val subscriptionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-            val subscriptionJob = subscriptionScope.launch {
-                subscriptionManager.startSubscription(keys.address).collect { /* state observed inside */ }
-            }
+            val unshieldedSubscription = UnshieldedSubscription(
+                subscriptionManager = subscriptionManager,
+                scope = subscriptionScope,
+                address = keys.address,
+            )
+            unshieldedSubscription.start()
 
             // ── Shielded NIGHT tracker (auto-syncs in background) ──
             //
@@ -1047,6 +1054,9 @@ class MidnightSdk private constructor(
                 // #284: per-transaction inbound NIGHT receipts, classified by UTXO-set
                 // provenance in the live subscription (own change is never a receipt).
                 receiptEvents = subscriptionManager.receipts,
+                // Restartable handle so wallet.forceResyncUnshielded() can rebuild the
+                // unshielded UTXO cache from genesis (roadmap #52 ghost-coin recovery).
+                unshieldedSubscription = unshieldedSubscription,
             )
 
             // ── Proactive dust tracker (#235) — opt-in ──
@@ -1140,7 +1150,6 @@ class MidnightSdk private constructor(
                 utxoManager = utxoManager,
                 transactionSubmitter = transactionSubmitter,
                 subscriptionScope = subscriptionScope,
-                subscriptionJob = subscriptionJob,
                 database = database,
                 indexerClient = indexerClient,
                 shieldedTracker = shieldedTracker,

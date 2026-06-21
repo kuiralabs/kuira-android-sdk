@@ -139,6 +139,17 @@ class TransactionSubmitterTest {
         assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = null).isDustSpendProof)
     }
 
+    // 171 (OutOfDustValidityWindow) is the dust-window sibling of 170 — an idle dust
+    // state whose ctime drifted out of [tblock-grace, tblock]. Must be detectable and
+    // distinct from 170 so the contract-call path can re-sync dust and retry.
+    @Test
+    fun `TransactionRejected isOutOfDustValidityWindow matches node error 171 only`() {
+        assertEquals(171, TransactionRejected.ERROR_OUT_OF_DUST_VALIDITY_WINDOW)
+        assertTrue(TransactionRejected("Invalid Transaction", customErrorCode = 171).isOutOfDustValidityWindow)
+        assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = 170).isOutOfDustValidityWindow)
+        assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = null).isOutOfDustValidityWindow)
+    }
+
     @Test
     fun `submitAndWait surfaces node error 170 as customErrorCode for dust-root recovery`() = runTest {
         val nodeClient = mockk<NodeRpcClient>()

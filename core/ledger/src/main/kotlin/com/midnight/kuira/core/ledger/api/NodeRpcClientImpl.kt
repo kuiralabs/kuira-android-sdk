@@ -236,6 +236,8 @@ class NodeRpcClientImpl(
                     println("[NodeRpc]   Custom error code: $customErrorCode")
                     when (customErrorCode) {
                         115 -> println("[NodeRpc]   115 = InvalidProof (ZK proof failed verification — check proving-key/verifier-key versions & proof public inputs)")
+                        170 -> println("[NodeRpc]   170 = InvalidDustSpendProof (dust ctime resolved a stale/foreign root — re-sync dust to the tip)")
+                        171 -> println("[NodeRpc]   171 = OutOfDustValidityWindow (dust ctime outside [tblock-grace, tblock] — idle dust on a long chain; re-sync dust to the tip)")
                         195 -> println("[NodeRpc]   195 = InputNotInUtxos (an unshielded UTXO input is already spent or missing)")
                         186 -> println("[NodeRpc]   186 = EffectsCheckFailure")
                     }
