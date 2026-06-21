@@ -57,4 +57,12 @@ dependencies {
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Instrumented tests: core:network ships no androidTest sources today, but AGP still builds +
+    // launches a connectedDebugAndroidTest APK — without the runner library that APK has no
+    // AndroidJUnitRunner and instrumentation dies with ClassNotFoundException. The EXPLICIT
+    // androidx.test:runner provides AndroidJUnitRunner (ext:junit alone doesn't drag it in — the
+    // other modules get it transitively via espresso). The (empty) suite then runs clean.
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }

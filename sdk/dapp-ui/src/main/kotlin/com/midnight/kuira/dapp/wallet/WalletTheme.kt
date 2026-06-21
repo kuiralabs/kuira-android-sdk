@@ -172,6 +172,7 @@ private const val THEME_DISABLED_FILL_ALPHA = 0.10f
 object ThemeStore {
     private const val PREFS_NAME = "wallet_panel"
     private const val KEY_THEME_ID = "appearance_theme_id"
+    private const val KEY_LIGHT_MODE = "appearance_light_mode"
 
     /** The persisted theme id, or null if the user never picked one (→ [WalletThemes.Default]). */
     fun selectedThemeId(context: Context): String? =
@@ -180,5 +181,18 @@ object ThemeStore {
     fun setSelectedThemeId(context: Context, id: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_THEME_ID, id).apply()
+    }
+
+    /**
+     * The persisted light-mode flag (default dark = false). Mirrors [selectedThemeId] so the
+     * light/dark choice survives a swipe-away kill too — `rememberSaveable` alone only carries it
+     * across a rotation / OS-killed-with-saved-state, not a cold start.
+     */
+    fun lightMode(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_LIGHT_MODE, false)
+
+    fun setLightMode(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_LIGHT_MODE, on).apply()
     }
 }

@@ -272,9 +272,12 @@ fun WalletStatusPanel(
     // panel-local (rememberSaveable). The host-supplied [colors] is the dark base; light flips to
     // the SDK's light dusk palette. Both pill and sheet render with the result — and a controlling
     // host applies the SAME flip to its overlays, so nothing diverges.
-    var internalLightMode by rememberSaveable { mutableStateOf(false) }
+    var internalLightMode by rememberSaveable { mutableStateOf(ThemeStore.lightMode(context)) }
     val effectiveLightMode = if (onToggleLightMode != null) lightMode else internalLightMode
-    val toggleLightMode = onToggleLightMode ?: { internalLightMode = !internalLightMode }
+    val toggleLightMode = onToggleLightMode ?: {
+        internalLightMode = !internalLightMode
+        ThemeStore.setLightMode(context, internalLightMode)
+    }
     // Standalone self-hosted settings can re-theme via the appearance picker; a host (onOpenSettings
     // set) themes externally and passes `colors` already resolved, so don't double-apply.
     val themedColors = if (onOpenSettings == null && selectedThemeId != WalletThemes.Default.id) {

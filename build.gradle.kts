@@ -120,6 +120,28 @@ gradle.projectsEvaluated {
     }
 }
 
+// ── e2e localnet funding (idempotent setup step) ──
+//
+// The core:ledger e2e tests (RealDustFeePaymentTest, DustPaymentE2ETest, …) all
+// derive the SAME wallet from the canonical "abandon … art" mnemonic, so funding
+// that one wallet unblocks the whole suite.
+// This wraps scripts/e2e/fund-localnet.sh (mn airdrop + dust register) so the
+// funding is a single command — run it once after (re)starting the localnet,
+// replacing the manual "airdrop before every e2e run" ritual:
+//
+//   ./gradlew fundE2eLocalnet
+//
+// Needs `mn` (midnight-wallet-cli) on PATH + the localnet running. NOT wired into
+// connectedDebugAndroidTest on purpose — auto-airdropping every run would pile up
+// UTXOs; this is a deliberate, one-time setup step.
+val fundE2eLocalnet by tasks.registering {
+    group = "kuira"
+    description = "Fund the canonical localnet test wallet for the core:ledger e2e suite (idempotent)."
+    doLast {
+        exec { commandLine("bash", "$rootDir/scripts/e2e/fund-localnet.sh") }
+    }
+}
+
 // ── Maven publish (alpha → Maven Central via the Central Portal) ──
 //
 // Every Android library module publishes its `release` variant under

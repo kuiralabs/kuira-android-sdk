@@ -4,6 +4,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,11 +40,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.withTimeoutOrNull
-import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
-import com.midnight.kuira.core.designsystem.theme.MidnightColors
-import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.LockGlyph
+import com.midnight.kuira.dapp.wallet.ThemeStore
+import com.midnight.kuira.dapp.wallet.WalletPanelColors
+import com.midnight.kuira.dapp.wallet.WalletThemes
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
@@ -117,9 +120,23 @@ private fun SessionLockScreen(
     sessionLock: SessionLock,
     activity: FragmentActivity?,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var unlocking by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
+
+    // Match the rest of the app: resolve the user's persisted appearance + light/dark. ThemeStore is
+    // durable, so the lock surface is themed even on a cold start, before the wallet panel composes.
+    val colors = remember {
+        val id = ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id
+        val themed = if (id == WalletThemes.Default.id) WalletPanelColors.Default else WalletThemes.byId(id).colors
+        if (ThemeStore.lightMode(context)) WalletPanelColors.Light else themed
+    }
+
+    // A field under the cover may have held focus when the lock took over, floating its IME over the
+    // lock. Dismiss it so the lock owns the screen.
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) { keyboard?.hide() }
 
     fun attemptUnlock() {
         val act = activity ?: return
@@ -158,7 +175,7 @@ private fun SessionLockScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MidnightColors.Void)
+            .background(colors.sheetBackground)
             // Absorb ALL input so nothing reaches the app underneath.
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -166,9 +183,14 @@ private fun SessionLockScreen(
             ) {},
         contentAlignment = Alignment.Center,
     ) {
-        // Dimmed to a subtle ambient texture (matching the sheet's treatment). At full alpha the
-        // brightest seeded star reads as a lone "dot" in the middle of the otherwise-black screen.
-        StarField(alpha = 0.45f)
+        // Brand "stars against void" texture, themed + SIZED to the screen — the missing
+        // matchParentSize was why it painted nothing (it laid out at zero bounds).
+        StarField(
+            modifier = Modifier.matchParentSize(),
+            color = colors.onSheet,
+            alpha = 0.5f,
+            starCount = 40,
+        )
         Column(
             modifier = Modifier
                 .safeDrawingPadding()
@@ -176,11 +198,11 @@ private fun SessionLockScreen(
                 .padding(horizontal = LOCK_SCREEN_HPADDING),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            LockGlyph(color = MidnightColors.Light, size = LOCK_ICON_SIZE)
+            LockGlyph(color = colors.onSheet, size = LOCK_ICON_SIZE)
             Spacer(modifier = Modifier.height(LOCK_GAP_ICON_TITLE))
             Text(
                 "LOCKED",
-                color = MidnightColors.LightSoft,
+                color = colors.onSheet,
                 fontSize = LOCK_TITLE_SIZE,
                 fontWeight = FontWeight.W400,
                 letterSpacing = LOCK_TITLE_TRACKING,
@@ -189,46 +211,45 @@ private fun SessionLockScreen(
             Text(
                 "Your session is locked. Unlock with your device biometric to " +
                     "continue. Your identity stays signed in.",
-                color = MidnightColors.LightMuted,
+                color = colors.onSheetDim,
                 fontSize = LOCK_BODY_SIZE,
                 lineHeight = LOCK_BODY_LINE_HEIGHT,
                 textAlign = TextAlign.Center,
             )
             Spacer(modifier = Modifier.height(LOCK_GAP_BODY_PANEL))
-            GlassPanel(
-                tint = MidnightColors.Light.copy(alpha = GLASS_FILL_ALPHA),
-                border = MidnightColors.LightFaint,
+            // A failed attempt is a quiet retry line ABOVE the button — no card, monochrome (auth
+            // retry isn't a financial-danger signal, so never red).
+            if (failed && !unlocking) {
+                Text(
+                    "Authentication didn't complete — tap to try again.",
+                    color = colors.onSheetSubtle,
+                    fontSize = LOCK_HINT_SIZE,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(LOCK_GAP_HINT_BUTTON))
+            }
+            // One clean, themed button — no box.
+            Button(
+                onClick = { attemptUnlock() },
+                enabled = activity != null,
+                modifier = Modifier.fillMaxWidth().height(LOCK_BUTTON_HEIGHT),
+                shape = RoundedCornerShape(LOCK_BUTTON_RADIUS),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.button,
+                    contentColor = colors.onButton,
+                    disabledContainerColor = colors.buttonDisabled,
+                    disabledContentColor = colors.onButtonDisabled,
+                ),
             ) {
                 if (unlocking) {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = MidnightColors.Light,
-                            modifier = Modifier.height(LOCK_SPINNER_SIZE),
-                        )
-                    }
+                    CircularProgressIndicator(
+                        color = colors.onButton,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.height(LOCK_SPINNER_SIZE),
+                    )
                 } else {
-                    if (failed) {
-                        // Auth retry is NOT a financial-danger signal → monochrome, not red.
-                        Text(
-                            "Authentication didn't complete — tap to try again.",
-                            color = MidnightColors.LightSoft,
-                            fontSize = LOCK_HINT_SIZE,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(modifier = Modifier.height(LOCK_GAP_HINT_BUTTON))
-                    }
-                    Button(
-                        onClick = { attemptUnlock() },
-                        enabled = activity != null,
-                        modifier = Modifier.fillMaxWidth().height(LOCK_BUTTON_HEIGHT),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MidnightColors.Light.copy(alpha = GLASS_FILL_ALPHA),
-                            contentColor = MidnightColors.Light,
-                        ),
-                    ) {
-                        Text("unlock", fontSize = LOCK_BUTTON_LABEL_SIZE, fontWeight = FontWeight.Medium)
-                    }
+                    Text("Unlock", fontSize = LOCK_BUTTON_LABEL_SIZE, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -249,6 +270,7 @@ private val LOCK_BODY_LINE_HEIGHT = 21.sp
 private val LOCK_HINT_SIZE = 13.sp
 private val LOCK_BUTTON_LABEL_SIZE = 15.sp
 private val LOCK_BUTTON_HEIGHT = 54.dp      // prominent CTA — above the 48dp HIG floor
+private val LOCK_BUTTON_RADIUS = 16.dp      // soft-rounded, elegant — not a hard rectangle
 private val LOCK_SPINNER_SIZE = 28.dp
 private val LOCK_GAP_ICON_TITLE = 20.dp
 private val LOCK_GAP_TITLE_BODY = 14.dp

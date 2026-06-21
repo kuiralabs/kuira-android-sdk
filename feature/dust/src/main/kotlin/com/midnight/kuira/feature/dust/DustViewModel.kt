@@ -224,13 +224,24 @@ class DustViewModel @Inject constructor(
                 // Step 4: Build registration transaction with UTXOs
                 Log.d(TAG, "Building dust registration transaction")
                 val ttl = System.currentTimeMillis() + TTL_OFFSET_MS
-                val scaleHex = DustRegistrationBuilder.build(
-                    nightPrivateKey = nightPrivateKey,
-                    dustPublicKeyHex = dustPublicKeyHex,
-                    utxosJson = utxosJson,
-                    ttlMillis = ttl,
-                    networkId = currentNetwork.rustNetworkId,
-                ) ?: throw IllegalStateException("Failed to build dust registration transaction")
+                val scaleHex = when (
+                    val built = DustRegistrationBuilder.build(
+                        nightPrivateKey = nightPrivateKey,
+                        dustPublicKeyHex = dustPublicKeyHex,
+                        utxosJson = utxosJson,
+                        ttlMillis = ttl,
+                        networkId = currentNetwork.rustNetworkId,
+                    )
+                ) {
+                    is DustRegistrationBuilder.Result.Built -> built.hex
+                    is DustRegistrationBuilder.Result.NotMatured ->
+                        throw IllegalStateException(
+                            "NIGHT coin has not generated enough dust to pay the registration fee " +
+                                "(short ${built.shortfallSpecks} Specks). Wait for it to mature and retry.",
+                        )
+                    DustRegistrationBuilder.Result.Failed ->
+                        throw IllegalStateException("Failed to build dust registration transaction")
+                }
                 Log.d(TAG, "Registration tx built: ${scaleHex.length} hex chars")
 
                 // Step 5: Prove transaction

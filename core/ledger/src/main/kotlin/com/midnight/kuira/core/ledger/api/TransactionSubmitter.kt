@@ -443,7 +443,27 @@ class TransactionSubmitter(
         val signedIntent = intent.copy(
             guaranteedUnshieldedOffer = offer.copy(signatures = signatures),
         )
-        return submitWithFees(signedIntent, ledgerParamsHex, fromAddress, dustSeed, timeoutMs)
+        var result = submitWithFees(signedIntent, ledgerParamsHex, fromAddress, dustSeed, timeoutMs)
+
+        // Error 196 (DustDoubleSpend) recovery: the dust UTXO picked to pay the fee carries a
+        // nullifier already in the node's spent set — its coin was consumed on-chain (e.g. by an
+        // immediately-prior send) while our local dust checkpoint still listed it as available. A
+        // plain delta re-sync can't fix it: an at-tip cursor short-circuits and RETAINS the stale
+        // state. So drop the checkpoint and rebuild dust from genesis, then retry ONCE —
+        // submitWithFees then reselects an unspent UTXO. The dust-side sibling of the 170
+        // (stale-root) net; it lives here on the shared signing path so DIRECT callers (the
+        // multi-input e2e money-path test) recover too, not only MidnightSdk.sendNight.
+        if (result is SubmissionResult.Failed &&
+            result.customErrorCode == TransactionRejected.ERROR_DUST_DOUBLE_SPEND
+        ) {
+            Log.w(TAG, "Transfer rejected with error 196 (dust double-spend) — rebuilding dust from genesis and retrying once")
+            runCatching {
+                dustRepository?.deleteState(fromAddress)
+                dustRepository?.syncFromBlockchain(fromAddress, dustSeed)
+            }.onFailure { Log.w(TAG, "196 pre-retry dust rebuild failed: ${it.message}") }
+            result = submitWithFees(signedIntent, ledgerParamsHex, fromAddress, dustSeed, timeoutMs)
+        }
+        return result
     }
 
     /**

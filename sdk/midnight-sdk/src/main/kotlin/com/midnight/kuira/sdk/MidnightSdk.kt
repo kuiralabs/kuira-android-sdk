@@ -217,18 +217,23 @@ class MidnightSdk private constructor(
         var lastResult: SubmissionResult? = null
         val maxRegistrations = currentNight().size + 2
 
-        // Size the registration TTL to the chain's global_ttl — a fixed 30-min window overshoots a
-        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182). The ceiling
-        // doesn't change between iterations, so read it once.
-        val registrationGlobalTtlSecs = try {
+        // Live ledger params drive two things, both read once (neither changes between iterations):
+        //  - the registration TTL window: size it to the chain's global_ttl — a fixed 30-min window
+        //    overshoots a tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182);
+        //  - the dust maturity gate: the native builder uses these params to compute the
+        //    registration's actual fee and refuse to emit a tx the (fresh) coin can't self-pay
+        //    (which the node would reject as BalanceCheckOverspend / error 138). Without params the
+        //    gate is skipped, so a missing fetch would re-expose the 138 — we still proceed, but the
+        //    maturity wait below only engages when params are present.
+        val ledgerParamsHex = try {
             indexerClient.getCurrentBlockWithParams().ledgerParameters
-                ?.let { ContractRuntime.ledgerGlobalTtlSeconds(it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "global_ttl fetch for registration failed, using default window: ${e.message}")
+            Log.w(TAG, "ledger params fetch for registration failed, gate/window use defaults: ${e.message}")
             null
         }
+        val registrationGlobalTtlSecs = ledgerParamsHex?.let { ContractRuntime.ledgerGlobalTtlSeconds(it) }
         val registrationWindowMs = MILLIS_PER_SECOND * IntentTtl.windowSeconds(registrationGlobalTtlSecs)
 
         repeat(maxRegistrations) { iteration ->
@@ -246,21 +251,71 @@ class MidnightSdk private constructor(
                 return lastResult ?: SubmissionResult.Success(txHash = "", blockHeight = 0L)
             }
 
-            // Chain-anchored time, NOT wall-clock (same reason as the Error 170 fix in
-            // MidnightWallet.tryBalance). The registration self-pays via allow_fee_payment,
-            // but ctime is still validated against chain block times.
-            val blockTimestamp = wallet.indexerBlockTimestampMs()
-            val unprovenHex = DustRegistrationBuilder.build(
-                nightPrivateKey = nightPrivateKey,
-                dustPublicKeyHex = dustPublicKeyHex,
-                utxosJson = unregisteredJson, // builder picks the highest-dust UTXO from this set
-                ttlMillis = blockTimestamp + registrationWindowMs,
-                networkId = networkId,
-                currentTimeMillis = blockTimestamp,
-            ) ?: return SubmissionResult.Failed(txHash = null, reason = "DustRegistrationBuilder.build returned null")
+            // Build the registration, waiting out coin maturity if needed.
+            //
+            // The tx SELF-PAYS its fee from the selected coin's "generationless" dust, which is
+            // ~0 on a brand-new coin (dt≈0) and grows as the coin ages. The native builder, given
+            // the live params, returns NotMatured rather than emit a tx the node would reject as
+            // error 138. So on a fresh wallet we back off and REBUILD with an advancing
+            // chain-anchored timestamp — each pass increases `dt`, hence `allow_fee_payment` —
+            // until the coin can cover the fee or a sane deadline elapses. This makes
+            // fresh-wallet dust-enable self-heal without any caller-side retry.
+            val maturityDeadline = System.currentTimeMillis() + DUST_MATURITY_TIMEOUT_MS
+            var unprovenHex: String? = null
+            var lastShortfall: java.math.BigInteger? = null
+            while (true) {
+                // Chain-anchored time, NOT wall-clock (same reason as the Error 170 fix in
+                // MidnightWallet.tryBalance). The registration self-pays via allow_fee_payment,
+                // but ctime is still validated against chain block times. Re-read each pass so
+                // the coin's age (dt) advances with the chain.
+                val blockTimestamp = wallet.indexerBlockTimestampMs()
+                when (
+                    val built = DustRegistrationBuilder.build(
+                        nightPrivateKey = nightPrivateKey,
+                        dustPublicKeyHex = dustPublicKeyHex,
+                        utxosJson = unregisteredJson, // builder picks the highest-dust UTXO from this set
+                        ttlMillis = blockTimestamp + registrationWindowMs,
+                        networkId = networkId,
+                        currentTimeMillis = blockTimestamp,
+                        ledgerParamsHex = ledgerParamsHex,
+                    )
+                ) {
+                    is DustRegistrationBuilder.Result.Built -> {
+                        unprovenHex = built.hex
+                    }
+                    is DustRegistrationBuilder.Result.NotMatured -> {
+                        lastShortfall = built.shortfallSpecks
+                        if (System.currentTimeMillis() >= maturityDeadline) {
+                            return lastResult ?: SubmissionResult.Failed(
+                                txHash = null,
+                                reason = "NIGHT coin never generated enough dust to pay the " +
+                                    "registration fee (short ${built.shortfallSpecks} Specks) " +
+                                    "within ${DUST_MATURITY_TIMEOUT_MS}ms.",
+                            )
+                        }
+                        Log.i(
+                            TAG,
+                            "Dust coin not yet matured (short ${built.shortfallSpecks} Specks) — " +
+                                "waiting ${DUST_MATURITY_POLL_MS}ms for it to age, then retrying",
+                        )
+                        delay(DUST_MATURITY_POLL_MS)
+                        runCatching { wallet.refresh() }
+                        continue
+                    }
+                    DustRegistrationBuilder.Result.Failed -> {
+                        return SubmissionResult.Failed(
+                            txHash = null,
+                            reason = "DustRegistrationBuilder.build failed (last shortfall=$lastShortfall)",
+                        )
+                    }
+                }
+                break
+            }
+            val builtHex = unprovenHex
+                ?: return SubmissionResult.Failed(txHash = null, reason = "DustRegistrationBuilder produced no tx")
 
             Log.i(TAG, "Registering dust: $unregisteredCount NIGHT UTXO(s) not yet generating (tx ${iteration + 1})")
-            val result = transactionSubmitter.submitPrebuiltTransaction(unprovenHex)
+            val result = transactionSubmitter.submitPrebuiltTransaction(builtHex)
             if (result !is SubmissionResult.Success && result !is SubmissionResult.Pending) {
                 return result
             }
@@ -361,15 +416,15 @@ class MidnightSdk private constructor(
             return SendResult.InsufficientFunds(amount, total, amount - total)
         }
 
-        // A fee-paying transfer can carry at most [MAX_TRANSFER_INPUTS] NIGHT inputs
-        // (ledger time-to-dismiss ceiling). If the amount needs more coins than that,
-        // consolidate first: merge the largest coins (a self-send, MAX inputs → one
-        // output) until the top [MAX_TRANSFER_INPUTS] coins alone cover the amount.
-        // Each merge drops the coin count by (MAX_TRANSFER_INPUTS - 1), so this
-        // converges; the counter bounds it against any sync hiccup.
+        // A fee-paying transfer can carry at most [MAX_TRANSFER_INPUTS] NIGHT inputs (ledger
+        // time-to-dismiss ceiling). That ceiling was measured on a ZERO-CHANGE shape; a transfer
+        // that leaves CHANGE carries an extra NIGHT output and can tip over the cost-to-dismiss
+        // budget (node error 168). So consolidate until a SINGLE coin covers the amount → the final
+        // send is the cheapest 1-input(+change) shape. The merges are zero-change MAX-in→1-out
+        // self-sends (at the calibrated ceiling); each drops the coin count, so this converges.
         var mergesRemaining = night.size
-        while (topSum(night, MAX_TRANSFER_INPUTS) < amount &&
-            night.size > MAX_TRANSFER_INPUTS &&
+        while (BigInteger(night.first().value) < amount &&
+            night.size > 1 &&
             mergesRemaining-- > 0
         ) {
             onProgress?.invoke(SendProgress.CONSOLIDATING)
@@ -1144,6 +1199,18 @@ class MidnightSdk private constructor(
          */
         private const val DUST_PROPAGATION_TIMEOUT_MS = 120_000L
         private const val DUST_POLL_INTERVAL_MS = 5_000L
+
+        /**
+         * Maturity wait for a fresh-wallet dust registration. The registration self-pays its fee
+         * from the selected coin's "generationless" dust, which starts ~0 on a brand-new coin and
+         * grows as the coin ages; until it covers the fee the native builder reports NotMatured and
+         * [registerForDustGenerationInternal] backs off and rebuilds with an advancing chain
+         * timestamp. The ceiling bounds that wait so a coin that can never mature (e.g. a dust-rate
+         * mismatch) fails cleanly instead of hanging. A ceiling, not a fixed cost — the loop exits
+         * the instant the coin can self-pay.
+         */
+        private const val DUST_MATURITY_TIMEOUT_MS = 120_000L
+        private const val DUST_MATURITY_POLL_MS = 5_000L
 
         /**
          * Per-step confirmation budget for [runProtocol]: after a step's action submits, the

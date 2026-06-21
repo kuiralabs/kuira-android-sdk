@@ -63,7 +63,7 @@ class RealDustFeePaymentTest {
     private lateinit var nodeClient: NodeRpcClientImpl
 
     companion object {
-        // SAME mnemonic as RealTransactionTest for consistency
+        // The canonical "abandon … art" test mnemonic
         // This wallet has 1 NIGHT funded at index 0
         private const val TEST_MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
 

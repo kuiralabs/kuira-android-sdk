@@ -1,138 +1,96 @@
 #!/bin/bash
-# SDK registration E2E test driver.
+# SDK e2e driver + continuous funding servicer.
 #
-# Runs SdkRegistrationE2ETest on an attached emulator/device against a running
-# localnet, with optional auto-funding via `mn transfer`.
+# Runs an instrumented SDK e2e class on an attached emulator against a running localnet, and
+# funds EACH per-test isolated wallet on demand. The isolated tier ([IsolatedWalletE2E]) generates
+# a fresh wallet per @Test and logs a funding request:
 #
-# What it does:
-#   1. Sanity-checks: adb device attached, localnet container up, `mn` CLI
-#      reachable. Bails with a clear message if any are missing.
-#   2. Pushes proving keys to /data/local/tmp on the emulator (no-op if already
-#      pushed since the previous run).
-#   3. Clears logcat, launches the test in the background, and tails logcat
-#      for the `FUND_TARGET_ADDR=<...>` marker.
-#   4. When the marker appears, runs `mn transfer <addr> 100` on the host
-#      to fund the test wallet (unless AUTO_FUND=0 was passed — then prints
-#      the command and waits for you to run it manually).
-#   5. Waits for the test to complete, prints the result.
+#   KUIRA_FUND_REQ addr=<bech32m> night=<int> small=<int> dust=<true|false>
 #
-# Idempotent: subsequent runs reuse the funded wallet, so the funding step is
-# fast (the test sees NIGHT >= 1 and skips waitForFunding immediately).
+# This script tails logcat for those lines and, for EACH (deduped by addr), runs
+# `mn airdrop <night/small> --wallet <addr>` × small. Dust registers ON-DEVICE (keyed; host can't sign).
+# The device's waitForFunding observes the credit over the indexer subscription — no ACK channel.
+#
+# The isolated tier proves REMOTELY (localnet proof server at 10.0.2.2:6300), so it needs NO
+# on-device proving-key bundle; the key check is a soft warning here (only the LOCAL-proving
+# SdkRegistrationE2ETest needs the pushed keys).
 #
 # Usage:
-#   AUTO_FUND=1 ./run-sdk-e2e.sh    # default — auto-fund + run
-#   AUTO_FUND=0 ./run-sdk-e2e.sh    # log the address, wait for manual transfer
+#   ANDROID_SERIAL=emulator-5554 ./run-sdk-e2e.sh                 # default: the isolated tier
+#   TEST_CLASS=com.midnight.kuira.sdk.SdkRegistrationE2ETest ./run-sdk-e2e.sh
 
 set -e
 
-AUTO_FUND="${AUTO_FUND:-1}"
-FUND_AMOUNT="${FUND_AMOUNT:-100}"
+TEST_CLASS="${TEST_CLASS:-com.midnight.kuira.sdk.e2e.SdkSendNightIsolatedE2ETest}"
 
 KUIRA_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$KUIRA_ROOT"
 
 # ─── Step 1: prereq checks ───
 echo "── Checking prerequisites ──"
-
-if ! command -v adb >/dev/null 2>&1; then
-    echo "✗ adb not in PATH" >&2; exit 1
-fi
-if ! adb devices | grep -qE "device$|emulator-"; then
-    echo "✗ No adb device attached. Start an emulator first." >&2; exit 1
-fi
-if ! command -v mn >/dev/null 2>&1; then
-    echo "✗ mn CLI not in PATH (needed for funding)" >&2; exit 1
-fi
-if ! docker ps 2>/dev/null | grep -q "midnight"; then
-    echo "✗ Localnet not running. Start it with: mn localnet start" >&2; exit 1
-fi
+command -v adb >/dev/null 2>&1 || { echo "✗ adb not in PATH" >&2; exit 1; }
+adb devices | grep -qE "device$|emulator-" || { echo "✗ No adb device attached. Start an emulator first." >&2; exit 1; }
+command -v mn  >/dev/null 2>&1 || { echo "✗ mn CLI not in PATH (needed for funding)" >&2; exit 1; }
+docker ps 2>/dev/null | grep -q "midnight" || { echo "✗ Localnet not running. Start it with: mn localnet start" >&2; exit 1; }
 echo "  ✓ adb device, mn CLI, localnet all reachable"
 
-# ─── Step 2: verify proving keys already on emulator ───
-#
-# The Kicks build script and `scripts/install-bboard-keys.sh` push these to
-# `/data/local/tmp/{bboard,wallet}_keys/`; we don't duplicate that here. If
-# either is missing, point the user at the existing tooling instead of inventing
-# a parallel path.
-echo ""
-echo "── Verifying proving keys on emulator ──"
-HAVE_BLS=$(adb shell ls /data/local/tmp/bboard_keys/bls_midnight_2p13 2>/dev/null || true)
+# ─── Step 2: proving keys — SOFT for the REMOTE isolated tier ───
 HAVE_DUST=$(adb shell ls /data/local/tmp/wallet_keys/dust/spend.prover 2>/dev/null || true)
-if [ -z "$HAVE_BLS" ] || [ -z "$HAVE_DUST" ]; then
-    echo "✗ Proving keys missing on emulator." >&2
-    echo "  Push them once via either:" >&2
-    echo "    examples/midnight-kicks/build-kicks.sh   (full Kicks build, also pushes keys)" >&2
-    echo "    scripts/install-bboard-keys.sh           (bboard/BLS subset)" >&2
-    exit 1
+if [ -z "$HAVE_DUST" ]; then
+    echo "  • on-device proving keys absent — fine for the REMOTE-proving isolated tier"
+    echo "    (only the LOCAL-proving SdkRegistrationE2ETest needs them: examples/midnight-kicks/build-kicks.sh)"
 fi
-echo "  ✓ bls_midnight_2p13 + dust/spend.prover present"
 
-# ─── Step 3: run the test, tail logcat for the funding marker ───
+# ─── Step 3: launch the test, start the funding servicer ───
 echo ""
-echo "── Launching test ──"
-
+echo "── Launching $TEST_CLASS ──"
 adb logcat -c
 ./gradlew :sdk:midnight-sdk:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=com.midnight.kuira.sdk.SdkRegistrationE2ETest \
+    -Pandroid.testInstrumentationRunnerArguments.class="$TEST_CLASS" \
     >/tmp/sdk-e2e-test.log 2>&1 &
 TEST_PID=$!
 echo "  test PID: $TEST_PID (gradle log: /tmp/sdk-e2e-test.log)"
 
-# Tail logcat in background, watch for the marker
+# Continuous funding servicer: tail the harness tag, fund each fresh wallet once.
+SERVICED=" "
 LOGCAT_PID=
-cleanup() {
-    [ -n "$LOGCAT_PID" ] && kill "$LOGCAT_PID" 2>/dev/null || true
-}
+cleanup() { [ -n "$LOGCAT_PID" ] && kill "$LOGCAT_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Filter to the test tag so we only see what's relevant.
-adb logcat -s SdkRegistrationE2E:* &
+echo ""
+echo "── Funding servicer: watching for KUIRA_FUND_REQ ──"
+adb logcat -s KuiraE2EFund:* >/tmp/sdk-e2e-fund.log 2>&1 &
 LOGCAT_PID=$!
 
-# Wait for the FUND_TARGET_ADDR marker — appears once per test run, very early.
-echo ""
-echo "── Waiting for FUND_TARGET_ADDR= marker ──"
-ADDR=""
-for _ in $(seq 1 60); do
-    sleep 1
-    ADDR=$(adb logcat -d -s SdkRegistrationE2E:* 2>/dev/null \
-        | grep -o "FUND_TARGET_ADDR=mn_addr_[a-z0-9_]*" \
-        | head -1 \
-        | cut -d= -f2)
-    [ -n "$ADDR" ] && break
+# Poll the fund log; service every new, not-yet-funded request.
+while kill -0 "$TEST_PID" 2>/dev/null; do
+    while IFS= read -r line; do
+        case "$line" in *KUIRA_FUND_REQ*) : ;; *) continue ;; esac
+        addr=$(echo "$line"  | grep -oE "addr=mn_addr_[a-z0-9]+"  | head -1 | cut -d= -f2)
+        night=$(echo "$line" | grep -oE "night=[0-9]+"           | head -1 | cut -d= -f2)
+        small=$(echo "$line" | grep -oE "small=[0-9]+"           | head -1 | cut -d= -f2)
+        dust=$(echo "$line"  | grep -oE "dust=(true|false)"      | head -1 | cut -d= -f2)
+        [ -n "$addr" ] && [ -n "$night" ] && [ -n "$small" ] || continue
+        case "$SERVICED" in *" $addr "*) continue ;; esac   # already funded
+        SERVICED="$SERVICED$addr "
+        per=$(( night / small )); [ "$per" -lt 1 ] && per=1
+        echo "  → airdrop $addr : ${per} NIGHT ×${small}  (dust=$dust registered ON-DEVICE, not here — it needs the wallet's keys)"
+        for _ in $(seq 1 "$small"); do mn airdrop "$per" --wallet "$addr" >/dev/null 2>&1 || true; done
+    done < /tmp/sdk-e2e-fund.log
+    sleep 2
 done
 
-if [ -z "$ADDR" ]; then
-    echo "✗ Never saw FUND_TARGET_ADDR= in logcat — did the test start? See /tmp/sdk-e2e-test.log" >&2
-    wait $TEST_PID
-    exit 1
-fi
-echo "  ✓ Test wallet address: $ADDR"
-
-# ─── Step 4: fund the wallet ───
-if [ "$AUTO_FUND" = "1" ]; then
-    echo ""
-    echo "── Auto-funding: mn airdrop $FUND_AMOUNT --wallet $ADDR ──"
-    mn airdrop "$FUND_AMOUNT" --wallet "$ADDR" || {
-        echo "  mn airdrop failed — test will time out on waitForFunding" >&2
-    }
-else
-    echo ""
-    echo "── AUTO_FUND=0; run this in another terminal: ──"
-    echo "    mn airdrop $FUND_AMOUNT --wallet $ADDR"
-fi
-
-# ─── Step 5: wait for test result ───
+# ─── Step 4: result + isolation gate ───
+wait "$TEST_PID"; TEST_RC=$?
 echo ""
-echo "── Waiting for test to complete... ──"
-wait $TEST_PID
-TEST_RC=$?
-
-echo ""
+if grep -qiE "customErrorCode=(195|196)|StaleUtxo|DustDoubleSpend" /tmp/sdk-e2e-test.log; then
+    echo "✗ ISOLATION BROKEN — a send hit 195/196 (stale UTXO/dust); fresh wallets should make this impossible."
+    TEST_RC=1
+fi
 if [ $TEST_RC -eq 0 ]; then
-    echo "✓ Test passed"
+    echo "✓ Tests passed (no 195/196 across the run)"
 else
-    echo "✗ Test failed (rc=$TEST_RC) — see /tmp/sdk-e2e-test.log"
+    echo "✗ Tests failed (rc=$TEST_RC) — see /tmp/sdk-e2e-test.log"
     tail -40 /tmp/sdk-e2e-test.log
 fi
 exit $TEST_RC

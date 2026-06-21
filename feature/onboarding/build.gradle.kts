@@ -83,4 +83,9 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
     testImplementation("org.mockito:mockito-core:5.7.0")
+
+    // Instrumented tests: feature:onboarding ships no androidTest sources, but AGP still launches a
+    // connectedDebugAndroidTest APK — without the runner it dies with ClassNotFoundException:
+    // AndroidJUnitRunner. The explicit androidx.test:runner provides it so the (empty) suite runs clean.
+    androidTestImplementation(libs.androidx.test.runner)
 }

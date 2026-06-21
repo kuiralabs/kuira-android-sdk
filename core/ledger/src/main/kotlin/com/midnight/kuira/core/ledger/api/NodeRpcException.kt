@@ -91,6 +91,8 @@ class NodeRpcError(
  *   check the proving-key & contract verifier-key versions match)
  * - 186: EffectsCheckFailure
  * - 195: InputNotInUtxos (an unshielded UTXO input is already spent or missing)
+ * - 196: DustDoubleSpend (the dust UTXO paying the fee was already spent on-chain — re-sync
+ *   dust to the tip, reselect an unspent dust UTXO, and retry)
  *
  * **Recovery:** Don't retry (fix transaction)
  */
@@ -117,6 +119,15 @@ class TransactionRejected(
 
         /** An unshielded UTXO input doesn't exist on-chain (already spent or never existed). */
         const val ERROR_INPUT_NOT_IN_UTXOS = 195
+
+        /**
+         * The dust UTXO selected to pay the fee has a nullifier already in the node's spent set —
+         * its coin was consumed on-chain (often by an immediately-prior send) while the local dust
+         * checkpoint still listed it as available. The dust-side sibling of 170: 170 is a stale
+         * dust *root*, 196 is an already-spent dust *nullifier*. Recovery: full-resync dust to the
+         * tip so the spent nullifier drops out, reselect an unspent dust UTXO, and retry.
+         */
+        const val ERROR_DUST_DOUBLE_SPEND = 196
     }
 
     /** True if the node rejected the transaction's ZK proof (node error 115). */
@@ -127,4 +138,7 @@ class TransactionRejected(
 
     /** True if an unshielded UTXO input was already spent / missing (node error 195). */
     val isStaleUtxo: Boolean get() = customErrorCode == ERROR_INPUT_NOT_IN_UTXOS
+
+    /** True if the dust UTXO paying the fee was already spent on-chain (node error 196). */
+    val isDustDoubleSpend: Boolean get() = customErrorCode == ERROR_DUST_DOUBLE_SPEND
 }

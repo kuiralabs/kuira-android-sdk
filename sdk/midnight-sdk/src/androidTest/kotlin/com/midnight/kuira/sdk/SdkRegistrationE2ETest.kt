@@ -157,9 +157,9 @@ class SdkRegistrationE2ETest {
         private const val TAG = "SdkRegistrationE2E"
 
         /**
-         * Standard BIP-39 test mnemonic — same one the parent app's
-         * `RealTransactionTest` uses. Deterministic address means a single
-         * `mn transfer` funds the wallet for every subsequent run.
+         * Standard BIP-39 test mnemonic — the canonical "abandon … art" wallet.
+         * Deterministic address means a single `mn airdrop` funds the wallet for
+         * every subsequent run.
          */
         private const val TEST_MNEMONIC =
             "abandon abandon abandon abandon abandon abandon abandon abandon " +

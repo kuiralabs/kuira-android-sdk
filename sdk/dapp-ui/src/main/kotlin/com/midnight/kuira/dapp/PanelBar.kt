@@ -147,7 +147,7 @@ fun PanelBar(
     // Light/dark is hoisted too so the pill, sheet, AND the overlays below resolve to ONE palette
     // (the pill self-resolves the same flip from the controlled lightMode). Light mode shows the
     // Kuira light palette and takes precedence over a chosen color theme.
-    var lightMode by rememberSaveable { mutableStateOf(false) }
+    var lightMode by rememberSaveable { mutableStateOf(ThemeStore.lightMode(context)) }
     val activeWalletColors = if (lightMode) WalletPanelColors.Light else themedWalletColors
 
     // The sigil pill rethemes in lockstep with the wallet — both pills are "one themed unit".
@@ -251,7 +251,7 @@ fun PanelBar(
             openSheetSignal = openWalletSignal + walletReopenSignal,
             onOpenSettings = { settingsSource = SettingsLaunchSource.Wallet; settingsOpen = true },
             lightMode = lightMode,
-            onToggleLightMode = { lightMode = !lightMode },
+            onToggleLightMode = { lightMode = !lightMode; ThemeStore.setLightMode(context, lightMode) },
             pill = pillSlot,
         )
     }
