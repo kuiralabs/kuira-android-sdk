@@ -100,19 +100,22 @@ class AlertNotifier(private val context: Context) {
     }
 
     /**
-     * Next received-alert slot, PERSISTED across notifier instances and process restarts.
-     * The background poll ([ReceivePollWorker]) news up a fresh [AlertNotifier] on every run,
-     * so an in-memory counter would reset to 0 and every receipt would land on the same id,
-     * silently replacing the last (the collapse this fixes). Rolling over [MAX_CONCURRENT]
-     * slots so distinct receipts each get their own notification, bounded so they don't stack
-     * without end. Best-effort under a rare concurrent post (live observer + worker) — a
-     * collision at worst merges two near-simultaneous receipts.
+     * Next received-alert slot, rolling over [MAX_CONCURRENT] so distinct receipts each get their
+     * own notification id (a fixed id lets a later receipt silently replace an earlier one).
+     *
+     * Backed by a PROCESS-WIDE atomic, not a plain prefs read-modify-write: the old version read
+     * `seq`, then wrote `seq+1` via async `apply()`, so two rapid posts (the live observer + the
+     * [ReceivePollWorker], or two within one tick) both read the same `seq` and collided on one id.
+     * The atomic hands out distinct slots even under concurrency; prefs only seeds it once per
+     * process (the worker news up a fresh [AlertNotifier] each run, so an un-seeded in-memory
+     * counter would reset to 0 — the seed preserves the rolling sequence across restarts).
      */
     private fun nextReceivedSlot(): Int {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val seq = prefs.getInt(KEY_RECEIVED_SEQ, 0)
-        prefs.edit().putInt(KEY_RECEIVED_SEQ, (seq + 1) % MAX_CONCURRENT).apply()
-        return seq % MAX_CONCURRENT
+        receivedSeq.compareAndSet(SEQ_UNSEEDED, prefs.getInt(KEY_RECEIVED_SEQ, 0) % MAX_CONCURRENT)
+        val slot = receivedSeq.getAndUpdate { (it + 1) % MAX_CONCURRENT }
+        prefs.edit().putInt(KEY_RECEIVED_SEQ, (slot + 1) % MAX_CONCURRENT).apply()
+        return slot
     }
 
     companion object {
@@ -124,6 +127,9 @@ class AlertNotifier(private val context: Context) {
         private const val RECEIVED_BASE_ID = 0xD078
         /** Spread of distinct ids so near-simultaneous alerts don't collide. */
         private const val MAX_CONCURRENT = 16
+        private const val SEQ_UNSEEDED = -1
+        /** Process-wide rolling slot — atomic so rapid in-process posts never collide; prefs seeds it. */
+        private val receivedSeq = java.util.concurrent.atomic.AtomicInteger(SEQ_UNSEEDED)
         // The rolling received-slot counter outlives any single notifier instance.
         private const val PREFS = "kuira_alert_state"
         private const val KEY_RECEIVED_SEQ = "received_seq"
