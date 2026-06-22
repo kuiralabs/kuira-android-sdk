@@ -10,6 +10,7 @@ import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
+import com.midnight.kuira.dapp.wallet.LocalWalletOverlay
 import com.midnight.kuira.dapp.wallet.SigilChipUi
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -109,6 +110,15 @@ fun SigilStatusPanel(
     LaunchedEffect(status) { onStatusChange(status) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(openSheetSignal) { if (openSheetSignal > 0) sheetOpen = true }
+
+    // Re-open this sheet when Settings (opened from THIS pill's gear) closes on the activity-window
+    // overlay host — the back-to-sheet stack the wallet pill also uses. The host bumps
+    // [sigilSheetReopen] on close; a lock closes via [dismissForLock] (no bump). The default ambient
+    // controller is a harmless no-op for a standalone sigil panel with no host.
+    val overlay = LocalWalletOverlay.current
+    LaunchedEffect(overlay.sigilSheetReopen) {
+        if (overlay.sigilSheetReopen > 0) sheetOpen = true
+    }
 
     // Activity is required by PasskeyManager.createPasskey — the Credential
     // Manager prompt hangs off it. Same reachability constraint as the

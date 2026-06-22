@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,9 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.midnight.kuira.dapp.sigil.SigilPanelColors
 import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.dapp.sigil.SigilStatus
@@ -36,9 +33,10 @@ import com.midnight.kuira.dapp.wallet.ThemeStore
 import com.midnight.kuira.dapp.wallet.WalletChip
 import com.midnight.kuira.dapp.wallet.WalletChipUi
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
+import com.midnight.kuira.dapp.wallet.LocalWalletOverlay
+import com.midnight.kuira.dapp.wallet.SettingsLaunchSource
+import com.midnight.kuira.dapp.wallet.WalletOverlay
 import com.midnight.kuira.dapp.wallet.WalletPanelViewModel
-import com.midnight.kuira.dapp.wallet.WalletSettingsOverlay
-import com.midnight.kuira.dapp.wallet.WalletStatus
 import com.midnight.kuira.dapp.wallet.WalletStatusPanel
 import com.midnight.kuira.dapp.wallet.WalletThemes
 import com.midnight.kuira.dapp.wallet.pillName
@@ -131,16 +129,20 @@ fun PanelBar(
     val walletViewModel: WalletPanelViewModel = hiltViewModel()
     val sigilViewModel: SigilPanelViewModel = hiltViewModel()
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
 
-    // Appearance theme is hoisted here so the pill, its sheet, and the Settings/recovery overlays
-    // all render from ONE resolved palette. Persisted in [ThemeStore] (durable across restart);
-    // rememberSaveable mirrors it for instant recomposition. Picking "Monochrome" (the brand
-    // default) falls back to the host-supplied [walletColors] so a host's own theming still wins;
-    // any other pick overrides with that theme's palette.
-    var selectedThemeId by rememberSaveable {
-        mutableStateOf(ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id)
+    // Appearance theme is hoisted onto the shared overlay controller so the pill, its sheet, and
+    // the host-rendered Settings overlay all render from ONE resolved palette — Settings (in the
+    // [WalletOverlayHost]) writes the chosen theme there, the pill reads it back, so a pick
+    // re-themes both live. Durable source of truth stays [ThemeStore]; seed the controller from it
+    // on first composition. Picking "Monochrome" (the brand default) falls back to the host-supplied
+    // [walletColors]; any other pick overrides with that theme's palette.
+    val overlay = LocalWalletOverlay.current
+    LaunchedEffect(Unit) {
+        if (overlay.selectedThemeId == null) {
+            overlay.selectedThemeId = ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id
+        }
     }
+    val selectedThemeId = overlay.selectedThemeId ?: WalletThemes.Default.id
     val themedWalletColors = remember(selectedThemeId, walletColors) {
         if (selectedThemeId == WalletThemes.Default.id) walletColors else WalletThemes.byId(selectedThemeId).colors
     }
@@ -161,33 +163,17 @@ fun PanelBar(
         if (lightMode) SigilPanelColors.from(WalletPanelColors.Light) else themedSigilColors
     }
 
-    // Settings + recovery-reveal overlays live at the bar level (above both panels) so a single
-    // Settings surface is reachable from the wallet pill's gear and the sigil pill's gear alike.
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
-
-    // Which panel's gear opened Settings, so dismissing it returns to THAT panel's sheet. Settings
-    // is hosted here (above both panels) but each panel owns its own sheet; the gear closes that
-    // sheet to surface Settings (a Popup renders UNDER the sheet's window), so on dismiss the sheet
-    // must re-open — else Back from Settings drops the user on the bare app. These reopen counters
-    // layer on top of the host's [openWalletSignal] to re-fire each panel's open-sheet effect.
-    var settingsSource by remember { mutableStateOf<SettingsLaunchSource?>(null) }
-    var walletReopenSignal by remember { mutableIntStateOf(0) }
-    var sigilReopenSignal by remember { mutableIntStateOf(0) }
-
-    // A session lock drops the SDK and must hide EVERYTHING. These overlays are Popups, which
-    // render in their own windows ABOVE the host's SessionLockGate cover — so on lock (which also
-    // fires on backgrounding, #251) we must close them ourselves and scrub any revealed phrase
-    // from memory, mirroring how WalletStatusPanel closes its sheet on Locked.
-    val walletStatus by walletViewModel.status.collectAsStateWithLifecycle()
-    LaunchedEffect(walletStatus) {
-        if (walletStatus is WalletStatus.Locked) {
-            // Hiding the overlay makes it self-close its recovery reveal + scrub the phrase
-            // (see WalletSettingsOverlay's visibility guard). Drop the launch source too so a lock
-            // can't trigger a spurious sheet re-open on the next dismiss.
-            settingsOpen = false
-            settingsSource = null
-        }
-    }
+    // Settings (+ its nested recovery reveal) is opened on the activity-window
+    // [WalletOverlayHost] via the ambient [overlay] controller — reachable from either pill's
+    // gear. The host owns its lifecycle (incl. close-on-lock), so PanelBar no longer tracks
+    // settings state or re-opens a sheet on dismiss. The launch source is still recorded
+    // (Sigil vs Wallet) on the overlay so the host can tell them apart.
+    //
+    // The host can surface the app version in the Settings ABOUT section; PanelBar owns that
+    // value, so push it onto the controller. Only write a REAL version — PanelBar's default is
+    // blank, and a blank write would clobber a value WalletAppShell already seeded (the two share
+    // one controller). Whoever holds the version sets it; a blank holder leaves it untouched.
+    LaunchedEffect(appVersion) { if (appVersion.isNotBlank()) overlay.appVersion = appVersion }
 
     // PanelBar observes sigil status itself so it can gate the wallet
     // panel's auto-bootstrap on Forged — implements "Problem A": don't
@@ -215,8 +201,7 @@ fun PanelBar(
                 currentSigilStatus = it
                 onSigilStatusChange(it)
             },
-            onOpenSettings = { settingsSource = SettingsLaunchSource.Sigil; settingsOpen = true },
-            openSheetSignal = sigilReopenSignal,
+            onOpenSettings = { overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Sigil)) },
             pill = pillSlot,
         )
     }
@@ -248,8 +233,7 @@ fun PanelBar(
                 is SigilStatus.Creating,
                 is SigilStatus.Error -> false
             },
-            openSheetSignal = openWalletSignal + walletReopenSignal,
-            onOpenSettings = { settingsSource = SettingsLaunchSource.Wallet; settingsOpen = true },
+            openSheetSignal = openWalletSignal,
             lightMode = lightMode,
             onToggleLightMode = { lightMode = !lightMode; ThemeStore.setLightMode(context, lightMode) },
             pill = pillSlot,
@@ -302,37 +286,7 @@ fun PanelBar(
             walletPanel(null)
         }
     }
-
-    // ── Settings (+ nested recovery reveal) ── via the shared host, also used by standalone panels.
-    WalletSettingsOverlay(
-        visible = settingsOpen,
-        viewModel = walletViewModel,
-        status = walletStatus,
-        activity = activity,
-        colors = activeWalletColors,
-        selectedThemeId = selectedThemeId,
-        onSelectTheme = { id ->
-            selectedThemeId = id
-            ThemeStore.setSelectedThemeId(context, id)
-        },
-        versionLabel = appVersion.ifBlank { null },
-        onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
-        onDismiss = {
-            settingsOpen = false
-            // Return to the panel whose gear opened Settings — its sheet was closed to surface
-            // Settings, so Back must re-open it instead of dropping the user on the bare app.
-            when (settingsSource) {
-                SettingsLaunchSource.Wallet -> walletReopenSignal++
-                SettingsLaunchSource.Sigil -> sigilReopenSignal++
-                null -> {}
-            }
-            settingsSource = null
-        },
-    )
 }
-
-/** Which panel's gear opened the shared Settings overlay, so dismiss returns to that panel's sheet. */
-private enum class SettingsLaunchSource { Wallet, Sigil }
 
 private object PanelBarDimens {
     /** Gap below the system status bar before the chips. Same value the wallet panel used to use solo. */

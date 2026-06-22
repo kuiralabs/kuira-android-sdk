@@ -44,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +58,6 @@ import com.midnight.kuira.core.designsystem.theme.MidnightColors
 import com.midnight.kuira.dapp.backup.BackupSection
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.midnight.kuira.dapp.sigil.SigilPanelViewModel
 import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
@@ -191,15 +189,6 @@ fun WalletStatusPanel(
      */
     openSheetSignal: Int = 0,
     /**
-     * Routes the sheet's settings gear. NON-NULL → the host surfaces Settings itself (e.g.
-     * [PanelBar]). NULL (default) → the panel SELF-HOSTS the bundled Settings + recovery overlays,
-     * so a standalone `WalletStatusPanel()` (no PanelBar) still reaches them. The gear shows only
-     * when the wallet is Ready.
-     */
-    onOpenSettings: (() -> Unit)? = null,
-    /** App version for the self-hosted Settings ABOUT section; null hides it. */
-    appVersion: String? = null,
-    /**
      * Light/dark mode, hoisted so a host (e.g. [PanelBar]) can keep the pill, sheet, and its
      * Settings/recovery overlays on ONE palette. CONTROLLED when [onToggleLightMode] is non-null
      * ([lightMode] is then authoritative); UNCONTROLLED otherwise — the panel self-manages the
@@ -217,21 +206,25 @@ fun WalletStatusPanel(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
-    val sendState by viewModel.sendState.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
-    var receiveOpen by rememberSaveable { mutableStateOf(false) }
-    var sendOpen by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { BalanceFormatter() }
-    // Standalone (no host-routed settings) self-host needs the bits PanelBar otherwise supplies:
-    // its own open-state, the sigil VM (sign-out), the theme store, and a context.
     val context = LocalContext.current
-    val sigilViewModel: SigilPanelViewModel = hiltViewModel()
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    var selectedThemeId by rememberSaveable {
-        mutableStateOf(ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id)
+    // Full-screen Send / Receive / Settings render in the activity window via the
+    // ambient [WalletOverlayHost]; the pill only OPENS them through this controller.
+    val overlay = LocalWalletOverlay.current
+    // Standalone theme id (no PanelBar): read the SHARED controller observable that the
+    // activity-window Settings overlay writes when the user picks a theme, so the pill re-themes
+    // live. Seed it from the durable store on first composition if nothing's been picked yet. (Under
+    // PanelBar, [onToggleLightMode] is non-null and the host passes pre-resolved `colors`, so this
+    // path is inert — see [themedColors] below.)
+    LaunchedEffect(Unit) {
+        if (overlay.selectedThemeId == null) {
+            overlay.selectedThemeId = ThemeStore.selectedThemeId(context) ?: WalletThemes.Default.id
+        }
     }
+    val selectedThemeId = overlay.selectedThemeId ?: WalletThemes.Default.id
 
     // Open the expanded panel when a host fires [openSheetSignal] (e.g. routing a
     // received-funds notification tap to the wallet). Keyed on the value so each new
@@ -240,15 +233,22 @@ fun WalletStatusPanel(
         if (openSheetSignal > 0) sheetOpen = true
     }
 
+    // Re-open this pill's sheet when a wallet-originated overlay closes (Send / Receive, or
+    // Settings opened from the wallet gear). The overlay host bumps [walletSheetReopen] on close —
+    // mirroring the old back-to-sheet stack so Back from an overlay returns here, not to the bare
+    // host. A lock closes via [dismissForLock] (no bump), so unlock never springs the sheet back.
+    LaunchedEffect(overlay.walletSheetReopen) {
+        if (overlay.walletSheetReopen > 0) sheetOpen = true
+    }
+
     // Whole-app session lock (#14): a ModalBottomSheet renders in its own window
-    // ABOVE the activity content, so if a lock fires while the sheet (or the
-    // receive dialog) is open it would float on top of the SessionLockGate. Close
-    // them on lock so the gate is the only surface the user sees.
+    // ABOVE the activity content, so if a lock fires while the sheet is open it would
+    // float on top of the SessionLockGate. Close it on lock so the gate is the only
+    // surface the user sees. (The full-screen overlays are handled by the host, which
+    // closes them on Locked too.)
     LaunchedEffect(status) {
         if (status is WalletStatus.Locked) {
             sheetOpen = false
-            receiveOpen = false
-            sendOpen = false
         }
     }
 
@@ -282,9 +282,10 @@ fun WalletStatusPanel(
     // system bars — that's the host's own surface to theme. Edge-to-edge bar theming is scoped to the
     // full-screen SDK surfaces only (Send / Receive / Settings / Recovery / Restore / Lock), each of
     // which sets bars on open and restores on close.
-    // Standalone self-hosted settings can re-theme via the appearance picker; a host (onOpenSettings
-    // set) themes externally and passes `colors` already resolved, so don't double-apply.
-    val themedColors = if (onOpenSettings == null && selectedThemeId != WalletThemes.Default.id) {
+    // A standalone panel re-themes from the persisted appearance picker; a host that controls
+    // theming (signalled by a non-null [onToggleLightMode], e.g. [PanelBar]) passes `colors`
+    // already resolved, so don't double-apply.
+    val themedColors = if (onToggleLightMode == null && selectedThemeId != WalletThemes.Default.id) {
         WalletThemes.byId(selectedThemeId).colors
     } else {
         colors
@@ -375,29 +376,6 @@ fun WalletStatusPanel(
         viewModel.consentRequests.collect { request -> consentLauncher.launch(request) }
     }
 
-    // Standalone self-host: route the gear to the bundled Settings (+ recovery) when the host
-    // doesn't surface it. Inert (visible = false) under a host like PanelBar that wires onOpenSettings.
-    WalletSettingsOverlay(
-        visible = settingsOpen,
-        viewModel = viewModel,
-        status = status,
-        activity = activity,
-        colors = activeColors,
-        selectedThemeId = selectedThemeId,
-        onSelectTheme = { id ->
-            selectedThemeId = id
-            ThemeStore.setSelectedThemeId(context, id)
-        },
-        versionLabel = appVersion,
-        onSignOut = { activity?.let { sigilViewModel.signOut(it) } },
-        onDismiss = {
-            settingsOpen = false
-            // Re-open the sheet the gear came from — the same return-to-previous-screen handoff
-            // Receive/Send use — so Back from Settings lands on the wallet panel, not the bare app.
-            sheetOpen = true
-        },
-    )
-
     if (sheetOpen) {
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },
@@ -425,24 +403,23 @@ fun WalletStatusPanel(
                 onDustToggle = { enabled -> activity?.let { viewModel.setDustBackup(enabled, config, it) } },
                 onDisableBackup = { activity?.let { viewModel.disableBackup(config, it) } },
                 onReceive = {
-                    // Dismiss the sheet first, then open the Receive screen on
-                    // the next frame so the sheet's exit animation isn't
-                    // competing with the screen's enter. Without the hide()
-                    // step the screen would render *under* the sheet scrim.
+                    // Dismiss the sheet, then open the Receive screen via the activity-window
+                    // overlay host. The hide() keeps the sheet's exit animation from competing
+                    // with the screen's enter.
                     coroutineScope.launch {
                         sheetState.hide()
                         sheetOpen = false
-                        receiveOpen = true
+                        overlay.open(WalletOverlay.Receive)
                     }
                 },
                 onSend = {
-                    // Same sheet→screen handoff as Receive. Start the flow clean
-                    // (clear any prior success/failure) so the form opens fresh.
+                    // Same sheet→overlay handoff as Receive. Start the flow clean (clear any
+                    // prior success/failure) so the form opens fresh.
                     viewModel.resetSendState()
                     coroutineScope.launch {
                         sheetState.hide()
                         sheetOpen = false
-                        sendOpen = true
+                        overlay.open(WalletOverlay.Send)
                     }
                 },
                 onLockNow = {
@@ -453,16 +430,12 @@ fun WalletStatusPanel(
                     }
                 },
                 onSettings = {
-                    // Settings is a full-screen Dialog (EdgeToEdgeOverlay) hosted at the panel/bar
-                    // level, which sits UNDER the sheet's window — NOT above it. (The earlier
-                    // "renders above" assumption was wrong: tapping Settings looked like a no-op, and
-                    // the screen only surfaced after dismissing the sheet — a stack-consistency bug.)
-                    // So dismiss the sheet FIRST, the same sheet→screen handoff as
-                    // Receive/Send/LockNow, then open Settings.
+                    // Dismiss the sheet, then open Settings in the activity window. A standalone
+                    // panel tags the launch source as Wallet (there's no sigil pill here).
                     coroutineScope.launch {
                         sheetState.hide()
                         sheetOpen = false
-                        if (onOpenSettings != null) onOpenSettings() else settingsOpen = true
+                        overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Wallet))
                     }
                 },
                 onClose = {
@@ -475,73 +448,8 @@ fun WalletStatusPanel(
         }
     }
 
-    // Receive screen — full-screen overlay rendered above the host content
-    // (and above the now-dismissed sheet). Only available when the wallet is
-    // Ready since we need addresses to display; in other states the sheet's
-    // "receive" button is disabled so this branch shouldn't fire.
-    //
-    // Hosted in an EdgeToEdgeOverlay (full-screen Dialog) so the screen escapes
-    // whatever Row/Box cell the host stuck the panel pill in AND draws behind the
-    // system bars. A Popup would resolve fillMaxSize() to the pill's narrow column
-    // and couldn't reach the bars (no Window of its own).
-    val readyStatus = status as? WalletStatus.Ready
-    if (receiveOpen && readyStatus != null) {
-        EdgeToEdgeOverlay(
-            isLight = activeColors.sheetBackground.luminance() > 0.5f,
-            onDismiss = {
-                receiveOpen = false
-                sheetOpen = true
-            },
-        ) {
-            WalletReceiveScreen(
-                unshieldedAddress = readyStatus.address,
-                shieldedAddress = readyStatus.shieldedAddress,
-                network = network,
-                colors = activeColors,
-                // Back returns to the sheet we came from (re-open it), instead of
-                // dropping all the way to the host content — the stack the user expects.
-                onBack = {
-                    receiveOpen = false
-                    sheetOpen = true
-                },
-            )
-        }
-    }
-
-    // Send screen — same full-screen-overlay pattern as Receive (#240). Only
-    // available when Ready (we need the sender address + spendable balance); the
-    // sheet's Send button is disabled otherwise so this branch shouldn't fire.
-    if (sendOpen && readyStatus != null) {
-        // The full-screen Dialog (EdgeToEdgeOverlay) consumes back at the window level
-        // (fires onDismiss) before any child BackHandler — so the wizard publishes its
-        // back logic here and we let it walk the steps / hide the keyboard; only an
-        // unconsumed back (first step) closes the overlay.
-        val sendBack = remember { mutableStateOf<() -> Boolean>({ false }) }
-        EdgeToEdgeOverlay(
-            isLight = activeColors.sheetBackground.luminance() > 0.5f,
-            onDismiss = {
-                if (!sendBack.value()) {
-                    sendOpen = false
-                    sheetOpen = true
-                }
-            },
-        ) {
-            WalletSendScreen(
-                // sendNight spends UNSHIELDED NIGHT, so cap the form at that pool.
-                spendableNightRaw = readyStatus.balance.unshieldedNight,
-                network = network,
-                sendState = sendState,
-                colors = activeColors,
-                onSubmit = { to, amount -> activity?.let { viewModel.sendNight(config, it, to, amount) } },
-                onResetState = { viewModel.resetSendState() },
-                onBack = {
-                    sendOpen = false
-                    sheetOpen = true
-                },
-                registerBack = { sendBack.value = it },
-            )
-        }
-    }
+    // Send / Receive / Settings full-screen overlays are no longer rendered here — they
+    // live in the activity window via [WalletOverlayHost], opened through [overlay] above.
 }
 
 // ── Pill ──

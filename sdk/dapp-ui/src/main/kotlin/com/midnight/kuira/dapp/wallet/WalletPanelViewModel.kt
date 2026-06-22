@@ -241,6 +241,18 @@ class WalletPanelViewModel @Inject constructor(
      */
     private var lastRequestedConfig: WalletConfig? = null
 
+    /**
+     * The [WalletConfig] the user last acted on, or a network-only default if the
+     * panel never bootstrapped yet. The full-screen overlay host ([WalletOverlayHost])
+     * needs this to drive Send: the proving mode / proof-server URL live in the pill's
+     * local state, not in the host, so the host reads back the config the pill already
+     * built. By the time Send is reachable the pill has called [refreshBalance] (which
+     * sets [lastRequestedConfig]), so this is non-null in practice; the fallback just
+     * keeps the contract total.
+     */
+    fun currentConfig(): WalletConfig =
+        lastRequestedConfig ?: WalletConfig(network = selectedNetwork.value)
+
     /** Wallet the live [observeBalanceJob] is bound to — so it's re-armed only on
      *  bootstrap / network switch, not on every refresh. */
     private var observedWalletAddress: String? = null
