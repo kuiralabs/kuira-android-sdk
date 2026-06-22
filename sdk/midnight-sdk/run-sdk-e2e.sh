@@ -17,6 +17,7 @@
 #
 # Usage:
 #   ANDROID_SERIAL=emulator-5554 ./run-sdk-e2e.sh                 # default: the isolated tier
+#   TEST_CLASS=ALL ./run-sdk-e2e.sh                               # FULL instrumented suite (ALL modules) + funding — nothing skips
 #   TEST_CLASS=com.midnight.kuira.sdk.SdkRegistrationE2ETest ./run-sdk-e2e.sh
 
 set -e
@@ -43,11 +44,20 @@ fi
 
 # ─── Step 3: launch the test, start the funding servicer ───
 echo ""
-echo "── Launching $TEST_CLASS ──"
 adb logcat -c
-./gradlew :sdk:midnight-sdk:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class="$TEST_CLASS" \
-    >/tmp/sdk-e2e-test.log 2>&1 &
+if [ "$TEST_CLASS" = "ALL" ]; then
+    # Full instrumented suite across EVERY module, with the funding servicer live so the
+    # isolated e2e tier RUNS (funded) instead of assumeTrue-skipping. --continue → every
+    # module runs even if one fails, so we see the whole picture in one pass.
+    echo "── Launching the FULL instrumented suite (ALL modules) + funding servicer ──"
+    ./gradlew connectedDebugAndroidTest --continue \
+        >/tmp/sdk-e2e-test.log 2>&1 &
+else
+    echo "── Launching $TEST_CLASS ──"
+    ./gradlew :sdk:midnight-sdk:connectedDebugAndroidTest \
+        -Pandroid.testInstrumentationRunnerArguments.class="$TEST_CLASS" \
+        >/tmp/sdk-e2e-test.log 2>&1 &
+fi
 TEST_PID=$!
 echo "  test PID: $TEST_PID (gradle log: /tmp/sdk-e2e-test.log)"
 
