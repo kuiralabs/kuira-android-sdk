@@ -231,17 +231,21 @@ public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationRes
 
 public final class com/midnight/kuira/core/ledger/api/TransactionRejected : com/midnight/kuira/core/ledger/api/NodeRpcException {
 	public static final field Companion Lcom/midnight/kuira/core/ledger/api/TransactionRejected$Companion;
+	public static final field ERROR_DUST_DOUBLE_SPEND I
 	public static final field ERROR_EFFECTS_CHECK_FAILURE I
 	public static final field ERROR_INPUT_NOT_IN_UTXOS I
 	public static final field ERROR_INVALID_DUST_SPEND_PROOF I
 	public static final field ERROR_INVALID_PROOF I
+	public static final field ERROR_OUT_OF_DUST_VALIDITY_WINDOW I
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getCustomErrorCode ()Ljava/lang/Integer;
 	public final fun getReason ()Ljava/lang/String;
 	public final fun getTxHash ()Ljava/lang/String;
+	public final fun isDustDoubleSpend ()Z
 	public final fun isDustSpendProof ()Z
 	public final fun isInvalidProof ()Z
+	public final fun isOutOfDustValidityWindow ()Z
 	public final fun isStaleUtxo ()Z
 }
 
@@ -359,8 +363,8 @@ public final class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionB
 	public static final field Companion Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$Companion;
 	public static final field DEFAULT_TTL_MINUTES I
 	public fun <init> (Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;)V
-	public final fun buildTransfer (Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun buildTransfer (Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZJLjava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;Ljava/lang/String;IZJLjava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public abstract class com/midnight/kuira/core/ledger/builder/UnshieldedTransactionBuilder$BuildResult {
@@ -461,8 +465,40 @@ public final class com/midnight/kuira/core/ledger/di/LedgerModule_ProvideTransac
 
 public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder {
 	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder;
-	public final fun build ([BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;J)Ljava/lang/String;
-	public static synthetic fun build$default (Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder;[BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;JILjava/lang/Object;)Ljava/lang/String;
+	public final fun build ([BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result;
+	public static synthetic fun build$default (Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder;[BLjava/lang/String;Ljava/lang/String;JLjava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result;
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result {
+}
+
+public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Built : com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Built;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Built;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Built;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHex ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Failed : com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result {
+	public static final field INSTANCE Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$NotMatured : com/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result {
+	public fun <init> (Ljava/math/BigInteger;)V
+	public final fun component1 ()Ljava/math/BigInteger;
+	public final fun copy (Ljava/math/BigInteger;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$NotMatured;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$NotMatured;Ljava/math/BigInteger;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/dust/DustRegistrationBuilder$Result$NotMatured;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getShortfallSpecks ()Ljava/math/BigInteger;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/ledger/fee/DustActionsBuilder {

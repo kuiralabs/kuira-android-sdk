@@ -277,6 +277,14 @@ public final class com/midnight/kuira/core/compact/DeployTimings {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/midnight/kuira/core/compact/DustCtime {
+	public static final field INSTANCE Lcom/midnight/kuira/core/compact/DustCtime;
+	public static final field SAFETY_WINDOW_MS J
+	public static final field TIP_BACKOFF_MS J
+	public final fun anchorMs (JJJJ)J
+	public static synthetic fun anchorMs$default (Lcom/midnight/kuira/core/compact/DustCtime;JJJJILjava/lang/Object;)J
+}
+
 public final class com/midnight/kuira/core/compact/ExecutionResult {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
