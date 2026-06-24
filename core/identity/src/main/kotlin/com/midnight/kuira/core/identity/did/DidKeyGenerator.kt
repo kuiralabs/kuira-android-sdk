@@ -5,17 +5,21 @@ import org.bitcoinj.core.Base58
 import java.security.interfaces.ECPublicKey
 
 /**
- * Generates W3C `did:key` identifiers from P-256 public keys.
+ * Generates and parses W3C `did:key` identifiers for the sigil's identity facet:
+ * one DID per user, stable across all Midnight dApps.
  *
- * The DID is derived from the root passkey's P-256 public key — one DID per user,
- * stable across all Midnight dApps. This is the sigil's identity facet.
+ * The production path derives the DID from the user's Ed25519 sigil key (the
+ * PRF-derived identity key; multicodec `0xed`), producing the well-known
+ * `did:key:z6Mk...` form (see [fromEd25519]). Earlier installations rooted the DID
+ * directly in the passkey's P-256 public key (multicodec `0x1200`, `did:key:zDn...`);
+ * that encoding is still recognized for migration (see [isLegacyP256] and
+ * [fromCompressedP256]).
  *
- * Format: `did:key:z<base58btc(varint(0x1200) || compressed_P256_pubkey)>`
+ * Format: `did:key:z<base58btc(varint(multicodec) || pubkey)>`
  *
  * Where:
- * - `0x1200` is the multicodec identifier for P-256 public keys
- * - varint encoding of `0x1200` = `[0x80, 0x24]`
- * - compressed P-256 public key = 33 bytes (0x02/0x03 prefix + 32-byte x coordinate)
+ * - multicodec varint: Ed25519 = `0xed` -> `[0xed, 0x01]`; legacy P-256 = `0x1200` -> `[0x80, 0x24]`
+ * - pubkey: 32-byte Ed25519 key, or 33-byte compressed P-256 key (0x02/0x03 prefix + 32-byte x)
  * - base58btc = Bitcoin-style base58 encoding (multibase prefix `z`)
  *
  * References:
