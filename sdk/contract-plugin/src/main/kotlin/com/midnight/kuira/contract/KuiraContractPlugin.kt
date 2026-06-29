@@ -1,5 +1,6 @@
 package com.midnight.kuira.contract
 
+import com.android.build.api.variant.AndroidComponentsExtension
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -114,6 +115,27 @@ class KuiraContractPlugin : Plugin<Project> {
             task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
         }
 
+        // generateContractApi — emits a typed Kotlin facade (<Alias>Contract)
+        // over MidnightContract.call(...) from the compiled contract's
+        // compiler/contract-info.json ABI, so dApps call circuits with
+        // compile-time-checked argument types. The output directory's exact
+        // location is set by AGP when the task is wired as a generated source
+        // (see afterEvaluate below); the convention here is a sensible default
+        // for the rare case AGP isn't present.
+        val contractInfoProvider = sourceProvider.map { dir ->
+            dir.file("$COMPILER_SUBDIR/$CONTRACT_INFO_FILE")
+        }
+        val generateContractApiTask = project.tasks.register(
+            GenerateContractApiTask.TASK_NAME,
+            GenerateContractApiTask::class.java,
+        ) { task ->
+            task.contractInfoFile.set(contractInfoProvider)
+            task.alias.set(aliasProvider)
+            task.outputDir.convention(
+                project.layout.buildDirectory.dir(GENERATED_API_SUBDIR),
+            )
+        }
+
         // provisionWalletKeys — downloads + stages the protocol wallet proving
         // keys into assets when bundleWalletKeys is on (the offline-bundle path).
         // gradleUserHomeDir is captured at configuration time so the action stays
@@ -180,12 +202,45 @@ class KuiraContractPlugin : Plugin<Project> {
             // Always wired; the task's onlyIf skips it when bundleWalletKeys is off,
             // so a consumer that doesn't opt in pays nothing.
             preBuild.dependsOn(provisionWalletKeysTask)
+
+            // Register the generated facade directory as a Kotlin source root on
+            // every Android variant so <Alias>Contract compiles into the consumer
+            // module with zero manual source-set wiring. The AGP touch is isolated
+            // in GeneratedSourceRegistrar (AGP is a compileOnly dep — see that
+            // class for why a direct reference here would break plugin loading in
+            // non-Android builds). Guarded: a non-Android consumer just gets the
+            // runnable task, with a loud (not silent) note that it won't be
+            // auto-compiled.
+            // Gate on a string plugin-id check (NOT an AGP type reference): only
+            // touch GeneratedSourceRegistrar — and therefore load the AGP classes
+            // it references — when an Android plugin is actually applied. This keeps
+            // a non-Android consumer (or the plugin's own non-Android TestKit
+            // project) from ever loading AGP off a compileOnly classpath.
+            val hasAndroidPlugin =
+                project.pluginManager.hasPlugin(ANDROID_APP_PLUGIN_ID) ||
+                    project.pluginManager.hasPlugin(ANDROID_LIB_PLUGIN_ID)
+            val registered = hasAndroidPlugin &&
+                GeneratedSourceRegistrar.register(project, generateContractApiTask)
+            if (!registered) {
+                project.logger.warn(
+                    "[kuira-contract] AGP variant API not found; the generated " +
+                        "typed contract facade will NOT be auto-compiled. Apply " +
+                        "com.android.application or com.android.library so " +
+                        "${GenerateContractApiTask.TASK_NAME}'s output is registered " +
+                        "as a Kotlin source root.",
+                )
+            }
         }
     }
 
     companion object {
         internal const val SYNC_TASK_NAME = "syncContractAssets"
         internal const val ANDROID_PREBUILD_TASK = "preBuild"
+
+        // String plugin ids used to gate the AGP source-registration touch
+        // without referencing AGP types from this class (see afterEvaluate).
+        internal const val ANDROID_APP_PLUGIN_ID = "com.android.application"
+        internal const val ANDROID_LIB_PLUGIN_ID = "com.android.library"
 
         internal const val CONTRACT_SUBDIR = "contract"
         internal const val KEYS_SUBDIR = "keys"
@@ -197,6 +252,10 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val COMPILER_SUBDIR = "compiler"
         internal const val CONTRACT_INFO_FILE = "contract-info.json"
         internal const val PACKAGE_JSON_FILE = "package.json"
+
+        // Generated typed-contract-API output, relative to the module's build dir.
+        // Matches the task spec: build/generated/kuira/.
+        internal const val GENERATED_API_SUBDIR = "generated/kuira"
 
         internal const val ASSETS_DEST = "src/main/assets"
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"

@@ -36,23 +36,23 @@ class ArgConverterTest {
     // ── Numbers ──
 
     @Test
-    fun `int becomes JS number`() {
-        assertEquals("42", ArgConverter.toJsExpression(42))
+    fun `int becomes JS BigInt`() {
+        assertEquals("42n", ArgConverter.toJsExpression(42))
     }
 
     @Test
     fun `negative int`() {
-        assertEquals("-1", ArgConverter.toJsExpression(-1))
+        assertEquals("-1n", ArgConverter.toJsExpression(-1))
     }
 
     @Test
     fun `zero`() {
-        assertEquals("0", ArgConverter.toJsExpression(0))
+        assertEquals("0n", ArgConverter.toJsExpression(0))
     }
 
     @Test
-    fun `long becomes JS number`() {
-        assertEquals("1000000000", ArgConverter.toJsExpression(1000000000L))
+    fun `long becomes JS BigInt`() {
+        assertEquals("1000000000n", ArgConverter.toJsExpression(1000000000L))
     }
 
     @Test
@@ -118,7 +118,7 @@ class ArgConverterTest {
             "age" to 30,
             "active" to true,
         ))
-        assertEquals("{ name: 'Alice', age: 30, active: true }", result)
+        assertEquals("{ name: 'Alice', age: 30n, active: true }", result)
     }
 
     @Test
@@ -126,7 +126,7 @@ class ArgConverterTest {
         val result = ArgConverter.toJsExpression(mapOf(
             "inner" to mapOf("x" to 1),
         ))
-        assertEquals("{ inner: { x: 1 } }", result)
+        assertEquals("{ inner: { x: 1n } }", result)
     }
 
     @Test
@@ -141,7 +141,7 @@ class ArgConverterTest {
 
     @Test
     fun `list becomes JS array`() {
-        assertEquals("[1, 2, 3]", ArgConverter.toJsExpression(listOf(1, 2, 3)))
+        assertEquals("[1n, 2n, 3n]", ArgConverter.toJsExpression(listOf(1, 2, 3)))
     }
 
     @Test
@@ -159,7 +159,7 @@ class ArgConverterTest {
     @Test
     fun `toJsExpressions converts multiple args`() {
         val result = ArgConverter.toJsExpressions("Hello", 42, true)
-        assertEquals(listOf("'Hello'", "42", "true"), result)
+        assertEquals(listOf("'Hello'", "42n", "true"), result)
     }
 
     @Test

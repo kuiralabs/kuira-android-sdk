@@ -4,6 +4,18 @@ public abstract class com/midnight/kuira/contract/AdbReverseLocalnetTask : org/g
 	public abstract fun getExecOps ()Lorg/gradle/process/ExecOperations;
 }
 
+public abstract class com/midnight/kuira/contract/GenerateContractApiTask : org/gradle/api/DefaultTask {
+	public static final field Companion Lcom/midnight/kuira/contract/GenerateContractApiTask$Companion;
+	public fun <init> ()V
+	public final fun generate ()V
+	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
+	public abstract fun getContractInfoFile ()Lorg/gradle/api/file/RegularFileProperty;
+	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;
+}
+
+public final class com/midnight/kuira/contract/GenerateContractApiTask$Companion {
+}
+
 public abstract class com/midnight/kuira/contract/KuiraContractExtension {
 	public fun <init> ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;

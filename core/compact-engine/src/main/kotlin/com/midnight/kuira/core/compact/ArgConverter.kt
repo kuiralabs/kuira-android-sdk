@@ -11,8 +11,7 @@ import java.math.BigInteger
  *
  * Supported types:
  * - `String` → `'escaped value'` (single-quoted JS string)
- * - `Int`, `Long` → `42` (JS number)
- * - `BigInteger` → `42n` (JS BigInt)
+ * - `Int`, `Long`, `BigInteger` → `42n` (JS BigInt — Compact's `Uint`/`Field`)
  * - `Boolean` → `true` / `false`
  * - `ByteArray` → `new Uint8Array([1,2,3])`
  * - `Map<String, Any?>` → `{ key: value }` (JS object literal)
@@ -26,9 +25,9 @@ internal object ArgConverter {
         null -> "null"
         is String -> "'${escapeJsString(value)}'"
         is Boolean -> value.toString()
-        is Int -> value.toString()
-        is Long -> value.toString()
-        is BigInteger -> "${value}n"
+        // Compact integer types (Uint<N>, Field) are JS BigInt — a plain JS
+        // number fails the generated wrapper's `typeof === 'bigint'` guard.
+        is Int, is Long, is BigInteger -> "${value}n"
         is ByteArray -> "new Uint8Array([${value.joinToString(",") { (it.toInt() and 0xFF).toString() }}])"
         is Map<*, *> -> toJsObject(value)
         is List<*> -> "[${value.joinToString(", ") { toJsExpression(it) }}]"

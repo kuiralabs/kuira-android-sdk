@@ -43,8 +43,23 @@ dependencies {
     // transitively from the kotlin-jvm plugin.
     implementation(gradleApi())
 
+    // KotlinPoet powers the build-time codegen of the typed contract
+    // facade (GenerateContractApiTask -> ContractApiGenerator).
+    implementation("com.squareup:kotlinpoet:2.0.0")
+
+    // AGP's variant API (AndroidComponentsExtension / Variant.sources) is
+    // used to register the generated directory as a Kotlin source root in
+    // the consumer's Android module. compileOnly: the consumer already
+    // brings AGP on the build classpath (it applies com.android.* ); we
+    // only need the types to compile the plugin, never to ship AGP.
+    // Pinned to the repo's AGP (gradle/libs.versions.toml: agp = 8.13.2).
+    compileOnly("com.android.tools.build:gradle-api:8.13.2")
+
     testImplementation(libs.junit)
     testImplementation(gradleTestKit())
+    // The generator test asserts on KotlinPoet output, so it needs the
+    // same codegen dependency on the test classpath.
+    testImplementation("com.squareup:kotlinpoet:2.0.0")
 }
 
 gradlePlugin {
