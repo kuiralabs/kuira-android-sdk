@@ -78,6 +78,9 @@ class CircuitExecutor(
         // Absolute intent TTL (seconds since epoch). Sized to the chain's global_ttl by the
         // caller; null lets the native fall back to its own (over-wide) default — see IntentTtl.
         ttlSecs: Long? = null,
+        // Chain block time (Unix SECONDS) for the native gas-query context. Sourced from the chain
+        // tip by the caller; null lets the native fall back to its own wall-clock — see #16.
+        blockTimeSecs: Long? = null,
     ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -102,7 +105,7 @@ class CircuitExecutor(
             ledgerParametersHex = ledgerParametersHex,
         )
 
-        assembleTransaction(params, ttlSecs)
+        assembleTransaction(params, ttlSecs, blockTimeSecs)
     }
 
     /**
@@ -132,8 +135,10 @@ class CircuitExecutor(
         coinPublicKey: ByteArray,
         networkId: String = "undeployed",
         verifierKeys: Map<String, String> = emptyMap(),
-        // Absolute intent TTL (seconds since epoch), sized to the chain's global_ttl by the
-        // caller; null lets the native fall back to its own (over-wide) default — see IntentTtl.
+        // Absolute intent TTL (seconds since epoch), sized to the chain's global_ttl AND anchored to
+        // chain block time by the caller; null lets the native fall back to its own (over-wide)
+        // default — see IntentTtl. The deploy assembler has no gas-query context, so no separate
+        // block_time_secs is needed here (unlike the contract-CALL path).
         ttlSecs: Long? = null,
     ): DeployExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(networkId, "networkId")
@@ -192,7 +197,9 @@ class CircuitExecutor(
             val entries = verifierKeys.entries.joinToString(",") { (k, v) -> "\"$k\":\"$v\"" }
             ",\"verifier_keys\":{$entries}"
         } else ""
-        // Stamp the chain-sized TTL, else the native deploy assembler defaults to now + 1h.
+        // Stamp the chain-sized TTL (already anchored to chain block time by the caller), else the
+        // native deploy assembler defaults to now + 1h. The deploy assembler builds no gas-query
+        // context, so it needs no block_time_secs — the chain-anchored ttl_secs is the only knob.
         val ttlJson = if (ttlSecs != null) ",\"ttl_secs\":$ttlSecs" else ""
         val paramsJson = """{"network_id":"$networkId","state_handle":$stateHandle$vkJson$ttlJson}"""
         val resultJson = ContractRuntime.assembleDeployTx(paramsJson)
@@ -255,11 +262,19 @@ class CircuitExecutor(
             ?: throw CircuitExecutionException("Circuit produced no output")
     }
 
-    private fun assembleTransaction(txParamsJson: String, ttlSecs: Long?): ExecutionResult {
-        // The call's params JSON is produced by the JS runtime (no TTL); stamp the
-        // chain-sized TTL before the native assembler, else it defaults to now + 1h.
-        val params = if (ttlSecs != null) {
-            JSONObject(txParamsJson).put("ttl_secs", ttlSecs).toString()
+    private fun assembleTransaction(
+        txParamsJson: String,
+        ttlSecs: Long?,
+        blockTimeSecs: Long?,
+    ): ExecutionResult {
+        // The call's params JSON is produced by the JS runtime (no TTL / no block time); stamp the
+        // chain-sized TTL + chain block time before the native assembler. Without a TTL the native
+        // defaults to now + 1h; without block_time_secs the gas-query context uses wall-clock.
+        val params = if (ttlSecs != null || blockTimeSecs != null) {
+            JSONObject(txParamsJson).apply {
+                if (ttlSecs != null) put("ttl_secs", ttlSecs)
+                if (blockTimeSecs != null) put("block_time_secs", blockTimeSecs)
+            }.toString()
         } else {
             txParamsJson
         }

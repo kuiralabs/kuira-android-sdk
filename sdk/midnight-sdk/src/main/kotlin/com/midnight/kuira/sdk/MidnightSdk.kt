@@ -137,6 +137,7 @@ class MidnightSdk private constructor(
     private val networkId: String,
     private val utxoManager: UtxoManager,
     private val transactionSubmitter: TransactionSubmitter,
+    private val versionCoherenceChecker: VersionCoherenceChecker,
     private val subscriptionScope: CoroutineScope,
     private val database: UtxoDatabase,
     private val indexerClient: IndexerClientImpl,
@@ -154,6 +155,18 @@ class MidnightSdk private constructor(
             )
         }
     }
+
+    /**
+     * One-time pre-flight: confirm the node's ledger is coherent with the client's bundled version,
+     * so a skew surfaces as a named warning rather than an opaque `Custom error: N` mid-submit (#16).
+     *
+     * Memoized via [VersionCoherenceChecker] — the RPC + native read run at most once per SDK
+     * instance. NON-BLOCKING by policy ([VersionCoherence.HARD_FAIL_ON_SKEW]): a skew logs loudly and
+     * returns [VersionCoherence.Result.Warning], it does NOT throw; a check that can't run returns
+     * [VersionCoherence.Result.Unknown]. Callers may invoke this explicitly to surface the typed
+     * result to the UI; the SDK also fires it once before each value-bearing submit.
+     */
+    suspend fun checkVersionCoherence(): VersionCoherence.Result = versionCoherenceChecker.check()
 
     /**
      * Register this wallet's NIGHT key to generate dust against its public dust key.
@@ -206,6 +219,13 @@ class MidnightSdk private constructor(
                 txHash = null,
                 reason = "No NIGHT UTXOs at $walletAddress. Fund the wallet first.",
             )
+        }
+
+        // One-time ledger-version pre-flight (#16): warns on skew (default) or hard-fails per policy.
+        try {
+            versionCoherenceChecker.ensure()
+        } catch (e: VersionSkewException) {
+            return SubmissionResult.Failed(txHash = null, reason = e.message ?: "Ledger version skew with the node.")
         }
 
         // A registration can carry only ~one NIGHT input before it exceeds the ledger's
@@ -395,6 +415,14 @@ class MidnightSdk private constructor(
         // Chain-independent request validation (positive amount, well-formed
         // same-network recipient) — pure + unit-tested in [validateSendRequest].
         validateSendRequest(amount, toAddress, walletAddress)?.let { return it }
+
+        // One-time ledger-version pre-flight (#16): a skew warns loudly (default) or, under a
+        // hard-fail policy, throws VersionSkewException — caught below and mapped to a typed failure.
+        try {
+            versionCoherenceChecker.ensure()
+        } catch (e: VersionSkewException) {
+            return SendResult.Failed(e.message ?: "Ledger version skew with the node.")
+        }
 
         // buildTransfer needs the sender's BIP-340 x-only public key (64 hex chars).
         val senderPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)
@@ -1116,9 +1144,16 @@ class MidnightSdk private constructor(
             // made through `sdk.config` runs as a tracked foreground operation — the
             // FULL pipeline incl. ZK proving — with no per-call dApp code (#261-264).
             val operations = OperationRegistry()
+            // One memoized coherence checker shared by all submit paths (#16): send + dust
+            // registration go through MidnightSdk; contract calls/deploys fire it here, in the
+            // listener that brackets every MidnightContract operation made through `sdk.config`.
+            val versionCoherenceChecker = VersionCoherenceChecker(nodeRpcClient)
             val contractOperationListener = object : ContractOperationListener {
                 override suspend fun <T> trackContractCall(circuitName: String, block: suspend () -> T): T =
-                    operations.run(OperationDescriptor(OperationKind.ContractCall)) { block() }
+                    operations.run(OperationDescriptor(OperationKind.ContractCall)) {
+                        versionCoherenceChecker.ensure()
+                        block()
+                    }
             }
 
             // ── Create config with embedded wallet ──
@@ -1149,6 +1184,7 @@ class MidnightSdk private constructor(
                 networkId = net.rustNetworkId,
                 utxoManager = utxoManager,
                 transactionSubmitter = transactionSubmitter,
+                versionCoherenceChecker = versionCoherenceChecker,
                 subscriptionScope = subscriptionScope,
                 database = database,
                 indexerClient = indexerClient,

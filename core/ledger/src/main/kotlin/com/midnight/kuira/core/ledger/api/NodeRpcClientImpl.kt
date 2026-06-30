@@ -644,6 +644,58 @@ class NodeRpcClientImpl(
         }
     }
 
+    override suspend fun getRuntimeVersion(): RuntimeVersion {
+        try {
+            val requestId = requestIdCounter.incrementAndGet()
+            val request = JsonRpcRequest(
+                id = requestId,
+                method = "state_getRuntimeVersion",
+                params = emptyList()
+            )
+
+            val response = httpClient.post(nodeUrl) {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5_000 }
+            }
+
+            val responseBody = response.bodyAsText()
+            val jsonResponse = json.decodeFromString<JsonRpcResponse>(responseBody)
+
+            if (jsonResponse.error != null) {
+                throw NodeRpcError(
+                    code = jsonResponse.error.code,
+                    message = jsonResponse.error.message,
+                    data = jsonResponse.error.data,
+                )
+            }
+
+            val result = jsonResponse.result?.jsonObject
+                ?: throw NodeInvalidResponseException("Missing 'result' in state_getRuntimeVersion response")
+
+            // Substrate's RuntimeVersion: specName/implName are strings, the *Version fields are
+            // numbers. Be lenient — only specName + specVersion are required for the coherence check.
+            val specName = result["specName"]?.jsonPrimitive?.contentOrNull
+                ?: throw NodeInvalidResponseException("Missing 'specName' in runtime version")
+            val specVersion = result["specVersion"]?.jsonPrimitive?.longOrNull
+                ?: throw NodeInvalidResponseException("Missing/invalid 'specVersion' in runtime version")
+
+            return RuntimeVersion(
+                specName = specName,
+                specVersion = specVersion,
+                implName = result["implName"]?.jsonPrimitive?.contentOrNull,
+                implVersion = result["implVersion"]?.jsonPrimitive?.longOrNull,
+                transactionVersion = result["transactionVersion"]?.jsonPrimitive?.longOrNull,
+            )
+        } catch (e: NodeRpcException) {
+            throw e
+        } catch (e: HttpRequestTimeoutException) {
+            throw NodeTimeoutException("Timeout fetching runtime version", e)
+        } catch (e: Exception) {
+            throw NodeNetworkException("Failed to fetch runtime version: ${e.message}", e)
+        }
+    }
+
     override fun close() {
         httpClient.close()
     }

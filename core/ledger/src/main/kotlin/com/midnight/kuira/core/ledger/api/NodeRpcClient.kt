@@ -126,10 +126,47 @@ interface NodeRpcClient {
     suspend fun isHealthy(): Boolean
 
     /**
+     * The node's runtime version (standard Substrate RPC: `state_getRuntimeVersion`).
+     *
+     * Used by the host's one-time version-coherence check (see the SDK's pre-flight) to
+     * compare the node's runtime against the client's bundled ledger version, so a client
+     * built behind the chain warns loudly instead of silently mis-decoding ops.
+     *
+     * @return the parsed [RuntimeVersion]
+     * @throws NodeNetworkException if network connectivity fails
+     * @throws NodeTimeoutException if request times out
+     * @throws NodeRpcError if node returns JSON-RPC error
+     * @throws NodeInvalidResponseException if response is malformed
+     */
+    suspend fun getRuntimeVersion(): RuntimeVersion
+
+    /**
      * Close the client and release resources.
      */
     fun close()
 }
+
+/**
+ * The node's reported runtime version, from Substrate's `state_getRuntimeVersion`.
+ *
+ * Substrate's runtime version doesn't carry the midnight-ledger semver directly; the most
+ * useful signal for a ledger-coherence check is [specName] + [specVersion] (e.g. the runtime
+ * bumps specVersion on a ledger-affecting upgrade). The raw values are kept so the host can
+ * decide how to map them to a known-compatible set.
+ *
+ * @property specName Runtime spec name (e.g. "midnight").
+ * @property specVersion Runtime spec version (monotonic; bumped on runtime upgrades).
+ * @property implName Runtime implementation name.
+ * @property implVersion Runtime implementation version.
+ * @property transactionVersion Extrinsic format version (changes when the tx encoding changes).
+ */
+data class RuntimeVersion(
+    val specName: String,
+    val specVersion: Long,
+    val implName: String? = null,
+    val implVersion: Long? = null,
+    val transactionVersion: Long? = null,
+)
 
 /**
  * Result of transaction finalization.

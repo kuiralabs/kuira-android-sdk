@@ -124,6 +124,31 @@ class MidnightConfig private constructor(
             .getString("ledgerParameters")
 
     /**
+     * The chain tip's ledger parameters AND block time, in one indexer round-trip.
+     *
+     * Both feed contract-call/deploy assembly: the cost model sizes gas, and the block time
+     * (Unix epoch MILLIS) anchors the intent TTL + the native gas-query context to CHAIN time
+     * rather than the device wall-clock — wall-clock drift past the chain's `global_ttl` is what
+     * the node rejects (custom error 182). See [ChainTip].
+     */
+    internal suspend fun fetchChainTip(): ChainTip =
+        graphqlQuery("query { block { ledgerParameters timestamp } }")
+            .getJSONObject("block")
+            .let { block ->
+                ChainTip(
+                    ledgerParametersHex = block.getString("ledgerParameters"),
+                    blockTimeMillis = block.getLong("timestamp"),
+                )
+            }
+
+    /** Chain-tip values used to build a contract transaction against live chain state. */
+    internal data class ChainTip(
+        val ledgerParametersHex: String,
+        /** Block timestamp, Unix epoch MILLIS (as the indexer reports it). */
+        val blockTimeMillis: Long,
+    )
+
+    /**
      * Read a deployed contract's on-chain state as parsed JSON.
      *
      * Returns the state tree with cells decoded as hex, text (if UTF-8), and numbers.

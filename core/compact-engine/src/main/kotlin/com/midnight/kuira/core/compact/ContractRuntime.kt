@@ -133,6 +133,18 @@ object ContractRuntime {
         return nativeGlobalTtlSecs(ledgerParamsHex).takeIf { it > 0L }
     }
 
+    /**
+     * The midnight-ledger version this client links against (e.g. "8.0.3").
+     *
+     * The host runs a coherence check against the node's reported runtime version so a client
+     * built behind the chain warns loudly instead of silently mis-decoding ops (the "Custom
+     * error: N" class). Returns `null` only if the native call fails.
+     */
+    fun ledgerVersion(): String? {
+        ensureLoaded()
+        return nativeLedgerVersion()
+    }
+
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativePersistentCommitAligned(inputJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
@@ -148,4 +160,5 @@ object ContractRuntime {
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
     @JvmStatic private external fun nativeAssembleDeployTx(paramsJson: String): String?
     @JvmStatic private external fun nativeGlobalTtlSecs(paramsHex: String): Long
+    @JvmStatic private external fun nativeLedgerVersion(): String?
 }

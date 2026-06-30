@@ -183,25 +183,32 @@ class MidnightContract private constructor(
         val jsArgs = ArgConverter.toJsExpressions(*args)
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
-        // Step 1: Fetch on-chain state + ledger params
+        // Step 1: Fetch on-chain state + chain tip (ledger params + block time, one round-trip)
         onProgress?.invoke(ContractCallStage.FetchingState)
         val fetchStart = System.currentTimeMillis()
         val onChainStateHex: String
-        val ledgerParamsHex: String
+        val chainTip: MidnightConfig.ChainTip
         try {
             onChainStateHex = config.fetchContractState(contractAddress)
-            ledgerParamsHex = config.fetchLedgerParameters()
+            chainTip = config.fetchChainTip()
         } catch (e: ContractCallException) {
             throw e
         } catch (e: Exception) {
             throw ContractCallException.StateFetchFailed("State fetch failed: ${e.message}", e)
         }
+        val ledgerParamsHex = chainTip.ledgerParametersHex
         val fetchMs = System.currentTimeMillis() - fetchStart
+
+        // Anchor TTL + the native gas-query context to CHAIN block time, not the device wall-clock:
+        // wall-clock drift past the chain's global_ttl is what the node rejects (custom error 182).
+        // The indexer reports the block time in millis; convert to seconds for block_time_secs.
+        val chainNowMs = chainTip.blockTimeMillis
+        val blockTimeSecs = chainNowMs / 1000
 
         // Size the intent TTL to the chain's global_ttl — a fixed window overshoots a
         // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182).
         val ttlSecs = IntentTtl.ttlSeconds(
-            nowMs = System.currentTimeMillis(),
+            nowMs = chainNowMs,
             globalTtlSecs = ContractRuntime.ledgerGlobalTtlSeconds(ledgerParamsHex),
         )
 
@@ -221,6 +228,7 @@ class MidnightContract private constructor(
                 onChainStateHex = onChainStateHex,
                 ledgerParametersHex = ledgerParamsHex,
                 ttlSecs = ttlSecs,
+                blockTimeSecs = blockTimeSecs,
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
@@ -323,18 +331,22 @@ class MidnightContract private constructor(
         requireWriteCapable()
         val privateStateJs = ArgConverter.toJsObjectLiteral(initialPrivateStateMap)
 
-        // Size the deploy intent TTL to the chain's global_ttl — a fixed window overshoots a
-        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182). Falls back
-        // to the default window if the indexer is unreachable (balancing would fail later anyway).
-        val globalTtlSecs = try {
-            ContractRuntime.ledgerGlobalTtlSeconds(config.fetchLedgerParameters())
+        // Size the deploy intent TTL to the chain's global_ttl and anchor it (+ the native
+        // gas-query context) to CHAIN block time — a fixed window or device wall-clock overshoots a
+        // tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182). Falls back to
+        // the default window + wall-clock if the indexer is unreachable (balancing would fail later
+        // anyway).
+        val chainTip = try {
+            config.fetchChainTip()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "global_ttl fetch failed, using default TTL window: ${e.message}")
+            Log.w(TAG, "chain-tip fetch failed, using default TTL window + wall-clock: ${e.message}")
             null
         }
-        val ttlSecs = IntentTtl.ttlSeconds(System.currentTimeMillis(), globalTtlSecs)
+        val globalTtlSecs = chainTip?.ledgerParametersHex?.let { ContractRuntime.ledgerGlobalTtlSeconds(it) }
+        val nowMs = chainTip?.blockTimeMillis ?: System.currentTimeMillis()
+        val ttlSecs = IntentTtl.ttlSeconds(nowMs, globalTtlSecs)
 
         // Step 1: Execute constructor
         onProgress?.invoke(ContractCallStage.Executing)
