@@ -5,7 +5,7 @@ import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -53,9 +53,12 @@ class UnshieldedTransferHarnessTest {
     @Test
     fun receiveUnshielded_assemblesPastStackKey() {
         val err = runCircuit("receiveUnshieldedTest", listOf("new Uint8Array(32)", "1000000n"))
-        assertFalse(
-            "receiveUnshielded must no longer fail at the #3 stack-key parse; got: <$err>",
-            err.contains("unknown key tag: stack"),
+        // Positively assert it assembled cleanly — not merely "not the #3 error".
+        // A future re-break via a different error must fail this guard too.
+        assertEquals(
+            "receiveUnshielded must assemble cleanly past the #3 stack-key parse; got error: <$err>",
+            "",
+            err,
         )
     }
 
@@ -63,9 +66,11 @@ class UnshieldedTransferHarnessTest {
     @Test
     fun sendUnshielded_assemblesPastStackKey() {
         val err = runCircuit("sendUnshieldedToSelfTest", listOf("new Uint8Array(32)", "1000000n"))
-        assertFalse(
-            "sendUnshielded must no longer fail at the #3 stack-key parse; got: <$err>",
-            err.contains("unknown key tag: stack"),
+        // Positively assert it assembled cleanly — not merely "not the #3 error".
+        assertEquals(
+            "sendUnshielded must assemble cleanly past the #3 stack-key parse; got error: <$err>",
+            "",
+            err,
         )
     }
 }

@@ -264,19 +264,26 @@ class CircuitExecutor(
             txParamsJson
         }
 
-        val txHex = ContractRuntime.assembleContractCallTx(params)
-            ?: throw CircuitExecutionException("Transaction assembly returned null")
+        // Free the native state-pool handles on EVERY exit — success OR throw. The
+        // handles were created during JS execution; an assembly error must not leak
+        // them. The serde transcript parser rejects a non-normal-form transcript the
+        // old hand parser tolerated, so the error path is reachable in normal
+        // operation — the free must not sit past the throw.
+        try {
+            val txHex = ContractRuntime.assembleContractCallTx(params)
+                ?: throw CircuitExecutionException("Transaction assembly returned null")
 
-        if (txHex.startsWith("{\"error")) {
-            throw CircuitExecutionException("Transaction assembly failed: $txHex")
+            if (txHex.startsWith("{\"error")) {
+                throw CircuitExecutionException("Transaction assembly failed: $txHex")
+            }
+
+            return ExecutionResult(
+                unprovenTxHex = txHex,
+                txParamsJson = params,
+            )
+        } finally {
+            freeStateHandles(params)
         }
-
-        freeStateHandles(params)
-
-        return ExecutionResult(
-            unprovenTxHex = txHex,
-            txParamsJson = params,
-        )
     }
 
     private fun freeStateHandles(txParamsJson: String) {
