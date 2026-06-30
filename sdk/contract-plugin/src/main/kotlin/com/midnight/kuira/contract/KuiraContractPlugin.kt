@@ -136,6 +136,21 @@ class KuiraContractPlugin : Plugin<Project> {
             )
         }
 
+        // Register the generated facade dir as a Kotlin source root via AGP's
+        // onVariants. This MUST run during configuration — NOT afterEvaluate, where
+        // AGP has already finalized variants ("too late to add actions ... call
+        // onVariants directly from the androidComponents DSL"). plugins.withId fires
+        // synchronously when the Android plugin is applied, so the AGP touch
+        // (GeneratedSourceRegistrar — AGP is a compileOnly dep) is loaded ONLY for an
+        // Android consumer, never in a non-Android build. An app applies
+        // `application`, a library `library` — never both — so register runs once.
+        project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
+            GeneratedSourceRegistrar.register(project, generateContractApiTask)
+        }
+        project.plugins.withId(ANDROID_LIB_PLUGIN_ID) {
+            GeneratedSourceRegistrar.register(project, generateContractApiTask)
+        }
+
         // provisionWalletKeys — downloads + stages the protocol wallet proving
         // keys into assets when bundleWalletKeys is on (the offline-bundle path).
         // gradleUserHomeDir is captured at configuration time so the action stays
@@ -202,34 +217,6 @@ class KuiraContractPlugin : Plugin<Project> {
             // Always wired; the task's onlyIf skips it when bundleWalletKeys is off,
             // so a consumer that doesn't opt in pays nothing.
             preBuild.dependsOn(provisionWalletKeysTask)
-
-            // Register the generated facade directory as a Kotlin source root on
-            // every Android variant so <Alias>Contract compiles into the consumer
-            // module with zero manual source-set wiring. The AGP touch is isolated
-            // in GeneratedSourceRegistrar (AGP is a compileOnly dep — see that
-            // class for why a direct reference here would break plugin loading in
-            // non-Android builds). Guarded: a non-Android consumer just gets the
-            // runnable task, with a loud (not silent) note that it won't be
-            // auto-compiled.
-            // Gate on a string plugin-id check (NOT an AGP type reference): only
-            // touch GeneratedSourceRegistrar — and therefore load the AGP classes
-            // it references — when an Android plugin is actually applied. This keeps
-            // a non-Android consumer (or the plugin's own non-Android TestKit
-            // project) from ever loading AGP off a compileOnly classpath.
-            val hasAndroidPlugin =
-                project.pluginManager.hasPlugin(ANDROID_APP_PLUGIN_ID) ||
-                    project.pluginManager.hasPlugin(ANDROID_LIB_PLUGIN_ID)
-            val registered = hasAndroidPlugin &&
-                GeneratedSourceRegistrar.register(project, generateContractApiTask)
-            if (!registered) {
-                project.logger.warn(
-                    "[kuira-contract] AGP variant API not found; the generated " +
-                        "typed contract facade will NOT be auto-compiled. Apply " +
-                        "com.android.application or com.android.library so " +
-                        "${GenerateContractApiTask.TASK_NAME}'s output is registered " +
-                        "as a Kotlin source root.",
-                )
-            }
         }
     }
 
