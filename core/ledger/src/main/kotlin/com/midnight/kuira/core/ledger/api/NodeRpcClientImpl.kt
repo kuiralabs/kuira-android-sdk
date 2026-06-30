@@ -645,51 +645,55 @@ class NodeRpcClientImpl(
     }
 
     override suspend fun getRuntimeVersion(): RuntimeVersion {
-        try {
-            val requestId = requestIdCounter.incrementAndGet()
-            val request = JsonRpcRequest(
-                id = requestId,
-                method = "state_getRuntimeVersion",
-                params = emptyList()
-            )
-
-            val response = httpClient.post(nodeUrl) {
-                contentType(ContentType.Application.Json)
-                setBody(request)
-                timeout { requestTimeoutMillis = 5_000 }
+        // On-device the node serves JSON-RPC over WebSocket: an HTTP POST to the same
+        // endpoint is rejected ("Request must be GET"), which silently degraded the
+        // version-coherence pre-flight to Unknown. Mirror the submit path's WS transport
+        // for this one-shot query. A timeout MUST surface as NodeTimeoutException (not a
+        // CancellationException) so it never cancels the caller's submit.
+        val wsUrl = nodeUrl
+            .replace("http://", "ws://")
+            .replace("https://", "wss://")
+        return try {
+            withTimeout(5_000) {
+                val result = CompletableDeferred<RuntimeVersion>()
+                httpClient.webSocket(wsUrl) {
+                    val requestId = requestIdCounter.incrementAndGet()
+                    send(Frame.Text(buildJsonRpcRequest(requestId, "state_getRuntimeVersion", emptyList())))
+                    for (frame in incoming) {
+                        if (frame !is Frame.Text) continue
+                        val response = json.decodeFromString<JsonObject>(frame.readText())
+                        response["error"]?.jsonObject?.let { error ->
+                            throw NodeRpcError(
+                                code = error["code"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: -1,
+                                message = error["message"]?.jsonPrimitive?.contentOrNull ?: "runtime version error",
+                                data = error["data"]?.jsonPrimitive?.contentOrNull,
+                            )
+                        }
+                        // One-shot query: skip any non-result frame, take the first result.
+                        val obj = response["result"]?.jsonObject ?: continue
+                        // specName/implName are strings, the *Version fields are numbers.
+                        // Only specName + specVersion are required for the coherence check.
+                        val specName = obj["specName"]?.jsonPrimitive?.contentOrNull
+                            ?: throw NodeInvalidResponseException("Missing 'specName' in runtime version")
+                        val specVersion = obj["specVersion"]?.jsonPrimitive?.longOrNull
+                            ?: throw NodeInvalidResponseException("Missing/invalid 'specVersion' in runtime version")
+                        result.complete(
+                            RuntimeVersion(
+                                specName = specName,
+                                specVersion = specVersion,
+                                implName = obj["implName"]?.jsonPrimitive?.contentOrNull,
+                                implVersion = obj["implVersion"]?.jsonPrimitive?.longOrNull,
+                                transactionVersion = obj["transactionVersion"]?.jsonPrimitive?.longOrNull,
+                            )
+                        )
+                        return@webSocket
+                    }
+                }
+                result.await()
             }
-
-            val responseBody = response.bodyAsText()
-            val jsonResponse = json.decodeFromString<JsonRpcResponse>(responseBody)
-
-            if (jsonResponse.error != null) {
-                throw NodeRpcError(
-                    code = jsonResponse.error.code,
-                    message = jsonResponse.error.message,
-                    data = jsonResponse.error.data,
-                )
-            }
-
-            val result = jsonResponse.result?.jsonObject
-                ?: throw NodeInvalidResponseException("Missing 'result' in state_getRuntimeVersion response")
-
-            // Substrate's RuntimeVersion: specName/implName are strings, the *Version fields are
-            // numbers. Be lenient — only specName + specVersion are required for the coherence check.
-            val specName = result["specName"]?.jsonPrimitive?.contentOrNull
-                ?: throw NodeInvalidResponseException("Missing 'specName' in runtime version")
-            val specVersion = result["specVersion"]?.jsonPrimitive?.longOrNull
-                ?: throw NodeInvalidResponseException("Missing/invalid 'specVersion' in runtime version")
-
-            return RuntimeVersion(
-                specName = specName,
-                specVersion = specVersion,
-                implName = result["implName"]?.jsonPrimitive?.contentOrNull,
-                implVersion = result["implVersion"]?.jsonPrimitive?.longOrNull,
-                transactionVersion = result["transactionVersion"]?.jsonPrimitive?.longOrNull,
-            )
         } catch (e: NodeRpcException) {
             throw e
-        } catch (e: HttpRequestTimeoutException) {
+        } catch (e: TimeoutCancellationException) {
             throw NodeTimeoutException("Timeout fetching runtime version", e)
         } catch (e: Exception) {
             throw NodeNetworkException("Failed to fetch runtime version: ${e.message}", e)
