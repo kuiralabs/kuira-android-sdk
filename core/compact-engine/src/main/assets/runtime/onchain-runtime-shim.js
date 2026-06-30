@@ -270,37 +270,17 @@ function transformAlignedValuePadded(av) {
     return [];
   });
 
-  // Pad empty value slots to match alignment dimensions
-  if (alignment.length > 0 && value.length > 0) {
-    value = value.map((slot, i) => {
-      if (slot.length > 0) return slot;
-      const align = alignment[i];
-      if (!align) return slot;
-      if (align.tag === 'atom' && align.value) {
-        if (align.value.tag === 'field' || align.value.tag === 'compress') {
-          return new Array(32).fill(0);
-        }
-        if (align.value.tag === 'bytes' && align.value.length) {
-          return new Array(align.value.length).fill(0);
-        }
-      }
-      return slot;
-    });
-  }
-
-  // If value is completely empty but alignment is not, create zero-filled slots
-  if (value.length === 0 && alignment.length > 0) {
-    value = alignment.map(align => {
-      if (align.tag === 'atom' && align.value) {
-        if (align.value.tag === 'field' || align.value.tag === 'compress') {
-          return new Array(32).fill(0);
-        }
-        if (align.value.tag === 'bytes' && align.value.length) {
-          return new Array(align.value.length).fill(0);
-        }
-      }
-      return [];
-    });
+  // Empty value slots are emitted as EMPTY atoms ([]), NOT zero-padded
+  // ([0,...,0]). Native transcript parsing is now upstream serde, whose
+  // AlignedValue deserializer rejects any atom not in normal form: a
+  // trailing-zero atom is not normal-form, an empty atom is (and
+  // Alignment::fits accepts it for field/compress/bytes). The old hand-parser
+  // tolerated the zero padding by truncating it; only placeholder/empty reads
+  // were ever padded — real read values already arrive normal-form from the VM.
+  if (value.length > 0) {
+    value = value.map(slot => (slot.length > 0 ? slot : []));
+  } else if (alignment.length > 0) {
+    value = alignment.map(() => []);
   }
 
   return { value: value, alignment: alignment };

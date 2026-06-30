@@ -915,34 +915,14 @@ var __compactRuntime = (() => {
       }
       return [];
     });
-    if (alignment.length > 0 && value.length > 0) {
-      value = value.map((slot, i) => {
-        if (slot.length > 0) return slot;
-        const align = alignment[i];
-        if (!align) return slot;
-        if (align.tag === "atom" && align.value) {
-          if (align.value.tag === "field" || align.value.tag === "compress") {
-            return new Array(32).fill(0);
-          }
-          if (align.value.tag === "bytes" && align.value.length) {
-            return new Array(align.value.length).fill(0);
-          }
-        }
-        return slot;
-      });
-    }
-    if (value.length === 0 && alignment.length > 0) {
-      value = alignment.map((align) => {
-        if (align.tag === "atom" && align.value) {
-          if (align.value.tag === "field" || align.value.tag === "compress") {
-            return new Array(32).fill(0);
-          }
-          if (align.value.tag === "bytes" && align.value.length) {
-            return new Array(align.value.length).fill(0);
-          }
-        }
-        return [];
-      });
+    // Empty value slots are emitted as EMPTY atoms ([]), NOT zero-padded — the
+    // native transcript parser is now upstream serde, whose AlignedValue
+    // deserializer rejects non-normal-form (trailing-zero) atoms but accepts an
+    // empty atom. Only placeholder reads were padded; real reads arrive normal-form.
+    if (value.length > 0) {
+      value = value.map((slot) => slot.length > 0 ? slot : []);
+    } else if (alignment.length > 0) {
+      value = alignment.map(() => []);
     }
     return { value, alignment };
   }
