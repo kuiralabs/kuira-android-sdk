@@ -1,0 +1,92 @@
+# Changelog
+
+All notable changes to the **Kuira Android SDK** are documented here.
+
+The SDK ships as a set of modules published **together on one version** to Maven Central
+under `io.github.kuiralabs:*` — `dapp-ui`, `midnight-sdk`, `wallet-runtime`, `wallet-seed`,
+`identity`, `auth`, `crypto`, `compact-engine`, `indexer`, `ledger`, `network`, `connector`,
+`designsystem`, `testing` — plus the `io.github.kuiralabs.contract` and
+`io.github.kuiralabs.localnet` Gradle plugins. This file tracks that shared version line.
+
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the SDK follows
+[Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may break API).
+Public-API entries from `alpha03` onward are reconciled against each module's checked-in
+`api/*.api` binary-compatibility dump; `alpha01` (which predates those dumps) is described
+from its release and history.
+
+## [Unreleased] — `0.1.0-alpha05` (in development)
+
+### Added
+- **Contract constructor arguments** — deploy a contract passing constructor args, threaded through the circuit-call path (`compact-engine`).
+- **Typed contract codegen + BigInt marshalling** hardening across the contract-call path (`compact-engine` / `midnight-sdk`).
+- **Version-coherence pre-flight** — chain-time sourcing and a client↔node version check before value-bearing calls.
+
+## [0.1.0-alpha04] — 2026-06-21
+
+The frosted "Void" design system and the background-operation framework land here.
+~70 new public types across the modules (verified against the `api/*.api` dumps).
+
+### Added
+- **Sovereign recovery phrase** — reveal a standard 24-word BIP-39 phrase behind biometrics and restore the exact wallet on any device; opt-in, one-way, on a `FLAG_SECURE` screen. `WalletRecovery`, `WalletSeedSource`, `EstablishResult`, `InvalidRecoveryPhraseException` (`wallet-seed`); reveal/restore Settings UI (`dapp-ui`). *(#252)*
+- **Session auto-lock** — idle, background, and screen-lock re-authentication plus a manual "lock now". `SessionLock` (`wallet-runtime`), `SessionLockGate` (`dapp-ui`).
+- **Reactive contract state** — `MidnightContract.observeLedger()` (a `Flow` pushed by block subscriptions) and `MidnightSdk.observeBlocks()`. *(#255)*
+- **Durable protocol orchestrator** — a ledger-anchored saga that resumes multi-step flows after process death. `ProtocolScope`, `ProtocolResult` (`midnight-sdk`). *(#253/#254)*
+- **NIGHT transfers** — `sendNight` with automatic change-UTXO consolidation, plus a 3-screen Send wizard with QR scan and back-stack nav. *(#240)*
+- **Per-transaction receive amounts** — real inbound value derived from UTXO-set provenance; `NightAmount`. *(#284)*
+- **Background receive notifications** — background push on incoming NIGHT with per-transaction value alerts. `BackgroundReceiveChecker`, `ReceivePollWorker`, `ReceiveCheckpointStore`, `WalletNotifications`, `AlertNotifier`, `FinalizationNotifier`, `SyncNotifier` (`wallet-runtime`), `ReceiptEvent` (`indexer`). *(#271)*
+- **Foreground-operation framework** — live operation stage surfaced in a foreground-service notification and a wallet chip; operations can carry a return content intent. `OperationRegistry`, `ActiveOperation`, `OperationDescriptor`, `OperationKind`, `OperationOutcome`, `OperationResult`, `OperationTerminalStatus`, `OperationAttention` (`midnight-sdk`), `WalletForegroundService` (`wallet-runtime`). *(#261–#268)*
+- **Cloud-backup controls (true disable)** — fully disable Dust and app-state cloud backups; disabling deletes the remote blobs and resets digests. `CloudBackupStatus`, `BackupStatusSnapshot`, `AppStateCloudBackup`; `MidnightWallet.disableDustCloudBackup()`; `BackupSection`/`BackupLaneState` (`dapp-ui`). *(#246)*
+- **Automatic app-state backup** — silent, hash-guarded capture on each sync. `AppStateCloudBackupCoordinator`, `AppStateBackupDigestStore` (`wallet-runtime`).
+- **Streamed cold sync** — shielded-state checkpoint + delta streamed to disk (no genesis re-replay, no first-sync GC-storm freeze). `ShieldedRepository`, `ZswapCheckpoint`, `ChainResetGuard` (`indexer`). *(#279/#290)*
+- **Proactive Dust sync** and **automatic dust-proof recovery** (`Custom error: 170/171`) via delta re-sync.
+- **Durable network preference** — `NetworkPreferenceStore` exposed through `MidnightSdkProvider`; `SyncStatus` / `SyncPhase`. *(#285)*
+- **x86_64 native ABI** — the crypto `.so` now ships `arm64-v8a` **and** `x86_64`, so Intel-/Apple-silicon emulators run on-device proving. *(#45)*
+- **Floating & resizable wallet/sigil chips** — opt-in draggable chips that dock to a screen edge as peek tabs. `WalletChipUi`, `SigilChipUi`, `WalletOverlay`, `WalletOverlayController`, `WalletOverlayHost` (`dapp-ui`).
+- **Theme palettes** — seven built-in wallet themes (Kuira Monochrome, Paper, Catppuccin, Nord, Dracula, Tokyo Night, Rosé Pine), persisted. `WalletTheme`, `WalletThemes`, `ThemeStore` (`dapp-ui`).
+- **Frosted "Void" design system** — GlassPanel v2, StarField, monochrome accent across the wallet, settings, recovery, and receive screens; `WalletAppShell`, `WalletSyncIndicator`, `ShimmerEffect`.
+- **Redesigned Send flow** — amount presets, a prominent review step, and honest in-flight copy.
+- **Hardened identity errors** — `SigilOverwriteException`, `PasskeyException`, `NoPasskeyCredentialException`, `DriveConsentRequiredException` (`identity`).
+- **Localnet Gradle plugin** — `io.github.kuiralabs.localnet` (`KuiraLocalnetPlugin`, `AdbReverseLocalnetTask`, `ProvisionWalletKeysTask`): auto `adb reverse` of localnet ports and wallet-key provisioning.
+- **Contract call helpers** — `IntentTtl`, `ContractOperationListener` (`compact-engine`).
+
+### Changed
+- **`PanelBar(...)` signature** — gained a `floating: Boolean` (and layout-key) parameter; recompile against the new arity.
+
+## [0.1.0-alpha03] — 2026-06-10
+
+First tag with checked-in `api/*.api` dumps. Reconstructed from history
+(`v0.1.0-alpha01..v0.1.0-alpha03`). No `alpha02` was published.
+
+### Added
+- **Contract Gradle plugin** — `io.github.kuiralabs.contract`: syncs compiled `.compact` artifacts into the app's assets and enforces the runtime-version pin. *(#11)*
+- **`kuiraDoctor` preflight** — build-time environment checks (assetlinks reachability, Compact runtime pin, SDK-bundled-runtime layer, minSdk/cleartext) that fail fast instead of crashing at runtime. *(#8/#9)*
+- **One-call proving-key staging** — `ProvingKeyManager.installCircuitKeysFromAssets()` (`compact-engine`).
+- **Cross-device Dust cloud backup** — encrypt-on-device Dust checkpoint to Google Drive `appDataFolder`, restored on a new device; consent UI in the wallet panel. Bidirectional merge + hash-guarded upload/fetch, seed-derived AES-256-GCM (Drive is transport only).
+- **Durable network selection** — the chosen network persists across launches.
+- **`ContractCallProgressBar`** — a drop-in progress component for deploy/call stages; `PanelBar` interaction states.
+- **`hilt-navigation-compose`** api-exposed for `hiltViewModel()` in consumer UI.
+
+### Changed
+- Bundled Compact runtime **0.15.0 → 0.16.0**.
+- Proving mode surfaced as **"on-device"** (was "local").
+- Throttled full wallet resync; balance now tracked via the reactive observer.
+
+## [0.1.0-alpha01] — 2026-05-28
+
+First public alpha of the Kuira Android SDK — build Midnight zero-knowledge dApps on
+Android from a single Gradle dependency (`io.github.kuiralabs:dapp-ui`).
+
+### Added
+- **On-device ZK proving** — the native Rust `midnight-zkir` engine over JNI; `ProvingMode.LOCAL` by default, no proof server (`arm64-v8a`).
+- **Passkey-derived Sigil identity** — one biometric mints a `did:key` identity + wallet seed; no seed phrase.
+- **Embedded self-custodial wallet** — shielded + unshielded balances and Dust, in-process.
+- **Compact contract runtime** — deploy and call `.compact` contracts (`MidnightContract`), with typed ledger reads.
+- **dApp connector** — the standard Midnight `ConnectedAPI` over a local WebSocket, Android Binder, or a WebView bridge.
+- **Drop-in Compose wallet UI** — `dapp-ui` (Sigil panel, balances, send/receive).
+- Published to Maven Central under `io.github.kuiralabs:*`.
+
+---
+
+[Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs) ·
+[Documentation](https://kuiralabs.github.io/kuira-sdk-android/) ·
+[Roadmap](https://kuiralabs.github.io/kuira-sdk-android/roadmap/)
