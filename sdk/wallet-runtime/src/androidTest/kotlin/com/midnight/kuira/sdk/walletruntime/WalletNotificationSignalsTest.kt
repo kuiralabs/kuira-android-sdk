@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.service.notification.StatusBarNotification
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -51,7 +52,10 @@ class WalletNotificationSignalsTest {
         alerter.postReceived("Received 5 NIGHT", "Tap to view your wallet.", null)
         alerter.postReceived("Received 12 NIGHT", "Tap to view your wallet.", null)
 
-        val active = notificationManager.activeNotifications
+        // notify() enqueues ASYNCHRONOUSLY (binder → NotificationManagerService), so a synchronous
+        // read of activeNotifications can miss a just-posted one. Wait for both to land before
+        // asserting — the rolling ids themselves are already distinct; this only rides out the post.
+        val active = awaitActiveNotifications(minDistinctIds = 2)
 
         // Both receipts must survive as SEPARATE notifications — the rolling id prevents a later
         // receipt from silently replacing an earlier one.
@@ -73,5 +77,26 @@ class WalletNotificationSignalsTest {
                 n.publicVersion!!.extras.getString(Notification.EXTRA_TITLE),
             )
         }
+    }
+
+    /**
+     * Poll [NotificationManager.getActiveNotifications] until at least [minDistinctIds] distinct ids
+     * are present, or [timeoutMs] elapses. notify() enqueues asynchronously, so a synchronous read
+     * can race a just-posted notification. Returns the last snapshot — the caller still asserts, so
+     * a timeout surfaces as a clear assertion failure rather than a hang.
+     */
+    private fun awaitActiveNotifications(
+        minDistinctIds: Int,
+        timeoutMs: Long = 5_000L,
+    ): Array<StatusBarNotification> {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var active = notificationManager.activeNotifications
+        while (active.map { it.id }.toSet().size < minDistinctIds &&
+            System.currentTimeMillis() < deadline
+        ) {
+            Thread.sleep(50)
+            active = notificationManager.activeNotifications
+        }
+        return active
     }
 }
