@@ -140,6 +140,11 @@ class CircuitExecutor(
         // default — see IntentTtl. The deploy assembler has no gas-query context, so no separate
         // block_time_secs is needed here (unlike the contract-CALL path).
         ttlSecs: Long? = null,
+        // Constructor arguments as JS expressions, in declaration order, appended to the
+        // contract.initialState(context, ...args) call. Empty for a no-arg constructor
+        // (counter/bboard); a configurable contract (e.g. a multisig's signer set +
+        // threshold) supplies them.
+        constructorArgs: List<String> = emptyList(),
     ): DeployExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(networkId, "networkId")
 
@@ -156,6 +161,9 @@ class CircuitExecutor(
 
             val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
             val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
+            // Compact's generated initialState is `initialState(context, ...constructorArgs)`.
+            // Append the (already JS-encoded) args after the context object; empty = no-arg.
+            val constructorArgsJs = if (constructorArgs.isEmpty()) "" else ", ${constructorArgs.joinToString(", ")}"
 
             val constructorJs = """
                 try {
@@ -165,7 +173,7 @@ class CircuitExecutor(
                     const initResult = contract.initialState({
                         initialPrivateState: $initialPrivateState,
                         initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
-                    });
+                    }$constructorArgsJs);
 
                     // Capture the state handle for the deploy transaction assembler
                     __capture(initResult.currentContractState._rustHandle.toString());

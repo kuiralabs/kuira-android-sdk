@@ -40,6 +40,7 @@ class MidnightContract private constructor(
     private val initialPrivateStateMap: Map<String, Any?>,
     private val coinPublicKey: ByteArray?,
     private val circuitVerifierKeys: Map<String, ByteArray> = emptyMap(),
+    private val constructorArgs: List<Any?> = emptyList(),
 ) {
     /**
      * Per-contract [LedgerEvaluator]. Lazily created on first
@@ -362,6 +363,7 @@ class MidnightContract private constructor(
                     bytes.joinToString("") { "%02x".format(it) }
                 },
                 ttlSecs = ttlSecs,
+                constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
@@ -439,6 +441,14 @@ class MidnightContract private constructor(
          */
         var circuitVerifierKeys: Map<String, ByteArray> = emptyMap()
 
+        /**
+         * Arguments for the contract constructor, in declaration order, as Kotlin
+         * values (auto-marshaled to JS like circuit call args). Empty for a no-arg
+         * constructor (the counter/bboard case). A configurable contract — e.g. a
+         * multisig taking its signer set + threshold — passes them here.
+         */
+        var constructorArgs: List<Any?> = emptyList()
+
         private val witnesses = mutableMapOf<String, WitnessProvider>()
 
         /** Register a witness provider for a named witness. */
@@ -477,6 +487,7 @@ class MidnightContract private constructor(
                 initialPrivateStateMap = initialPrivateState,
                 coinPublicKey = cpk,
                 circuitVerifierKeys = circuitVerifierKeys,
+                constructorArgs = constructorArgs,
             )
         }
     }
