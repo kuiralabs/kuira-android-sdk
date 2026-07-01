@@ -719,6 +719,9 @@ var __compactRuntime = (() => {
     static newArray() {
       return new _StateValue({ type: "array", items: [] });
     }
+    static newMap(stateMap) {
+      return new _StateValue({ type: "map", map: stateMap || new StateMap() });
+    }
     arrayPush(item) {
       if (this._data.type !== "array") throw new Error("Not an array");
       const copy = new _StateValue({
@@ -883,6 +886,14 @@ var __compactRuntime = (() => {
         content: (obj.items || []).map((item) => transformStateValue(item))
       };
     }
+    if (obj.type === "map") {
+      const entries = (obj.map && obj.map.entries) || [];
+      const content = {};
+      for (const [key, value] of entries) {
+        content[key] = transformStateValue(value);
+      }
+      return { tag: "map", content };
+    }
     return obj;
   }
   function transformAlignedValue(av) {
@@ -1041,6 +1052,9 @@ var __compactRuntime = (() => {
   var StateBoundedMerkleTree = class {
   };
   var StateMap = class {
+    constructor() {
+      this.entries = [];
+    }
   };
   function persistentHash(alignment, value) {
     if (typeof globalThis.__native_persistentHash_aligned === "function") {

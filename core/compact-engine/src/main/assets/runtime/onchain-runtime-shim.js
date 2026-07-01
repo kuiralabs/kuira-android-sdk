@@ -29,6 +29,15 @@ export class StateValue {
     return new StateValue({ type: 'array', items: [] });
   }
 
+  // A Map/Set ledger value. Native StateValue::Map wraps a HashMap<AlignedValue,
+  // StateValue> that serde-serializes (collect_map) to a JSON object. A constructor
+  // only ever produces an EMPTY map (every Map/Set ledger field starts empty), which
+  // is content `{}`. Non-empty maps are never built here — post-deploy inserts mutate
+  // the native state handle via idx/ins ops, not through this factory.
+  static newMap(stateMap) {
+    return new StateValue({ type: 'map', map: stateMap || new StateMap() });
+  }
+
   arrayPush(item) {
     if (this._data.type !== 'array') throw new Error('Not an array');
     const copy = new StateValue({
@@ -220,6 +229,17 @@ function transformStateValueObj(obj) {
       tag: 'array',
       content: (obj.items || []).map(item => transformStateValue(item)),
     };
+  }
+
+  if (obj.type === 'map') {
+    // Native StateValue::Map(HashMap) serde = collect_map → a JSON object keyed by
+    // the entries' AlignedValues. Constructor maps are always empty, so content = {}.
+    const entries = (obj.map && obj.map.entries) || [];
+    const content = {};
+    for (const [key, value] of entries) {
+      content[key] = transformStateValue(value);
+    }
+    return { tag: 'map', content };
   }
 
   // Unknown format — try as-is
@@ -432,7 +452,14 @@ export class VmStack {}
 // ── StateBoundedMerkleTree / StateMap ──
 
 export class StateBoundedMerkleTree {}
-export class StateMap {}
+export class StateMap {
+  constructor() {
+    // [key, value] entries. Empty at construction — the only shape a contract
+    // constructor produces for a Map/Set ledger field. Post-deploy inserts go
+    // through native state ops, not this class.
+    this.entries = [];
+  }
+}
 
 // ── Crypto functions ──
 
