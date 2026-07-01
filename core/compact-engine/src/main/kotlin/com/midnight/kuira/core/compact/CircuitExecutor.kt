@@ -81,6 +81,11 @@ class CircuitExecutor(
         // Chain block time (Unix SECONDS) for the native gas-query context. Sourced from the chain
         // tip by the caller; null lets the native fall back to its own wall-clock — see #16.
         blockTimeSecs: Long? = null,
+        // Constructor args (JS expressions). The circuit-call path calls initialState() to build a
+        // throwaway state skeleton, then swaps in the on-chain state — so a constructor-args contract
+        // needs shape-valid args here to pass initialState's validation (the values are discarded).
+        // Empty for a no-arg constructor (counter/bboard).
+        constructorArgs: List<String> = emptyList(),
     ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -103,6 +108,7 @@ class CircuitExecutor(
             networkId = networkId,
             onChainStateHex = onChainStateHex,
             ledgerParametersHex = ledgerParametersHex,
+            constructorArgs = constructorArgs,
         )
 
         assembleTransaction(params, ttlSecs, blockTimeSecs)
@@ -235,6 +241,7 @@ class CircuitExecutor(
         networkId: String,
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
+        constructorArgs: List<String> = emptyList(),
     ): String {
         var txParamsJson: String? = null
         var jsError: String? = null
@@ -257,6 +264,7 @@ class CircuitExecutor(
                 networkId = networkId,
                 onChainStateHex = onChainStateHex,
                 ledgerParametersHex = ledgerParametersHex,
+                constructorArgs = constructorArgs,
             )
             evaluate<Any?>(JS_DEEP_CONVERT)
             evaluate<Any?>(circuitJs)
@@ -350,9 +358,13 @@ class CircuitExecutor(
         networkId: String,
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
+        constructorArgs: List<String> = emptyList(),
     ): String {
         val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
 
+        // initialState() below builds a throwaway state (the on-chain state is swapped in after), so
+        // a constructor-args contract needs shape-valid args here just to pass its validation.
+        val constructorArgsJs = if (constructorArgs.isEmpty()) "" else ", ${constructorArgs.joinToString(", ")}"
         val argsStr = if (circuitArgs.isNotEmpty()) ", ${circuitArgs.joinToString(", ")}" else ""
         val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
 
@@ -391,7 +403,7 @@ class CircuitExecutor(
                 const initResult = contract.initialState({
                     initialPrivateState: $initialPrivateState,
                     initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
-                });
+                }$constructorArgsJs);
 
                 $onChainStateSwap
 

@@ -230,6 +230,9 @@ class MidnightContract private constructor(
                 ledgerParametersHex = ledgerParamsHex,
                 ttlSecs = ttlSecs,
                 blockTimeSecs = blockTimeSecs,
+                // A constructor-args contract's circuit-call path calls initialState() (then swaps in
+                // on-chain state), so pass the args to satisfy its validation. Empty = no-arg contract.
+                constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(
