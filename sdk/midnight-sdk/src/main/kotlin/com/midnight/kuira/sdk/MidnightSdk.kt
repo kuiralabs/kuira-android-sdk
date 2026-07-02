@@ -587,6 +587,46 @@ class MidnightSdk private constructor(
     }
 
     /**
+     * Build the unshielded-funding JSON that lets a contract call fund the value a contract
+     * receives via `receiveUnshielded` (e.g. a treasury deposit). Pass the result to
+     * [MidnightContract.call]'s `unshieldedFundingJson`; the native assembler adds + signs a
+     * guaranteed offer whose inputs cover [amount] (+ change back to this wallet).
+     *
+     * Selects the wallet's NIGHT UTXOs largest-first from the live set (no lock — mirrors the
+     * send path's `nightDescending()` read; a locked selection is a tracked follow-up). Throws
+     * [InsufficientFundsException] when the wallet can't cover [amount].
+     *
+     * @param amount base units the contract will receive.
+     * @param tokenType 32-byte token color hex (default: native NIGHT).
+     */
+    suspend fun buildUnshieldedFundingJson(
+        amount: BigInteger,
+        tokenType: String = UtxoSpend.NATIVE_TOKEN_TYPE,
+    ): String {
+        // Resolve the wallet-side inputs, then delegate the selection + JSON shape to the pure
+        // (unit-tested) UnshieldedFundingBuilder.
+        //  - owner: the derived HD verifying key (the indexer omits it), same as the send path.
+        //  - change_owner: this wallet's UserAddress (Bech32m address -> 32-byte hash hex).
+        val ownerPublicKey = TransactionSigner.getPublicKey(nightPrivateKey)?.toHex()
+            ?: throw IllegalStateException("Failed to derive sender public key (native library not loaded?).")
+        val candidates = utxoManager.getUnspentUtxos(walletAddress)
+            .filter { it.tokenType == tokenType }
+        val (_, changeOwnerBytes) = Bech32m.decode(walletAddress)
+
+        return UnshieldedFundingBuilder.build(
+            candidates = candidates,
+            amount = amount,
+            ownerPublicKeyHex = ownerPublicKey,
+            changeOwnerHex = changeOwnerBytes.toHex(),
+            nightPrivateKeyHex = nightPrivateKey.toHex(),
+        )
+    }
+
+    // Lower-case hex, matching the FFI's hex::decode expectations (send path uses the same form).
+    // Never log the result for the NIGHT key — it's the wallet's signing secret.
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    /**
      * Poll until the just-created merged coin (value == [mergeAmount]) surfaces in the
      * live UTXO set, re-syncing dust each tick (a successful tx deletes the dust cache,
      * and the next tx needs it). Returns the fresh descending NIGHT UTXO list, or null

@@ -86,6 +86,10 @@ class CircuitExecutor(
         // needs shape-valid args here to pass initialState's validation (the values are discarded).
         // Empty for a no-arg constructor (counter/bboard).
         constructorArgs: List<String> = emptyList(),
+        // Opaque unshielded-funding JSON object (built by the SDK) that funds the value a contract
+        // receives via receiveUnshielded. Null for calls that move no unshielded value — those take
+        // the exact same path as before (no offer added). See the native build_funding_offer.
+        unshieldedFundingJson: String? = null,
     ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -111,7 +115,7 @@ class CircuitExecutor(
             constructorArgs = constructorArgs,
         )
 
-        assembleTransaction(params, ttlSecs, blockTimeSecs)
+        assembleTransaction(params, ttlSecs, blockTimeSecs, unshieldedFundingJson)
     }
 
     /**
@@ -282,14 +286,18 @@ class CircuitExecutor(
         txParamsJson: String,
         ttlSecs: Long?,
         blockTimeSecs: Long?,
+        unshieldedFundingJson: String? = null,
     ): ExecutionResult {
         // The call's params JSON is produced by the JS runtime (no TTL / no block time); stamp the
         // chain-sized TTL + chain block time before the native assembler. Without a TTL the native
         // defaults to now + 1h; without block_time_secs the gas-query context uses wall-clock.
-        val params = if (ttlSecs != null || blockTimeSecs != null) {
+        // unshielded_funding (when present) tells the native assembler to add + sign the offer that
+        // funds a receiveUnshielded; absent → no offer, byte-identical to a plain call.
+        val params = if (ttlSecs != null || blockTimeSecs != null || unshieldedFundingJson != null) {
             JSONObject(txParamsJson).apply {
                 if (ttlSecs != null) put("ttl_secs", ttlSecs)
                 if (blockTimeSecs != null) put("block_time_secs", blockTimeSecs)
+                if (unshieldedFundingJson != null) put("unshielded_funding", JSONObject(unshieldedFundingJson))
             }.toString()
         } else {
             txParamsJson
