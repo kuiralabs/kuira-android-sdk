@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.compact
 
 import android.util.Log
+import org.json.JSONObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -67,10 +68,11 @@ class MidnightContract private constructor(
     suspend fun call(
         circuitName: String,
         vararg args: Any?,
-        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
         // Opaque unshielded-funding JSON (built by the SDK) for circuits that receiveUnshielded value
-        // (e.g. a treasury deposit). Null → no offer, identical to a plain call.
+        // (e.g. a treasury deposit). Null → no offer, identical to a plain call. Declared before
+        // onProgress so a trailing-lambda progress callback still binds to onProgress.
         unshieldedFundingJson: String? = null,
+        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): TransactionReceipt = config.runTracked(circuitName) {
         requireWriteCapable()
         requireAddress("call")
@@ -184,10 +186,11 @@ class MidnightContract private constructor(
     suspend fun prepare(
         circuitName: String,
         vararg args: Any?,
-        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
         // Opaque unshielded-funding JSON (built by the SDK) for circuits that receiveUnshielded value.
-        // Null → no offer, identical to a plain call. See CircuitExecutor.executeCircuit.
+        // Null → no offer, identical to a plain call. Declared before onProgress so a trailing-lambda
+        // progress callback still binds to onProgress. See CircuitExecutor.executeCircuit.
         unshieldedFundingJson: String? = null,
+        onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): PreparedTransaction {
         requireWriteCapable()
         requireAddress("prepare")
@@ -255,11 +258,28 @@ class MidnightContract private constructor(
         // Step 3: Prove locally
         onProgress?.invoke(ContractCallStage.Proving)
         val proveStart = System.currentTimeMillis()
-        val provenTxHex = try {
+        val rawProvenTxHex = try {
             config.proofProvider.prove(executionResult.unprovenTxHex).trim()
         } catch (e: Exception) {
             throw ContractCallException.ProvingFailed("Proving failed: ${e.message}", e)
         }
+
+        // Step 3b: Sign the unshielded funding offer AFTER proving. Proving rewrites the contract
+        // call's erased serialization, so the offer (attached unsigned at assembly) must be signed
+        // now — signing before proving yields a signature the node rejects (error 175). Only runs
+        // when the caller funded a receiveUnshielded; a plain call leaves the tx untouched.
+        val provenTxHex = unshieldedFundingJson?.let { fundingJson ->
+            val nightKey = JSONObject(fundingJson).optString("night_private_key").ifEmpty {
+                throw ContractCallException.ProvingFailed(
+                    "Unshielded funding missing night_private_key; cannot sign the offer.", null,
+                )
+            }
+            val signed = ContractRuntime.signProvenOffer(rawProvenTxHex, nightKey)
+            if (signed == null || signed.startsWith("{\"error")) {
+                throw ContractCallException.ProvingFailed("Signing the unshielded offer failed: $signed", null)
+            }
+            signed.trim()
+        } ?: rawProvenTxHex
         val proveMs = System.currentTimeMillis() - proveStart
 
         return PreparedTransaction(
