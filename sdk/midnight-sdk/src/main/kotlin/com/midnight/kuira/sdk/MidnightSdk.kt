@@ -622,6 +622,31 @@ class MidnightSdk private constructor(
         )
     }
 
+    /**
+     * Build the unshielded-withdrawal JSON for a contract call whose circuit SENDS value out via
+     * `sendUnshielded` (e.g. a treasury withdrawal). Pass the result to [MidnightContract.call]'s
+     * `unshieldedWithdrawalJson`; the native assembler adds a fallible offer with the recipient
+     * output (no inputs, no signature — the contract provides the value). The [recipientAddressHash]
+     * MUST match the recipient the contract claims (verify.rs claimed_unshielded_spends).
+     *
+     * @param recipientAddressHash the recipient's 32-byte UserAddress (Bech32m-decoded).
+     * @param amount base units the contract will send.
+     * @param tokenType 32-byte token color hex (default: native NIGHT).
+     */
+    fun buildUnshieldedWithdrawalJson(
+        recipientAddressHash: ByteArray,
+        amount: BigInteger,
+        tokenType: String = UtxoSpend.NATIVE_TOKEN_TYPE,
+    ): String {
+        require(amount > BigInteger.ZERO) { "Withdrawal amount must be positive, got $amount" }
+        require(recipientAddressHash.size == 32) { "Recipient address hash must be 32 bytes" }
+        return JSONObject().apply {
+            put("recipient", recipientAddressHash.toHex())
+            put("color", tokenType)
+            put("amount", amount.toString())
+        }.toString()
+    }
+
     // Lower-case hex, matching the FFI's hex::decode expectations (send path uses the same form).
     // Never log the result for the NIGHT key — it's the wallet's signing secret.
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

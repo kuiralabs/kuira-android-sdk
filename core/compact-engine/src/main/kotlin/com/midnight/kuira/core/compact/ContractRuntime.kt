@@ -1,5 +1,7 @@
 package com.midnight.kuira.core.compact
 
+import org.json.JSONObject
+
 /**
  * Native bridge to the Rust contract runtime.
  *
@@ -107,6 +109,26 @@ object ContractRuntime {
     }
 
     /**
+     * Sign the fallible unshielded offer on a PROVEN contract-call transaction.
+     *
+     * The offer that funds a `receiveUnshielded` is attached unsigned at assembly and signed
+     * here, after proving — proving rewrites the call's erased serialization, so a signature
+     * made earlier would fail the node's verification (error 175).
+     *
+     * @param provenTxHex the proven transaction hex (from the proof provider).
+     * @param nightPrivateKeyHex the wallet's NIGHT signing key hex (32 bytes).
+     * @return the signed transaction hex, or a `{"error":...}` payload / null on failure.
+     */
+    fun signProvenOffer(provenTxHex: String, nightPrivateKeyHex: String): String? {
+        ensureLoaded()
+        val params = JSONObject().apply {
+            put("proven_tx_hex", provenTxHex)
+            put("night_private_key", nightPrivateKeyHex)
+        }.toString()
+        return nativeSignProvenOffer(params)
+    }
+
+    /**
      * Assemble a contract DEPLOY transaction from constructor output.
      *
      * Takes JSON: `{"network_id":"preprod","state_handle":42}`
@@ -158,6 +180,7 @@ object ContractRuntime {
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
     @JvmStatic private external fun nativeStateReadFields(handle: Long): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
+    @JvmStatic private external fun nativeSignProvenOffer(paramsJson: String): String?
     @JvmStatic private external fun nativeAssembleDeployTx(paramsJson: String): String?
     @JvmStatic private external fun nativeGlobalTtlSecs(paramsHex: String): Long
     @JvmStatic private external fun nativeLedgerVersion(): String?

@@ -72,6 +72,9 @@ class MidnightContract private constructor(
         // (e.g. a treasury deposit). Null → no offer, identical to a plain call. Declared before
         // onProgress so a trailing-lambda progress callback still binds to onProgress.
         unshieldedFundingJson: String? = null,
+        // Opaque unshielded-withdrawal JSON for circuits that sendUnshielded value out (e.g. a
+        // treasury withdrawal via execute). Null → no offer, identical to a plain call.
+        unshieldedWithdrawalJson: String? = null,
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): TransactionReceipt = config.runTracked(circuitName) {
         requireWriteCapable()
@@ -92,6 +95,7 @@ class MidnightContract private constructor(
                 circuitName, *args,
                 onProgress = onProgress,
                 unshieldedFundingJson = unshieldedFundingJson,
+                unshieldedWithdrawalJson = unshieldedWithdrawalJson,
             )
 
             onProgress?.invoke(ContractCallStage.Balancing)
@@ -190,6 +194,8 @@ class MidnightContract private constructor(
         // Null → no offer, identical to a plain call. Declared before onProgress so a trailing-lambda
         // progress callback still binds to onProgress. See CircuitExecutor.executeCircuit.
         unshieldedFundingJson: String? = null,
+        // Opaque unshielded-withdrawal JSON for circuits that sendUnshielded value out. No signing.
+        unshieldedWithdrawalJson: String? = null,
         onProgress: (suspend (ContractCallStage) -> Unit)? = null,
     ): PreparedTransaction {
         requireWriteCapable()
@@ -247,6 +253,7 @@ class MidnightContract private constructor(
                 // on-chain state), so pass the args to satisfy its validation. Empty = no-arg contract.
                 constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
                 unshieldedFundingJson = unshieldedFundingJson,
+                unshieldedWithdrawalJson = unshieldedWithdrawalJson,
             )
         } catch (e: Exception) {
             throw ContractCallException.CircuitExecutionFailed(

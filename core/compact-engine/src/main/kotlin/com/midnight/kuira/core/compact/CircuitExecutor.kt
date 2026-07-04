@@ -90,6 +90,9 @@ class CircuitExecutor(
         // receives via receiveUnshielded. Null for calls that move no unshielded value — those take
         // the exact same path as before (no offer added). See the native build_funding_offer.
         unshieldedFundingJson: String? = null,
+        // Opaque unshielded-withdrawal JSON (built by the SDK) that receives the value a contract
+        // SENDS via sendUnshielded (the recipient output). Null except for withdrawals.
+        unshieldedWithdrawalJson: String? = null,
     ): ExecutionResult = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -115,7 +118,7 @@ class CircuitExecutor(
             constructorArgs = constructorArgs,
         )
 
-        assembleTransaction(params, ttlSecs, blockTimeSecs, unshieldedFundingJson)
+        assembleTransaction(params, ttlSecs, blockTimeSecs, unshieldedFundingJson, unshieldedWithdrawalJson)
     }
 
     /**
@@ -287,17 +290,22 @@ class CircuitExecutor(
         ttlSecs: Long?,
         blockTimeSecs: Long?,
         unshieldedFundingJson: String? = null,
+        unshieldedWithdrawalJson: String? = null,
     ): ExecutionResult {
         // The call's params JSON is produced by the JS runtime (no TTL / no block time); stamp the
         // chain-sized TTL + chain block time before the native assembler. Without a TTL the native
         // defaults to now + 1h; without block_time_secs the gas-query context uses wall-clock.
-        // unshielded_funding (when present) tells the native assembler to add + sign the offer that
-        // funds a receiveUnshielded; absent → no offer, byte-identical to a plain call.
-        val params = if (ttlSecs != null || blockTimeSecs != null || unshieldedFundingJson != null) {
+        // unshielded_funding / unshielded_withdrawal (when present) tell the native assembler to add
+        // the offer that funds a receiveUnshielded / receives a sendUnshielded; absent → no offer,
+        // byte-identical to a plain call.
+        val hasExtra = ttlSecs != null || blockTimeSecs != null ||
+            unshieldedFundingJson != null || unshieldedWithdrawalJson != null
+        val params = if (hasExtra) {
             JSONObject(txParamsJson).apply {
                 if (ttlSecs != null) put("ttl_secs", ttlSecs)
                 if (blockTimeSecs != null) put("block_time_secs", blockTimeSecs)
                 if (unshieldedFundingJson != null) put("unshielded_funding", JSONObject(unshieldedFundingJson))
+                if (unshieldedWithdrawalJson != null) put("unshielded_withdrawal", JSONObject(unshieldedWithdrawalJson))
             }.toString()
         } else {
             txParamsJson
