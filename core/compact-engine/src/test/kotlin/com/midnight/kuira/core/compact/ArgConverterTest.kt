@@ -41,6 +41,19 @@ class ArgConverterTest {
     }
 
     @Test
+    fun `CompactEnum becomes a bare JS number, not a BigInt`() {
+        // Enum fields (e.g. Recipient.kind) are guarded by `typeof === 'number'`; a BigInt fails.
+        assertEquals("1", ArgConverter.toJsExpression(CompactEnum(1)))
+        assertEquals("0", ArgConverter.toJsExpression(CompactEnum(0)))
+    }
+
+    @Test
+    fun `CompactEnum inside a struct marshals as a number field`() {
+        val recipient = mapOf("kind" to CompactEnum(1), "address" to byteArrayOf(1, 2))
+        assertEquals("{ kind: 1, address: new Uint8Array([1,2]) }", ArgConverter.toJsExpression(recipient))
+    }
+
+    @Test
     fun `negative int`() {
         assertEquals("-1n", ArgConverter.toJsExpression(-1))
     }

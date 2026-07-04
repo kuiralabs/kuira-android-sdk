@@ -28,6 +28,9 @@ internal object ArgConverter {
         // Compact integer types (Uint<N>, Field) are JS BigInt — a plain JS
         // number fails the generated wrapper's `typeof === 'bigint'` guard.
         is Int, is Long, is BigInteger -> "${value}n"
+        // Compact enum fields marshal to a bare JS number — the generated wrapper guards them
+        // with `typeof === 'number'`, which a BigInt would fail.
+        is CompactEnum -> value.ordinal.toString()
         is ByteArray -> "new Uint8Array([${value.joinToString(",") { (it.toInt() and 0xFF).toString() }}])"
         is Map<*, *> -> toJsObject(value)
         is List<*> -> "[${value.joinToString(", ") { toJsExpression(it) }}]"

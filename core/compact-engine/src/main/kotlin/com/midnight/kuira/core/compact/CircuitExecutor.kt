@@ -417,7 +417,12 @@ class CircuitExecutor(
 
                 const circuitCtx = __compactRuntime.createCircuitContext(
                     '$contractAddress',
-                    { coinPublicKey: new Uint8Array([$cpkJs]) },
+                    // Bare coin public key as { bytes: Uint8Array } — createCircuitContext's
+                    // fallback (emptyZswapLocalState) stores this object as-is for the caller's
+                    // coinPublicKey, so ownPublicKey() returns a ZswapCoinPublicKey the contract's
+                    // descriptor can read (.bytes). A { coinPublicKey: … } wrapper here gets
+                    // double-nested → ownPublicKey().bytes is undefined (breaks getCaller/signers).
+                    { bytes: new Uint8Array([$cpkJs]) },
                     initResult.currentContractState,
                     initResult.currentPrivateState,
                 );
