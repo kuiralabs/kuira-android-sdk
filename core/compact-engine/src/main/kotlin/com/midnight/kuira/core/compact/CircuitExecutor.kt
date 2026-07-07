@@ -137,6 +137,8 @@ class CircuitExecutor(
         onChainStateHex: String,
         constructorArgs: List<String> = emptyList(),
         networkId: String = "undeployed",
+        // View circuits may still consume witnesses (private-state reads); empty for pure getters.
+        witnesses: Map<String, WitnessProvider> = emptyMap(),
     ): String = withContext(ioDispatcher) {
         validateIdentifier(circuitName, "circuitName")
         validateHex(contractAddress, "contractAddress")
@@ -148,7 +150,7 @@ class CircuitExecutor(
             contractAddress = contractAddress,
             circuitName = circuitName,
             circuitArgs = circuitArgs,
-            witnesses = emptyMap(),
+            witnesses = witnesses,
             initialPrivateState = initialPrivateState,
             coinPublicKey = coinPublicKey,
             networkId = networkId,
@@ -458,8 +460,23 @@ class CircuitExecutor(
         // Write mode assembles the transaction (clone for gas + proof data).
         val executionTail = if (readMode) {
             """
-                const circuitResult = contract.impureCircuits['$circuitName'](circuitCtx$argsStr);
-                __capture(JSON.stringify(jsonSafe(circuitResult.result)));
+                // Reads never reach the assembler whose `finally` frees the write path's handles,
+                // so free the native ledger-state handles HERE — the pool is process-global and a
+                // dApp polling view circuits would otherwise leak one full contract state per read.
+                // The finally also covers a THROWING circuit (routine: proposal enumeration
+                // terminates on the contract's own not-found assert).
+                const preHandle = circuitCtx.currentQueryContext._rustHandle;
+                let postHandle = null;
+                try {
+                    const circuitResult = contract.impureCircuits['$circuitName'](circuitCtx$argsStr);
+                    postHandle = circuitResult.context.currentQueryContext._rustHandle;
+                    __capture(JSON.stringify(jsonSafe(circuitResult.result)));
+                } finally {
+                    globalThis.__native_stateFree(String(preHandle));
+                    if (postHandle !== null && postHandle !== preHandle) {
+                        globalThis.__native_stateFree(String(postHandle));
+                    }
+                }
             """
         } else {
             """

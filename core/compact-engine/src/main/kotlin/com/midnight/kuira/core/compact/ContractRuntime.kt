@@ -69,6 +69,16 @@ object ContractRuntime {
         nativeStateFree(handle)
     }
 
+    /**
+     * Live entries in the native contract-state pool. Test/debug introspection: the pool is
+     * process-global (it survives QuickJS teardown), so leak tests assert it returns to baseline
+     * after a circuit execution or read.
+     */
+    fun statePoolLen(): Long {
+        ensureLoaded()
+        return nativeStatePoolLen()
+    }
+
     /** Execute opcodes against a contract state handle. */
     fun contractQuery(handle: Long, opcodesJson: String): String? {
         ensureLoaded()
@@ -176,6 +186,7 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStateCreateWithNulls(structureJson: String): Long
     @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
     @JvmStatic private external fun nativeStateFree(handle: Long)
+    @JvmStatic private external fun nativeStatePoolLen(): Long
     @JvmStatic private external fun nativeStateClone(handle: Long): Long
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
     @JvmStatic private external fun nativeStateReadFields(handle: Long): String?

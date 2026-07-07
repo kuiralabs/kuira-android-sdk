@@ -381,6 +381,7 @@ class MidnightContract private constructor(
             onChainStateHex = onChainStateHex,
             constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
             networkId = config.networkId,
+            witnesses = witnesses,
         )
     }
 
