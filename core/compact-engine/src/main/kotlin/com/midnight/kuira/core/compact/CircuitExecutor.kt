@@ -122,6 +122,43 @@ class CircuitExecutor(
     }
 
     /**
+     * Run a view/getter circuit against the on-chain state and return its RETURN value as JSON —
+     * no proving, no transaction, no submit. BigInt → decimal string, Uint8Array → hex, nested
+     * structs preserved (see jsonSafe). Lets a dApp read a contract's computed views (balances,
+     * proposals, thresholds) that aren't exposed as raw ledger fields.
+     */
+    suspend fun readCircuit(
+        contractJs: String,
+        contractAddress: String,
+        circuitName: String,
+        circuitArgs: List<String> = emptyList(),
+        initialPrivateState: String,
+        coinPublicKey: ByteArray,
+        onChainStateHex: String,
+        constructorArgs: List<String> = emptyList(),
+        networkId: String = "undeployed",
+    ): String = withContext(ioDispatcher) {
+        validateIdentifier(circuitName, "circuitName")
+        validateHex(contractAddress, "contractAddress")
+        validateIdentifier(networkId, "networkId")
+        validateHex(onChainStateHex, "onChainStateHex")
+
+        executeInQuickJs(
+            contractJs = contractJs,
+            contractAddress = contractAddress,
+            circuitName = circuitName,
+            circuitArgs = circuitArgs,
+            witnesses = emptyMap(),
+            initialPrivateState = initialPrivateState,
+            coinPublicKey = coinPublicKey,
+            networkId = networkId,
+            onChainStateHex = onChainStateHex,
+            constructorArgs = constructorArgs,
+            readMode = true,
+        )
+    }
+
+    /**
      * Execute a contract constructor and assemble a deploy transaction.
      *
      * Runs `contract.initialState()` in QuickJS (same runtime as circuit execution)
@@ -249,6 +286,7 @@ class CircuitExecutor(
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
         constructorArgs: List<String> = emptyList(),
+        readMode: Boolean = false,
     ): String {
         var txParamsJson: String? = null
         var jsError: String? = null
@@ -272,8 +310,9 @@ class CircuitExecutor(
                 onChainStateHex = onChainStateHex,
                 ledgerParametersHex = ledgerParametersHex,
                 constructorArgs = constructorArgs,
+                readMode = readMode,
             )
-            evaluate<Any?>(JS_DEEP_CONVERT)
+            evaluate<Any?>(if (readMode) JS_JSON_SAFE else JS_DEEP_CONVERT)
             evaluate<Any?>(circuitJs)
         }
 
@@ -375,6 +414,9 @@ class CircuitExecutor(
         onChainStateHex: String? = null,
         ledgerParametersHex: String? = null,
         constructorArgs: List<String> = emptyList(),
+        // Read mode: run the circuit only to capture its RETURN value (a view/getter), skipping
+        // the gas clone + proof-data assembly. Used by readCircuit — no transaction is built.
+        readMode: Boolean = false,
     ): String {
         val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
 
@@ -411,30 +453,16 @@ class CircuitExecutor(
             ""
         }
 
-        return """
-            try {
-                const witnesses = { $witnessEntries };
-                const contract = new Contract(witnesses);
-
-                const initResult = contract.initialState({
-                    initialPrivateState: $initialPrivateState,
-                    initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
-                }$constructorArgsJs);
-
-                $onChainStateSwap
-
-                const circuitCtx = __compactRuntime.createCircuitContext(
-                    '$contractAddress',
-                    // Bare coin public key as { bytes: Uint8Array } — createCircuitContext's
-                    // fallback (emptyZswapLocalState) stores this object as-is for the caller's
-                    // coinPublicKey, so ownPublicKey() returns a ZswapCoinPublicKey the contract's
-                    // descriptor can read (.bytes). A { coinPublicKey: … } wrapper here gets
-                    // double-nested → ownPublicKey().bytes is undefined (breaks getCaller/signers).
-                    { bytes: new Uint8Array([$cpkJs]) },
-                    initResult.currentContractState,
-                    initResult.currentPrivateState,
-                );
-
+        // Read mode captures the circuit's RETURN value (a view/getter) — no gas clone, no proof
+        // assembly. jsonSafe() makes it JSON-serializable (BigInt → decimal string, Uint8Array → hex).
+        // Write mode assembles the transaction (clone for gas + proof data).
+        val executionTail = if (readMode) {
+            """
+                const circuitResult = contract.impureCircuits['$circuitName'](circuitCtx$argsStr);
+                __capture(JSON.stringify(jsonSafe(circuitResult.result)));
+            """
+        } else {
+            """
                 // Clone the initial state BEFORE circuit execution modifies it.
                 // The assembler re-executes against this to compute correct gas.
                 const initialStateHandle = Number(
@@ -464,6 +492,33 @@ class CircuitExecutor(
                         ),
                     },
                 }));
+            """
+        }
+
+        return """
+            try {
+                const witnesses = { $witnessEntries };
+                const contract = new Contract(witnesses);
+
+                const initResult = contract.initialState({
+                    initialPrivateState: $initialPrivateState,
+                    initialZswapLocalState: { coinPublicKey: new Uint8Array([$cpkJs]) },
+                }$constructorArgsJs);
+
+                $onChainStateSwap
+
+                const circuitCtx = __compactRuntime.createCircuitContext(
+                    '$contractAddress',
+                    // Bare coin public key as { bytes: Uint8Array } — createCircuitContext's
+                    // fallback (emptyZswapLocalState) stores this object as-is for the caller's
+                    // coinPublicKey, so ownPublicKey() returns a ZswapCoinPublicKey the contract's
+                    // descriptor can read (.bytes). A { coinPublicKey: … } wrapper here gets
+                    // double-nested → ownPublicKey().bytes is undefined (breaks getCaller/signers).
+                    { bytes: new Uint8Array([$cpkJs]) },
+                    initResult.currentContractState,
+                    initResult.currentPrivateState,
+                );
+                $executionTail
             } catch (e) {
                 __captureError(String(e) + (e && e.stack ? "\n" + e.stack : ""));
             }
@@ -597,6 +652,23 @@ class CircuitExecutor(
                 }
                 if (typeof obj === 'bigint') return obj.toString();
                 return obj;
+            }
+        """
+
+        // Makes a view circuit's return value JSON-serializable: BigInt (Uint/Field) → decimal
+        // string, Uint8Array (Bytes) → lowercase hex, nested structs/arrays preserved. Enums arrive
+        // as plain numbers and pass through. Used only by readCircuit.
+        private const val JS_JSON_SAFE = """
+            function jsonSafe(v) {
+                if (typeof v === 'bigint') return v.toString();
+                if (v instanceof Uint8Array) return Array.from(v).map(function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+                if (Array.isArray(v)) return v.map(jsonSafe);
+                if (v !== null && typeof v === 'object') {
+                    const o = {};
+                    for (const k of Object.keys(v)) o[k] = jsonSafe(v[k]);
+                    return o;
+                }
+                return v;
             }
         """
     }

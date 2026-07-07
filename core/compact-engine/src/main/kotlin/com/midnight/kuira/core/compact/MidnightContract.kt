@@ -359,6 +359,32 @@ class MidnightContract private constructor(
     }
 
     /**
+     * Call a view/getter circuit and return its result as JSON — no proving, no transaction. Reads
+     * a contract's computed views (e.g. a treasury balance or a proposal struct) that aren't exposed
+     * as raw ledger fields via [observeLedger]. BigInt → decimal string, Bytes → hex, structs
+     * preserved; parse the JSON per circuit. A read-only handle (no signing keys) is sufficient.
+     *
+     * @throws IllegalArgumentException if this contract was built without an address.
+     */
+    suspend fun read(circuitName: String, vararg args: Any?): String {
+        requireAddress("read")
+        val onChainStateHex = config.fetchContractState(contractAddress)
+        return config.executor.readCircuit(
+            contractJs = contractJsContent,
+            contractAddress = contractAddress,
+            circuitName = circuitName,
+            circuitArgs = ArgConverter.toJsExpressions(*args),
+            initialPrivateState = ArgConverter.toJsObjectLiteral(initialPrivateStateMap),
+            // View circuits don't use ownPublicKey; a zero key satisfies the context when the
+            // handle has no signing key (read-only).
+            coinPublicKey = coinPublicKey ?: ByteArray(32),
+            onChainStateHex = onChainStateHex,
+            constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
+            networkId = config.networkId,
+        )
+    }
+
+    /**
      * Deploy a new contract instance to the blockchain.
      *
      * Runs the constructor in QuickJS, proves the deploy tx, balances, and submits.
