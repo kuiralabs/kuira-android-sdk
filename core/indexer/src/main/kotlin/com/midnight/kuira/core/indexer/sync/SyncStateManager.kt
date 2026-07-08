@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -135,22 +136,31 @@ class SyncStateManager(private val context: Context) {
     }
 
     /**
-     * The GENESIS block hash the persisted checkpoints were built against — a per-chain identity
-     * for detecting a chain RESET (a fresh localnet has a different genesis hash). Lives in the
-     * same "sync_state" DataStore as the tx cursor but is NOT touched by [clearSyncState] (which
-     * clears only the cursor), so [com.midnight.kuira.core.indexer.sync.ChainResetGuard] can re-pin
-     * it to the new chain after wiping the stale caches. [clearAllSyncState] does clear it.
+     * The CHECKPOINT block the persisted caches were built against — a per-chain-instance identity
+     * for detecting a chain RESET. It is a block ABOVE genesis (`height` + `hash`): a localnet
+     * booting from a fixed chain spec reproduces the same GENESIS hash across a reset, so genesis
+     * can't be the discriminator, but any higher block carries a per-instance timestamp and so a
+     * per-instance hash. [com.midnight.kuira.core.indexer.sync.ChainResetGuard] re-looks-up this
+     * height on each sync; a missing block (shorter fresh chain) or a changed hash means a reset.
      *
-     * @return the pinned genesis hash, or null if this address has never been pinned.
+     * Lives in the same "sync_state" DataStore as the tx cursor but is NOT touched by
+     * [clearSyncState] (which clears only the cursor), so the guard can re-pin it to the new chain
+     * AFTER wiping the stale caches (crash-safe re-pin-last). [clearAllSyncState] does clear it.
+     *
+     * @return the pinned checkpoint, or null if this address has never been pinned.
      */
-    suspend fun getPinnedGenesisHash(address: String): String? {
-        return dataStore.data.first()[genesisHashKey(address)]
+    suspend fun getPinnedChainCheckpoint(address: String): ChainCheckpoint? {
+        val prefs = dataStore.data.first()
+        val height = prefs[checkpointHeightKey(address)] ?: return null
+        val hash = prefs[checkpointHashKey(address)] ?: return null
+        return ChainCheckpoint(height = height, hash = hash)
     }
 
-    /** Pin [genesisHash] as the chain identity the checkpoints for [address] were built against. */
-    suspend fun setPinnedGenesisHash(address: String, genesisHash: String) {
+    /** Pin [checkpoint] as the chain-instance identity the caches for [address] were built against. */
+    suspend fun setPinnedChainCheckpoint(address: String, checkpoint: ChainCheckpoint) {
         dataStore.edit { preferences ->
-            preferences[genesisHashKey(address)] = genesisHash
+            preferences[checkpointHeightKey(address)] = checkpoint.height
+            preferences[checkpointHashKey(address)] = checkpoint.hash
         }
     }
 
@@ -158,7 +168,14 @@ class SyncStateManager(private val context: Context) {
         return intPreferencesKey("last_tx_id_$address")
     }
 
-    private fun genesisHashKey(address: String): Preferences.Key<String> {
-        return stringPreferencesKey("genesis_hash_$address")
+    private fun checkpointHeightKey(address: String): Preferences.Key<Long> {
+        return longPreferencesKey("checkpoint_height_$address")
+    }
+
+    private fun checkpointHashKey(address: String): Preferences.Key<String> {
+        return stringPreferencesKey("checkpoint_hash_$address")
     }
 }
+
+/** A block pinned as a chain-instance identity: its [height] and [hash]. See [SyncStateManager]. */
+data class ChainCheckpoint(val height: Long, val hash: String)

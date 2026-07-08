@@ -137,22 +137,30 @@ interface IndexerClient {
     suspend fun getCurrentBlockWithParams(): BlockInfo
 
     /**
-     * The chain's GENESIS block hash — a stable per-chain identity used to detect a chain RESET
-     * (a localnet `docker` down/up replaces the chain with a fresh genesis). The wallet pins this
-     * next to each checkpoint; a mismatch on the next sync means the chain was replaced, so the
-     * cached balance / UTXOs must be wiped and re-synced from genesis. Block height + event/tx IDs
-     * all restart at 0 on a reset, so they can't be the discriminator — the genesis hash is the one
-     * value stable within a chain but different across one.
+     * The hash of the block at [height] — the discriminator for detecting a chain RESET (a localnet
+     * `docker` down/up replaces the chain). [ChainResetGuard] pins a CHECKPOINT block above genesis
+     * and re-looks-it-up here on each sync: after a reset the fresh chain is shorter (the pinned
+     * height returns [BlockHashLookup.NotOnChain]) or, once it re-climbs, that height carries a
+     * different hash ([BlockHashLookup.Found] with a new value).
      *
-     * **GraphQL Query:** `query { block(offset: { height: 0 }) { hash } }`
+     * The GENESIS (height-0) hash is deliberately NOT usable for this: a localnet booting from a
+     * fixed chain spec reproduces the same genesis hash across a reset (verified live), so a
+     * height-0 compare can't tell a reset from a healthy chain. Any block above genesis carries a
+     * per-instance timestamp, so its hash IS chain-instance-specific.
      *
-     * Defaults to null — a "can't determine" signal callers MUST treat as "skip the reset check"
-     * (never as a reset), so a transient indexer failure can't nuke a healthy wallet, and in-memory
-     * test doubles needn't implement it.
+     * **GraphQL Query:** `query { block(offset: { height: $height }) { hash } }`
      *
-     * @return the genesis block hash (hex), or null if it can't be queried.
+     * The three-way result keeps the two "can't-read" cases apart, because they mean opposite things:
+     *  - [BlockHashLookup.Found] — the block exists; compare its hash.
+     *  - [BlockHashLookup.NotOnChain] — a VALID response with no block at that height (the chain is
+     *    shorter than the checkpoint) → the caller treats this as a reset.
+     *  - [BlockHashLookup.Unavailable] — the query itself failed (network / GraphQL / parse) → the
+     *    caller MUST skip the reset check, so a transient indexer failure can't wipe a healthy wallet.
+     *
+     * Defaults to [BlockHashLookup.Unavailable] so in-memory test doubles needn't implement it (a
+     * double that doesn't override it can never trigger a wipe).
      */
-    suspend fun getGenesisBlockHash(): String? = null
+    suspend fun getBlockHashAtHeight(height: Long): BlockHashLookup = BlockHashLookup.Unavailable
 
     /**
      * Get historical events in range.

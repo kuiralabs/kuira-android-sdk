@@ -1,52 +1,56 @@
 package com.midnight.kuira.core.indexer.sync
 
+import com.midnight.kuira.core.indexer.api.BlockHashLookup
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Pins the chain-reset DECISION ([chainStatus]) — the heart of [ChainResetGuard]'s contract.
+ * Pins the chain-reset DECISION ([checkpointStatus]) — the heart of [ChainResetGuard]'s contract.
  *
- * The credibility-critical invariant is the FIRST case: a null `current` (genesis hash unqueryable —
- * a transient indexer failure) is ALWAYS [ChainStatus.UNKNOWN], never a reset, even when a pin
- * exists. That is what guarantees a flaky indexer can't wipe a healthy wallet.
+ * **Why this looks the way it does (the #36 regression it guards):** the guard's ORIGINAL
+ * discriminator was the GENESIS (height-0) block hash, on the premise "genesis differs across a
+ * reset." That premise is FALSE for a localnet booting from a fixed chain spec — a full
+ * volume-wiping `docker` down/up reproduces the SAME genesis hash byte-for-byte (verified against a
+ * live localnet). So a reset read as SAME, the stale dust/UTXO caches were never wiped, and the next
+ * spend failed with node error 171 (OutOfDustValidityWindow). The fix pins a CHECKPOINT block above
+ * genesis and re-looks-it-up: after a reset the fresh chain is shorter (the checkpoint height is
+ * [BlockHashLookup.NotOnChain]) or, once it re-climbs, the block at that height has a different hash.
+ * These two cases below — NotOnChain and Found(different) — are that regression, and both must be
+ * RESET where the genesis compare returned SAME.
+ *
+ * The credibility-critical invariant is the LAST case: an un-queryable checkpoint
+ * ([BlockHashLookup.Unavailable] — a transient indexer failure) is ALWAYS [ChainStatus.UNKNOWN],
+ * never a reset. That is what guarantees a flaky indexer can't wipe a healthy wallet.
  */
 class ChainResetGuardTest {
 
     @Test
-    fun `unqueryable genesis is UNKNOWN, never a reset — even with a pin`() {
-        assertEquals(ChainStatus.UNKNOWN, chainStatus(current = null, pinned = null))
-        assertEquals(ChainStatus.UNKNOWN, chainStatus(current = null, pinned = "genesisA"))
+    fun `checkpoint height missing on the chain is a RESET (fresh chain is shorter)`() {
+        // THE #36 REGRESSION: identical genesis, but the pinned checkpoint height no longer exists →
+        // the chain was replaced by a shorter fresh one. The genesis compare called this SAME.
+        assertEquals(ChainStatus.RESET, checkpointStatus(pinnedHash = "abc", lookup = BlockHashLookup.NotOnChain))
     }
 
     @Test
-    fun `first sync (no pin) pins, does not wipe`() {
-        assertEquals(ChainStatus.FIRST_SYNC, chainStatus(current = "genesisA", pinned = null))
+    fun `checkpoint present with a different hash is a RESET (chain re-climbed past the pin)`() {
+        assertEquals(ChainStatus.RESET, checkpointStatus(pinnedHash = "abc", lookup = BlockHashLookup.Found("def")))
     }
 
     @Test
-    fun `same genesis is the untouched fast path`() {
-        assertEquals(ChainStatus.SAME, chainStatus(current = "genesisA", pinned = "genesisA"))
+    fun `checkpoint present with the same hash is the untouched fast path`() {
+        assertEquals(ChainStatus.SAME, checkpointStatus(pinnedHash = "abc", lookup = BlockHashLookup.Found("abc")))
     }
 
     @Test
-    fun `different genesis is a reset`() {
-        assertEquals(ChainStatus.RESET, chainStatus(current = "genesisB", pinned = "genesisA"))
-    }
-
-    @Test
-    fun `empty-string genesis values are compared as-is (no special casing)`() {
-        // Defensive: the guard never invents semantics for "" — equality is the only rule, so an
-        // indexer that returned "" once and a real hash later is correctly seen as a RESET, and ""
-        // vs "" is SAME. (getGenesisBlockHash returns null, not "", on failure — UNKNOWN covers that.)
-        assertEquals(ChainStatus.SAME, chainStatus(current = "", pinned = ""))
-        assertEquals(ChainStatus.RESET, chainStatus(current = "genesisA", pinned = ""))
+    fun `un-queryable checkpoint is UNKNOWN, never a reset — a flaky indexer can't wipe a wallet`() {
+        assertEquals(ChainStatus.UNKNOWN, checkpointStatus(pinnedHash = "abc", lookup = BlockHashLookup.Unavailable))
     }
 
     @Test
     fun `resetAction wipes a reset only on a wipe-enabled (dev) chain`() {
-        // The gating that keeps PreProd safe: a genuine reset (different genesis) WIPEs on the dev
-        // chain but degrades to a log-only SKIP on a remote chain — a remote indexer's anomalous
-        // height-0 hash can never nuke a healthy wallet.
+        // The gating that keeps PreProd safe: a genuine reset WIPEs on the local dev chain but
+        // degrades to a log-only SKIP on a remote chain — a remote indexer's pruned or rolled-back
+        // checkpoint can never nuke a healthy wallet.
         assertEquals(ResetAction.WIPE, resetAction(ChainStatus.RESET, wipeOnResetEnabled = true))
         assertEquals(ResetAction.SKIP, resetAction(ChainStatus.RESET, wipeOnResetEnabled = false))
     }
@@ -58,14 +62,5 @@ class ChainResetGuardTest {
             assertEquals(ResetAction.SKIP, resetAction(ChainStatus.SAME, enabled))
             assertEquals(ResetAction.PIN, resetAction(ChainStatus.FIRST_SYNC, enabled))
         }
-    }
-
-    @Test
-    fun `end-to-end - a localnet reset wipes, the same mismatch on a remote chain does not`() {
-        // chainStatus + resetAction composed: the exact decision ensureFreshChain makes.
-        assertEquals(ResetAction.WIPE, resetAction(chainStatus(current = "newGenesis", pinned = "oldGenesis"), wipeOnResetEnabled = true))
-        assertEquals(ResetAction.SKIP, resetAction(chainStatus(current = "newGenesis", pinned = "oldGenesis"), wipeOnResetEnabled = false))
-        // An unqueryable genesis is SKIP on either chain — never a wipe.
-        assertEquals(ResetAction.SKIP, resetAction(chainStatus(current = null, pinned = "oldGenesis"), wipeOnResetEnabled = true))
     }
 }

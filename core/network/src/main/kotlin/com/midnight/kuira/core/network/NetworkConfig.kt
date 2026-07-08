@@ -30,6 +30,18 @@ data class NetworkConfig(
     val proofServerUrl: String,
     val developmentMode: Boolean
 ) {
+    /**
+     * True only for the LOCAL dev chain (localnet / [MidnightNetwork.UNDEPLOYED]) — the one place a
+     * chain RESET is a routine event and wiping the wallet's caches on detection is safe.
+     *
+     * This is DELIBERATELY separate from [developmentMode]: `developmentMode` is true on PreProd and
+     * Preview too (it only means "allow the local proof server over HTTP"), so it must NOT be used to
+     * gate destructive actions. Wiring a wallet-wipe to `developmentMode` would let an anomalous
+     * remote-indexer reading nuke a healthy PreProd wallet. See
+     * [com.midnight.kuira.core.indexer.sync.ChainResetGuard].
+     */
+    val isLocalDevChain: Boolean get() = network == MidnightNetwork.UNDEPLOYED
+
     companion object {
 
         /**

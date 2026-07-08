@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -424,29 +425,39 @@ class IndexerClientImpl(
     }
 
     /**
-     * Genesis (height-0) block hash — FAILURE-TOLERANT. Any error (network, GraphQL, parse, missing
-     * field) returns null rather than throwing, so the chain-reset check SKIPS on a transient
-     * indexer hiccup instead of risking a wipe of a healthy wallet. CancellationException is
-     * rethrown so coroutine cancellation isn't swallowed.
+     * Block hash at [height] — the chain-reset checkpoint lookup. FAILURE-TOLERANT: any query error
+     * (network, GraphQL, parse) is [BlockHashLookup.Unavailable] rather than a throw, so the reset
+     * check SKIPS on a transient hiccup instead of risking a wipe of a healthy wallet. A VALID
+     * response whose `block` field is null (the chain is shorter than the checkpoint) is
+     * [BlockHashLookup.NotOnChain] — kept distinct from Unavailable so the guard can treat the two
+     * opposite meanings differently. CancellationException is rethrown so cancellation isn't swallowed.
      */
-    override suspend fun getGenesisBlockHash(): String? {
+    override suspend fun getBlockHashAtHeight(height: Long): BlockHashLookup {
         return try {
             val response = httpClient.post(graphqlEndpoint) {
                 contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(GraphQLQueries.QUERY_GENESIS_BLOCK))
+                setBody(GraphQLRequest(
+                    query = GraphQLQueries.QUERY_BLOCK_AT_HEIGHT,
+                    variables = mapOf("height" to height.toString())
+                ))
             }
             val jsonResponse = json.parseToJsonElement(response.bodyAsText()).jsonObject
-            // GraphQL errors → null ("can't determine", never treated as a reset).
+            // GraphQL errors → Unavailable ("can't determine", never treated as a reset).
             val errors = jsonResponse["errors"]?.jsonArray
-            if (errors != null && errors.isNotEmpty()) return null
-            jsonResponse["data"]?.jsonObject
-                ?.get("block")?.jsonObject
-                ?.get("hash")?.jsonPrimitive?.content
-                ?.takeIf { it.isNotBlank() } // a blank hash → null → UNKNOWN, never a false reset
+            if (errors != null && errors.isNotEmpty()) return BlockHashLookup.Unavailable
+            val data = jsonResponse["data"]?.jsonObject
+                ?: return BlockHashLookup.Unavailable
+            // A present `data` with a null `block` is a VALID "no block at that height" → the chain
+            // is shorter than the checkpoint → NotOnChain (the reset signal), NOT Unavailable.
+            val block = data["block"]
+            if (block == null || block is JsonNull) return BlockHashLookup.NotOnChain
+            val hash = block.jsonObject["hash"]?.jsonPrimitive?.content
+            // A blank hash can't be compared — treat as Unavailable, never a false reset.
+            if (hash.isNullOrBlank()) BlockHashLookup.Unavailable else BlockHashLookup.Found(hash)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            null
+            BlockHashLookup.Unavailable
         }
     }
 

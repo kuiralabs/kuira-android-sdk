@@ -1063,10 +1063,12 @@ class MidnightSdk private constructor(
                 dustRepository = dustRepository,
                 syncStateManager = syncStateManager,
                 utxoManager = utxoManager,
-                // Wipe-on-reset ONLY for the local dev chain (developmentMode = localhost localnet),
-                // where resets are a daily dev action and the indexer is local. On remote chains
-                // (PreProd/Preview) a genesis mismatch is treated as an indexer anomaly, never a wipe.
-                wipeOnResetEnabled = networkConfig.developmentMode,
+                // Wipe-on-reset ONLY for the local dev chain (localnet), where resets are a daily dev
+                // action and the indexer is local. On remote chains (PreProd/Preview) a checkpoint
+                // mismatch is treated as an indexer anomaly, never a wipe. Gated on isLocalDevChain,
+                // NOT developmentMode — the latter is also true on PreProd/Preview (local proof-server
+                // HTTP), so gating a destructive wipe on it would risk nuking a healthy remote wallet.
+                wipeOnResetEnabled = networkConfig.isLocalDevChain,
             )
 
             val subscriptionManager = SubscriptionManager(

@@ -114,14 +114,17 @@ object GraphQLQueries {
     """
 
     /**
-     * Query the GENESIS block (height 0). Its hash is a stable per-chain identity: a fresh
-     * localnet (after a `docker` reset) has a different genesis hash, so a mismatch against the
-     * pinned value flags a chain reset. The `block` field takes an optional `offset`;
-     * `{ height: 0 }` pins it to genesis (no offset = latest block).
+     * Query the block at a specific [height] — the chain-reset checkpoint lookup. A missing block
+     * (the chain is shorter than the pinned checkpoint) comes back as a `null` `block` field, which
+     * [com.midnight.kuira.core.indexer.api.IndexerClientImpl.getBlockHashAtHeight] maps to
+     * [com.midnight.kuira.core.indexer.api.BlockHashLookup.NotOnChain] — distinct from a failed query.
+     *
+     * Variables:
+     * - height: Int!
      */
-    const val QUERY_GENESIS_BLOCK = """
-        query {
-          block(offset: { height: 0 }) {
+    const val QUERY_BLOCK_AT_HEIGHT = """
+        query(${'$'}height: Int!) {
+          block(offset: { height: ${'$'}height }) {
             height
             hash
           }
