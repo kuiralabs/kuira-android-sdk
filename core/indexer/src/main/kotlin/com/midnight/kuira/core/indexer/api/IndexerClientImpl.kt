@@ -436,10 +436,7 @@ class IndexerClientImpl(
         return try {
             val response = httpClient.post(graphqlEndpoint) {
                 contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(
-                    query = GraphQLQueries.QUERY_BLOCK_AT_HEIGHT,
-                    variables = mapOf("height" to height.toString())
-                ))
+                setBody(GraphQLRequest(GraphQLQueries.queryBlockAtHeight(height)))
             }
             val jsonResponse = json.parseToJsonElement(response.bodyAsText()).jsonObject
             // GraphQL errors → Unavailable ("can't determine", never treated as a reset).

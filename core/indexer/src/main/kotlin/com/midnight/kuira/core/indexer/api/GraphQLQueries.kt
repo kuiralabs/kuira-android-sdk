@@ -119,12 +119,16 @@ object GraphQLQueries {
      * [com.midnight.kuira.core.indexer.api.IndexerClientImpl.getBlockHashAtHeight] maps to
      * [com.midnight.kuira.core.indexer.api.BlockHashLookup.NotOnChain] — distinct from a failed query.
      *
-     * Variables:
-     * - height: Int!
+     * The height is INLINED into the query text rather than passed as a typed variable: the
+     * transport's variables map is string-valued, and GraphQL does not coerce a string into the
+     * schema's `Int!` — a `"7140"` variable is rejected with "expected type Int", which the
+     * failure-tolerant caller reads as Unavailable and the reset check silently skips. That exact
+     * mistake shipped once and turned the whole chain-reset guard into a production no-op (pinned
+     * against by BlockHashLookupIntegrationTest).
      */
-    const val QUERY_BLOCK_AT_HEIGHT = """
-        query(${'$'}height: Int!) {
-          block(offset: { height: ${'$'}height }) {
+    fun queryBlockAtHeight(height: Long): String = """
+        query {
+          block(offset: { height: $height }) {
             height
             hash
           }
