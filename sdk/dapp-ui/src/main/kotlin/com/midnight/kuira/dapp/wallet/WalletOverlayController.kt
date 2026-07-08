@@ -1,5 +1,6 @@
 package com.midnight.kuira.dapp.wallet
 
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -79,7 +80,23 @@ class WalletOverlayController {
     var sigilSheetReopen by mutableIntStateOf(0)
         private set
 
+    /**
+     * True once a [WalletOverlayHost] has adopted this controller as its render surface. The
+     * ambient DEFAULT controller (see [LocalWalletOverlay]) is never adopted — [open] on it flips
+     * state nobody renders, which is a silent-broken gear/Send/Receive. The flag lets [open] turn
+     * that silence into an actionable log line without breaking the no-crash contract.
+     */
+    internal var hostAttached: Boolean = false
+
     fun open(overlay: WalletOverlay) {
+        if (!hostAttached) {
+            Log.w(
+                "WalletOverlay",
+                "open($overlay) called but no WalletOverlayHost renders this controller — the " +
+                    "overlay will NOT appear. Wrap the app root in WalletAppShell { } (or " +
+                    "WalletOverlayHost { }) so full-screen Settings / Send / Receive have a surface.",
+            )
+        }
         active = overlay
     }
 

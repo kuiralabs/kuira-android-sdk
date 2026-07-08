@@ -49,7 +49,7 @@ fun WalletOverlayHost(
     appVersion: String? = null,
     content: @Composable () -> Unit,
 ) {
-    val controller = remember { WalletOverlayController() }
+    val controller = remember { WalletOverlayController().also { it.hostAttached = true } }
 
     // Seed the host-level app version onto the controller. A content-level host
     // (PanelBar) may overwrite it with its own; whichever is set last wins for ABOUT.
