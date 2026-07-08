@@ -385,6 +385,66 @@ class MidnightContract private constructor(
         )
     }
 
+    /** One view-circuit invocation in a [readMany] batch, identified by [key]. */
+    data class ReadRequest(val key: String, val circuitName: String, val args: List<Any?> = emptyList())
+
+    /** Per-key outcome of a [readMany] batch: the circuit's JSON result or its error message. */
+    data class ReadOutcome(val json: String?, val error: String?) {
+        val isOk: Boolean get() = json != null
+    }
+
+    /**
+     * Read MANY view circuits in one shot: ONE state fetch, ONE engine session, every circuit
+     * against the SAME state snapshot (each isolated on a native clone). Failures are captured
+     * per key instead of failing the batch — probing patterns (enumerate proposals until the
+     * contract's not-found assert) read the error from the outcome.
+     *
+     * [notIndexedTimeoutMs] > 0 retries the state fetch while the contract isn't in the indexer
+     * yet (a freshly-deployed or just-connected contract lags the node by a beat) — the retry
+     * every consumer was hand-rolling. Cancellation propagates normally.
+     */
+    suspend fun readMany(
+        requests: List<ReadRequest>,
+        notIndexedTimeoutMs: Long = 0,
+    ): Map<String, ReadOutcome> {
+        requireAddress("readMany")
+        val onChainStateHex = fetchStateRetryingIndexerLag(notIndexedTimeoutMs)
+        return config.executor.readManyCircuits(
+            contractJs = contractJsContent,
+            contractAddress = contractAddress,
+            requests = requests.map {
+                CircuitExecutor.CircuitReadRequest(
+                    key = it.key,
+                    circuitName = it.circuitName,
+                    circuitArgs = ArgConverter.toJsExpressions(*it.args.toTypedArray()),
+                )
+            },
+            initialPrivateState = ArgConverter.toJsObjectLiteral(initialPrivateStateMap),
+            coinPublicKey = coinPublicKey ?: ByteArray(32),
+            onChainStateHex = onChainStateHex,
+            constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
+            networkId = config.networkId,
+        ).mapValues { (_, r) -> ReadOutcome(r.json, r.error) }
+    }
+
+    // A node-finalized contract takes a beat to appear in the indexer; within the window the
+    // fetch throws StateFetchFailed. Retry up to the deadline — CancellationException is not
+    // caught (kotlinx CancellationException does not extend the caught type's branch here
+    // because we rethrow it explicitly), so a cancelled caller cancels cleanly.
+    private suspend fun fetchStateRetryingIndexerLag(timeoutMs: Long): String {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (true) {
+            try {
+                return config.fetchContractState(contractAddress)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: ContractCallException.StateFetchFailed) {
+                if (System.currentTimeMillis() >= deadline) throw e
+                kotlinx.coroutines.delay(NOT_INDEXED_POLL_MS)
+            }
+        }
+    }
+
     /**
      * Deploy a new contract instance to the blockchain.
      *
@@ -598,6 +658,9 @@ class MidnightContract private constructor(
         /** Bound on waiting for a call to be indexed before [call] returns (see [awaitContractStateIndexed]). */
         private const val STATE_INDEX_TIMEOUT_MS = 30_000L
         private const val STATE_INDEX_POLL_MS = 1_000L
+
+        /** Poll cadence while a not-yet-indexed contract's state fetch retries (readMany). */
+        private const val NOT_INDEXED_POLL_MS = 2_000L
 
         /** Attempts [call] makes when the node rejects the intent as a stale-state duplicate. */
         private const val CALL_MAX_ATTEMPTS = 4

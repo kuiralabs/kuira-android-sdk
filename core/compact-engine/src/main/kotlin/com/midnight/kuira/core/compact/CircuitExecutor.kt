@@ -160,6 +160,82 @@ class CircuitExecutor(
         )
     }
 
+    /** One view-circuit invocation inside a [readManyCircuits] batch, identified by [key]. */
+    data class CircuitReadRequest(
+        val key: String,
+        val circuitName: String,
+        /** JS expressions (from ArgConverter), same form as [readCircuit]'s circuitArgs. */
+        val circuitArgs: List<String> = emptyList(),
+    )
+
+    /** Per-key outcome of a batch read: the circuit's JSON result, or its error message. */
+    data class CircuitReadResult(val json: String?, val error: String?)
+
+    /**
+     * Run MANY view circuits in ONE engine session against ONE on-chain state — one runtime +
+     * contract load, one initialState, one state snapshot — instead of a full engine boot and
+     * state fetch per read. Every circuit runs against its own NATIVE CLONE of the fetched state,
+     * so reads are isolated (a circuit's context mutations can't leak into the next) and all see
+     * the SAME snapshot (no mixed-block reads within a batch).
+     *
+     * Failures are captured PER KEY rather than failing the batch — callers that probe (e.g.
+     * enumerate proposals until the contract's not-found assert) read the error from the result.
+     * All clone/post handles (and the base state handle) are freed engine-side; the pool returns
+     * to baseline exactly as single reads do.
+     */
+    suspend fun readManyCircuits(
+        contractJs: String,
+        contractAddress: String,
+        requests: List<CircuitReadRequest>,
+        initialPrivateState: String,
+        coinPublicKey: ByteArray,
+        onChainStateHex: String,
+        constructorArgs: List<String> = emptyList(),
+        networkId: String = "undeployed",
+        witnesses: Map<String, WitnessProvider> = emptyMap(),
+    ): Map<String, CircuitReadResult> = withContext(ioDispatcher) {
+        require(requests.isNotEmpty()) { "readManyCircuits needs at least one request" }
+        validateHex(contractAddress, "contractAddress")
+        validateIdentifier(networkId, "networkId")
+        validateHex(onChainStateHex, "onChainStateHex")
+        requests.forEach { req ->
+            validateIdentifier(req.circuitName, "circuitName(${req.key})")
+            require(req.key.isNotEmpty() && req.key.all { it.isLetterOrDigit() || it in ":_-." }) {
+                "read key must be [A-Za-z0-9:_-.]+, got '${req.key}'"
+            }
+        }
+        require(requests.map { it.key }.toSet().size == requests.size) { "read keys must be unique" }
+
+        val callsJs = requests.joinToString("\n                ") { req ->
+            val args = if (req.circuitArgs.isEmpty()) "" else ", ${req.circuitArgs.joinToString(", ")}"
+            "__readOne('${req.key}', (ctx) => contract.impureCircuits['${req.circuitName}'](ctx$args));"
+        }
+        val resultsJson = executeInQuickJs(
+            contractJs = contractJs,
+            contractAddress = contractAddress,
+            circuitName = "__readMany", // unused by the multi tail; passes identifier validation
+            circuitArgs = emptyList(),
+            witnesses = witnesses,
+            initialPrivateState = initialPrivateState,
+            coinPublicKey = coinPublicKey,
+            networkId = networkId,
+            onChainStateHex = onChainStateHex,
+            constructorArgs = constructorArgs,
+            readMode = true,
+            multiReadCallsJs = callsJs,
+        )
+
+        val parsed = JSONObject(resultsJson)
+        requests.associate { req ->
+            val entry = parsed.optJSONObject(req.key)
+            req.key to when {
+                entry == null -> CircuitReadResult(null, "no result captured")
+                entry.has("ok") -> CircuitReadResult(entry.getString("ok"), null)
+                else -> CircuitReadResult(null, entry.optString("err", "unknown error"))
+            }
+        }
+    }
+
     /**
      * Execute a contract constructor and assemble a deploy transaction.
      *
@@ -289,6 +365,7 @@ class CircuitExecutor(
         ledgerParametersHex: String? = null,
         constructorArgs: List<String> = emptyList(),
         readMode: Boolean = false,
+        multiReadCallsJs: String? = null,
     ): String {
         var txParamsJson: String? = null
         var jsError: String? = null
@@ -313,6 +390,7 @@ class CircuitExecutor(
                 ledgerParametersHex = ledgerParametersHex,
                 constructorArgs = constructorArgs,
                 readMode = readMode,
+                multiReadCallsJs = multiReadCallsJs,
             )
             evaluate<Any?>(if (readMode) JS_JSON_SAFE else JS_DEEP_CONVERT)
             evaluate<Any?>(circuitJs)
@@ -419,6 +497,9 @@ class CircuitExecutor(
         // Read mode: run the circuit only to capture its RETURN value (a view/getter), skipping
         // the gas clone + proof-data assembly. Used by readCircuit — no transaction is built.
         readMode: Boolean = false,
+        // Batch read mode (implies readMode): straight-line `__readOne(key, fn)` calls generated
+        // by readManyCircuits; each runs against its own native clone of the fetched state.
+        multiReadCallsJs: String? = null,
     ): String {
         val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
 
@@ -458,7 +539,46 @@ class CircuitExecutor(
         // Read mode captures the circuit's RETURN value (a view/getter) — no gas clone, no proof
         // assembly. jsonSafe() makes it JSON-serializable (BigInt → decimal string, Uint8Array → hex).
         // Write mode assembles the transaction (clone for gas + proof data).
-        val executionTail = if (readMode) {
+        val executionTail = if (multiReadCallsJs != null) {
+            // Batch read: each circuit runs against a NATIVE CLONE of the fetched state (isolated
+            // + same snapshot), failures are captured per key, and every handle — clone, post, and
+            // the base swapped-in state — is freed before returning (pool back to baseline).
+            """
+                const __baseState = initResult.currentContractState;
+                const __baseHandle = __baseState._rustHandle;
+                const __results = {};
+                function __readOne(key, run) {
+                    const clone = Number(globalThis.__native_stateClone(String(__baseHandle)));
+                    let post = null;
+                    try {
+                        __baseState._rustHandle = clone;
+                        if (__baseState._data) { __baseState._data._rustHandle = clone; }
+                        const ctx = __compactRuntime.createCircuitContext(
+                            '$contractAddress',
+                            { bytes: new Uint8Array([$cpkJs]) },
+                            __baseState,
+                            initResult.currentPrivateState,
+                        );
+                        const r = run(ctx);
+                        post = r.context.currentQueryContext._rustHandle;
+                        __results[key] = { ok: JSON.stringify(jsonSafe(r.result)) };
+                    } catch (e) {
+                        __results[key] = { err: String(e && e.message ? e.message : e) };
+                    } finally {
+                        globalThis.__native_stateFree(String(clone));
+                        if (post !== null && post !== clone) {
+                            globalThis.__native_stateFree(String(post));
+                        }
+                    }
+                }
+                try {
+                    $multiReadCallsJs
+                } finally {
+                    globalThis.__native_stateFree(String(__baseHandle));
+                }
+                __capture(JSON.stringify(__results));
+            """
+        } else if (readMode) {
             """
                 // Reads never reach the assembler whose `finally` frees the write path's handles,
                 // so free the native ledger-state handles HERE — the pool is process-global and a
