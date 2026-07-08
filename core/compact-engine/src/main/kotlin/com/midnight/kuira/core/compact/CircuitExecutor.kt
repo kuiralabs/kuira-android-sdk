@@ -160,6 +160,45 @@ class CircuitExecutor(
         )
     }
 
+    /**
+     * Run a circuit LOCALLY against the contract's `initialState()` — no on-chain state, no fetch.
+     * The engine-level counterpart of [readCircuit] for state-independent (pure) circuits: it omits
+     * the `onChainStateHex` entirely (null → `executeInQuickJs` builds from `initialState()`), so
+     * there is no deployed instance to validate and no hex to supply.
+     *
+     * Intended for computing things a contract exposes as PURE circuits before any deploy — e.g.
+     * `persistentHash` commitments — so the app derives them with the contract's OWN logic rather
+     * than a reimplementation. An impure circuit run this way sees only empty initial state.
+     */
+    suspend fun readCircuitLocal(
+        contractJs: String,
+        circuitName: String,
+        circuitArgs: List<String> = emptyList(),
+        initialPrivateState: String,
+        coinPublicKey: ByteArray,
+        constructorArgs: List<String> = emptyList(),
+        networkId: String = "undeployed",
+        witnesses: Map<String, WitnessProvider> = emptyMap(),
+    ): String = withContext(ioDispatcher) {
+        validateIdentifier(circuitName, "circuitName")
+        validateIdentifier(networkId, "networkId")
+
+        executeInQuickJs(
+            contractJs = contractJs,
+            // A pure circuit never consults the address; a zero placeholder keeps the handle valid.
+            contractAddress = "0".repeat(64),
+            circuitName = circuitName,
+            circuitArgs = circuitArgs,
+            witnesses = witnesses,
+            initialPrivateState = initialPrivateState,
+            coinPublicKey = coinPublicKey,
+            networkId = networkId,
+            onChainStateHex = null, // ← initialState(), no chain fetch
+            constructorArgs = constructorArgs,
+            readMode = true,
+        )
+    }
+
     /** One view-circuit invocation inside a [readManyCircuits] batch, identified by [key]. */
     data class CircuitReadRequest(
         val key: String,
@@ -208,7 +247,9 @@ class CircuitExecutor(
 
         val callsJs = requests.joinToString("\n                ") { req ->
             val args = if (req.circuitArgs.isEmpty()) "" else ", ${req.circuitArgs.joinToString(", ")}"
-            "__readOne('${req.key}', (ctx) => contract.impureCircuits['${req.circuitName}'](ctx$args));"
+            // `circuits` is the superset (pure + impure); an impure entry is the SAME reference as
+            // in impureCircuits, and PURE circuits (e.g. persistentHash commitments) live ONLY here.
+            "__readOne('${req.key}', (ctx) => contract.circuits['${req.circuitName}'](ctx$args));"
         }
         val resultsJson = executeInQuickJs(
             contractJs = contractJs,
@@ -588,7 +629,9 @@ class CircuitExecutor(
                 const preHandle = circuitCtx.currentQueryContext._rustHandle;
                 let postHandle = null;
                 try {
-                    const circuitResult = contract.impureCircuits['$circuitName'](circuitCtx$argsStr);
+                    // `circuits` is the superset of impureCircuits; a view circuit is the same
+                    // reference, and PURE circuits (persistentHash commitments) live ONLY here.
+                    const circuitResult = contract.circuits['$circuitName'](circuitCtx$argsStr);
                     postHandle = circuitResult.context.currentQueryContext._rustHandle;
                     __capture(JSON.stringify(jsonSafe(circuitResult.result)));
                 } finally {

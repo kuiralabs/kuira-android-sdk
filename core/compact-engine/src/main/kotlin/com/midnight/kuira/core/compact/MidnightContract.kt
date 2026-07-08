@@ -385,6 +385,34 @@ class MidnightContract private constructor(
         )
     }
 
+    /**
+     * Run a PURE (or otherwise state-independent) circuit LOCALLY — against the contract's
+     * `initialState()`, with NO deployed address and NO chain fetch — and return its result as JSON.
+     *
+     * This exists for computation the app must do BEFORE a contract exists or that never depends on
+     * chain state: e.g. deriving `persistentHash` commitments (signer/threshold/proposal) so a
+     * privacy contract's deploy-time arguments are computed by the contract's OWN pure circuits
+     * rather than a hand-reimplemented hash that could silently diverge. Because it runs against
+     * `initialState`, only PURE circuits (no ledger reads) are meaningful here; an impure circuit
+     * would see empty state.
+     *
+     * Unlike [read] this needs no address — a handle built with only the contract JS (via
+     * [MidnightContract.local]) suffices. Same JSON encoding as [read] (BigInt → decimal string,
+     * Bytes → hex, structs preserved).
+     */
+    suspend fun readLocal(circuitName: String, vararg args: Any?): String {
+        return config.executor.readCircuitLocal(
+            contractJs = contractJsContent,
+            circuitName = circuitName,
+            circuitArgs = ArgConverter.toJsExpressions(*args),
+            initialPrivateState = ArgConverter.toJsObjectLiteral(initialPrivateStateMap),
+            coinPublicKey = coinPublicKey ?: ByteArray(32),
+            constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
+            networkId = config.networkId,
+            witnesses = witnesses,
+        )
+    }
+
     /** One view-circuit invocation in a [readMany] batch, identified by [key]. */
     data class ReadRequest(val key: String, val circuitName: String, val args: List<Any?> = emptyList())
 
