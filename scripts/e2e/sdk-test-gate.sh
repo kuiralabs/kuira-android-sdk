@@ -23,7 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
-INDEXER_URL="http://localhost:8088/api/v3/graphql"
+INDEXER_URL="http://localhost:8088/api/v4/graphql"
 SERIAL="${1:-$(adb devices | awk '/\tdevice$/{print $1; exit}')}"
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
