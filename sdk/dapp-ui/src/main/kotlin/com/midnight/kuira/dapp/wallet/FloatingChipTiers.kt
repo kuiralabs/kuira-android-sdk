@@ -3,6 +3,7 @@ package com.midnight.kuira.dapp.wallet
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
+import com.midnight.kuira.dapp.backup.RunnerDustProgress
 
 /**
  * Phase 2 preview surface — the four floating-chip size tiers as REAL composables, so they render
@@ -68,6 +70,9 @@ data class WalletChipUi(
     val dustRegistered: Boolean,
     val synced: Boolean,
     val network: String,
+    /** Live sync fraction (0..1) when a determinate sync is in flight; null = idle/indeterminate →
+     *  the Panel tier hides the progress bar rather than showing a frozen mock. */
+    val syncProgress: Float? = null,
 ) {
     companion object {
         val Sample = WalletChipUi(
@@ -102,6 +107,8 @@ internal fun WalletChip(
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
     width: Dp = tier.naturalWidth(),
+    onSend: () -> Unit = {},
+    onReceive: () -> Unit = {},
 ) {
     when (tier) {
         ChipTier.Peek -> PeekTab(colors, modifier)
@@ -154,16 +161,16 @@ internal fun WalletChip(
                 Text(ui.dust, color = colors.onSheet, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
                 if (ui.dustRegistered) Text("  ✓ registered", color = colors.positive, fontSize = 12.sp)
             }
-            // Runner sync track (determinate) — the brand's only on-chip motion when syncing.
-            Box(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp).height(20.dp)) {
-                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(colors.onSheetSubtle))
-                Box(Modifier.fillMaxWidth(0.62f).height(3.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(colors.onSheet))
-                RunnerGlyph(colors.onSheet, Modifier.align(Alignment.CenterStart).padding(start = 150.dp), size = 20.dp)
+            // Real sync progress — the brand runner, driven by the live fraction and width-relative
+            // (BoxWithConstraints inside), shown ONLY while a determinate sync is in flight.
+            ui.syncProgress?.let { frac ->
+                Spacer(Modifier.height(12.dp))
+                RunnerDustProgress(progress = frac, colors = colors, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton("Send", colors, primary = true, modifier = Modifier.weight(1f))
-                ActionButton("Receive", colors, primary = false, modifier = Modifier.weight(1f))
+                ActionButton("Send", colors, primary = true, onClick = onSend, modifier = Modifier.weight(1f))
+                ActionButton("Receive", colors, primary = false, onClick = onReceive, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -178,6 +185,8 @@ internal fun SigilChip(
     colors: WalletPanelColors,
     modifier: Modifier = Modifier,
     width: Dp = tier.naturalWidth(),
+    onSettings: () -> Unit = {},
+    onSignOut: () -> Unit = {},
 ) {
     when (tier) {
         ChipTier.Peek -> PeekTab(colors, modifier)
@@ -211,8 +220,8 @@ internal fun SigilChip(
             MonoField(ui.didFull, colors)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton("Settings", colors, primary = false, modifier = Modifier.weight(1f))
-                ActionButton("Sign out", colors, primary = false, modifier = Modifier.weight(1f))
+                ActionButton("Settings", colors, primary = false, onClick = onSettings, modifier = Modifier.weight(1f))
+                ActionButton("Sign out", colors, primary = false, onClick = onSignOut, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -287,13 +296,16 @@ private fun MonoField(text: String, colors: WalletPanelColors) {
 }
 
 @Composable
-private fun ActionButton(text: String, colors: WalletPanelColors, primary: Boolean, modifier: Modifier = Modifier) {
+private fun ActionButton(text: String, colors: WalletPanelColors, primary: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .height(38.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (primary) colors.onSheet else colors.onSheet.copy(alpha = GLASS_FILL_ALPHA))
-            .border(1.dp, if (primary) Color.Transparent else colors.onSheetSubtle, RoundedCornerShape(10.dp)),
+            .border(1.dp, if (primary) Color.Transparent else colors.onSheetSubtle, RoundedCornerShape(10.dp))
+            // .clickable CONSUMES the tap, so it doesn't fall through to the chip-wide
+            // detectTapGestures in ResizableChip (which opens the sheet).
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(

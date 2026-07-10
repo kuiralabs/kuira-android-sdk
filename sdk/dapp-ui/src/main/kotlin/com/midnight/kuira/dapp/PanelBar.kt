@@ -193,7 +193,7 @@ fun PanelBar(
     // independent floaters (opt-in). Same VM / theme / overlay wiring drives both layouts.
     // Each panel takes an optional `pill` slot: docked mode passes null (built-in pill); floating
     // mode passes the live resizable widget. The panel keeps its sheet/bootstrap either way.
-    val sigilPanel: @Composable (pill: (@Composable (SigilChipUi, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
+    val sigilPanel: @Composable (pill: (@Composable (SigilChipUi, () -> Unit, () -> Unit, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         SigilStatusPanel(
             viewModel = sigilViewModel,
             colors = activeSigilColors,
@@ -205,7 +205,7 @@ fun PanelBar(
             pill = pillSlot,
         )
     }
-    val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
+    val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit, () -> Unit, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         WalletStatusPanel(
             viewModel = walletViewModel,
             initialNetwork = network,
@@ -255,8 +255,12 @@ fun PanelBar(
                 containerHeightPx = heightPx,
                 initialCorner = FloatingCorner.TopStart,
             ) {
-                sigilPanel { ui, onTap ->
-                    ResizableChip(activeWalletColors, onTap) { tier, w -> SigilChip(tier, ui, activeWalletColors, width = w) }
+                sigilPanel { ui, onTap, onSettings, onSignOut ->
+                    // Both floating chips share the WALLET palette so they read as one themed unit
+                    // (see the floating-mode comment above); each panel still themes its own sheet.
+                    ResizableChip(activeWalletColors, onTap) { tier, w ->
+                        SigilChip(tier, ui, activeWalletColors, width = w, onSettings = onSettings, onSignOut = onSignOut)
+                    }
                 }
             }
             FloatingChip(
@@ -265,8 +269,10 @@ fun PanelBar(
                 containerHeightPx = heightPx,
                 initialCorner = FloatingCorner.TopEnd,
             ) {
-                walletPanel { ui, onTap ->
-                    ResizableChip(activeWalletColors, onTap) { tier, w -> WalletChip(tier, ui, activeWalletColors, width = w) }
+                walletPanel { ui, onTap, onSend, onReceive ->
+                    ResizableChip(activeWalletColors, onTap) { tier, w ->
+                        WalletChip(tier, ui, activeWalletColors, width = w, onSend = onSend, onReceive = onReceive)
+                    }
                 }
             }
         }

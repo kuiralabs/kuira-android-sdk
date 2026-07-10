@@ -202,7 +202,7 @@ fun WalletStatusPanel(
      * `onTap` that opens the sheet. The panel keeps owning the sheet, bootstrap, and lock — only the
      * pill's visual is delegated. Null → the classic built-in pill.
      */
-    pill: (@Composable (WalletChipUi, onTap: () -> Unit) -> Unit)? = null,
+    pill: (@Composable (WalletChipUi, onTap: () -> Unit, onSend: () -> Unit, onReceive: () -> Unit) -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -295,22 +295,13 @@ fun WalletStatusPanel(
     // The pill. A floating host can swap its visual via [pill] (e.g. the resizable widget), fed the
     // live balance; otherwise the built-in WalletPill. Either way, a tap opens the sheet.
     if (pill != null) {
-        val net = network.pillName.replaceFirstChar { it.uppercase() }
-        val chipUi = (status as? WalletStatus.Ready)?.let { s ->
-            val b = s.balance
-            WalletChipUi(
-                night = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
-                unshielded = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
-                shielded = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else "—",
-                // formatAbbreviated is the tight-surface form (integer below 1K, K/M above) — dust
-                // carries 15 decimals, so formatCompact left it 18 chars long and overflowed the chip.
-                dust = formatter.formatAbbreviated(b.dust, "DUST"),
-                dustRegistered = b.dustRegistered,
-                synced = syncProgress == null && s.busy == null,
-                network = net,
-            )
-        } ?: WalletChipUi("—", "—", "—", "—", dustRegistered = false, synced = false, network = net)
-        pill(chipUi) { sheetOpen = true }
+        val chipUi = walletChipUi(status, syncProgress, formatter, network)
+        pill(
+            chipUi,
+            { sheetOpen = true },
+            { viewModel.resetSendState(); overlay.open(WalletOverlay.Send) },
+            { overlay.open(WalletOverlay.Receive) },
+        )
     } else {
         // dappPressable gives the pressed/hover/focus state layer + press scale.
         WalletPill(
@@ -504,6 +495,36 @@ private fun WalletPill(
 
 // `internal` (not `private`) so PillLabelTest can lock down the formatting
 // contract — see `sdk/dapp-ui/src/test/.../PillLabelTest.kt`.
+/**
+ * The floating chip's UI model — a PURE function of (status, syncProgress, network) so the
+ * syncProgress→chip-fraction plumbing and the `synced` flag are unit-testable without Compose.
+ * A determinate sync fraction flows into [WalletChipUi.syncProgress] (drives the Panel-tier bar);
+ * null (idle or indeterminate) hides it. Non-Ready status → an em-dash placeholder chip.
+ */
+internal fun walletChipUi(
+    status: WalletStatus,
+    syncProgress: WalletSyncProgress?,
+    formatter: BalanceFormatter,
+    network: MidnightNetwork,
+): WalletChipUi {
+    val net = network.pillName.replaceFirstChar { it.uppercase() }
+    return (status as? WalletStatus.Ready)?.let { s ->
+        val b = s.balance
+        WalletChipUi(
+            night = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
+            unshielded = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
+            shielded = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else "—",
+            // formatAbbreviated is the tight-surface form (integer below 1K, K/M above) — dust
+            // carries 15 decimals, so formatCompact left it 18 chars long and overflowed the chip.
+            dust = formatter.formatAbbreviated(b.dust, "DUST"),
+            dustRegistered = b.dustRegistered,
+            synced = syncProgress == null && s.busy == null,
+            network = net,
+            syncProgress = syncProgress?.fraction,
+        )
+    } ?: WalletChipUi("—", "—", "—", "—", dustRegistered = false, synced = false, network = net)
+}
+
 internal fun pillLabel(
     status: WalletStatus,
     network: MidnightNetwork,

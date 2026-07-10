@@ -104,7 +104,7 @@ fun SigilStatusPanel(
      * resizable floating widget), fed the live [SigilChipUi] + an `onTap` that opens the sheet. The
      * panel keeps the sheet + state machine; only the pill's visual is delegated. Null → built-in.
      */
-    pill: (@Composable (SigilChipUi, onTap: () -> Unit) -> Unit)? = null,
+    pill: (@Composable (SigilChipUi, onTap: () -> Unit, onSettings: () -> Unit, onSignOut: () -> Unit) -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     LaunchedEffect(status) { onStatusChange(status) }
@@ -127,7 +127,12 @@ fun SigilStatusPanel(
     val activity = LocalContext.current as? FragmentActivity
 
     if (pill != null) {
-        pill(status.toSigilChipUi()) { sheetOpen = true }
+        pill(
+            status.toSigilChipUi(),
+            { sheetOpen = true },
+            onOpenSettings,
+            { activity?.let { viewModel.signOut(it) } },
+        )
     } else {
         SigilPill(
             status = status,
