@@ -1,5 +1,6 @@
 package com.midnight.kuira.contract
 
+import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.provider.Property
 
 /**
@@ -23,11 +24,29 @@ import org.gradle.api.provider.Property
 abstract class KuiraContractExtension {
 
     /**
-     * Path (relative to the project directory) of the directory containing
-     * compiled contract artifacts. The directory must have an `index.js`
-     * under `contract`, `*.prover` and `*.verifier` files under `keys`,
-     * and `*.bzkir` files under `zkir` — the standard output layout of
-     * the Midnight Compact compiler.
+     * Multiple contracts, each with its own [source]/[alias]/runtime-version. Use this for a dApp
+     * that ships more than one contract:
+     *
+     * ```
+     * kuiraContract {
+     *     contracts {
+     *         register("Vault")        { source.set("contract/src/managed/Vault") }
+     *         register("PrivateVault") { source.set("contract/src/managed/PrivateVault") }
+     *     }
+     * }
+     * ```
+     *
+     * The top-level [source] below is the single-contract shorthand and composes with this — a build
+     * may set [source] (one contract) OR use `contracts { … }` (many); setting both includes all.
+     */
+    abstract val contracts: NamedDomainObjectContainer<KuiraContractSpec>
+
+    /**
+     * Single-contract shorthand: path (relative to the project directory) of the directory
+     * containing compiled contract artifacts. The directory must have an `index.js` under
+     * `contract`, `*.prover` and `*.verifier` files under `keys`, and `*.bzkir` files under `zkir`
+     * — the standard output layout of the Midnight Compact compiler. For more than one contract use
+     * [contracts].
      */
     abstract val source: Property<String>
 
