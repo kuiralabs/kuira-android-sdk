@@ -125,30 +125,18 @@ class KuiraContractPlugin : Plugin<Project> {
         val contractInfoProvider = sourceProvider.map { dir ->
             dir.file("$COMPILER_SUBDIR/$CONTRACT_INFO_FILE")
         }
-        val generateContractApiTask = project.tasks.register(
-            GenerateContractApiTask.TASK_NAME,
-            GenerateContractApiTask::class.java,
-        ) { task ->
-            task.contractInfoFile.set(contractInfoProvider)
-            task.alias.set(aliasProvider)
-            task.outputDir.convention(
-                project.layout.buildDirectory.dir(GENERATED_API_SUBDIR),
-            )
-        }
 
-        // Register the generated facade dir as a Kotlin source root via AGP's
-        // onVariants. This MUST run during configuration — NOT afterEvaluate, where
-        // AGP has already finalized variants ("too late to add actions ... call
-        // onVariants directly from the androidComponents DSL"). plugins.withId fires
-        // synchronously when the Android plugin is applied, so the AGP touch
-        // (GeneratedSourceRegistrar — AGP is a compileOnly dep) is loaded ONLY for an
-        // Android consumer, never in a non-Android build. An app applies
-        // `application`, a library `library` — never both — so register runs once.
+        // Register a per-variant generateContractApi task + wire its output as a Kotlin generated
+        // source root, via AGP's onVariants (GeneratedSourceRegistrar). This MUST run during
+        // configuration — NOT afterEvaluate, where AGP has already finalized variants. plugins.withId
+        // fires synchronously when the Android plugin is applied, so the AGP touch (AGP is a
+        // compileOnly dep) is loaded ONLY for an Android consumer, never in a non-Android build. An
+        // app applies `application`, a library `library` — never both — so register runs once.
         project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
-            GeneratedSourceRegistrar.register(project, generateContractApiTask)
+            GeneratedSourceRegistrar.register(project, contractInfoProvider, aliasProvider)
         }
         project.plugins.withId(ANDROID_LIB_PLUGIN_ID) {
-            GeneratedSourceRegistrar.register(project, generateContractApiTask)
+            GeneratedSourceRegistrar.register(project, contractInfoProvider, aliasProvider)
         }
 
         // provisionWalletKeys — downloads + stages the protocol wallet proving
@@ -239,10 +227,6 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val COMPILER_SUBDIR = "compiler"
         internal const val CONTRACT_INFO_FILE = "contract-info.json"
         internal const val PACKAGE_JSON_FILE = "package.json"
-
-        // Generated typed-contract-API output, relative to the module's build dir.
-        // Matches the task spec: build/generated/kuira/.
-        internal const val GENERATED_API_SUBDIR = "generated/kuira"
 
         internal const val ASSETS_DEST = "src/main/assets"
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"

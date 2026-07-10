@@ -81,8 +81,4 @@ abstract class GenerateContractApiTask : DefaultTask() {
         outDir.mkdirs()
         fileSpec.writeTo(outDir)
     }
-
-    companion object {
-        internal const val TASK_NAME = "generateContractApi"
-    }
 }
