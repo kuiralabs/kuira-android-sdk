@@ -4,7 +4,10 @@ import com.android.build.api.variant.AndroidComponentsExtension
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.TaskProvider
 
 /**
  * `io.github.kuiralabs.contract` — wires a compiled Compact contract into
@@ -73,70 +76,91 @@ class KuiraContractPlugin : Plugin<Project> {
         val sourceProvider = extension.source.map { rel ->
             project.layout.projectDirectory.dir(rel)
         }
-        val aliasProvider = extension.alias
+        // A dApp configures ONE contract via the top-level `source` shorthand, OR many via the
+        // `contracts { }` container. Each contract gets its own validate + sync + generated facade;
+        // collect the sync tasks to wire into preBuild once (afterEvaluate).
+        val syncTasks = mutableListOf<TaskProvider<Copy>>()
 
-        // The Copy task gets skipped (NO-SOURCE) by Gradle when its input
-        // directory does not exist, which would silently let a build
-        // proceed when the consumer forgot to compile their contract.
-        // A separate validation task with a forced output state runs
-        // first so the failure is loud and the diagnostic is owned by
-        // the plugin (not deferred to a runtime crash).
-        //
-        // It's a typed task (not a `doLast` closure) so its action
-        // captures only the declared properties — never `project` — and
-        // is therefore compatible with the configuration cache.
-        val validateTask = project.tasks.register(
-            ValidateKuiraContractSourceTask.TASK_NAME,
-            ValidateKuiraContractSourceTask::class.java,
-        ) { task ->
-            task.sourceDirectory.set(sourceProvider)
-            task.expectedRuntimeVersion.set(extension.expectedRuntimeVersion)
-            task.requireRuntimeMatch.set(extension.requireRuntimeMatch)
-        }
+        // Register validate + sync + the generated facade for ONE contract. `discriminator` = "" is
+        // the shorthand (keeps the legacy task names); a container entry passes its name. Each
+        // contract's tasks skip cleanly when its source isn't set (so shorthand and container coexist).
+        fun registerContract(
+            discriminator: String,
+            source: Property<String>,
+            alias: Provider<String>,
+            expectedRuntimeVersion: Provider<String>,
+            requireRuntimeMatch: Provider<Boolean>,
+        ) {
+            val sourceDir = source.map { rel -> project.layout.projectDirectory.dir(rel) }
+            // Present iff this contract's source is set; read at task time (after the consumer's
+            // kuiraContract{} block), so `false` cleanly disables the unused shorthand/container half.
+            val enabled = source.map { true }.orElse(false)
+            val suffix = discriminator.replaceFirstChar { it.uppercaseChar() }
+            val validateName = if (discriminator.isEmpty()) ValidateKuiraContractSourceTask.TASK_NAME
+            else "validate${suffix}ContractSource"
+            val syncName = if (discriminator.isEmpty()) SYNC_TASK_NAME else "sync${suffix}ContractAssets"
 
-        val syncTask = project.tasks.register(SYNC_TASK_NAME, Copy::class.java) { task ->
-            task.group = "build"
-            task.description = "Sync compiled Compact contract artifacts into Android assets."
-            task.dependsOn(validateTask)
-
-            task.from(sourceProvider.map { it.dir(CONTRACT_SUBDIR) }) { spec ->
-                spec.include("index.js")
-                spec.rename { _ -> "${aliasProvider.get()}-contract.js" }
-                spec.into(ASSETS_RUNTIME_SUBDIR)
+            val validateTask = project.tasks.register(
+                validateName,
+                ValidateKuiraContractSourceTask::class.java,
+            ) { task ->
+                task.sourceDirectory.set(sourceDir)
+                task.expectedRuntimeVersion.set(expectedRuntimeVersion)
+                task.requireRuntimeMatch.set(requireRuntimeMatch)
+                task.onlyIf { enabled.get() }
             }
-            task.from(sourceProvider.map { it.dir(KEYS_SUBDIR) }) { spec ->
-                spec.include("*.prover", "*.verifier")
-                spec.into(ASSETS_KEYS_SUBDIR)
+
+            val syncTask = project.tasks.register(syncName, Copy::class.java) { task ->
+                task.group = "build"
+                task.description = "Sync compiled Compact contract artifacts into Android assets."
+                task.dependsOn(validateTask)
+                task.from(sourceDir.map { it.dir(CONTRACT_SUBDIR) }) { spec ->
+                    spec.include("index.js")
+                    spec.rename { _ -> "${alias.get()}-contract.js" }
+                    spec.into(ASSETS_RUNTIME_SUBDIR)
+                }
+                task.from(sourceDir.map { it.dir(KEYS_SUBDIR) }) { spec ->
+                    spec.include("*.prover", "*.verifier")
+                    spec.into(ASSETS_KEYS_SUBDIR)
+                }
+                task.from(sourceDir.map { it.dir(ZKIR_SUBDIR) }) { spec ->
+                    spec.include("*.bzkir")
+                    spec.into(ASSETS_KEYS_SUBDIR)
+                }
+                task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
+                task.onlyIf { enabled.get() }
             }
-            task.from(sourceProvider.map { it.dir(ZKIR_SUBDIR) }) { spec ->
-                spec.include("*.bzkir")
-                spec.into(ASSETS_KEYS_SUBDIR)
+            syncTasks += syncTask
+
+            // generate<Variant><Contract>ContractApi — a typed facade from the ABI, wired into the
+            // Kotlin compile per variant. Must register during config (onVariants), which
+            // plugins.withId (shorthand) + contracts.all (container) both satisfy.
+            val contractInfoProvider = sourceDir.map { dir ->
+                dir.file("$COMPILER_SUBDIR/$CONTRACT_INFO_FILE")
             }
-            task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
+            project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
+                GeneratedSourceRegistrar.register(project, discriminator, contractInfoProvider, alias, enabled)
+            }
+            project.plugins.withId(ANDROID_LIB_PLUGIN_ID) {
+                GeneratedSourceRegistrar.register(project, discriminator, contractInfoProvider, alias, enabled)
+            }
         }
 
-        // generateContractApi — emits a typed Kotlin facade (<Alias>Contract)
-        // over MidnightContract.call(...) from the compiled contract's
-        // compiler/contract-info.json ABI, so dApps call circuits with
-        // compile-time-checked argument types. The output directory's exact
-        // location is set by AGP when the task is wired as a generated source
-        // (see afterEvaluate below); the convention here is a sensible default
-        // for the rare case AGP isn't present.
-        val contractInfoProvider = sourceProvider.map { dir ->
-            dir.file("$COMPILER_SUBDIR/$CONTRACT_INFO_FILE")
-        }
+        // Single-contract shorthand.
+        registerContract(
+            "", extension.source, extension.alias,
+            extension.expectedRuntimeVersion, extension.requireRuntimeMatch,
+        )
 
-        // Register a per-variant generateContractApi task + wire its output as a Kotlin generated
-        // source root, via AGP's onVariants (GeneratedSourceRegistrar). This MUST run during
-        // configuration — NOT afterEvaluate, where AGP has already finalized variants. plugins.withId
-        // fires synchronously when the Android plugin is applied, so the AGP touch (AGP is a
-        // compileOnly dep) is loaded ONLY for an Android consumer, never in a non-Android build. An
-        // app applies `application`, a library `library` — never both — so register runs once.
-        project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
-            GeneratedSourceRegistrar.register(project, contractInfoProvider, aliasProvider)
-        }
-        project.plugins.withId(ANDROID_LIB_PLUGIN_ID) {
-            GeneratedSourceRegistrar.register(project, contractInfoProvider, aliasProvider)
+        // Multi-contract container. `.all` fires per entry as the consumer's `contracts { }` block
+        // adds them (config time), so the onVariants wiring lands during configuration.
+        extension.contracts.all { spec ->
+            spec.alias.convention(project.provider { spec.name })
+            spec.requireRuntimeMatch.convention(extension.requireRuntimeMatch)
+            registerContract(
+                spec.name, spec.source, spec.alias,
+                spec.expectedRuntimeVersion, spec.requireRuntimeMatch,
+            )
         }
 
         // provisionWalletKeys — downloads + stages the protocol wallet proving
@@ -188,11 +212,11 @@ class KuiraContractPlugin : Plugin<Project> {
         // task graph — so missing-config errors fire here instead of as
         // an inscrutable MissingValueException at task scheduling time.
         project.afterEvaluate {
-            if (!extension.source.isPresent) {
+            if (!extension.source.isPresent && extension.contracts.isEmpty()) {
                 throw GradleException(
-                    "kuiraContract.source must be set — declare " +
-                        "`kuiraContract { source.set(\"contract/src/managed/<name>\") }` " +
-                        "in your build script. The path is relative to the project directory.",
+                    "kuiraContract needs a contract: set `source.set(\"contract/src/managed/<name>\")` " +
+                        "for one, or a `contracts { register(\"<Name>\") { source.set(...) } }` block for " +
+                        "many. Paths are relative to the project directory.",
                 )
             }
             val preBuild = project.tasks.findByName(ANDROID_PREBUILD_TASK)
@@ -201,7 +225,9 @@ class KuiraContractPlugin : Plugin<Project> {
                         "(com.android.application or com.android.library) to be applied. " +
                         "Apply one of those before configuring kuiraContract.",
                 )
-            preBuild.dependsOn(syncTask)
+            // Each contract's sync task is onlyIf-gated on its own source, so wiring the unused
+            // half (shorthand or container) costs nothing.
+            syncTasks.forEach { preBuild.dependsOn(it) }
             // Always wired; the task's onlyIf skips it when bundleWalletKeys is off,
             // so a consumer that doesn't opt in pays nothing.
             preBuild.dependsOn(provisionWalletKeysTask)

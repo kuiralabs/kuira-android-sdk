@@ -132,10 +132,45 @@ class KuiraContractPluginTest {
         val result = runExpectingFailure("syncContractAssets")
 
         val output = result.output
+        // With neither the top-level `source` shorthand nor a `contracts { }` block, the plugin
+        // fails fast naming BOTH ways to declare a contract.
         assertTrue(
             "error should name the missing setting: $output",
-            output.contains("kuiraContract.source must be set"),
+            output.contains("kuiraContract needs a contract") &&
+                output.contains("contracts {"),
         )
+    }
+
+    @Test
+    fun `contracts container registers name-discriminated sync + validate tasks per entry`() {
+        writeCanonicalContractTree("Alpha")
+        writeCanonicalContractTree("Beta")
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("io.github.kuiralabs.contract")
+            }
+            tasks.register("preBuild")
+            kuiraContract {
+                contracts {
+                    register("Alpha") { source.set("contract/src/managed/Alpha") }
+                    register("Beta") { source.set("contract/src/managed/Beta") }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val output = run("tasks", "--all").output
+
+        // Each container entry fans out into its own name-discriminated tasks (no collision).
+        assertTrue("Alpha sync task missing: $output", output.contains("syncAlphaContractAssets"))
+        assertTrue("Beta sync task missing: $output", output.contains("syncBetaContractAssets"))
+        assertTrue("Alpha validate task missing: $output", output.contains("validateAlphaContractSource"))
+        assertTrue("Beta validate task missing: $output", output.contains("validateBetaContractSource"))
     }
 
     @Test

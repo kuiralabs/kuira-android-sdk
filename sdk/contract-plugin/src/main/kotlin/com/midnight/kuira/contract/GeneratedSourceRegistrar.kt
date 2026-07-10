@@ -35,21 +35,31 @@ internal object GeneratedSourceRegistrar {
      */
     fun register(
         project: Project,
+        nameDiscriminator: String,
         contractInfoProvider: Provider<RegularFile>,
         aliasProvider: Provider<String>,
+        enabled: Provider<Boolean>,
     ): Boolean {
         val androidComponents = project.extensions.findByType(
             AndroidComponentsExtension::class.java,
         ) ?: return false
 
         androidComponents.onVariants { variant ->
+            // onVariants fires AFTER the consumer's kuiraContract{} block is evaluated, so `enabled`
+            // (source present?) is known here — lets the single-contract shorthand skip cleanly when
+            // a build uses only the contracts{} container.
+            if (!enabled.getOrElse(false)) return@onVariants
             // Wire into the JAVA source container, not `kotlin`: in a Kotlin-Android module the
             // Kotlin compile consumes the java source dirs (a module's own `.kt` under src/main/java
             // is compiled that way), and `sources.kotlin.addGeneratedSourceDirectory` did NOT create
             // the compile dependency on AGP 8.13 + Kotlin 2.3.20 (the facade stayed off the
             // classpath). `sources.java` reliably feeds compile<Variant>Kotlin.
             val java = variant.sources.java ?: return@onVariants
-            val taskName = "generate${variant.name.replaceFirstChar { it.uppercaseChar() }}ContractApi"
+            // Task name carries the variant AND the contract discriminator so multiple contracts
+            // don't collide. "" (the shorthand) keeps the original generate<Variant>ContractApi name.
+            val variantPart = variant.name.replaceFirstChar { it.uppercaseChar() }
+            val contractPart = nameDiscriminator.replaceFirstChar { it.uppercaseChar() }
+            val taskName = "generate$variantPart${contractPart}ContractApi"
             val generateTask = project.tasks.register(taskName, GenerateContractApiTask::class.java) { task ->
                 task.contractInfoFile.set(contractInfoProvider)
                 task.alias.set(aliasProvider)
