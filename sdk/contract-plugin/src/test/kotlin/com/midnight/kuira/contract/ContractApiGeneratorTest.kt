@@ -199,6 +199,43 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `value-returning circuits get a typed read method decoding the ABI result-type`() {
+        // Emit-both: a value-returning circuit keeps its call() (receipt) AND gains a read<Name>()
+        // that runs handle.read + decodes the result-type. Unit-returning circuits get NO read
+        // method; Struct returns are deferred (no read method yet), keeping only call().
+        val src = render("sample", SCALAR_RETURNS_ABI)
+
+        // Uint result -> BigInteger via JSONTokener scalar.
+        assertTrue(
+            "Uint read method wrong: $src",
+            src.contains("suspend fun readGetCount(): BigInteger") &&
+                src.contains("""val json = handle.read("getCount")""") &&
+                src.contains("return BigInteger(JSONTokener(json).nextValue().toString())"),
+        )
+        // Boolean result -> toBooleanStrict.
+        assertTrue(
+            "Boolean read method wrong: $src",
+            src.contains("suspend fun readIsReady(): Boolean") &&
+                src.contains("return JSONTokener(json).nextValue().toString().toBooleanStrict()"),
+        )
+        // Enum result -> typed enum via ordinal.
+        assertTrue(
+            "Enum read method wrong: $src",
+            src.contains("suspend fun readGetPhase(): Phase") &&
+                src.contains("return Phase.entries[JSONTokener(json).nextValue().toString().toInt()]"),
+        )
+        // The call() method is still emitted for every circuit (the tx path).
+        assertTrue("call method must remain: $src", src.contains("suspend fun getCount("))
+
+        // Unit-returning circuit: call() only, no read method (nothing to read).
+        assertTrue("Unit circuit must keep call(): $src", src.contains("suspend fun doThing("))
+        assertFalse("Unit circuit must NOT get a read method: $src", src.contains("readDoThing"))
+
+        // Struct return is deferred — no read method yet, only call().
+        assertFalse("Struct-return read method is deferred: $src", src.contains("readGetRecord"))
+    }
+
+    @Test
     fun `marshalled struct is a Map that ArgConverter accepts, where the bare data class throws`() {
         // The generator's whole reason to exist is to keep a struct arg from
         // reaching ArgConverter as a non-(String/Int/Long/BigInteger/Boolean/
@@ -343,6 +380,32 @@ class ContractApiGeneratorTest {
               ],
               "result-type": { "type-name": "Tuple", "types": [] }
             }
+          ],
+          "witnesses": [],
+          "contracts": [],
+          "ledger": []
+        }
+        """.trimIndent()
+
+        // Mixed result-types to exercise the typed read (view) path: Uint / Boolean / Enum reads,
+        // a Unit-returning circuit (no read method), and a Struct return (deferred — no read yet).
+        val SCALAR_RETURNS_ABI = """
+        {
+          "compiler-version": "0.31.0",
+          "language-version": "0.23.0",
+          "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "getCount", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Uint", "maxval": 255 } },
+            { "name": "isReady", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Boolean" } },
+            { "name": "getPhase", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Enum", "name": "Phase", "elements": ["A", "B", "C"] } },
+            { "name": "doThing", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Tuple", "types": [] } },
+            { "name": "getRecord", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Struct", "name": "Record",
+                "elements": [ { "name": "n", "type": { "type-name": "Uint", "maxval": 255 } } ] } }
           ],
           "witnesses": [],
           "contracts": [],

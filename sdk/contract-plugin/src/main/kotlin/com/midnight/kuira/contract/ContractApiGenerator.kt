@@ -68,6 +68,14 @@ import com.squareup.kotlinpoet.UNIT
  * Constructors are NOT in the ABI, so no typed `deploy` is generated — deploy
  * stays on the raw [MidnightContract.deploy].
  *
+ * Value-returning circuits ALSO get a typed VIEW method `read<Name>(args): <decoded>` alongside
+ * their `call()` (which submits a tx and returns a receipt). The read method runs
+ * [MidnightContract.read] — which executes the circuit locally against fetched state and returns
+ * JSON — and decodes the ABI `result-type`. The ABI can't say which circuits are read-only (a
+ * mutation like `proposeWithdrawal` also returns a value), so BOTH are emitted and the caller picks:
+ * `read<Name>()` for a local view, `<name>()` to submit. Only scalar result-types (Uint/Field/
+ * Boolean/Enum/string Opaque) decode today; Bytes/Struct/Vector/Tuple returns are a follow-up.
+ *
  * Pure (no Gradle types) so it is unit-testable directly: feed an ABI string,
  * assert on the produced source.
  */
@@ -82,6 +90,9 @@ internal object ContractApiGenerator {
 
     /** Runtime wrapper the ArgConverter recognizes for a Compact enum: `CompactEnum(ordinal)`. */
     private val COMPACT_ENUM = ClassName("com.midnight.kuira.core.compact", "CompactEnum")
+
+    /** `org.json.JSONTokener` — parses the bare-scalar JSON `MidnightContract.read` returns. */
+    private val JSON_TOKENER = ClassName("org.json", "JSONTokener")
     private val BIG_INTEGER = ClassName("java.math", "BigInteger")
     private val LIST = ClassName("kotlin.collections", "List")
 
@@ -134,7 +145,14 @@ internal object ContractApiGenerator {
         for (circuit in circuits) {
             val obj = circuit as? JsonObject ?: continue
             when (val built = buildCircuitFun(obj, supporting)) {
-                is CircuitFun.Generated -> facade.addFunction(built.spec)
+                is CircuitFun.Generated -> {
+                    facade.addFunction(built.spec)
+                    // Emit-both: a value-returning circuit ALSO gets a typed view-path method
+                    // (handle.read + decode) alongside its call() (which returns a receipt). The ABI
+                    // can't say which circuits are read-only, so the caller picks: read<Name>() for a
+                    // local view, <name>() to submit a tx. Only emitted when the result-type decodes.
+                    buildReadFun(obj, supporting)?.let { facade.addFunction(it) }
+                }
                 is CircuitFun.Skipped -> skipNotices.add(built.notice)
             }
         }
@@ -241,6 +259,90 @@ internal object ContractApiGenerator {
         // a TransactionReceipt (an empty Tuple is the circuit's unit return today).
         fn.addStatement("return handle.call($callArgs)", *callFormatArgs.toTypedArray())
         return CircuitFun.Generated(fn.build())
+    }
+
+    /**
+     * Build the typed VIEW method for a value-returning circuit: `read<Name>(args): <decoded>`
+     * running `handle.read(...)` (which yields JSON) and decoding it per the ABI `result-type`.
+     *
+     * Returns null (no read method — the caller uses the `call()` method) when:
+     *  - the result-type is Unit (empty Tuple) — nothing to read;
+     *  - the result-type isn't a scalar the decoder handles yet (Struct/Vector/Bytes returns are a
+     *    follow-up — they need a JSON-object/array decoder);
+     *  - an argument isn't marshallable (same gate as the call method).
+     */
+    private fun buildReadFun(circuit: JsonObject, supporting: SupportingTypes): FunSpec? {
+        val name = (circuit["name"] as? JsonString)?.value ?: error("circuit missing name")
+        val resultType = (circuit["result-type"] as? JsonObject)?.let(::resolveAlias) ?: return null
+        if (!isScalarDecodable(resultType)) return null
+
+        val args = (circuit["arguments"] as? JsonArray)?.items.orEmpty()
+            .map { it as? JsonObject ?: error("circuit '$name' has a non-object argument") }
+        // The read method takes and marshals the same args as the call method; if any is
+        // unmarshallable the call method was skipped too, so skip the read for symmetry.
+        for (arg in args) {
+            val argType = arg["type"] as? JsonObject ?: error("argument missing type")
+            if (firstUnmarshallable(argType) != null) return null
+        }
+
+        val returnType = mapType(resultType, supporting) // registers the enum class for an Enum result
+        val fn = FunSpec.builder(readMethodName(name))
+            .addModifiers(KModifier.SUSPEND)
+            .returns(returnType)
+
+        val readArgs = StringBuilder("%S")
+        val readFormat = mutableListOf<Any>(name)
+        for (arg in args) {
+            val argName = (arg["name"] as? JsonString)?.value ?: error("argument missing name")
+            val argType = arg["type"] as? JsonObject ?: error("argument '$argName' missing type")
+            fn.addParameter(argName, mapType(argType, supporting))
+            readArgs.append(", %L")
+            readFormat.add(marshalExpression(CodeBlock.of("%N", argName), argType))
+        }
+
+        fn.addStatement("val json = handle.read($readArgs)", *readFormat.toTypedArray())
+        fn.addStatement(
+            "return %L",
+            decodeScalarValue(CodeBlock.of("%T(json).nextValue()", JSON_TOKENER), resultType, returnType),
+        )
+        return fn.build()
+    }
+
+    /** `getThreshold` -> `readGetThreshold`. */
+    private fun readMethodName(circuit: String): String =
+        "read" + circuit.replaceFirstChar { it.uppercaseChar() }
+
+    /**
+     * Can a circuit result of type [type] be decoded from the bare-scalar JSON `read` returns?
+     * Uint/Field/Boolean/Enum and string Opaque, yes. Bytes, non-string Opaque, Struct, Vector and
+     * non-empty Tuple returns need a richer (JSON object/array) decoder — a follow-up — so `false`.
+     */
+    private fun isScalarDecodable(type: JsonObject): Boolean {
+        val name = (type["type-name"] as? JsonString)?.value ?: error("type node missing type-name")
+        return when (name) {
+            "Uint", "Field", "Boolean", "Enum" -> true
+            "Opaque" -> (type["tsType"] as? JsonString)?.value == "string"
+            "Alias" -> isScalarDecodable(resolveAlias(type))
+            else -> false // Bytes, Struct, Vector, Tuple, non-string Opaque
+        }
+    }
+
+    /**
+     * Decode a parsed JSON scalar [value] (the result of `JSONTokener(json).nextValue()`) into its
+     * typed Kotlin value. All forms go through `.toString()` so an Integer/Long/String JSON encoding
+     * of the same number decodes identically. [returnType] is the enum ClassName for an Enum result.
+     */
+    private fun decodeScalarValue(value: CodeBlock, type: JsonObject, returnType: TypeName): CodeBlock {
+        val name = (type["type-name"] as? JsonString)?.value ?: error("type node missing type-name")
+        return when (name) {
+            "Uint", "Field" -> CodeBlock.of("%T(%L.toString())", BIG_INTEGER, value)
+            "Boolean" -> CodeBlock.of("%L.toString().toBooleanStrict()", value)
+            // A Compact enum is returned as its ordinal; map it back through the generated enum.
+            "Enum" -> CodeBlock.of("%T.entries[%L.toString().toInt()]", returnType, value)
+            "Opaque" -> CodeBlock.of("%L.toString()", value)
+            "Alias" -> decodeScalarValue(value, resolveAlias(type), returnType)
+            else -> error("decodeScalarValue called on non-scalar $name (guarded by isScalarDecodable)")
+        }
     }
 
     /** Resolve through any chain of `Alias` nodes to the underlying (non-Alias) type. */
