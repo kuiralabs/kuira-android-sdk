@@ -235,6 +235,15 @@ internal object ContractApiGenerator {
         return CircuitFun.Generated(fn.build())
     }
 
+    /** Resolve through any chain of `Alias` nodes to the underlying (non-Alias) type. */
+    private fun resolveAlias(type: JsonObject): JsonObject {
+        var t = type
+        while ((t["type-name"] as? JsonString)?.value == "Alias") {
+            t = t["type"] as? JsonObject ?: error("Alias missing inner type")
+        }
+        return t
+    }
+
     /**
      * Walk an argument type-tree; return the first ABI type-name that the typed
      * API cannot yet marshal (`Enum`, or a non-empty `Tuple`), or `null` if the
@@ -253,14 +262,18 @@ internal object ContractApiGenerator {
             }
             "Vector" -> {
                 val inner = type["type"] as? JsonObject ?: error("Vector missing inner type")
-                val innerName = (inner["type-name"] as? JsonString)?.value
+                // Resolve through any Alias FIRST: a Vector<Alias<Vector<Struct>>> otherwise reads as
+                // innerName == "Alias", slips past this guard, and gets emitted as unmarshalled
+                // pass-through — the exact latent ArgConverter crash the guard exists to prevent.
+                val resolvedInner = resolveAlias(inner)
+                val innerName = (resolvedInner["type-name"] as? JsonString)?.value
                     ?: error("type node missing type-name")
                 // A Vector marshals element-wise only for the single-level
                 // Vector<Struct> case (`map { it.toCallArg() }`). Nested vectors of
                 // structs would need a deeper map; that shape is unverified, so flag
                 // it rather than emit subtly-wrong code. Vector<scalar> passes through.
-                if (innerName == "Vector" && firstUnmarshallable(inner) == null &&
-                    containsStruct(inner)
+                if (innerName == "Vector" && firstUnmarshallable(resolvedInner) == null &&
+                    containsStruct(resolvedInner)
                 ) {
                     "Vector<Vector<Struct>>"
                 } else {

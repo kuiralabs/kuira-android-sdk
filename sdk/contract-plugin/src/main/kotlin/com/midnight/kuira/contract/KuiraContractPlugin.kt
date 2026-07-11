@@ -105,6 +105,11 @@ class KuiraContractPlugin : Plugin<Project> {
         // gradleUserHomeDir is captured at configuration time so the action stays
         // configuration-cache clean (no `project` access at execution).
         val gradleUserHome = project.gradle.gradleUserHomeDir
+        // Capture the Property, NOT `extension`: an onlyIf lambda is serialized into the config
+        // cache, and capturing `extension` drags in its `contracts` NamedDomainObjectContainer, which
+        // holds a non-serializable Project → the config cache fails to store (surfaced here on
+        // provisionWalletKeys). A bare Property is config-cache-safe.
+        val bundleWalletKeys = extension.bundleWalletKeys
         val provisionWalletKeysTask = project.tasks.register(
             ProvisionWalletKeysTask.TASK_NAME,
             ProvisionWalletKeysTask::class.java,
@@ -119,7 +124,7 @@ class KuiraContractPlugin : Plugin<Project> {
                 project.layout.projectDirectory.dir("$ASSETS_DEST/$ASSETS_WALLET_KEYS_SUBDIR"),
             )
             // Skip entirely (no download, no staging) unless the consumer opted in.
-            task.onlyIf { extension.bundleWalletKeys.get() }
+            task.onlyIf { bundleWalletKeys.get() }
         }
 
         // kuiraDoctor — standalone preflight task. NOT wired to preBuild.
@@ -156,6 +161,34 @@ class KuiraContractPlugin : Plugin<Project> {
                         "many. Paths are relative to the project directory.",
                 )
             }
+            // A container entry is never optional — unlike the shorthand it can't silently skip. Fail
+            // loudly if one forgets `source`, else its (onlyIf-gated) validate never runs and the build
+            // ships an asset-less / never-generated contract with no diagnostic.
+            extension.contracts.forEach { spec ->
+                if (!spec.source.isPresent) {
+                    throw GradleException(
+                        "kuiraContract.contracts entry '${spec.name}' is missing its source — add " +
+                            "`source.set(\"contract/src/managed/${spec.name}\")` to it.",
+                    )
+                }
+            }
+            // Every contract (shorthand + container) emits <Alias>Contract into ONE generated package
+            // and a name-discriminated sync/generate task. Aliases that collapse to the same class /
+            // task name (case-only or separator-only differences, or a shorthand+container overlap)
+            // would produce a duplicate-class compile error or a task-name clash — catch it here with
+            // a clear message instead.
+            val aliases = buildList {
+                if (extension.source.isPresent) add(extension.alias.get())
+                extension.contracts.forEach { add(it.alias.get()) }
+            }
+            aliases.groupBy { it.lowercase().filter(Char::isLetterOrDigit) }
+                .filterValues { it.size > 1 }
+                .forEach { (_, clashing) ->
+                    throw GradleException(
+                        "kuiraContract: contract aliases $clashing collapse to the same generated class " +
+                            "and task name. Give each contract a distinct alias.",
+                    )
+                }
             val preBuild = project.tasks.findByName(ANDROID_PREBUILD_TASK)
                 ?: throw GradleException(
                     "io.github.kuiralabs.contract requires an Android plugin " +
@@ -195,6 +228,11 @@ class KuiraContractPlugin : Plugin<Project> {
         // Present iff this contract's source is set; read at task time (after the consumer's
         // kuiraContract{} block), so `false` cleanly disables the unused shorthand/container half.
         val enabled = source.map { true }.orElse(false)
+        // Gradle resolves a task's inputs even when onlyIf will skip it. An unset source (the unused
+        // shorthand in a container-only build) makes `sourceDir` ABSENT — and `Copy.from(absent
+        // provider)` fails dependency resolution. Fall back to a nonexistent build dir so the inputs
+        // resolve to EMPTY instead; the task onlyIf-skips execution regardless.
+        val safeSourceDir = sourceDir.orElse(project.layout.buildDirectory.dir("kuira-no-contract"))
         val suffix = discriminator.replaceFirstChar { it.uppercaseChar() }
         val validateName = if (discriminator.isEmpty()) ValidateKuiraContractSourceTask.TASK_NAME
         else "validate${suffix}ContractSource"
@@ -204,7 +242,7 @@ class KuiraContractPlugin : Plugin<Project> {
             validateName,
             ValidateKuiraContractSourceTask::class.java,
         ) { task ->
-            task.sourceDirectory.set(sourceDir)
+            task.sourceDirectory.set(safeSourceDir)
             task.expectedRuntimeVersion.set(expectedRuntimeVersion)
             task.requireRuntimeMatch.set(requireRuntimeMatch)
             task.onlyIf { enabled.get() }
@@ -214,16 +252,16 @@ class KuiraContractPlugin : Plugin<Project> {
             task.group = "build"
             task.description = "Sync compiled Compact contract artifacts into Android assets."
             task.dependsOn(validateTask)
-            task.from(sourceDir.map { it.dir(CONTRACT_SUBDIR) }) { spec ->
+            task.from(safeSourceDir.map { it.dir(CONTRACT_SUBDIR) }) { spec ->
                 spec.include("index.js")
-                spec.rename { _ -> "${alias.get()}-contract.js" }
+                spec.rename { _ -> "${alias.getOrElse("contract")}-contract.js" }
                 spec.into(ASSETS_RUNTIME_SUBDIR)
             }
-            task.from(sourceDir.map { it.dir(KEYS_SUBDIR) }) { spec ->
+            task.from(safeSourceDir.map { it.dir(KEYS_SUBDIR) }) { spec ->
                 spec.include("*.prover", "*.verifier")
                 spec.into(ASSETS_KEYS_SUBDIR)
             }
-            task.from(sourceDir.map { it.dir(ZKIR_SUBDIR) }) { spec ->
+            task.from(safeSourceDir.map { it.dir(ZKIR_SUBDIR) }) { spec ->
                 spec.include("*.bzkir")
                 spec.into(ASSETS_KEYS_SUBDIR)
             }

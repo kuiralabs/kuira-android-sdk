@@ -174,6 +174,62 @@ class KuiraContractPluginTest {
     }
 
     @Test
+    fun `container entry missing source fails loudly, naming the entry`() {
+        // A container entry is never optional; forgetting source must NOT silently ship a broken
+        // build (the onlyIf gate would otherwise skip its validate task with no diagnostic).
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("io.github.kuiralabs.contract")
+            }
+            tasks.register("preBuild")
+            kuiraContract {
+                contracts {
+                    register("Vault") { }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val output = runExpectingFailure("tasks").output
+        assertTrue("should name the entry missing source: $output",
+            output.contains("entry 'Vault' is missing its source"))
+    }
+
+    @Test
+    fun `contracts whose aliases collapse to the same class fail with a clear message`() {
+        writeCanonicalContractTree("Vault")
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+        // Shorthand alias "Vault" + container entry alias "vault" both generate VaultContract into
+        // one package → duplicate-class compile error. Caught at config with a clear message.
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("io.github.kuiralabs.contract")
+            }
+            tasks.register("preBuild")
+            kuiraContract {
+                source.set("contract/src/managed/Vault")
+                contracts {
+                    register("vault") { source.set("contract/src/managed/Vault") }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val output = runExpectingFailure("tasks").output
+        assertTrue("should flag the alias collision: $output",
+            output.contains("collapse to the same generated class"))
+    }
+
+    @Test
     fun `syncContractAssets is wired into the preBuild lifecycle`() {
         writeCanonicalContractTree("penalty")
         writeBuildScript(source = "contract/src/managed/penalty")
@@ -553,6 +609,44 @@ class KuiraContractPluginTest {
         val second = runWithConfigCache("syncContractAssets")
         assertTrue(
             "second run should reuse the configuration cache: ${second.output}",
+            second.output.contains("Reusing configuration cache"),
+        )
+    }
+
+    @Test
+    fun `container config keeps provisionWalletKeys configuration-cache compatible`() {
+        // Regression: with a contracts { } container on the extension, provisionWalletKeys's onlyIf
+        // must NOT capture the whole extension (it holds the container → a non-serializable Project).
+        // Running preBuild pulls provisionWalletKeys into the graph so the config-cache store
+        // serializes it — the exact path that failed the real Vault build.
+        writeCanonicalContractTree("Vault", emittedRuntimeVersion = "0.16.0")
+        writePackageJson("contract", runtimeVersion = "0.16.0")
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("io.github.kuiralabs.contract")
+            }
+            tasks.register("preBuild")
+            kuiraContract {
+                contracts {
+                    register("Vault") { source.set("contract/src/managed/Vault") }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val first = runWithConfigCache("preBuild")
+        assertTrue(
+            "first run should store the config cache without problems: ${first.output}",
+            first.output.contains("Configuration cache entry stored"),
+        )
+        val second = runWithConfigCache("preBuild")
+        assertTrue(
+            "second run should reuse the config cache (proves no store problems): ${second.output}",
             second.output.contains("Reusing configuration cache"),
         )
     }

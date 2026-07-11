@@ -37,7 +37,9 @@ abstract class KuiraContractExtension {
      * ```
      *
      * The top-level [source] below is the single-contract shorthand and composes with this — a build
-     * may set [source] (one contract) OR use `contracts { … }` (many); setting both includes all.
+     * may set [source] (one contract) OR use `contracts { … }` (many); setting both includes all,
+     * PROVIDED every contract resolves to a distinct alias (aliases that collapse to the same
+     * generated `<Alias>Contract` class / task name are rejected at configuration time).
      */
     abstract val contracts: NamedDomainObjectContainer<KuiraContractSpec>
 
