@@ -137,23 +137,26 @@ class ContractApiGeneratorTest {
     }
 
     @Test
-    fun `enum argument circuit is skipped with a comment, not a crashing method`() {
-        // An Enum arg has no verified typed marshalling, so the circuit must be
-        // GRACEFULLY SKIPPED — no `fun setPhase`, no `Phase` enum class — while the
-        // sibling Vector<scalar> circuit still gets a typed method.
+    fun `enum argument circuit is generated as a typed enum marshalled by ordinal`() {
+        // A C-style Enum arg marshals as its ordinal via CompactEnum(ordinal): the circuit gets a
+        // typed method taking a generated `enum class Phase`, and the call wraps `phase.ordinal`.
         val src = render("sample", SAMPLE_ENUM_VECTOR_ABI)
 
-        assertFalse(
-            "enum-arg circuit must NOT be generated as a typed method: $src",
-            Regex("""fun setPhase\(""").containsMatchIn(src),
+        assertTrue(
+            "enum-arg circuit must be generated with a typed enum param: $src",
+            Regex("""fun setPhase\(\s*phase: Phase""").containsMatchIn(src),
         )
-        assertFalse(
-            "skipped enum type must NOT be emitted: $src",
+        assertTrue(
+            "the enum type must be emitted: $src",
             src.contains("enum class Phase"),
         )
         assertTrue(
-            "skipped circuit must be documented with a comment naming the type: $src",
-            src.contains("setPhase: not generated") && src.contains("Enum"),
+            "enum arg must marshal as CompactEnum(phase.ordinal): $src",
+            src.contains("""handle.call("setPhase", CompactEnum(phase.ordinal), onProgress = onProgress)"""),
+        )
+        assertFalse(
+            "enum-arg circuit must no longer be skipped: $src",
+            src.contains("setPhase: not generated"),
         )
 
         // The Vector<scalar> sibling is unaffected: List<BigInteger>, passes through.
@@ -164,6 +167,34 @@ class ContractApiGeneratorTest {
         assertTrue(
             "vector-of-scalar must pass through unmarshalled: $src",
             src.contains("""handle.call("setShoots", shoots, onProgress = onProgress)"""),
+        )
+    }
+
+    @Test
+    fun `struct arg with an enum field un-gates the circuit and marshals the field as CompactEnum`() {
+        // The real Vault shape: proposeWithdrawal(to: Recipient{ kind: enum, address: Bytes<32> }).
+        // Before enum support the whole circuit was skipped because a struct field was an Enum; now
+        // it's generated and the struct's toCallArg() marshals the enum field by ordinal.
+        val src = render("vault", STRUCT_WITH_ENUM_FIELD_ABI)
+
+        assertTrue(
+            "circuit with an enum-bearing struct arg must be generated: $src",
+            Regex("""fun proposeWithdrawal\(\s*to: Recipient""").containsMatchIn(src),
+        )
+        assertTrue("enum field type must be emitted: $src", src.contains("enum class RecipientKind"))
+        assertTrue("struct type must be emitted: $src", src.contains("data class Recipient"))
+        // The struct's toCallArg() marshals the enum field by ordinal and the bytes field passes through.
+        assertTrue(
+            "struct toCallArg must marshal the enum field as CompactEnum(kind.ordinal): $src",
+            src.contains("\"kind\" to CompactEnum(kind.ordinal)"),
+        )
+        assertTrue(
+            "struct toCallArg must pass the Bytes field through: $src",
+            src.contains("\"address\" to address"),
+        )
+        assertFalse(
+            "circuit must no longer be skipped: $src",
+            src.contains("proposeWithdrawal: not generated"),
         )
     }
 
@@ -278,6 +309,47 @@ class ContractApiGeneratorTest {
 
         // Synthetic: Enum + Vector circuit ARGS (drawn from the penalty Phase enum
         // + a Vector<Uint> shoot list) to cover the recursive mapper's branches.
+        // The real Vault proposeWithdrawal shape (verbatim structure from the Vault
+        // contract-info.json): a struct arg whose first field is a C-style enum.
+        val STRUCT_WITH_ENUM_FIELD_ABI = """
+        {
+          "compiler-version": "0.31.0",
+          "language-version": "0.23.0",
+          "runtime-version": "0.16.0",
+          "circuits": [
+            {
+              "name": "proposeWithdrawal",
+              "pure": false,
+              "proof": true,
+              "arguments": [
+                {
+                  "name": "to",
+                  "type": {
+                    "type-name": "Struct",
+                    "name": "Recipient",
+                    "elements": [
+                      {
+                        "name": "kind",
+                        "type": {
+                          "type-name": "Enum",
+                          "name": "RecipientKind",
+                          "elements": ["ShieldedUser", "UnshieldedUser", "Contract"]
+                        }
+                      },
+                      { "name": "address", "type": { "type-name": "Bytes", "length": 32 } }
+                    ]
+                  }
+                }
+              ],
+              "result-type": { "type-name": "Tuple", "types": [] }
+            }
+          ],
+          "witnesses": [],
+          "contracts": [],
+          "ledger": []
+        }
+        """.trimIndent()
+
         val SAMPLE_ENUM_VECTOR_ABI = """
         {
           "compiler-version": "0.31.0",

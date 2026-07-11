@@ -53,12 +53,17 @@ import com.squareup.kotlinpoet.UNIT
  * scalar / bytes / string / boolean / `Vector<scalar>` args are already
  * `ArgConverter`-safe and pass through unchanged.
  *
- * `Enum` and non-empty `Tuple` argument types have no verified wire encoding for
- * the typed path (no in-repo contract exercises them as args). A circuit whose
- * argument type-tree contains either is GRACEFULLY SKIPPED — instead of a typed
- * method that would throw, the facade emits a comment pointing the caller at the
- * raw [MidnightContract.call]. The contract's other circuits still get typed
- * methods. Such enums/tuples are therefore NOT emitted as supporting types.
+ * A Compact `Enum` argument (C-style: variant names, no payload — Maybe/Either are
+ * Structs, not Enums) is emitted as a generated Kotlin `enum class` and marshalled
+ * as its ordinal via `CompactEnum(value.ordinal)`, the shape the runtime
+ * [ArgConverter] expects; this works nested inside a Struct field or a `Vector<Enum>`.
+ *
+ * A non-empty `Tuple` argument type still has no verified wire encoding for the typed
+ * path (no in-repo contract exercises it as an arg). A circuit whose argument
+ * type-tree contains one is GRACEFULLY SKIPPED — instead of a typed method that would
+ * throw, the facade emits a comment pointing the caller at the raw
+ * [MidnightContract.call]. The contract's other circuits still get typed methods. Such
+ * tuples are therefore NOT emitted as supporting types.
  *
  * Constructors are NOT in the ABI, so no typed `deploy` is generated — deploy
  * stays on the raw [MidnightContract.deploy].
@@ -74,6 +79,9 @@ internal object ContractApiGenerator {
     private val MIDNIGHT_CONTRACT = ClassName("com.midnight.kuira.core.compact", "MidnightContract")
     private val TRANSACTION_RECEIPT = ClassName("com.midnight.kuira.core.compact", "TransactionReceipt")
     private val CONTRACT_CALL_STAGE = ClassName("com.midnight.kuira.core.compact", "ContractCallStage")
+
+    /** Runtime wrapper the ArgConverter recognizes for a Compact enum: `CompactEnum(ordinal)`. */
+    private val COMPACT_ENUM = ClassName("com.midnight.kuira.core.compact", "CompactEnum")
     private val BIG_INTEGER = ClassName("java.math", "BigInteger")
     private val LIST = ClassName("kotlin.collections", "List")
 
@@ -255,7 +263,9 @@ internal object ContractApiGenerator {
             ?: error("type node missing type-name")
         return when (name) {
             "Uint", "Field", "Boolean", "Bytes", "Opaque" -> null
-            "Enum" -> "Enum"
+            // A Compact enum is a C-style enumeration (variant names, no payload); it marshals as its
+            // ordinal via CompactEnum(ordinal). Algebraic types (Maybe/Either) are Structs, not Enums.
+            "Enum" -> null
             "Tuple" -> {
                 val types = (type["types"] as? JsonArray)?.items.orEmpty()
                 if (types.isEmpty()) null else "Tuple"
@@ -312,10 +322,14 @@ internal object ContractApiGenerator {
             ?: error("type node missing type-name")
         return when (name) {
             "Struct" -> CodeBlock.of("%L.%M()", receiver, TO_CALL_ARG_MEMBER)
+            // A Compact enum marshals as its ordinal, wrapped so the ArgConverter treats it as an
+            // enum rather than a bare Uint: CompactEnum(value.ordinal).
+            "Enum" -> CodeBlock.of("%T(%L.ordinal)", COMPACT_ENUM, receiver)
             "Vector" -> {
                 val inner = type["type"] as? JsonObject ?: error("Vector missing inner type")
                 if (innerNeedsMarshalling(inner)) {
-                    CodeBlock.of("%L.map·{ it.%M() }", receiver, TO_CALL_ARG_MEMBER)
+                    // Marshal each element by its own rule (Struct -> toCallArg(), Enum -> CompactEnum).
+                    CodeBlock.of("%L.map·{ %L }", receiver, marshalExpression(CodeBlock.of("it"), inner))
                 } else {
                     receiver
                 }
@@ -340,6 +354,7 @@ internal object ContractApiGenerator {
             ?: error("type node missing type-name")
         return when (name) {
             "Struct" -> true
+            "Enum" -> true
             "Alias" -> {
                 val deeper = inner["type"] as? JsonObject ?: error("Alias missing inner type")
                 innerNeedsMarshalling(deeper)
