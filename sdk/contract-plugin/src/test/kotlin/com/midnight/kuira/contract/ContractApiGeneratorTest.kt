@@ -305,6 +305,26 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `a pure circuit gets a local() readLocal view, not a call or on-chain read`() {
+        // A `pure: true` circuit (proof: false) is computed locally against initialState() with no
+        // deployed instance — the PrivateVault commitment circuits. It must emit ONLY
+        // local<Name>() = handle.readLocal + decode; never call() (not a tx) nor read<Name>()
+        // (handle.read needs deployed state). A non-pure sibling keeps read<Name>() + call().
+        val src = render("commit", PURE_AND_ONCHAIN_ABI)
+
+        assertTrue(
+            "pure circuit must emit local<Name> via readLocal: $src",
+            src.contains("localComputeHash(x: ByteArray): ByteArray = decodeComputeHashResult(handle.readLocal(\"computeHash\", x))"),
+        )
+        assertFalse("pure circuit must NOT get a read<Name>: $src", src.contains("readComputeHash"))
+        assertFalse("pure circuit must NOT get a call(): $src", src.contains("handle.call(\"computeHash\""))
+
+        // The non-pure sibling is unaffected: on-chain read<Name> + call().
+        assertTrue("non-pure read<Name> missing: $src", src.contains("readGetCount(): BigInteger = decodeGetCountResult(handle.read(\"getCount\"))"))
+        assertTrue("non-pure call() missing: $src", src.contains("suspend fun getCount("))
+    }
+
+    @Test
     fun `an empty struct is a plain class, not an illegal data class`() {
         // Kotlin rejects `data class Foo()` (needs >=1 primary-ctor param). A field-less struct must
         // emit a plain `class` so the generated file still compiles.
@@ -453,6 +473,21 @@ class ContractApiGeneratorTest {
 
         // Synthetic: Enum + Vector circuit ARGS (drawn from the penalty Phase enum
         // + a Vector<Uint> shoot list) to cover the recursive mapper's branches.
+        // A pure circuit (computed via readLocal, no deploy) + a non-pure on-chain read sibling.
+        val PURE_AND_ONCHAIN_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "computeHash", "pure": true, "proof": false,
+              "arguments": [ { "name": "x", "type": { "type-name": "Bytes", "length": 32 } } ],
+              "result-type": { "type-name": "Bytes", "length": 32 } },
+            { "name": "getCount", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Uint", "maxval": 255 } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
         // A struct ARG whose field is a Vector — marshallable as an arg (Vector<scalar> passes
         // through toCallArg) but NOT decodable, so no read-decoder should be generated for it.
         val STRUCT_ARG_VECTOR_FIELD_ABI = """

@@ -185,14 +185,21 @@ internal object ContractApiGenerator {
         val skipNotices = mutableListOf<String>()
         for (circuit in circuits) {
             val obj = circuit as? JsonObject ?: continue
+            // A `pure` circuit (proof: false) is computed LOCALLY against initialState() with no
+            // deployed instance — it's not a transaction, so it gets ONLY a local<Name>() view
+            // (handle.readLocal + decode), never a call() or an on-chain read<Name>().
+            if ((obj["pure"] as? JsonBoolean)?.value == true) {
+                buildViewFun(obj, supporting, local = true)?.let { facade.addFunction(it) }
+                continue
+            }
             when (val built = buildCircuitFun(obj, supporting)) {
                 is CircuitFun.Generated -> {
                     facade.addFunction(built.spec)
-                    // Emit-both: a value-returning circuit ALSO gets a typed view-path method
-                    // (handle.read + decode) alongside its call() (which returns a receipt). The ABI
-                    // can't say which circuits are read-only, so the caller picks: read<Name>() for a
-                    // local view, <name>() to submit a tx. Only emitted when the result-type decodes.
-                    buildReadFun(obj, supporting)?.let { facade.addFunction(it) }
+                    // Emit-both: a non-pure value-returning circuit ALSO gets a typed on-chain view
+                    // (read<Name>() = handle.read + decode) alongside its call() (which returns a
+                    // receipt). The ABI can't say which are read-only, so the caller picks: read<Name>()
+                    // for a view, <name>() to submit a tx. Only emitted when the result-type decodes.
+                    buildViewFun(obj, supporting, local = false)?.let { facade.addFunction(it) }
                 }
                 is CircuitFun.Skipped -> skipNotices.add(built.notice)
             }
@@ -359,24 +366,27 @@ internal object ContractApiGenerator {
     }
 
     /**
-     * Build the typed VIEW method for a value-returning circuit: `read<Name>(args): <decoded>`
-     * running `handle.read(...)` (which yields JSON) and decoding it per the ABI `result-type`.
+     * Build the typed VIEW method for a value-returning circuit and register its reusable result
+     * decoder. Two runtimes, chosen by the circuit's `pure` flag:
+     *  - [local] = false → `read<Name>(args): <decoded>` running `handle.read(...)` — an on-chain
+     *    view against fetched contract state (a `pure: false` circuit).
+     *  - [local] = true  → `local<Name>(args): <decoded>` running `handle.readLocal(...)` — a PURE
+     *    circuit computed against `initialState()` with NO deployed instance (`pure: true` / no
+     *    proof), e.g. a commitment/hash circuit run before deploy.
+     * Both decode the ABI `result-type` identically via the shared `decode<Circuit>Result`.
      *
-     * Returns null (no read method — the caller uses the `call()` method) when:
-     *  - the result-type is Unit (empty Tuple) — nothing to read;
-     *  - the result-type isn't a scalar the decoder handles yet (Struct/Vector/Bytes returns are a
-     *    follow-up — they need a JSON-object/array decoder);
-     *  - an argument isn't marshallable (same gate as the call method).
+     * Returns null when the result-type is Unit (empty Tuple, nothing to read), isn't decodable, or
+     * an argument isn't marshallable.
      */
-    private fun buildReadFun(circuit: JsonObject, supporting: SupportingTypes): FunSpec? {
+    private fun buildViewFun(circuit: JsonObject, supporting: SupportingTypes, local: Boolean): FunSpec? {
         val name = (circuit["name"] as? JsonString)?.value ?: error("circuit missing name")
         val resultType = (circuit["result-type"] as? JsonObject)?.let(::resolveAlias) ?: return null
         if (!isDecodable(resultType)) return null
 
         val args = (circuit["arguments"] as? JsonArray)?.items.orEmpty()
             .map { it as? JsonObject ?: error("circuit '$name' has a non-object argument") }
-        // The read method takes and marshals the same args as the call method; if any is
-        // unmarshallable the call method was skipped too, so skip the read for symmetry.
+        // The view method takes and marshals the same args as the call method; if any is
+        // unmarshallable the call method was skipped too, so skip the view for symmetry.
         for (arg in args) {
             val argType = arg["type"] as? JsonObject ?: error("argument missing type")
             if (firstUnmarshallable(argType) != null) return null
@@ -385,7 +395,7 @@ internal object ContractApiGenerator {
         val returnType = mapType(resultType, supporting) // registers the enum class for an Enum result
 
         // The reusable result decoder: decode<Circuit>Result(json: String): <ReturnType>. Its `json`
-        // parameter is the variable decodeTopLevel's expression references, so read<Name>() and any
+        // parameter is the variable decodeTopLevel's expression references, so the view method and any
         // batched host read path decode identically. Registered as a standalone file function.
         supporting.registerResultDecoder(
             FunSpec.builder(resultDecoderName(name))
@@ -396,23 +406,24 @@ internal object ContractApiGenerator {
                 .build(),
         )
 
-        val fn = FunSpec.builder(readMethodName(name))
+        val fn = FunSpec.builder(if (local) localMethodName(name) else readMethodName(name))
             .addModifiers(KModifier.SUSPEND)
             .returns(returnType)
 
-        val readArgs = StringBuilder("%S")
-        val readFormat = mutableListOf<Any>(name)
+        val viewArgs = StringBuilder("%S")
+        val viewFormat = mutableListOf<Any>(name)
         for (arg in args) {
             val argName = (arg["name"] as? JsonString)?.value ?: error("argument missing name")
             val argType = arg["type"] as? JsonObject ?: error("argument '$argName' missing type")
             fn.addParameter(argName, mapType(argType, supporting))
-            readArgs.append(", %L")
-            readFormat.add(marshalExpression(CodeBlock.of("%N", argName), argType))
+            viewArgs.append(", %L")
+            viewFormat.add(marshalExpression(CodeBlock.of("%N", argName), argType))
         }
 
-        // read<Name>() delegates to the reusable decoder: decode<Name>Result(handle.read(...)).
-        val readCall = CodeBlock.of("handle.read($readArgs)", *readFormat.toTypedArray())
-        fn.addStatement("return %L(%L)", resultDecoderName(name), readCall)
+        // Delegates to the reusable decoder: decode<Name>Result(handle.read[Local](...)).
+        val runtime = if (local) "handle.readLocal" else "handle.read"
+        val viewCall = CodeBlock.of("$runtime($viewArgs)", *viewFormat.toTypedArray())
+        fn.addStatement("return %L(%L)", resultDecoderName(name), viewCall)
         return fn.build()
     }
 
@@ -443,6 +454,10 @@ internal object ContractApiGenerator {
     /** `getThreshold` -> `readGetThreshold`. */
     private fun readMethodName(circuit: String): String =
         "read" + circuit.replaceFirstChar { it.uppercaseChar() }
+
+    /** `signerCommitment` -> `localSignerCommitment` (the readLocal, pure-circuit view). */
+    private fun localMethodName(circuit: String): String =
+        "local" + circuit.replaceFirstChar { it.uppercaseChar() }
 
     /**
      * Can a circuit result of type [type] be decoded from the JSON `read` returns?
