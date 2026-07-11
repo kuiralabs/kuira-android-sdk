@@ -8,6 +8,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.TaskProvider
+import java.util.concurrent.Callable
 
 /**
  * `io.github.kuiralabs.contract` — wires a compiled Compact contract into
@@ -248,6 +249,14 @@ class KuiraContractPlugin : Plugin<Project> {
             task.onlyIf { enabled.get() }
         }
 
+        // A container entry syncs its circuit keys to a per-alias dir (`<alias>-keys`) so contracts
+        // that share a circuit name don't overwrite each other in one `assets/keys/`; the shorthand
+        // keeps the plain `keys` dir (existing consumers read from there). Resolved lazily (a Callable)
+        // because the alias may be `alias.set(...)` later in the consumer's block. Mirrors the
+        // generated facade's KEYS_ASSET_DIR constant.
+        val keysAssetDest = Callable {
+            if (discriminator.isEmpty()) ASSETS_KEYS_SUBDIR else "${alias.getOrElse(discriminator)}-keys"
+        }
         val syncTask = project.tasks.register(syncName, Copy::class.java) { task ->
             task.group = "build"
             task.description = "Sync compiled Compact contract artifacts into Android assets."
@@ -259,11 +268,11 @@ class KuiraContractPlugin : Plugin<Project> {
             }
             task.from(safeSourceDir.map { it.dir(KEYS_SUBDIR) }) { spec ->
                 spec.include("*.prover", "*.verifier")
-                spec.into(ASSETS_KEYS_SUBDIR)
+                spec.into(keysAssetDest)
             }
             task.from(safeSourceDir.map { it.dir(ZKIR_SUBDIR) }) { spec ->
                 spec.include("*.bzkir")
-                spec.into(ASSETS_KEYS_SUBDIR)
+                spec.into(keysAssetDest)
             }
             task.into(project.layout.projectDirectory.dir(ASSETS_DEST))
             task.onlyIf { enabled.get() }

@@ -199,6 +199,24 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `facade emits asset-path constants — shorthand keeps the plain keys dir`() {
+        // The shorthand (namespaced = false) is backward-compatible: KEYS_ASSET_DIR stays "keys".
+        val src = render("vault", VOTING_ABI)
+        assertTrue("alias const wrong: $src", src.contains("const val CONTRACT_ALIAS: String = \"vault\""))
+        assertTrue("runtime const wrong: $src", src.contains("const val RUNTIME_ASSET: String = \"runtime/vault-contract.js\""))
+        assertTrue("shorthand keys dir must stay 'keys': $src", src.contains("const val KEYS_ASSET_DIR: String = \"keys\""))
+    }
+
+    @Test
+    fun `container entry namespaces its keys dir per-alias`() {
+        // A contracts{} container entry (namespaced = true) keys under <alias>-keys so contracts
+        // sharing a circuit name don't collide in one assets/keys/.
+        val src = ContractApiGenerator.generate("privateVault", VOTING_ABI, namespaced = true).toString()
+        assertTrue("container keys dir must be per-alias: $src", src.contains("const val KEYS_ASSET_DIR: String = \"privateVault-keys\""))
+        assertTrue("runtime const wrong: $src", src.contains("const val RUNTIME_ASSET: String = \"runtime/privateVault-contract.js\""))
+    }
+
+    @Test
     fun `value-returning circuits get a typed read method decoding the ABI result-type`() {
         // Emit-both: a value-returning circuit keeps its call() (receipt) AND gains a read<Name>()
         // that delegates to a reusable decode<Name>Result(json) decoding the result-type. Unit-

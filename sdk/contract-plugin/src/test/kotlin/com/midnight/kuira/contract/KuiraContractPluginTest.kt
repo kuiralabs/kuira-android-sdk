@@ -3,6 +3,7 @@ package com.midnight.kuira.contract
 import org.gradle.testkit.runner.GradleRunner
 import org.gradle.testkit.runner.TaskOutcome
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -171,6 +172,44 @@ class KuiraContractPluginTest {
         assertTrue("Beta sync task missing: $output", output.contains("syncBetaContractAssets"))
         assertTrue("Alpha validate task missing: $output", output.contains("validateAlphaContractSource"))
         assertTrue("Beta validate task missing: $output", output.contains("validateBetaContractSource"))
+    }
+
+    @Test
+    fun `container entries sync keys into per-alias dirs so shared circuit names don't collide`() {
+        // Both contracts have a circuit named circuit1 (writeCanonicalContractTree). If the container
+        // dumped both into one assets/keys/, their circuit1.verifier files would overwrite each other.
+        // Per-alias dirs keep them apart — the fix for the Vault + PrivateVault shared-circuit-name case.
+        writeCanonicalContractTree("Alpha")
+        writeCanonicalContractTree("Beta")
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """rootProject.name = "kuira-contract-test"
+            """.trimIndent(),
+        )
+        projectDir.resolve("build.gradle.kts").writeText(
+            """
+            plugins {
+                id("io.github.kuiralabs.contract")
+            }
+            tasks.register("preBuild")
+            kuiraContract {
+                contracts {
+                    register("Alpha") { source.set("contract/src/managed/Alpha") }
+                    register("Beta") { source.set("contract/src/managed/Beta") }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        run("syncAlphaContractAssets", "syncBetaContractAssets")
+
+        // Each entry's keys land under <alias>-keys, so both circuit1.verifier files coexist.
+        assertTrue(projectDir.resolve("src/main/assets/Alpha-keys/circuit1.verifier").exists())
+        assertTrue(projectDir.resolve("src/main/assets/Beta-keys/circuit1.verifier").exists())
+        // And NOT in the shared keys/ dir (where they would have collided).
+        assertFalse(projectDir.resolve("src/main/assets/keys/circuit1.verifier").exists())
+        // Runtime JS stays alias-named in the shared runtime/ dir (already collision-free by filename).
+        assertTrue(projectDir.resolve("src/main/assets/runtime/Alpha-contract.js").exists())
+        assertTrue(projectDir.resolve("src/main/assets/runtime/Beta-contract.js").exists())
     }
 
     @Test

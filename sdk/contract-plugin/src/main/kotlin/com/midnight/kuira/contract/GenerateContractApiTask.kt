@@ -42,6 +42,15 @@ abstract class GenerateContractApiTask : DefaultTask() {
     abstract val alias: Property<String>
 
     /**
+     * True when this contract is a `contracts { }` container entry. It drives the generated
+     * `KEYS_ASSET_DIR` constant: a container entry's circuit keys sync to a per-alias asset dir
+     * (`<alias>-keys`) so contracts sharing a circuit name don't collide, while the single-contract
+     * shorthand keeps the plain `keys` dir (backward-compatible with existing consumers).
+     */
+    @get:Input
+    abstract val namespaced: Property<Boolean>
+
+    /**
      * Generated-source output directory. AGP sets its convention via
      * `addGeneratedSourceDirectory`; the task writes one `.kt` under it.
      */
@@ -66,7 +75,7 @@ abstract class GenerateContractApiTask : DefaultTask() {
         val aliasValue = alias.get()
 
         val fileSpec = try {
-            ContractApiGenerator.generate(aliasValue, json)
+            ContractApiGenerator.generate(aliasValue, json, namespaced.getOrElse(false))
         } catch (e: Exception) {
             throw GradleException(
                 "Failed to generate the typed contract API for '$aliasValue' from $infoFile: ${e.message}",

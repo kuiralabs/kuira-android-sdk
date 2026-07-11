@@ -63,6 +63,8 @@ internal object GeneratedSourceRegistrar {
             val generateTask = project.tasks.register(taskName, GenerateContractApiTask::class.java) { task ->
                 task.contractInfoFile.set(contractInfoProvider)
                 task.alias.set(aliasProvider)
+                // A non-empty discriminator = a contracts{} container entry → keys sync per-alias.
+                task.namespaced.set(nameDiscriminator.isNotEmpty())
             }
             // AGP owns outputDir per-variant; no convention needed here.
             java.addGeneratedSourceDirectory(generateTask) { it.outputDir }

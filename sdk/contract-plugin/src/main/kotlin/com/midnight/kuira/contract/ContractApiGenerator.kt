@@ -140,8 +140,10 @@ internal object ContractApiGenerator {
      *
      * @param alias the managed-dir name (e.g. `voting`) — drives the class name.
      * @param contractInfoJson the raw `contract-info.json` text.
+     * @param namespaced true for a `contracts { }` container entry — its circuit keys sync to a
+     *   per-alias asset dir (`<alias>-keys`), reflected in the generated `KEYS_ASSET_DIR` constant.
      */
-    fun generate(alias: String, contractInfoJson: String): FileSpec {
+    fun generate(alias: String, contractInfoJson: String, namespaced: Boolean = false): FileSpec {
         val root = JsonValue.parse(contractInfoJson) as? JsonObject
             ?: error("contract-info.json is not a JSON object")
         val circuits = (root["circuits"] as? JsonArray)?.items.orEmpty()
@@ -162,6 +164,9 @@ internal object ContractApiGenerator {
                     .initializer("handle")
                     .build(),
             )
+            // Asset-path constants: ONE source of truth for where the plugin syncs this contract's
+            // runtime JS + circuit keys, so the app loads them via these instead of magic strings.
+            .addType(assetConstants(alias, namespaced))
 
         val skipNotices = mutableListOf<String>()
         for (circuit in circuits) {
@@ -251,6 +256,25 @@ internal object ContractApiGenerator {
                     .build(),
             )
             .build()
+
+    /**
+     * The `companion object` of asset-path constants for the facade. These mirror where
+     * [KuiraContractPlugin] syncs the contract's artifacts, so a consumer wires
+     * `MidnightContract.create { contractJs = assets.open(RUNTIME_ASSET) }` and
+     * `ProvingKeyManager.installCircuitKeysFromAssets(KEYS_ASSET_DIR)` off ONE source that can't drift
+     * from the sync. A container entry ([namespaced]) keys under `<alias>-keys`; the shorthand keeps
+     * the plain `keys` dir.
+     */
+    private fun assetConstants(alias: String, namespaced: Boolean): TypeSpec {
+        val keysDir = if (namespaced) "$alias-keys" else "keys"
+        fun const(name: String, value: String, kdoc: String) =
+            PropertySpec.builder(name, STRING, KModifier.CONST).addKdoc(kdoc).initializer("%S", value).build()
+        return TypeSpec.companionObjectBuilder()
+            .addProperty(const("CONTRACT_ALIAS", alias, "Managed-dir alias — the identity the plugin syncs this contract's assets under."))
+            .addProperty(const("RUNTIME_ASSET", "runtime/$alias-contract.js", "APK asset path of the contract runtime JS (MidnightContract.create { contractJs })."))
+            .addProperty(const("KEYS_ASSET_DIR", keysDir, "APK asset dir of this contract's circuit keys (ProvingKeyManager.installCircuitKeysFromAssets)."))
+            .build()
+    }
 
     /** `voting` -> `VotingContract`, `penalty` -> `PenaltyContract`. */
     private fun facadeClassName(alias: String): String =
