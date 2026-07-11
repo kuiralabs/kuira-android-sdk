@@ -299,8 +299,10 @@ fun WalletStatusPanel(
         pill(
             chipUi,
             { sheetOpen = true },
-            { viewModel.resetSendState(); overlay.open(WalletOverlay.Send) },
-            { overlay.open(WalletOverlay.Receive) },
+            // Launched from the enlarged chip's own button — there's no sheet to return to, so
+            // don't spring one open on close (#52). The sheet's Send/Receive keep the default.
+            { viewModel.resetSendState(); overlay.open(WalletOverlay.Send, reopenSheetOnClose = false) },
+            { overlay.open(WalletOverlay.Receive, reopenSheetOnClose = false) },
         )
     } else {
         // dappPressable gives the pressed/hover/focus state layer + press scale.

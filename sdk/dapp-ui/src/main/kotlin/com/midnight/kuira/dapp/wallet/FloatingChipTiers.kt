@@ -45,6 +45,14 @@ import com.midnight.kuira.dapp.backup.RunnerDustProgress
  */
 internal enum class ChipTier { Peek, Pill, Card, Panel }
 
+/**
+ * Bottom clearance the Panel tier reserves below its action-button row so the [ResizableChip] grip —
+ * a 32.dp handle anchored to the chip's bottom-end corner — sits in a free strip instead of over the
+ * right-most action button (which made the button hard to hit). Sized to the grip's footprint minus
+ * the card's own 16.dp bottom padding.
+ */
+internal val PanelGripClearance = 16.dp
+
 /** The clean width each tier snaps to (Peek is the docked sliver; Pill wraps, this is its threshold). */
 internal fun ChipTier.naturalWidth(): Dp = when (this) {
     ChipTier.Peek -> 26.dp
@@ -172,6 +180,7 @@ internal fun WalletChip(
                 ActionButton("Send", colors, primary = true, onClick = onSend, modifier = Modifier.weight(1f))
                 ActionButton("Receive", colors, primary = false, onClick = onReceive, modifier = Modifier.weight(1f))
             }
+            Spacer(Modifier.height(PanelGripClearance))
         }
     }
 }
@@ -223,6 +232,7 @@ internal fun SigilChip(
                 ActionButton("Settings", colors, primary = false, onClick = onSettings, modifier = Modifier.weight(1f))
                 ActionButton("Sign out", colors, primary = false, onClick = onSignOut, modifier = Modifier.weight(1f))
             }
+            Spacer(Modifier.height(PanelGripClearance))
         }
     }
 }

@@ -88,7 +88,17 @@ class WalletOverlayController {
      */
     internal var hostAttached: Boolean = false
 
-    fun open(overlay: WalletOverlay) {
+    /**
+     * Whether the NEXT [close] should re-open the originating pill's sheet. Set by [open].
+     *
+     * A sheet-launched overlay (the default) reopens so Back returns to the sheet it came from.
+     * An overlay launched DIRECTLY from an enlarged floating chip's own action buttons (Send /
+     * Receive / Settings on the widget itself) must NOT — there was no sheet, so springing one
+     * open on close is a surprise sheet over the persistent widget (#52).
+     */
+    private var reopenSheetOnClose: Boolean = true
+
+    fun open(overlay: WalletOverlay, reopenSheetOnClose: Boolean = true) {
         if (!hostAttached) {
             Log.w(
                 "WalletOverlay",
@@ -97,6 +107,7 @@ class WalletOverlayController {
                     "WalletOverlayHost { }) so full-screen Settings / Send / Receive have a surface.",
             )
         }
+        this.reopenSheetOnClose = reopenSheetOnClose
         active = overlay
     }
 
@@ -108,7 +119,9 @@ class WalletOverlayController {
      */
     fun close() {
         val closed = active
+        val reopen = reopenSheetOnClose
         active = null
+        if (!reopen) return
         when (closed) {
             is WalletOverlay.Send,
             is WalletOverlay.Receive -> walletSheetReopen++

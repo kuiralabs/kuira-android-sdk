@@ -19,6 +19,7 @@ from its release and history.
 ### Added
 - **Contract constructor arguments** — deploy a contract passing constructor args, threaded through the circuit-call path (`compact-engine`).
 - **Typed contract codegen + BigInt marshalling** hardening across the contract-call path (`compact-engine` / `midnight-sdk`).
+- **Multi-contract `contracts { }` container** (`io.github.kuiralabs.contract`) — register several Compact contracts in one module, each generating its own typed `<Alias>Contract` facade. The generated-API task is name-discriminated per variant and per contract: `generate<Variant>ContractApi` for the single-contract shorthand (e.g. `generateDebugContractApi`) and `generate<Variant><Contract>ContractApi` for each container entry (e.g. `generateDebugVaultContractApi`). Aliases that collapse to the same class/task name are rejected at configuration time.
 - **Version-coherence pre-flight** — chain-time sourcing and a client↔node version check before value-bearing calls.
 
 ## [0.1.0-alpha04] — 2026-06-21

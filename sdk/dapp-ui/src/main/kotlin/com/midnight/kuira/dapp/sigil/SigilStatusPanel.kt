@@ -11,7 +11,9 @@ import com.midnight.kuira.dapp.wallet.GLASS_FILL_ALPHA
 import com.midnight.kuira.dapp.wallet.GearGlyph
 import com.midnight.kuira.dapp.wallet.GlyphButton
 import com.midnight.kuira.dapp.wallet.LocalWalletOverlay
+import com.midnight.kuira.dapp.wallet.SettingsLaunchSource
 import com.midnight.kuira.dapp.wallet.SigilChipUi
+import com.midnight.kuira.dapp.wallet.WalletOverlay
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -126,12 +128,19 @@ fun SigilStatusPanel(
     // ComponentActivity-based apps do).
     val activity = LocalContext.current as? FragmentActivity
 
+    // Sign-out confirm is hoisted here so BOTH entry points — the sheet's "sign out" and the
+    // enlarged floating chip's Sign-out button — route through the SAME confirm dialog (#53). The
+    // enlarged chip previously signed out on a single tap with no guard.
+    var showSignOutConfirm by rememberSaveable { mutableStateOf(false) }
+
     if (pill != null) {
         pill(
             status.toSigilChipUi(),
             { sheetOpen = true },
-            onOpenSettings,
-            { activity?.let { viewModel.signOut(it) } },
+            // Enlarged chip's own Settings button — no sheet to return to, so don't spring one
+            // open on close (#52). The sheet's gear (below) keeps the default reopen.
+            { overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Sigil), reopenSheetOnClose = false) },
+            { showSignOutConfirm = true },
         )
     } else {
         SigilPill(
@@ -155,7 +164,7 @@ fun SigilStatusPanel(
                 colors = colors,
                 onForgeSigil = { activity?.let { viewModel.forgeSigil(it) } },
                 onRestore = { activity?.let { viewModel.restoreSeed(it) } },
-                onSignOut = { activity?.let { viewModel.signOut(it) } },
+                onSignOut = { showSignOutConfirm = true },
                 onStartFresh = {
                     viewModel.dismissBackup()
                     sheetOpen = false
@@ -166,6 +175,37 @@ fun SigilStatusPanel(
                 },
             )
         }
+    }
+
+    if (showSignOutConfirm) {
+        // Danger zone — deliberately understated (monochrome, not red: sign-out is recoverable, not
+        // a financial-danger signal). The confirm + biometric (in the VM) are the real guards.
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirm = false },
+            // Theme to the sigil panel's (dark) palette. A bare AlertDialog falls back to the host's
+            // default Material scheme — a light container — which left the "Sign out" label
+            // (colors.onSheet, a light tone) as white-on-light and unreadable, and clashed with the
+            // dark app. Mirrors BackupSection's themed dialog.
+            containerColor = colors.sheetBackground,
+            titleContentColor = colors.onSheet,
+            textContentColor = colors.onSheetDim,
+            title = { Text("Sign out?") },
+            text = {
+                Text(
+                    "You'll need your passkey to sign back in. Your wallet and " +
+                        "cloud backup are not deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignOutConfirm = false
+                    activity?.let { viewModel.signOut(it) }
+                }) { Text("Sign out", color = colors.onSheet) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel", color = colors.onSheetDim) }
+            },
+        )
     }
 }
 
@@ -542,48 +582,19 @@ private fun ForgedBody(
         MonoField(label = "did", value = forged.did, colors = colors, onCopy = onCopy)
     }
 
-    var showSignOutConfirm by remember { mutableStateOf(false) }
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
-    // Danger zone — deliberately understated (monochrome, not red: sign-out is
-    // recoverable, not a financial-danger signal). The confirm + biometric (in the
-    // VM) are the real guards.
+    // Danger zone — deliberately understated (monochrome, not red: sign-out is recoverable, not a
+    // financial-danger signal). [onSignOut] requests the shared confirm dialog (hoisted to the
+    // panel so the enlarged chip's Sign-out uses the same guard, #53); confirm + the VM's biometric
+    // are the real guards.
     Text(
         text = "sign out",
         color = colors.onSheetDim,
         fontSize = SigilType.Body,
         modifier = Modifier
-            .clickable { showSignOutConfirm = true }
+            .clickable { onSignOut() }
             .padding(vertical = SigilDimens.SheetSmallGap),
     )
-
-    if (showSignOutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showSignOutConfirm = false },
-            // Theme to the sigil panel's (dark) palette. A bare AlertDialog falls back to the host's
-            // default Material scheme — a light container — which left the "Sign out" label
-            // (colors.onSheet, a light tone) as white-on-light and unreadable, and clashed with the
-            // dark app. Mirrors BackupSection's themed dialog.
-            containerColor = colors.sheetBackground,
-            titleContentColor = colors.onSheet,
-            textContentColor = colors.onSheetDim,
-            title = { Text("Sign out?") },
-            text = {
-                Text(
-                    "You'll need your passkey to sign back in. Your wallet and " +
-                        "cloud backup are not deleted.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSignOutConfirm = false
-                    onSignOut()
-                }) { Text("Sign out", color = colors.onSheet) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel", color = colors.onSheetDim) }
-            },
-        )
-    }
 }
 
 /**
