@@ -214,6 +214,20 @@ class ContractApiGeneratorTest {
         val src = ContractApiGenerator.generate("privateVault", VOTING_ABI, namespaced = true).toString()
         assertTrue("container keys dir must be per-alias: $src", src.contains("const val KEYS_ASSET_DIR: String = \"privateVault-keys\""))
         assertTrue("runtime const wrong: $src", src.contains("const val RUNTIME_ASSET: String = \"runtime/privateVault-contract.js\""))
+        // A container entry generates into a per-alias SUB-PACKAGE so two contracts that share
+        // circuit/struct names don't emit colliding top-level decode.../toCallArg functions.
+        assertTrue(
+            "container entry must use a per-alias package: $src",
+            src.contains("package com.midnight.kuira.contract.generated.privatevault"),
+        )
+    }
+
+    @Test
+    fun `shorthand keeps the flat generated package`() {
+        // Backward compat: a single-contract shorthand (namespaced = false) stays in the flat
+        // generated package so existing consumers' imports don't break.
+        val src = render("vault", VOTING_ABI)
+        assertTrue("shorthand must stay in the flat package: $src", src.contains("package com.midnight.kuira.contract.generated\n"))
     }
 
     @Test
