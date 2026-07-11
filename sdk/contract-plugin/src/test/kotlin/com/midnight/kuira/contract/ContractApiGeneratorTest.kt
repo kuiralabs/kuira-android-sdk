@@ -201,35 +201,45 @@ class ContractApiGeneratorTest {
     @Test
     fun `value-returning circuits get a typed read method decoding the ABI result-type`() {
         // Emit-both: a value-returning circuit keeps its call() (receipt) AND gains a read<Name>()
-        // that runs handle.read + decodes the result-type. Unit-returning circuits get NO read
-        // method; Struct returns are deferred (no read method yet), keeping only call().
+        // that delegates to a reusable decode<Name>Result(json) decoding the result-type. Unit-
+        // returning circuits get NO read method / no result decoder.
         val src = render("sample", SCALAR_RETURNS_ABI)
 
-        // Uint result -> BigInteger via JSONTokener scalar.
+        // read<Name>() delegates to a reusable decode<Name>Result(json) so a batched host read path
+        // can decode identically. Uint result -> BigInteger via JSONTokener scalar.
         assertTrue(
-            "Uint read method wrong: $src",
-            src.contains("suspend fun readGetCount(): BigInteger") &&
-                src.contains("""val json = handle.read("getCount")""") &&
-                src.contains("return BigInteger(JSONTokener(json).nextValue().toString())"),
+            "Uint read method must delegate: $src",
+            src.contains("readGetCount(): BigInteger = decodeGetCountResult(handle.read(\"getCount\"))"),
+        )
+        assertTrue(
+            "Uint result decoder wrong: $src",
+            src.contains("internal fun decodeGetCountResult(json: String): BigInteger = BigInteger(JSONTokener(json).nextValue().toString())"),
         )
         // Boolean result -> toBooleanStrict.
         assertTrue(
-            "Boolean read method wrong: $src",
-            src.contains("suspend fun readIsReady(): Boolean") &&
-                src.contains("return JSONTokener(json).nextValue().toString().toBooleanStrict()"),
+            "Boolean read method must delegate: $src",
+            src.contains("readIsReady(): Boolean = decodeIsReadyResult(handle.read(\"isReady\"))"),
+        )
+        assertTrue(
+            "Boolean result decoder wrong: $src",
+            src.contains("internal fun decodeIsReadyResult(json: String): Boolean = JSONTokener(json).nextValue().toString().toBooleanStrict()"),
         )
         // Enum result -> typed enum via ordinal.
         assertTrue(
-            "Enum read method wrong: $src",
-            src.contains("suspend fun readGetPhase(): Phase") &&
-                src.contains("return Phase.entries[JSONTokener(json).nextValue().toString().toInt()]"),
+            "Enum read method must delegate: $src",
+            src.contains("readGetPhase(): Phase = decodeGetPhaseResult(handle.read(\"getPhase\"))"),
+        )
+        assertTrue(
+            "Enum result decoder wrong: $src",
+            src.contains("internal fun decodeGetPhaseResult(json: String): Phase = Phase.entries[JSONTokener(json).nextValue().toString().toInt()]"),
         )
         // The call() method is still emitted for every circuit (the tx path).
         assertTrue("call method must remain: $src", src.contains("suspend fun getCount("))
 
-        // Unit-returning circuit: call() only, no read method (nothing to read).
+        // Unit-returning circuit: call() only, no read method / no result decoder (nothing to read).
         assertTrue("Unit circuit must keep call(): $src", src.contains("suspend fun doThing("))
         assertFalse("Unit circuit must NOT get a read method: $src", src.contains("readDoThing"))
+        assertFalse("Unit circuit must NOT get a result decoder: $src", src.contains("decodeDoThingResult"))
 
         // Struct return: a typed read method + a decode<Struct>(JSONObject) function.
         assertTrue("Struct-return read method wrong: $src", src.contains("suspend fun readGetRecord(): Record"))
@@ -242,11 +252,13 @@ class ContractApiGeneratorTest {
         // color: Bytes<32>, amount: Uint<128>, status: enum }. Exercises every field-decode branch.
         val src = render("vault", PROPOSAL_RETURN_ABI)
 
-        assertTrue("read method wrong: $src", src.contains("suspend fun readGetProposal(id: BigInteger): Proposal"))
         assertTrue(
-            "top-level struct decode wrong: $src",
-            src.contains("""val json = handle.read("getProposal", id)""") &&
-                src.contains("return decodeProposal(JSONObject(json))"),
+            "read method must delegate to the result decoder: $src",
+            src.contains("readGetProposal(id: BigInteger): Proposal = decodeGetProposalResult(handle.read(\"getProposal\", id))"),
+        )
+        assertTrue(
+            "top-level struct result decoder wrong: $src",
+            src.contains("internal fun decodeGetProposalResult(json: String): Proposal = decodeProposal(JSONObject(json))"),
         )
         // Proposal decoder: nested struct via decodeRecipient(getJSONObject), Bytes via decodeBytes,
         // Uint via BigInteger, enum via ordinal.

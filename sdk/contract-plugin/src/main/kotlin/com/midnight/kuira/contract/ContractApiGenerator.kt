@@ -107,6 +107,14 @@ internal object ContractApiGenerator {
 
     /** The generated per-struct read decoder: `decode<Struct>(o: JSONObject): <Struct>`. */
     private fun structDecoderMember(structName: String) = MemberName(GENERATED_PACKAGE, "decode$structName")
+
+    /**
+     * The generated per-circuit result decoder: `decode<Circuit>Result(json: String): <ReturnType>`.
+     * Reusable so a batched read path (a host running its own `readMany`) can decode each result JSON
+     * with the SAME typed decoder the `read<Name>()` method uses — no hand-written parsing.
+     */
+    private fun resultDecoderMember(circuit: String) =
+        MemberName(GENERATED_PACKAGE, "decode${circuit.replaceFirstChar { it.uppercaseChar() }}Result")
     private val BIG_INTEGER = ClassName("java.math", "BigInteger")
     private val LIST = ClassName("kotlin.collections", "List")
 
@@ -202,6 +210,12 @@ internal object ContractApiGenerator {
         // ArgConverter and throw at the first call.
         for (ext in supporting.callArgExtensions()) {
             fileBuilder.addFunction(ext)
+        }
+
+        // Per-circuit result decoders: decode<Circuit>Result(json) -> typed value. Reusable by a
+        // host's own batched read path; read<Name>() delegates to them.
+        for (decoder in supporting.resultDecoders()) {
+            fileBuilder.addFunction(decoder)
         }
 
         // Read-decoders (the inverse of toCallArg): decode<Struct>(JSONObject) -> data class, plus
@@ -331,6 +345,19 @@ internal object ContractApiGenerator {
         }
 
         val returnType = mapType(resultType, supporting) // registers the enum class for an Enum result
+
+        // The reusable result decoder: decode<Circuit>Result(json: String): <ReturnType>. Its `json`
+        // parameter is the variable decodeTopLevel's expression references, so read<Name>() and any
+        // batched host read path decode identically. Registered as a standalone file function.
+        supporting.registerResultDecoder(
+            FunSpec.builder(resultDecoderMember(name).simpleName)
+                .addModifiers(KModifier.INTERNAL)
+                .addParameter("json", STRING)
+                .returns(returnType)
+                .addStatement("return %L", decodeTopLevel(resultType, returnType, supporting))
+                .build(),
+        )
+
         val fn = FunSpec.builder(readMethodName(name))
             .addModifiers(KModifier.SUSPEND)
             .returns(returnType)
@@ -345,8 +372,9 @@ internal object ContractApiGenerator {
             readFormat.add(marshalExpression(CodeBlock.of("%N", argName), argType))
         }
 
-        fn.addStatement("val json = handle.read($readArgs)", *readFormat.toTypedArray())
-        fn.addStatement("return %L", decodeTopLevel(resultType, returnType, supporting))
+        // read<Name>() delegates to the reusable decoder: decode<Name>Result(handle.read(...)).
+        val readCall = CodeBlock.of("handle.read($readArgs)", *readFormat.toTypedArray())
+        fn.addStatement("return %M(%L)", resultDecoderMember(name), readCall)
         return fn.build()
     }
 
@@ -676,6 +704,9 @@ private class SupportingTypes {
     /** `decode<Struct>(o: JSONObject)` read-decoders, keyed by struct name, in insertion order. */
     private val decoderFunctions = LinkedHashMap<String, FunSpec>()
 
+    /** `decode<Circuit>Result(json: String)` per-circuit result decoders, in registration order. */
+    private val resultDecoderFunctions = LinkedHashMap<String, FunSpec>()
+
     /** Set when any generated decoder (or top-level read) needs the shared `decodeBytes` helper. */
     private var usesBytesDecoder = false
 
@@ -806,6 +837,14 @@ private class SupportingTypes {
 
     /** The generated `decode<Struct>(o: JSONObject)` read-decoders, in insertion order. */
     fun decoders(): List<FunSpec> = decoderFunctions.values.toList()
+
+    /** Register a per-circuit `decode<Circuit>Result(json)` decoder (idempotent by name). */
+    fun registerResultDecoder(fn: FunSpec) {
+        resultDecoderFunctions.putIfAbsent(fn.name, fn)
+    }
+
+    /** The generated per-circuit `decode<Circuit>Result(json)` decoders, in registration order. */
+    fun resultDecoders(): List<FunSpec> = resultDecoderFunctions.values.toList()
 
     companion object {
         // Sentinel held while a struct is being built so a cyclic reference is a
