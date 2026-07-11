@@ -231,8 +231,35 @@ class ContractApiGeneratorTest {
         assertTrue("Unit circuit must keep call(): $src", src.contains("suspend fun doThing("))
         assertFalse("Unit circuit must NOT get a read method: $src", src.contains("readDoThing"))
 
-        // Struct return is deferred — no read method yet, only call().
-        assertFalse("Struct-return read method is deferred: $src", src.contains("readGetRecord"))
+        // Struct return: a typed read method + a decode<Struct>(JSONObject) function.
+        assertTrue("Struct-return read method wrong: $src", src.contains("suspend fun readGetRecord(): Record"))
+        assertTrue("struct decoder must be generated: $src", src.contains("internal fun decodeRecord(o: JSONObject): Record"))
+    }
+
+    @Test
+    fun `struct return decodes nested struct, enum, bytes and uint fields`() {
+        // The real Vault getProposal shape: Proposal{ to: Recipient{ kind: enum, address: Bytes<32> },
+        // color: Bytes<32>, amount: Uint<128>, status: enum }. Exercises every field-decode branch.
+        val src = render("vault", PROPOSAL_RETURN_ABI)
+
+        assertTrue("read method wrong: $src", src.contains("suspend fun readGetProposal(id: BigInteger): Proposal"))
+        assertTrue(
+            "top-level struct decode wrong: $src",
+            src.contains("""val json = handle.read("getProposal", id)""") &&
+                src.contains("return decodeProposal(JSONObject(json))"),
+        )
+        // Proposal decoder: nested struct via decodeRecipient(getJSONObject), Bytes via decodeBytes,
+        // Uint via BigInteger, enum via ordinal.
+        assertTrue("nested struct decode wrong: $src", src.contains("""to = decodeRecipient(o.getJSONObject("to"))"""))
+        assertTrue("bytes field decode wrong: $src", src.contains("""color = decodeBytes(o.get("color"))"""))
+        assertTrue("uint field decode wrong: $src", src.contains("""amount = BigInteger(o.get("amount").toString())"""))
+        assertTrue(
+            "enum field decode wrong: $src",
+            src.contains("""status = ProposalStatus.entries[o.get("status").toString().toInt()]"""),
+        )
+        // Nested Recipient decoder + the shared decodeBytes helper are emitted.
+        assertTrue("nested decoder missing: $src", src.contains("internal fun decodeRecipient(o: JSONObject): Recipient"))
+        assertTrue("decodeBytes helper missing: $src", src.contains("internal fun decodeBytes(v: Any?): ByteArray"))
     }
 
     @Test
@@ -379,6 +406,49 @@ class ContractApiGeneratorTest {
                 }
               ],
               "result-type": { "type-name": "Tuple", "types": [] }
+            }
+          ],
+          "witnesses": [],
+          "contracts": [],
+          "ledger": []
+        }
+        """.trimIndent()
+
+        // The real Vault getProposal return: a struct with a nested struct, two Bytes fields, a
+        // Uint<128>, and an enum — exercises every struct-field decode branch.
+        val PROPOSAL_RETURN_ABI = """
+        {
+          "compiler-version": "0.31.0",
+          "language-version": "0.23.0",
+          "runtime-version": "0.16.0",
+          "circuits": [
+            {
+              "name": "getProposal",
+              "pure": false,
+              "proof": true,
+              "arguments": [ { "name": "id", "type": { "type-name": "Uint", "maxval": 255 } } ],
+              "result-type": {
+                "type-name": "Struct",
+                "name": "Proposal",
+                "elements": [
+                  {
+                    "name": "to",
+                    "type": {
+                      "type-name": "Struct",
+                      "name": "Recipient",
+                      "elements": [
+                        { "name": "kind", "type": { "type-name": "Enum", "name": "RecipientKind",
+                          "elements": ["ShieldedUser", "UnshieldedUser", "Contract"] } },
+                        { "name": "address", "type": { "type-name": "Bytes", "length": 32 } }
+                      ]
+                    }
+                  },
+                  { "name": "color", "type": { "type-name": "Bytes", "length": 32 } },
+                  { "name": "amount", "type": { "type-name": "Uint", "maxval": 340282366920938463463374607431768211455 } },
+                  { "name": "status", "type": { "type-name": "Enum", "name": "ProposalStatus",
+                    "elements": ["Inactive", "Active", "Executed", "Cancelled"] } }
+                ]
+              }
             }
           ],
           "witnesses": [],
