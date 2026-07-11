@@ -550,14 +550,15 @@ internal object ContractApiGenerator {
                 val resolvedInner = resolveAlias(inner)
                 val innerName = (resolvedInner["type-name"] as? JsonString)?.value
                     ?: error("type node missing type-name")
-                // A Vector marshals element-wise only for the single-level
-                // Vector<Struct> case (`map { it.toCallArg() }`). Nested vectors of
-                // structs would need a deeper map; that shape is unverified, so flag
-                // it rather than emit subtly-wrong code. Vector<scalar> passes through.
+                // A Vector marshals element-wise only for the single-level case (Vector<Struct> ->
+                // `map { it.toCallArg() }`, Vector<Enum> -> `map { CompactEnum(it.ordinal) }`). A
+                // NESTED vector whose elements need marshalling (Struct or Enum) would require a
+                // deeper map; that shape is unverified, so flag it rather than emit a bare pass-through
+                // that reaches ArgConverter as raw data classes / enum objects. Vector<scalar> passes.
                 if (innerName == "Vector" && firstUnmarshallable(resolvedInner) == null &&
-                    containsStruct(resolvedInner)
+                    containsMarshalledElement(resolvedInner)
                 ) {
-                    "Vector<Vector<Struct>>"
+                    "Vector<Vector<marshalled>>"
                 } else {
                     firstUnmarshallable(inner)
                 }
@@ -635,15 +636,20 @@ internal object ContractApiGenerator {
         }
     }
 
-    /** True if [type]'s tree contains a Struct anywhere (Vector/Alias-transparent). */
-    private fun containsStruct(type: JsonObject): Boolean {
+    /**
+     * True if [type]'s tree contains an element that needs per-element marshalling — a Struct
+     * (`toCallArg()`) or an Enum (`CompactEnum(ordinal)`) — anywhere (Vector/Alias-transparent). Used
+     * to reject nested `Vector<Vector<…>>` of such elements, which the single-level `map { … }` can't
+     * marshal.
+     */
+    private fun containsMarshalledElement(type: JsonObject): Boolean {
         val name = (type["type-name"] as? JsonString)?.value
             ?: error("type node missing type-name")
         return when (name) {
-            "Struct" -> true
+            "Struct", "Enum" -> true
             "Vector", "Alias" -> {
                 val inner = type["type"] as? JsonObject ?: error("$name missing inner type")
-                containsStruct(inner)
+                containsMarshalledElement(inner)
             }
             else -> false
         }
@@ -703,6 +709,21 @@ internal object ContractApiGenerator {
         val structName = (type["name"] as? JsonString)?.value
             ?: error("Struct missing name")
         val elements = (type["elements"] as? JsonArray)?.items.orEmpty().map { it as JsonObject }
+        // A read-decoder is generated ONLY for a struct every field of which decodes. An arg-only
+        // struct with an un-decodable field (a Vector, a non-string Opaque, …) is still a valid
+        // ARGUMENT (toCallArg passes those through), but has no valid decoder — and an un-decodable
+        // struct can never appear in a RESULT position (the read gate rejects it), so no decoder is
+        // ever referenced. Emitting one anyway would throw at generation time (decodeFieldFromObject
+        // on a Vector field) or produce a non-compiling decoder. So gate it on decodability.
+        val decodeField: ((String, JsonObject) -> CodeBlock)? =
+            if (isDecodable(type)) {
+                { fieldName, elemType ->
+                    // Inside the generated `fun decode<Struct>(o: JSONObject)`, read each field off `o`.
+                    decodeFieldFromObject(CodeBlock.of("o"), fieldName, elemType, supporting)
+                }
+            } else {
+                null
+            }
         return supporting.registerStruct(
             name = structName,
             elements = elements,
@@ -712,10 +733,7 @@ internal object ContractApiGenerator {
                 // scope as a property — reference it bare and marshal recursively.
                 marshalExpression(CodeBlock.of("%N", fieldName), elemType)
             },
-            decodeField = { fieldName, elemType ->
-                // Inside the generated `fun decode<Struct>(o: JSONObject)`, read each field off `o`.
-                decodeFieldFromObject(CodeBlock.of("o"), fieldName, elemType, supporting)
-            },
+            decodeField = decodeField,
         )
     }
 
@@ -756,7 +774,8 @@ private class SupportingTypes(
         elements: List<JsonObject>,
         mapElement: (JsonObject) -> TypeName,
         marshalField: (fieldName: String, fieldType: JsonObject) -> CodeBlock,
-        decodeField: (fieldName: String, fieldType: JsonObject) -> CodeBlock,
+        /** Null when the struct isn't decodable (arg-only, un-decodable field) — no decoder emitted. */
+        decodeField: ((fieldName: String, fieldType: JsonObject) -> CodeBlock)?,
     ): ClassName {
         if (!types.containsKey(name)) {
             // Reserve the slot before recursing so a self/mutually-referential
@@ -764,10 +783,13 @@ private class SupportingTypes(
             // in practice; this is belt-and-braces).
             types[name] = PLACEHOLDER
             val ctor = FunSpec.constructorBuilder()
-            val builder = TypeSpec.classBuilder(name).addModifiers(KModifier.DATA)
+            // A field-less struct can't be a `data class` (Kotlin requires >=1 primary-ctor param);
+            // emit a plain class so a degenerate empty struct still compiles.
+            val builder = TypeSpec.classBuilder(name)
+                .apply { if (elements.isNotEmpty()) addModifiers(KModifier.DATA) }
 
-            // Body of the marshalling extension: mapOf("field" to <marshalled>, ...) and, in
-            // parallel, the read-decoder's constructor args: field = <decoded from JSONObject>.
+            // Body of the marshalling extension: mapOf("field" to <marshalled>, ...) and, when the
+            // struct decodes, the read-decoder's constructor args: field = <decoded from JSONObject>.
             val mapEntries = mutableListOf<CodeBlock>()
             val decodeArgs = mutableListOf<CodeBlock>()
             for (element in elements) {
@@ -781,7 +803,9 @@ private class SupportingTypes(
                     PropertySpec.builder(elemName, kt).initializer(elemName).build(),
                 )
                 mapEntries.add(CodeBlock.of("%S to %L", elemName, marshalField(elemName, elemType)))
-                decodeArgs.add(CodeBlock.of("%N = %L", elemName, decodeField(elemName, elemType)))
+                if (decodeField != null) {
+                    decodeArgs.add(CodeBlock.of("%N = %L", elemName, decodeField(elemName, elemType)))
+                }
             }
             types[name] = builder.primaryConstructor(ctor.build()).build()
 
@@ -807,25 +831,28 @@ private class SupportingTypes(
                 .build()
 
             // internal fun decode<Struct>(o: JSONObject): <Struct> = <Struct>(field = <decoded>, ...)
-            // The inverse of toCallArg — reads each field off the JSON `read` returns. Generated for
-            // every struct; unused for arg-only structs (harmless dead code).
-            val decodeBody = if (decodeArgs.isEmpty()) {
-                CodeBlock.of("%T()", structClass)
-            } else {
-                CodeBlock.builder()
-                    .add("%T(\n", structClass)
-                    .indent()
-                    .apply { decodeArgs.forEach { add("%L,\n", it) } }
-                    .unindent()
-                    .add(")")
+            // The inverse of toCallArg — reads each field off the JSON `read` returns. Emitted ONLY
+            // when the struct decodes (decodeField != null); an arg-only struct with an un-decodable
+            // field gets no decoder (it can never appear in a result position anyway).
+            if (decodeField != null) {
+                val decodeBody = if (decodeArgs.isEmpty()) {
+                    CodeBlock.of("%T()", structClass)
+                } else {
+                    CodeBlock.builder()
+                        .add("%T(\n", structClass)
+                        .indent()
+                        .apply { decodeArgs.forEach { add("%L,\n", it) } }
+                        .unindent()
+                        .add(")")
+                        .build()
+                }
+                decoderFunctions[name] = FunSpec.builder("decode$name")
+                    .addModifiers(KModifier.INTERNAL)
+                    .addParameter("o", JSON_OBJECT_CN)
+                    .returns(structClass)
+                    .addStatement("return %L", decodeBody)
                     .build()
             }
-            decoderFunctions[name] = FunSpec.builder("decode$name")
-                .addModifiers(KModifier.INTERNAL)
-                .addParameter("o", JSON_OBJECT_CN)
-                .returns(structClass)
-                .addStatement("return %L", decodeBody)
-                .build()
         }
         return ClassName(pkg, name)
     }

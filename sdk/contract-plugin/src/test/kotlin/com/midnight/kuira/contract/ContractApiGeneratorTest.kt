@@ -279,6 +279,42 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `struct ARG with an un-decodable field generates a call but no read-decoder, no crash`() {
+        // A struct used only as an ARGUMENT whose field can't be decoded (a Vector) is a valid
+        // argument (toCallArg passes the Vector through) but has no valid read-decoder. The generator
+        // must still emit the call() method and the data class — and must NOT try to emit a
+        // decode<Struct> (which would throw at generation time on the Vector field).
+        val src = render("bag", STRUCT_ARG_VECTOR_FIELD_ABI)
+
+        assertTrue("circuit must be generated: $src", Regex("""fun setItems\(\s*bag: Bag""").containsMatchIn(src))
+        assertTrue("struct data class must be emitted: $src", src.contains("data class Bag"))
+        assertTrue("struct arg must marshal via toCallArg: $src", src.contains("setItems\", bag.toCallArg()"))
+        // The struct isn't decodable (Vector field), so NO read-decoder is generated for it.
+        assertFalse("un-decodable struct must NOT get a read-decoder: $src", src.contains("decodeBag"))
+    }
+
+    @Test
+    fun `nested Vector of Enum argument is skipped, not emitted un-marshalled`() {
+        // marshalExpression can only map a single-level Vector<Enum>; a Vector<Vector<Enum>> would
+        // need a nested map, so the circuit must be GRACEFULLY SKIPPED rather than emit a bare
+        // pass-through that reaches ArgConverter as raw enum objects (the latent crash class).
+        val src = render("grid", NESTED_VECTOR_ENUM_ABI)
+
+        assertFalse("nested-vector-of-enum circuit must NOT be generated: $src", src.contains("fun setGrid("))
+        assertTrue("must be documented as skipped: $src", src.contains("setGrid: not generated"))
+    }
+
+    @Test
+    fun `an empty struct is a plain class, not an illegal data class`() {
+        // Kotlin rejects `data class Foo()` (needs >=1 primary-ctor param). A field-less struct must
+        // emit a plain `class` so the generated file still compiles.
+        val src = render("ping", EMPTY_STRUCT_ABI)
+
+        assertTrue("empty struct must be a plain class: $src", src.contains("public class Empty"))
+        assertFalse("empty struct must NOT be a data class: $src", src.contains("data class Empty"))
+    }
+
+    @Test
     fun `struct return decodes nested struct, enum, bytes and uint fields`() {
         // The real Vault getProposal shape: Proposal{ to: Recipient{ kind: enum, address: Bytes<32> },
         // color: Bytes<32>, amount: Uint<128>, status: enum }. Exercises every field-decode branch.
@@ -417,6 +453,54 @@ class ContractApiGeneratorTest {
 
         // Synthetic: Enum + Vector circuit ARGS (drawn from the penalty Phase enum
         // + a Vector<Uint> shoot list) to cover the recursive mapper's branches.
+        // A struct ARG whose field is a Vector — marshallable as an arg (Vector<scalar> passes
+        // through toCallArg) but NOT decodable, so no read-decoder should be generated for it.
+        val STRUCT_ARG_VECTOR_FIELD_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "setItems", "pure": false, "proof": true,
+              "arguments": [ { "name": "bag", "type": {
+                "type-name": "Struct", "name": "Bag",
+                "elements": [ { "name": "items", "type": {
+                  "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } } ] } } ],
+              "result-type": { "type-name": "Tuple", "types": [] } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
+        // A Vector<Vector<Enum>> arg — the single-level element map can't marshal it, so the circuit
+        // must be skipped rather than emitted as a bare (un-marshalled) pass-through.
+        val NESTED_VECTOR_ENUM_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "setGrid", "pure": false, "proof": true,
+              "arguments": [ { "name": "grid", "type": {
+                "type-name": "Vector", "length": 2, "type": {
+                  "type-name": "Vector", "length": 2, "type": {
+                    "type-name": "Enum", "name": "Phase", "elements": ["A", "B"] } } } } ],
+              "result-type": { "type-name": "Tuple", "types": [] } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
+        // A field-less struct — must generate a plain class, not an (illegal) data class.
+        val EMPTY_STRUCT_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "ping", "pure": false, "proof": true,
+              "arguments": [ { "name": "e", "type": {
+                "type-name": "Struct", "name": "Empty", "elements": [] } } ],
+              "result-type": { "type-name": "Tuple", "types": [] } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
         // The real Vault proposeWithdrawal shape (verbatim structure from the Vault
         // contract-info.json): a struct arg whose first field is a C-style enum.
         val STRUCT_WITH_ENUM_FIELD_ABI = """
