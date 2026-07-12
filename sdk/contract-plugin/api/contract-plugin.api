@@ -5,21 +5,19 @@ public abstract class com/midnight/kuira/contract/AdbReverseLocalnetTask : org/g
 }
 
 public abstract class com/midnight/kuira/contract/GenerateContractApiTask : org/gradle/api/DefaultTask {
-	public static final field Companion Lcom/midnight/kuira/contract/GenerateContractApiTask$Companion;
 	public fun <init> ()V
 	public final fun generate ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
 	public abstract fun getContractInfoFile ()Lorg/gradle/api/file/RegularFileProperty;
+	public abstract fun getNamespaced ()Lorg/gradle/api/provider/Property;
 	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;
-}
-
-public final class com/midnight/kuira/contract/GenerateContractApiTask$Companion {
 }
 
 public abstract class com/midnight/kuira/contract/KuiraContractExtension {
 	public fun <init> ()V
 	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
 	public abstract fun getBundleWalletKeys ()Lorg/gradle/api/provider/Property;
+	public abstract fun getContracts ()Lorg/gradle/api/NamedDomainObjectContainer;
 	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRequireDoctorPass ()Lorg/gradle/api/provider/Property;
 	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
@@ -37,6 +35,15 @@ public final class com/midnight/kuira/contract/KuiraContractPlugin : org/gradle/
 }
 
 public final class com/midnight/kuira/contract/KuiraContractPlugin$Companion {
+}
+
+public abstract class com/midnight/kuira/contract/KuiraContractSpec : org/gradle/api/Named {
+	public fun <init> (Ljava/lang/String;)V
+	public abstract fun getAlias ()Lorg/gradle/api/provider/Property;
+	public abstract fun getExpectedRuntimeVersion ()Lorg/gradle/api/provider/Property;
+	public fun getName ()Ljava/lang/String;
+	public abstract fun getRequireRuntimeMatch ()Lorg/gradle/api/provider/Property;
+	public abstract fun getSource ()Lorg/gradle/api/provider/Property;
 }
 
 public abstract class com/midnight/kuira/contract/KuiraDoctorTask : org/gradle/api/DefaultTask {

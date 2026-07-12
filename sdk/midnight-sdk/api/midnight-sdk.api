@@ -118,9 +118,18 @@ public final class com/midnight/kuira/sdk/InsufficientDustException : java/lang/
 	public fun <init> (Ljava/lang/String;)V
 }
 
+public final class com/midnight/kuira/sdk/InsufficientFundsException : java/lang/IllegalStateException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public final class com/midnight/kuira/sdk/MidnightSdk {
 	public static final field Companion Lcom/midnight/kuira/sdk/MidnightSdk$Companion;
-	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lkotlinx/coroutines/CoroutineScope;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/sdk/VersionCoherenceChecker;Lkotlinx/coroutines/CoroutineScope;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun buildUnshieldedFundingJson (Ljava/math/BigInteger;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun buildUnshieldedFundingJson$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/math/BigInteger;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun buildUnshieldedWithdrawalJson ([BLjava/math/BigInteger;Ljava/lang/String;)Ljava/lang/String;
+	public static synthetic fun buildUnshieldedWithdrawalJson$default (Lcom/midnight/kuira/sdk/MidnightSdk;[BLjava/math/BigInteger;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+	public final fun checkVersionCoherence (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close ()V
 	public final fun getAccessKeyPath ()Ljava/lang/String;
 	public final fun getAccessKeyPublicKey ()[B
@@ -445,6 +454,87 @@ public final class com/midnight/kuira/sdk/SyncStatus$UpToDate : com/midnight/kui
 	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/VersionCoherence {
+	public static final field CLIENT_LEDGER_VERSION_FALLBACK Ljava/lang/String;
+	public static final field HARD_FAIL_ON_SKEW Z
+	public static final field INSTANCE Lcom/midnight/kuira/sdk/VersionCoherence;
+	public final fun evaluate (Lcom/midnight/kuira/core/ledger/api/RuntimeVersion;Ljava/lang/String;)Lcom/midnight/kuira/sdk/VersionCoherence$Result;
+	public final fun getKNOWN_COMPATIBLE_SPEC_VERSIONS ()Ljava/util/Set;
+}
+
+public abstract interface class com/midnight/kuira/sdk/VersionCoherence$Result {
+	public abstract fun getClientLedgerVersion ()Ljava/lang/String;
+	public abstract fun getNodeSpecName ()Ljava/lang/String;
+	public abstract fun getNodeSpecVersion ()J
+}
+
+public final class com/midnight/kuira/sdk/VersionCoherence$Result$Coherent : com/midnight/kuira/sdk/VersionCoherence$Result {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;J)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Coherent;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/VersionCoherence$Result$Coherent;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Coherent;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getClientLedgerVersion ()Ljava/lang/String;
+	public fun getNodeSpecName ()Ljava/lang/String;
+	public fun getNodeSpecVersion ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/VersionCoherence$Result$Incompatible : com/midnight/kuira/sdk/VersionCoherence$Result {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Incompatible;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/VersionCoherence$Result$Incompatible;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Incompatible;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getClientLedgerVersion ()Ljava/lang/String;
+	public final fun getMessage ()Ljava/lang/String;
+	public fun getNodeSpecName ()Ljava/lang/String;
+	public fun getNodeSpecVersion ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/VersionCoherence$Result$Unknown : com/midnight/kuira/sdk/VersionCoherence$Result {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Unknown;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/VersionCoherence$Result$Unknown;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Unknown;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getClientLedgerVersion ()Ljava/lang/String;
+	public fun getNodeSpecName ()Ljava/lang/String;
+	public fun getNodeSpecVersion ()J
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/VersionCoherence$Result$Warning : com/midnight/kuira/sdk/VersionCoherence$Result {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Warning;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/sdk/VersionCoherence$Result$Warning;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/sdk/VersionCoherence$Result$Warning;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getClientLedgerVersion ()Ljava/lang/String;
+	public final fun getMessage ()Ljava/lang/String;
+	public fun getNodeSpecName ()Ljava/lang/String;
+	public fun getNodeSpecVersion ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/sdk/VersionSkewException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
 }
 
 public final class com/midnight/kuira/sdk/WalletBalance {

@@ -2,6 +2,34 @@ public final class com/midnight/kuira/core/indexer/api/ApiVersionException : com
 	public fun <init> (Ljava/lang/String;)V
 }
 
+public abstract interface class com/midnight/kuira/core/indexer/api/BlockHashLookup {
+}
+
+public final class com/midnight/kuira/core/indexer/api/BlockHashLookup$Found : com/midnight/kuira/core/indexer/api/BlockHashLookup {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/indexer/api/BlockHashLookup$Found;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/indexer/api/BlockHashLookup$Found;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/indexer/api/BlockHashLookup$Found;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/indexer/api/BlockHashLookup$NotOnChain : com/midnight/kuira/core/indexer/api/BlockHashLookup {
+	public static final field INSTANCE Lcom/midnight/kuira/core/indexer/api/BlockHashLookup$NotOnChain;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/indexer/api/BlockHashLookup$Unavailable : com/midnight/kuira/core/indexer/api/BlockHashLookup {
+	public static final field INSTANCE Lcom/midnight/kuira/core/indexer/api/BlockHashLookup$Unavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/indexer/api/CertificatePinningException : com/midnight/kuira/core/indexer/api/IndexerException {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -16,13 +44,13 @@ public final class com/midnight/kuira/core/indexer/api/GraphQLQueries {
 	public static final field INSTANCE Lcom/midnight/kuira/core/indexer/api/GraphQLQueries;
 	public static final field QUERY_CONTRACT_STATE Ljava/lang/String;
 	public static final field QUERY_CURRENT_BLOCK Ljava/lang/String;
-	public static final field QUERY_GENESIS_BLOCK Ljava/lang/String;
 	public static final field QUERY_NETWORK_STATE Ljava/lang/String;
 	public static final field QUERY_ZSWAP_EVENTS Ljava/lang/String;
 	public static final field SUBSCRIBE_BLOCKS Ljava/lang/String;
 	public static final field SUBSCRIBE_DUST_LEDGER_EVENTS Ljava/lang/String;
 	public static final field SUBSCRIBE_UNSHIELDED_TRANSACTIONS Ljava/lang/String;
 	public static final field SUBSCRIBE_ZSWAP_LEDGER_EVENTS Ljava/lang/String;
+	public final fun queryBlockAtHeight (J)Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/indexer/api/HttpException : com/midnight/kuira/core/indexer/api/IndexerException {
@@ -38,9 +66,9 @@ public abstract interface class com/midnight/kuira/core/indexer/api/IndexerClien
 	public static final field DELTA_TIMEOUT_MS J
 	public static final field FULL_SYNC_TIMEOUT_MS J
 	public abstract fun close ()V
+	public fun getBlockHashAtHeight (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getCurrentBlockWithParams (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getEventsInRange (JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getGenesisBlockHash (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getNetworkState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun queryContractState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -65,7 +93,7 @@ public final class com/midnight/kuira/core/indexer/api/IndexerClient$Companion {
 }
 
 public final class com/midnight/kuira/core/indexer/api/IndexerClient$DefaultImpls {
-	public static fun getGenesisBlockHash (Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun getBlockHashAtHeight (Lcom/midnight/kuira/core/indexer/api/IndexerClient;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun queryDustEvents$default (Lcom/midnight/kuira/core/indexer/api/IndexerClient;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static synthetic fun queryDustEventsDelta$default (Lcom/midnight/kuira/core/indexer/api/IndexerClient;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static synthetic fun subscribeToDustEvents$default (Lcom/midnight/kuira/core/indexer/api/IndexerClient;Ljava/lang/Long;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
@@ -80,9 +108,9 @@ public final class com/midnight/kuira/core/indexer/api/IndexerClientImpl : com/m
 	public fun <init> (Ljava/lang/String;Ljava/util/List;Z)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
+	public fun getBlockHashAtHeight (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getCurrentBlockWithParams (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getEventsInRange (JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun getGenesisBlockHash (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getNetworkState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun isHealthy (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun queryContractState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -1240,6 +1268,19 @@ public final class com/midnight/kuira/core/indexer/storage/SyncStateManager {
 	public final fun updateProgress (JJ)V
 }
 
+public final class com/midnight/kuira/core/indexer/sync/ChainCheckpoint {
+	public fun <init> (JLjava/lang/String;)V
+	public final fun component1 ()J
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (JLjava/lang/String;)Lcom/midnight/kuira/core/indexer/sync/ChainCheckpoint;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/indexer/sync/ChainCheckpoint;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/indexer/sync/ChainCheckpoint;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHash ()Ljava/lang/String;
+	public final fun getHeight ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/indexer/sync/ChainResetGuard {
 	public static final field TAG Ljava/lang/String;
 	public fun <init> (Lcom/midnight/kuira/core/indexer/api/IndexerClient;Lcom/midnight/kuira/core/indexer/repository/ShieldedRepository;Lcom/midnight/kuira/core/indexer/repository/DustRepository;Lcom/midnight/kuira/core/indexer/sync/SyncStateManager;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Z)V
@@ -1377,10 +1418,10 @@ public final class com/midnight/kuira/core/indexer/sync/SyncStateManager {
 	public final fun clearAllSyncState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun clearSyncState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getLastProcessedTransactionId (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun getPinnedGenesisHash (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getPinnedChainCheckpoint (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun observeLastProcessedTransactionId (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
 	public final fun saveLastProcessedTransactionId (Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun setPinnedGenesisHash (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun setPinnedChainCheckpoint (Ljava/lang/String;Lcom/midnight/kuira/core/indexer/sync/ChainCheckpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/core/indexer/sync/SyncStateManager$Companion {

@@ -82,10 +82,45 @@ public final class com/midnight/kuira/core/compact/CircuitExecutor {
 	public static final field Companion Lcom/midnight/kuira/core/compact/CircuitExecutor$Companion;
 	public fun <init> (Landroid/content/Context;Lkotlinx/coroutines/CoroutineDispatcher;)V
 	public synthetic fun <init> (Landroid/content/Context;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun executeCircuit (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun executeCircuit$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
-	public final fun executeConstructor (Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/util/Map;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun executeConstructor$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/util/Map;Ljava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun executeCircuit (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun executeCircuit$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun executeConstructor (Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/util/Map;Ljava/lang/Long;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun executeConstructor$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;[BLjava/lang/String;Ljava/util/Map;Ljava/lang/Long;Ljava/util/List;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun readCircuit (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readCircuit$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun readCircuitLocal (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readCircuitLocal$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun readManyCircuits (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readManyCircuits$default (Lcom/midnight/kuira/core/compact/CircuitExecutor;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/compact/CircuitExecutor$CircuitReadRequest {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadRequest;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadRequest;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCircuitArgs ()Ljava/util/List;
+	public final fun getCircuitName ()Ljava/lang/String;
+	public final fun getKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/compact/CircuitExecutor$CircuitReadResult {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadResult;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/CircuitExecutor$CircuitReadResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getError ()Ljava/lang/String;
+	public final fun getJson ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/compact/CircuitExecutor$Companion {
@@ -115,6 +150,20 @@ public final class com/midnight/kuira/core/compact/CircuitResult {
 
 public final class com/midnight/kuira/core/compact/CircuitResult$Companion {
 	public final fun fromJson (Lorg/json/JSONObject;Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/CircuitResult;
+}
+
+public final class com/midnight/kuira/core/compact/CompactEnum {
+	public static final synthetic fun box-impl (I)Lcom/midnight/kuira/core/compact/CompactEnum;
+	public static fun constructor-impl (I)I
+	public fun equals (Ljava/lang/Object;)Z
+	public static fun equals-impl (ILjava/lang/Object;)Z
+	public static final fun equals-impl0 (II)Z
+	public final fun getOrdinal ()I
+	public fun hashCode ()I
+	public static fun hashCode-impl (I)I
+	public fun toString ()Ljava/lang/String;
+	public static fun toString-impl (I)Ljava/lang/String;
+	public final synthetic fun unbox-impl ()I
 }
 
 public abstract class com/midnight/kuira/core/compact/ContractCallException : java/lang/Exception {
@@ -212,13 +261,16 @@ public final class com/midnight/kuira/core/compact/ContractRuntime {
 	public final fun contractQuery (JLjava/lang/String;)Ljava/lang/String;
 	public final fun ensureLoaded ()V
 	public final fun ledgerGlobalTtlSeconds (Ljava/lang/String;)Ljava/lang/Long;
+	public final fun ledgerVersion ()Ljava/lang/String;
 	public final fun persistentCommitAligned (Ljava/lang/String;)Ljava/lang/String;
 	public final fun persistentHash (Ljava/lang/String;)Ljava/lang/String;
 	public final fun persistentHashAligned (Ljava/lang/String;)Ljava/lang/String;
+	public final fun signProvenOffer (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 	public final fun stateClone (J)J
 	public final fun stateCreate (Ljava/lang/String;)J
 	public final fun stateCreateWithNulls (Ljava/lang/String;)J
 	public final fun stateFree (J)V
+	public final fun statePoolLen ()J
 	public final fun stateReadFields (J)Ljava/lang/String;
 	public final fun stateSetOperation (JLjava/lang/String;)V
 	public final fun valueToBigInt (Ljava/lang/String;)Ljava/lang/String;
@@ -342,9 +394,9 @@ public final class com/midnight/kuira/core/compact/MidnightConfig$Companion {
 
 public final class com/midnight/kuira/core/compact/MidnightContract {
 	public static final field Companion Lcom/midnight/kuira/core/compact/MidnightContract$Companion;
-	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;[BLjava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun call (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun call$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;[BLjava/util/Map;Ljava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun call (Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun call$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun callIdempotent (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun callIdempotent$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun deploy (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -352,8 +404,12 @@ public final class com/midnight/kuira/core/compact/MidnightContract {
 	public final fun getContractAddress ()Ljava/lang/String;
 	public final fun ledger (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun observeLedger ()Lkotlinx/coroutines/flow/Flow;
-	public final fun prepare (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun prepare$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun prepare (Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun prepare$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun read (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readLocal (Ljava/lang/String;[Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readMany (Ljava/util/List;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readMany$default (Lcom/midnight/kuira/core/compact/MidnightContract;Ljava/util/List;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/midnight/kuira/core/compact/MidnightContract$Companion {
@@ -364,16 +420,48 @@ public final class com/midnight/kuira/core/compact/MidnightContract$ContractBuil
 	public final fun getAddress ()Ljava/lang/String;
 	public final fun getCircuitVerifierKeys ()Ljava/util/Map;
 	public final fun getCoinPublicKey ()[B
+	public final fun getConstructorArgs ()Ljava/util/List;
 	public final fun getContractJs ()Ljava/io/InputStream;
 	public final fun getInitialPrivateState ()Ljava/util/Map;
 	public final fun getName ()Ljava/lang/String;
 	public final fun setAddress (Ljava/lang/String;)V
 	public final fun setCircuitVerifierKeys (Ljava/util/Map;)V
 	public final fun setCoinPublicKey ([B)V
+	public final fun setConstructorArgs (Ljava/util/List;)V
 	public final fun setContractJs (Ljava/io/InputStream;)V
 	public final fun setInitialPrivateState (Ljava/util/Map;)V
 	public final fun setName (Ljava/lang/String;)V
 	public final fun witness (Ljava/lang/String;Lcom/midnight/kuira/core/compact/WitnessProvider;)V
+}
+
+public final class com/midnight/kuira/core/compact/MidnightContract$ReadOutcome {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightContract$ReadOutcome;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/MidnightContract$ReadOutcome;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/MidnightContract$ReadOutcome;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getError ()Ljava/lang/String;
+	public final fun getJson ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isOk ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/compact/MidnightContract$ReadRequest {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/midnight/kuira/core/compact/MidnightContract$ReadRequest;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/MidnightContract$ReadRequest;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/MidnightContract$ReadRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArgs ()Ljava/util/List;
+	public final fun getCircuitName ()Ljava/lang/String;
+	public final fun getKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/compact/MidnightLedger {

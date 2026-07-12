@@ -57,6 +57,7 @@ public final class com/midnight/kuira/core/network/NetworkConfig {
 	public final fun getNodeRpcUrl ()Ljava/lang/String;
 	public final fun getProofServerUrl ()Ljava/lang/String;
 	public fun hashCode ()I
+	public final fun isLocalDevChain ()Z
 	public fun toString ()Ljava/lang/String;
 }
 
