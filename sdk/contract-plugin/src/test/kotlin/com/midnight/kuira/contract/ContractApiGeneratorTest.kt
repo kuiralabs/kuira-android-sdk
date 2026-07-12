@@ -468,6 +468,11 @@ class ContractApiGeneratorTest {
         assertFalse("Set field must NOT get a typed accessor: $src", src.contains("public val members"))
         assertTrue("skipped Map noted: $src", src.contains(" - balances (Map)"))
         assertTrue("skipped Set noted: $src", src.contains(" - members (Set)"))
+
+        // A NON-exported field isn't in the contract's ledger() reader → no accessor and NOT in the
+        // skip note (it's private internal state, not an unsupported type).
+        assertFalse("non-exported field must NOT get an accessor: $src", src.contains("public val secret"))
+        assertFalse("non-exported field must NOT be listed as skipped: $src", src.contains("secret ("))
     }
 
     @Test
@@ -741,17 +746,18 @@ class ContractApiGeneratorTest {
           ],
           "witnesses": [], "contracts": [],
           "ledger": [
-            { "name": "nextId", "index": 0, "storage": "Counter" },
-            { "name": "threshold", "index": 1, "storage": "Cell", "type": { "type-name": "Uint", "maxval": 255 } },
-            { "name": "active", "index": 2, "storage": "Cell", "type": { "type-name": "Boolean" } },
-            { "name": "owner", "index": 3, "storage": "Cell", "type": { "type-name": "Bytes", "length": 32 } },
-            { "name": "phase", "index": 4, "storage": "Cell", "type": { "type-name": "Enum", "name": "Phase", "elements": ["A", "B"] } },
-            { "name": "label", "index": 5, "storage": "Cell", "type": { "type-name": "Opaque", "tsType": "string" } },
-            { "name": "scores", "index": 6, "storage": "Cell", "type": { "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } },
-            { "name": "roster", "index": 7, "storage": "Cell", "type": { "type-name": "Vector", "length": 2, "type": { "type-name": "Bytes", "length": 32 } } },
-            { "name": "note", "index": 8, "storage": "Cell", "type": { "type-name": "Struct", "name": "Maybe", "elements": [ { "name": "is_some", "type": { "type-name": "Boolean" } }, { "name": "value", "type": { "type-name": "Opaque", "tsType": "string" } } ] } },
-            { "name": "balances", "index": 9, "storage": "Map", "key": { "type-name": "Bytes", "length": 32 }, "value": { "type-name": "Uint", "maxval": 255 } },
-            { "name": "members", "index": 10, "storage": "Set", "type": { "type-name": "Bytes", "length": 32 } }
+            { "name": "nextId", "index": 0, "exported": true, "storage": "Counter" },
+            { "name": "threshold", "index": 1, "exported": true, "storage": "Cell", "type": { "type-name": "Uint", "maxval": 255 } },
+            { "name": "active", "index": 2, "exported": true, "storage": "Cell", "type": { "type-name": "Boolean" } },
+            { "name": "owner", "index": 3, "exported": true, "storage": "Cell", "type": { "type-name": "Bytes", "length": 32 } },
+            { "name": "phase", "index": 4, "exported": true, "storage": "Cell", "type": { "type-name": "Enum", "name": "Phase", "elements": ["A", "B"] } },
+            { "name": "label", "index": 5, "exported": true, "storage": "Cell", "type": { "type-name": "Opaque", "tsType": "string" } },
+            { "name": "scores", "index": 6, "exported": true, "storage": "Cell", "type": { "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } },
+            { "name": "roster", "index": 7, "exported": true, "storage": "Cell", "type": { "type-name": "Vector", "length": 2, "type": { "type-name": "Bytes", "length": 32 } } },
+            { "name": "note", "index": 8, "exported": true, "storage": "Cell", "type": { "type-name": "Struct", "name": "Maybe", "elements": [ { "name": "is_some", "type": { "type-name": "Boolean" } }, { "name": "value", "type": { "type-name": "Opaque", "tsType": "string" } } ] } },
+            { "name": "balances", "index": 9, "exported": true, "storage": "Map", "key": { "type-name": "Bytes", "length": 32 }, "value": { "type-name": "Uint", "maxval": 255 } },
+            { "name": "members", "index": 10, "exported": true, "storage": "Set", "type": { "type-name": "Bytes", "length": 32 } },
+            { "name": "secret", "index": 11, "exported": false, "storage": "Cell", "type": { "type-name": "Uint", "maxval": 255 } }
           ]
         }
         """.trimIndent()

@@ -421,7 +421,14 @@ internal object ContractApiGenerator {
         supporting: SupportingTypes,
         facade: TypeSpec.Builder,
     ): TypeSpec? {
-        val entries = (root["ledger"] as? JsonArray)?.items.orEmpty().mapNotNull { it as? JsonObject }
+        // Only `exported` ledger fields are readable: the contract's compiled `ledger()` reader emits a
+        // getter ONLY for exported fields, so `readAll` never sees a non-exported (private) one — an
+        // accessor for it would throw at runtime. Non-exported fields are silently omitted (they are
+        // internal state, not "unsupported"); Map/Set/MerkleTree that ARE exported but not yet typed
+        // land in `skipped` (the KDoc note).
+        val entries = (root["ledger"] as? JsonArray)?.items.orEmpty()
+            .mapNotNull { it as? JsonObject }
+            .filter { (it["exported"] as? JsonBoolean)?.value == true }
         if (entries.isEmpty()) return null
 
         val accessors = mutableListOf<PropertySpec>()
