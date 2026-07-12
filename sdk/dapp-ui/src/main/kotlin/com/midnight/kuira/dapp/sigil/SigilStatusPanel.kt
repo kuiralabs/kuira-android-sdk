@@ -210,13 +210,16 @@ fun SigilStatusPanel(
 }
 
 /** Maps the sigil state machine to the floating widget's display model (all states representable). */
-private fun SigilStatus.toSigilChipUi(): SigilChipUi = when (this) {
-    is SigilStatus.Forged -> SigilChipUi("Sigil", "Forged · Protected", shortDid(did), did)
-    is SigilStatus.Creating -> SigilChipUi("Sigil", "Creating…", "", "")
-    is SigilStatus.None -> SigilChipUi("Sigil", "Tap to create", "", "")
-    is SigilStatus.BackupAvailable -> SigilChipUi("Sigil", "Restore available", "", "")
-    is SigilStatus.Initializing -> SigilChipUi("Sigil", "…", "", "")
-    is SigilStatus.Error -> SigilChipUi("Sigil", "Error", "", "")
+internal fun SigilStatus.toSigilChipUi(): SigilChipUi = when (this) {
+    // Only a forged, active identity earns the green "protected" dot. The rest stay
+    // neutral (no active sigil / in-flight) or error, so the chip never signals
+    // "protected" while the sigil is absent, initializing, or failed.
+    is SigilStatus.Forged -> SigilChipUi("Sigil", "Forged · Protected", shortDid(did), did, SigilChipUi.Tone.Protected)
+    is SigilStatus.Creating -> SigilChipUi("Sigil", "Creating…", "", "", SigilChipUi.Tone.Neutral)
+    is SigilStatus.None -> SigilChipUi("Sigil", "Tap to create", "", "", SigilChipUi.Tone.Neutral)
+    is SigilStatus.BackupAvailable -> SigilChipUi("Sigil", "Restore available", "", "", SigilChipUi.Tone.Neutral)
+    is SigilStatus.Initializing -> SigilChipUi("Sigil", "…", "", "", SigilChipUi.Tone.Neutral)
+    is SigilStatus.Error -> SigilChipUi("Sigil", "Error", "", "", SigilChipUi.Tone.Error)
 }
 
 private fun shortDid(did: String): String =

@@ -96,12 +96,22 @@ data class SigilChipUi(
     val status: String,
     val didShort: String,
     val didFull: String,
+    /**
+     * Health of the sigil, driving the status dot / status-text color. Only
+     * [Protected] earns the reserved green — a forged, active identity. Everything
+     * else stays neutral or error so the chip never signals "protected" while the
+     * sigil is absent, initializing, or failed (green-when-disconnected was a lie).
+     */
+    val tone: Tone = Tone.Neutral,
 ) {
+    enum class Tone { Protected, Neutral, Error }
+
     companion object {
         val Sample = SigilChipUi(
             label = "Sigil", status = "Forged · Protected",
             didShort = "did:key:z6Mk…a1b2",
             didFull = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+            tone = Tone.Protected,
         )
     }
 }
@@ -204,7 +214,7 @@ internal fun SigilChip(
             Spacer(Modifier.width(8.dp))
             Text(ui.label, color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300)
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(6.dp).clip(CircleShape).background(colors.positive))
+            Box(Modifier.size(6.dp).clip(CircleShape).background(ui.tone.color(colors)))
         }
         ChipTier.Card -> GlassCard(colors, modifier.width(width)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -212,7 +222,7 @@ internal fun SigilChip(
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(ui.label, color = colors.onSheet, fontSize = 14.sp, fontWeight = FontWeight.W300)
-                    Text(ui.status, color = colors.positive, fontSize = 11.sp)
+                    Text(ui.status, color = ui.tone.color(colors), fontSize = 11.sp)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -223,7 +233,7 @@ internal fun SigilChip(
                 RunnerGlyph(colors.onSheet, size = 56.dp)
                 Spacer(Modifier.height(6.dp))
                 Text("Your Sigil", color = colors.onSheet, fontSize = 16.sp, fontWeight = FontWeight.W300)
-                Text(ui.status, color = colors.positive, fontSize = 12.sp)
+                Text(ui.status, color = ui.tone.color(colors), fontSize = 12.sp)
             }
             Spacer(Modifier.height(14.dp))
             MonoField(ui.didFull, colors)
@@ -238,6 +248,17 @@ internal fun SigilChip(
 }
 
 // ── Shared bits ──────────────────────────────────────────────────────────────
+
+/**
+ * Status-indicator color for a sigil chip's tone. [Protected] is the reserved
+ * green (a forged, active identity); [Error] is the semantic error red; every
+ * other state is neutral-dim so the chip never falsely reads as "protected".
+ */
+private fun SigilChipUi.Tone.color(colors: WalletPanelColors): Color = when (this) {
+    SigilChipUi.Tone.Protected -> colors.positive
+    SigilChipUi.Tone.Error -> colors.error
+    SigilChipUi.Tone.Neutral -> colors.onSheetDim
+}
 
 /**
  * Chip surface opacity: mostly opaque so the chip stays readable over ANY host (e.g. BBoard's
