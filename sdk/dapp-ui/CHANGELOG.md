@@ -77,6 +77,12 @@ These fixes landed before the extraction but the new test suite makes
 them regression-proof going forward. Each entry cites the original
 commit so a reader can trace the original investigation:
 
+- **Sigil chip status color** (03338c9) — the floating sigil chip's status
+  dot rendered the reserved "protected" green regardless of state, so a
+  disconnected / initializing / failed sigil still read as protected. The
+  dot color now derives from the sigil state via a new `SigilChipUi.tone`
+  (`Protected` / `Neutral` / `Error`); only a forged, active sigil is green.
+  Regression-locked by `SigilChipToneTest`.
 - **Master key missing on restore** (94ae65f) — a *fresh-install*
   Block Store restore (no prior wallet → forge a sigil → restore from
   cloud) failed silently because the Keystore master key was never
