@@ -441,6 +441,54 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `conformance — the full type surface composes in one contract (interactions)`() {
+        // One contract exercising every supported type combined the way real contracts do: a struct
+        // reused as arg + return + tuple-element + vector-element, a Vector<Uint> arg, a Tuple<Uint,
+        // Struct> return, an enum field, and a pure Bytes->Bytes circuit. The single recursive walker
+        // must keep all of these consistent in ONE file.
+        val src = render("bank", CONFORMANCE_ABI)
+
+        // Struct arg marshalled; Vector<Uint> arg guarded element-wise.
+        assertTrue("struct arg via toCallArg: $src", src.contains("""handle.call("openAccount", acct.toCallArg()"""))
+        assertTrue(
+            "Vector<Uint> arg guarded element-wise: $src",
+            src.contains("""amounts.map { requireUintInRange(it, BigInteger("18446744073709551615")) }"""),
+        )
+
+        // Tuple<Uint, Struct> return: read positionally, the struct element via its own decoder.
+        assertTrue("Tuple<Uint,Struct> read signature: $src", src.contains("readSettle(amounts: List<BigInteger>): Tuple2"))
+        assertTrue(
+            "Tuple element decodes the nested struct: $src",
+            src.contains("Tuple2(BigInteger(a0.get(0).toString()), decodeAccount(a0.get(1) as JSONObject))"),
+        )
+
+        // Vector<Struct> return decodes each element via decodeAccount.
+        assertTrue("Vector<Struct> read: $src", src.contains("readListAccounts(): List<Account>"))
+        assertTrue("Vector<Struct> element decode: $src", src.contains("List(a0.length()) { i0 -> decodeAccount(a0.get(i0) as JSONObject) }"))
+
+        // Pure circuit -> local() via readLocal; Bytes<32> both directions.
+        assertTrue("pure Bytes->Bytes local(): $src", src.contains("""localDigest(x: ByteArray): ByteArray = decodeDigestResult(handle.readLocal("digest", x))"""))
+
+        // The reused struct emits BOTH a marshaller (arg) and a decoder (return), consistently typed.
+        assertTrue("struct data class with every field kind: $src",
+            src.contains("data class Account(") && src.contains("public val balance: BigInteger") &&
+                src.contains("public val id: ByteArray") && src.contains("public val active: Boolean") &&
+                src.contains("public val tier: Tier"))
+        assertTrue("enum class emitted: $src", src.contains("enum class Tier"))
+        assertTrue("struct marshaller emitted: $src", src.contains("internal fun Account.toCallArg()"))
+        assertTrue("struct decoder emitted: $src", src.contains("internal fun decodeAccount(o: JSONObject): Account"))
+        assertTrue("tuple element type is the struct: $src", src.contains("public val field1: Account"))
+
+        // Enum field marshals as CompactEnum(ordinal), decodes back via entries[].
+        assertTrue("enum field marshals as CompactEnum: $src", src.contains("\"tier\" to CompactEnum(tier.ordinal)"))
+        assertTrue("enum field decodes via entries: $src", src.contains("tier = Tier.entries[o.get(\"tier\").toString().toInt()]"))
+
+        // Shared helpers each emitted exactly once.
+        assertEquals("decodeBytes helper once: $src", 1, Regex("""internal fun decodeBytes\(""").findAll(src).count())
+        assertEquals("requireUintInRange helper once: $src", 1, Regex("""internal fun requireUintInRange\(""").findAll(src).count())
+    }
+
+    @Test
     fun `marshalled struct is a Map that ArgConverter accepts, where the bare data class throws`() {
         // The generator's whole reason to exist is to keep a struct arg from
         // reaching ArgConverter as a non-(String/Int/Long/BigInteger/Boolean/
@@ -606,6 +654,47 @@ class ContractApiGeneratorTest {
               "result-type": { "type-name": "Tuple", "types": [
                 { "type-name": "Boolean" },
                 { "type-name": "Uint", "maxval": 255 } ] } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
+        // Kitchen-sink: the full supported type surface in ONE contract, combined the way real
+        // contracts do (a struct reused as arg AND return, a Vector<Struct>, a mixed Tuple return, an
+        // enum field, a pure Bytes->Bytes circuit). Guards cross-type INTERACTIONS the per-feature
+        // tests don't — one recursive walker must handle them all in a single file.
+        val CONFORMANCE_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "openAccount", "pure": false, "proof": true,
+              "arguments": [ { "name": "acct", "type": {
+                "type-name": "Struct", "name": "Account", "elements": [
+                  { "name": "balance", "type": { "type-name": "Uint", "maxval": 340282366920938463463374607431768211455 } },
+                  { "name": "id", "type": { "type-name": "Bytes", "length": 32 } },
+                  { "name": "active", "type": { "type-name": "Boolean" } },
+                  { "name": "tier", "type": { "type-name": "Enum", "name": "Tier", "elements": ["Bronze", "Silver", "Gold"] } } ] } } ],
+              "result-type": { "type-name": "Tuple", "types": [] } },
+            { "name": "settle", "pure": false, "proof": true,
+              "arguments": [ { "name": "amounts", "type": {
+                "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 18446744073709551615 } } } ],
+              "result-type": { "type-name": "Tuple", "types": [
+                { "type-name": "Uint", "maxval": 18446744073709551615 },
+                { "type-name": "Struct", "name": "Account", "elements": [
+                  { "name": "balance", "type": { "type-name": "Uint", "maxval": 340282366920938463463374607431768211455 } },
+                  { "name": "id", "type": { "type-name": "Bytes", "length": 32 } },
+                  { "name": "active", "type": { "type-name": "Boolean" } },
+                  { "name": "tier", "type": { "type-name": "Enum", "name": "Tier", "elements": ["Bronze", "Silver", "Gold"] } } ] } ] } },
+            { "name": "listAccounts", "pure": false, "proof": false, "arguments": [],
+              "result-type": { "type-name": "Vector", "length": 4, "type": {
+                "type-name": "Struct", "name": "Account", "elements": [
+                  { "name": "balance", "type": { "type-name": "Uint", "maxval": 340282366920938463463374607431768211455 } },
+                  { "name": "id", "type": { "type-name": "Bytes", "length": 32 } },
+                  { "name": "active", "type": { "type-name": "Boolean" } },
+                  { "name": "tier", "type": { "type-name": "Enum", "name": "Tier", "elements": ["Bronze", "Silver", "Gold"] } } ] } } },
+            { "name": "digest", "pure": true, "proof": false,
+              "arguments": [ { "name": "x", "type": { "type-name": "Bytes", "length": 32 } } ],
+              "result-type": { "type-name": "Bytes", "length": 32 } }
           ],
           "witnesses": [], "contracts": [], "ledger": []
         }

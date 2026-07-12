@@ -68,14 +68,48 @@ these vanish when the hand parser is replaced by serde.**
 | `Opaque<other>` | — | — | passthrough + runtime |
 | return value | — | **dropped by `call()`** | decoded via ABI `result-type` |
 
+## As-built supported surface (shipped)
+
+The generated `<Alias>Contract` facade covers every type a Compact **circuit
+signature** uses, both directions:
+
+| Type | Argument | Return |
+|---|---|---|
+| `Uint<N>` | `BigInteger`, range-guarded to the ABI `maxval` (u8/u64/u128 …) | `BigInteger` |
+| `Field` | `BigInteger` (unbounded — no guard) | `BigInteger` |
+| `Boolean` | `Boolean` | `Boolean` |
+| `Bytes<N>` | `ByteArray` | `ByteArray` (hex- and array-tolerant) |
+| `Enum` | `enum class`, marshalled `CompactEnum(ordinal)` | symbolic via `entries[ordinal]` |
+| `Vector<T>` | `List<T>`, elements marshalled/guarded, recursive | `List<T>`, recursive |
+| `Tuple` | positional `TupleN` (non-empty tuple args skipped today) | positional `TupleN`, shape-deduped |
+| `Struct` | `data class` + `toCallArg()` | `data class` + `decode<Struct>` |
+| `Opaque<"string">` | `String` | `String` |
+| `Alias` | transparent to its inner type | transparent |
+| `Maybe` / `Either` / addresses / coin keys | a `Struct` of the above → same path | same |
+
+Circuits are emitted as: `call()` (write → receipt) for every circuit; `read<Name>()`
+(on-chain view) for a value-returning `pure:false` circuit; `local<Name>()` (readLocal,
+no deploy) for a `pure:true` circuit. A shape the walker can't yet marshal/decode (a
+nested `Vector<Vector<Enum>>` arg, a non-string `Opaque` return) is **gracefully
+skipped** with a facade KDoc note — never emitted broken.
+
+Not generated (tracked separately): typed **ledger accessors** for the `ledger`
+section's ADTs (`Map`/`Set`/`Counter`/`MerkleTree`) — dApps read those via
+`handle.ledger()` today.
+
 ## The regression guard — tests that can't lag
 
 1. **Native serde round-trip (Rust, no chain).** Serialize every upstream `Op` /
    `Key` / `StateValue` variant and assert it deserializes. Driven by the upstream
    types, so a new variant fails the build mechanically. (No such test exists today.)
-2. **Conformance contracts (localnet).** A few kitchen-sink Compact contracts —
-   types, value transfers, state shapes, control-flow + witnesses — each deployed and
-   every circuit exercised end-to-end.
+2. **Conformance — generator (shipped).** A kitchen-sink ABI exercising the full type
+   surface *combined* (a struct reused as arg + return + tuple-element + vector-element,
+   a `Vector<Uint>` arg, a `Tuple<Uint,Struct>` return, an enum field, a pure
+   `Bytes->Bytes` circuit) asserts the one recursive walker keeps them all consistent in
+   a single file. The generated facades also compile as part of every dApp's build
+   (`compileDebugKotlin` against the published plugin) — the on-device compile gate.
+   Remaining tier: kitchen-sink contracts DEPLOYED on localnet with every circuit
+   exercised end-to-end (the runtime conformance harness).
 3. **Real-app acceptance.** tifosi and the starter green, and tifosi's
    `patch-voting.js` **deleted** — the proof the fix reached the real world.
 
