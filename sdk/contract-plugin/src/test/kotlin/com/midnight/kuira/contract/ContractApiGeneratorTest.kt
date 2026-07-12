@@ -1,6 +1,7 @@
 package com.midnight.kuira.contract
 
 import java.math.BigInteger
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,8 +60,9 @@ class ContractApiGeneratorTest {
             Regex("""fun castVote\(\s*optionIdx: (java\.math\.)?BigInteger""").containsMatchIn(src),
         )
         assertTrue(
-            "castVote must delegate to handle.call",
-            src.contains("""handle.call("castVote", optionIdx"""),
+            "castVote must delegate to handle.call with a range-guarded optionIdx: $src",
+            src.contains("""handle.call("castVote",""") &&
+                src.contains("""requireUintInRange(optionIdx, BigInteger("18446744073709551615"))"""),
         )
 
         // closePoll() — no args, just onProgress, delegates by name.
@@ -107,12 +109,14 @@ class ContractApiGeneratorTest {
         // shape (recipient.toCallArg()), NOT passed as the bare data class — which
         // would compile but throw IllegalArgumentException at the first call.
         assertTrue(
-            "withdraw must marshal the struct arg via toCallArg(): $src",
-            src.contains("""handle.call("withdraw", amount, recipient.toCallArg()"""),
+            "withdraw must marshal the struct arg via toCallArg() and range-guard amount: $src",
+            src.contains("""handle.call("withdraw",""") &&
+                src.contains("""requireUintInRange(amount, BigInteger("340282366920938463463374607431768211455"))""") &&
+                src.contains("recipient.toCallArg()"),
         )
-        // Scalar args still pass through unchanged (amount, not amount.toCallArg()).
+        // A Uint arg is range-guarded, not struct-marshalled (no toCallArg on a scalar).
         assertFalse(
-            "scalar arg must NOT be marshalled: $src",
+            "scalar arg must NOT be struct-marshalled: $src",
             src.contains("amount.toCallArg()"),
         )
 
@@ -159,14 +163,15 @@ class ContractApiGeneratorTest {
             src.contains("setPhase: not generated"),
         )
 
-        // The Vector<scalar> sibling is unaffected: List<BigInteger>, passes through.
+        // The Vector<scalar> sibling: signature is List<BigInteger>, and each Uint element is
+        // range-guarded element-wise (a shape-preserving map — the guard composes to any depth).
         assertTrue(
             "vector-arg circuit signature wrong: $src",
             Regex("""fun setShoots\(\s*shoots: List<(java\.math\.)?BigInteger>""").containsMatchIn(src),
         )
         assertTrue(
-            "vector-of-scalar must pass through unmarshalled: $src",
-            src.contains("""handle.call("setShoots", shoots, onProgress = onProgress)"""),
+            "vector-of-scalar Uint elements must be range-guarded element-wise: $src",
+            src.contains("""handle.call("setShoots", shoots.map { requireUintInRange(it, BigInteger("255")) }"""),
         )
     }
 
@@ -341,8 +346,9 @@ class ContractApiGeneratorTest {
         val src = render("vault", PROPOSAL_RETURN_ABI)
 
         assertTrue(
-            "read method must delegate to the result decoder: $src",
-            src.contains("readGetProposal(id: BigInteger): Proposal = decodeGetProposalResult(handle.read(\"getProposal\", id))"),
+            "read method must delegate to the result decoder with a range-guarded id: $src",
+            src.contains("readGetProposal(id: BigInteger): Proposal = decodeGetProposalResult(") &&
+                src.contains("""handle.read("getProposal", requireUintInRange(id, BigInteger("255")))"""),
         )
         assertTrue(
             "top-level struct result decoder wrong: $src",
@@ -360,6 +366,42 @@ class ContractApiGeneratorTest {
         // Nested Recipient decoder + the shared decodeBytes helper are emitted.
         assertTrue("nested decoder missing: $src", src.contains("internal fun decodeRecipient(o: JSONObject): Recipient"))
         assertTrue("decodeBytes helper missing: $src", src.contains("internal fun decodeBytes(v: Any?): ByteArray"))
+    }
+
+    @Test
+    fun `each Uint arg is range-guarded by its own width, Field is not, and the helper is emitted once`() {
+        // #34 class: a value that fits Uint<128> was silently decoded as u64. The typed API now
+        // range-checks every bounded Uint at the boundary — with the CORRECT per-width bound.
+        val src = render("widths", UINT_WIDTHS_ABI)
+
+        // u64 vs u128 discrimination: each Uint guard carries ITS OWN maxval, not a shared one.
+        assertTrue(
+            "u64 arg must be guarded to 2^64-1: $src",
+            src.contains("""requireUintInRange(small, BigInteger("18446744073709551615"))"""),
+        )
+        assertTrue(
+            "u128 arg must be guarded to 2^128-1 (distinct bound): $src",
+            src.contains("""requireUintInRange(big, BigInteger("340282366920938463463374607431768211455"))"""),
+        )
+        // A Field is a prime-field element with no fixed width — it must NOT be range-guarded.
+        assertFalse("Field arg must NOT be range-guarded: $src", src.contains("requireUintInRange(f,"))
+
+        // The guard composes through a struct: the Wrapper's Uint<8> field is checked inside toCallArg.
+        assertTrue(
+            "struct Uint field must be guarded inside toCallArg: $src",
+            src.contains("""requireUintInRange(n, BigInteger("255"))"""),
+        )
+
+        // The shared helper is emitted EXACTLY once, and validates [0, max].
+        assertEquals(
+            "requireUintInRange helper must be emitted exactly once: $src",
+            1,
+            Regex("""internal fun requireUintInRange\(""").findAll(src).count(),
+        )
+        assertTrue(
+            "helper must reject negative or over-max values: $src",
+            src.contains("require(value.signum() >= 0 && value <= max)"),
+        )
     }
 
     @Test
@@ -458,6 +500,42 @@ class ContractApiGeneratorTest {
                     "name": "UserAddress",
                     "elements": [
                       { "name": "bytes", "type": { "type-name": "Bytes", "length": 32 } }
+                    ]
+                  }
+                }
+              ],
+              "result-type": { "type-name": "Tuple", "types": [] }
+            }
+          ],
+          "witnesses": [],
+          "contracts": [],
+          "ledger": []
+        }
+        """.trimIndent()
+
+        // A circuit mixing Uint widths (u64, u128, u8-in-a-struct) with an unbounded Field, to pin the
+        // range-guard: each Uint gets ITS OWN maxval bound (u64 vs u128 discrimination), Field none.
+        val UINT_WIDTHS_ABI = """
+        {
+          "compiler-version": "0.31.0",
+          "language-version": "0.23.0",
+          "runtime-version": "0.16.0",
+          "circuits": [
+            {
+              "name": "widths",
+              "pure": false,
+              "proof": true,
+              "arguments": [
+                { "name": "small", "type": { "type-name": "Uint", "maxval": 18446744073709551615 } },
+                { "name": "big", "type": { "type-name": "Uint", "maxval": 340282366920938463463374607431768211455 } },
+                { "name": "f", "type": { "type-name": "Field" } },
+                {
+                  "name": "wrapped",
+                  "type": {
+                    "type-name": "Struct",
+                    "name": "Wrapper",
+                    "elements": [
+                      { "name": "n", "type": { "type-name": "Uint", "maxval": 255 } }
                     ]
                   }
                 }
