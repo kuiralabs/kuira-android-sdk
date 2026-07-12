@@ -473,6 +473,14 @@ internal object ContractApiGenerator {
                 supporting.markUsesBytesDecoderIf(true)
                 CodeBlock.of("%L(%T(json).nextValue())", DECODE_BYTES, JSON_TOKENER)
             }
+            // A Vector/Tuple result is a JSON array (jsonSafe) — decode it from the parsed top-level
+            // value, recursively (#48A). Empty Tuple never reaches here (buildViewFun treats it as Unit).
+            "Vector", "Tuple" -> decodeElement(
+                CodeBlock.of("%T(json).nextValue()", JSON_TOKENER),
+                resolved,
+                supporting,
+                0,
+            )
             else -> decodeScalarValue(CodeBlock.of("%T(json).nextValue()", JSON_TOKENER), resolved, returnType)
         }
     }
@@ -503,8 +511,19 @@ internal object ContractApiGenerator {
                     isDecodable(elType)
                 }
             }
+            // A Vector<T> decodes iff its element does — jsonSafe emits it as a JSON array (#48A).
+            "Vector" -> {
+                val inner = type["type"] as? JsonObject ?: error("Vector missing inner type")
+                isDecodable(inner)
+            }
+            // A non-empty Tuple decodes iff every positional element does (empty Tuple = Unit, handled
+            // upstream as "nothing to read"). jsonSafe emits it as a JSON array too.
+            "Tuple" -> {
+                val types = (type["types"] as? JsonArray)?.items.orEmpty()
+                types.isNotEmpty() && types.all { isDecodable(it as JsonObject) }
+            }
             "Alias" -> isDecodable(resolveAlias(type))
-            else -> false // Vector, Tuple, non-string Opaque
+            else -> false // non-string Opaque
         }
     }
 
@@ -530,11 +549,65 @@ internal object ContractApiGenerator {
                 supporting.markUsesBytesDecoderIf(true)
                 CodeBlock.of("%L(%L.get(%S))", DECODE_BYTES, objVar, fieldName)
             }
+            // A Vector/Tuple field value is a JSON array; decode it recursively from the raw element.
+            "Vector", "Tuple" -> decodeElement(CodeBlock.of("%L.get(%S)", objVar, fieldName), resolved, supporting, 0)
             else -> decodeScalarValue(
                 CodeBlock.of("%L.get(%S)", objVar, fieldName),
                 resolved,
                 mapType(resolved, supporting),
             )
+        }
+    }
+
+    /**
+     * Decode a raw parsed JSON value [valueExpr] (an `Any?` from `JSONTokener(...).nextValue()`,
+     * `JSONArray.get(i)`, or `JSONObject.get(k)`) into its typed Kotlin value for ABI [type]. The
+     * recursive workhorse behind Vector/Tuple returns (#48A): a `Vector<T>` is a JSON array mapped
+     * element-wise; a `Tuple` is a JSON array read positionally into its `TupleN`. Composes to any
+     * depth (Vector<Vector<…>>, Vector<Struct>, Tuple<…, Vector<…>>). [depth] keeps the generated
+     * `.let`/index binders unique so nested arrays don't shadow.
+     */
+    private fun decodeElement(
+        valueExpr: CodeBlock,
+        type: JsonObject,
+        supporting: SupportingTypes,
+        depth: Int,
+    ): CodeBlock {
+        val resolved = resolveAlias(type)
+        val name = (resolved["type-name"] as? JsonString)?.value ?: error("type node missing type-name")
+        return when (name) {
+            "Struct" -> {
+                val structName = (resolved["name"] as? JsonString)?.value ?: error("Struct missing name")
+                CodeBlock.of("%L(%L as %T)", structDecoderName(structName), valueExpr, JSON_OBJECT)
+            }
+            "Bytes" -> {
+                supporting.markUsesBytesDecoderIf(true)
+                CodeBlock.of("%L(%L)", DECODE_BYTES, valueExpr)
+            }
+            "Vector" -> {
+                val inner = resolved["type"] as? JsonObject ?: error("Vector missing inner type")
+                val arr = "a$depth"
+                val idx = "i$depth"
+                val element = decodeElement(CodeBlock.of("$arr.get($idx)"), inner, supporting, depth + 1)
+                CodeBlock.of(
+                    "(%L as %T).let·{ $arr -> %T($arr.length())·{ $idx -> %L } }",
+                    valueExpr, JSON_ARRAY, LIST, element,
+                )
+            }
+            "Tuple" -> {
+                val elementTypes = (resolved["types"] as? JsonArray)?.items.orEmpty().map { it as JsonObject }
+                val tupleType = mapType(resolved, supporting)
+                val arr = "a$depth"
+                val ctorArgs = elementTypes.mapIndexed { i, t ->
+                    decodeElement(CodeBlock.of("$arr.get($i)"), t, supporting, depth + 1)
+                }
+                val joined = ctorArgs.map { "%L" }.joinToString(", ")
+                CodeBlock.of(
+                    "(%L as %T).let·{ $arr -> %T($joined) }",
+                    valueExpr, JSON_ARRAY, tupleType, *ctorArgs.toTypedArray(),
+                )
+            }
+            else -> decodeScalarValue(valueExpr, resolved, mapType(resolved, supporting))
         }
     }
 
@@ -850,6 +923,9 @@ private class SupportingTypes(
     /** Set when any marshalled argument carries a bounded Uint needing the shared range-guard helper. */
     private var usesUintGuard = false
 
+    /** Synthesized `TupleN` type name per structural signature, so distinct same-arity shapes don't collide. */
+    private val tupleNameBySignature = LinkedHashMap<String, String>()
+
     fun registerStruct(
         name: String,
         elements: List<JsonObject>,
@@ -965,22 +1041,33 @@ private class SupportingTypes(
         elementTypes: List<JsonObject>,
         mapElement: (JsonObject) -> TypeName,
     ): ClassName {
-        // Deterministic name from arity so identical-arity tuples collapse to one
-        // type. compactc rarely emits non-empty tuple ARGS, but the vocabulary
-        // allows them, so this stays exhaustive.
-        val name = "Tuple${elementTypes.size}"
-        if (!types.containsKey(name)) {
-            types[name] = PLACEHOLDER
-            val ctor = FunSpec.constructorBuilder()
-            val builder = TypeSpec.classBuilder(name).addModifiers(KModifier.DATA)
-            elementTypes.forEachIndexed { i, t ->
-                val field = "field$i"
-                val kt = mapElement(t)
-                ctor.addParameter(field, kt)
-                builder.addProperty(PropertySpec.builder(field, kt).initializer(field).build())
-            }
-            types[name] = builder.primaryConstructor(ctor.build()).build()
+        // A Compact tuple is anonymous, so the name is synthesized. Naming by arity ALONE would
+        // collapse two DIFFERENT same-arity shapes — e.g. Tuple<Uint,Bytes> and Tuple<Bool,Recipient>
+        // — onto one type, silently mis-typing a decoded return. So dedupe by the STRUCTURAL
+        // signature (the mapped Kotlin field types): identical shapes share a type; a distinct shape
+        // that wants an already-taken `TupleN` name gets a disambiguating suffix. Deterministic in
+        // insertion order.
+        val fieldTypes = elementTypes.map { mapElement(it) }
+        val signature = fieldTypes.joinToString(",") { it.toString() }
+        tupleNameBySignature[signature]?.let { return ClassName(pkg, it) }
+
+        val arity = elementTypes.size
+        var name = "Tuple$arity"
+        var suffix = 2
+        while (types.containsKey(name)) {
+            name = "Tuple${arity}_$suffix"
+            suffix++
         }
+        tupleNameBySignature[signature] = name
+        types[name] = PLACEHOLDER
+        val ctor = FunSpec.constructorBuilder()
+        val builder = TypeSpec.classBuilder(name).addModifiers(KModifier.DATA)
+        fieldTypes.forEachIndexed { i, kt ->
+            val field = "field$i"
+            ctor.addParameter(field, kt)
+            builder.addProperty(PropertySpec.builder(field, kt).initializer(field).build())
+        }
+        types[name] = builder.primaryConstructor(ctor.build()).build()
         return ClassName(pkg, name)
     }
 

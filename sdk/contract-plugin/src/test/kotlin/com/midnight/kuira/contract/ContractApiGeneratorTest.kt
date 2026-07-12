@@ -285,16 +285,16 @@ class ContractApiGeneratorTest {
 
     @Test
     fun `struct ARG with an un-decodable field generates a call but no read-decoder, no crash`() {
-        // A struct used only as an ARGUMENT whose field can't be decoded (a Vector) is a valid
-        // argument (toCallArg passes the Vector through) but has no valid read-decoder. The generator
-        // must still emit the call() method and the data class — and must NOT try to emit a
-        // decode<Struct> (which would throw at generation time on the Vector field).
-        val src = render("bag", STRUCT_ARG_VECTOR_FIELD_ABI)
+        // A struct used only as an ARGUMENT whose field can't be decoded (a non-string Opaque) is a
+        // valid argument (toCallArg passes the Opaque through) but has no valid read-decoder. The
+        // generator must still emit the call() method and the data class — and must NOT try to emit a
+        // decode<Struct> (which would throw at generation time on the un-decodable field).
+        val src = render("bag", STRUCT_ARG_UNDECODABLE_FIELD_ABI)
 
         assertTrue("circuit must be generated: $src", Regex("""fun setItems\(\s*bag: Bag""").containsMatchIn(src))
         assertTrue("struct data class must be emitted: $src", src.contains("data class Bag"))
         assertTrue("struct arg must marshal via toCallArg: $src", src.contains("setItems\", bag.toCallArg()"))
-        // The struct isn't decodable (Vector field), so NO read-decoder is generated for it.
+        // The struct isn't decodable (non-string Opaque field), so NO read-decoder is generated.
         assertFalse("un-decodable struct must NOT get a read-decoder: $src", src.contains("decodeBag"))
     }
 
@@ -401,6 +401,42 @@ class ContractApiGeneratorTest {
         assertTrue(
             "helper must reject negative or over-max values: $src",
             src.contains("require(value.signum() >= 0 && value <= max)"),
+        )
+    }
+
+    @Test
+    fun `Vector and Tuple returns decode into List and positional tuple types (#48A)`() {
+        val src = render("scores", VECTOR_TUPLE_RETURN_ABI)
+
+        // Vector<Uint> -> List<BigInteger>, decoded element-wise off the JSON array.
+        assertTrue("Vector<Uint> read signature wrong: $src", src.contains("readGetScores(): List<BigInteger>"))
+        assertTrue(
+            "Vector<Uint> decoder must map the JSON array element-wise: $src",
+            src.contains("(JSONTokener(json).nextValue() as JSONArray).let { a0 -> List(a0.length()) { i0 -> BigInteger(a0.get(i0).toString()) } }"),
+        )
+
+        // Vector<Struct> -> List<Player>, each element via the struct's own decoder.
+        assertTrue("Vector<Struct> read signature wrong: $src", src.contains("readGetPlayers(): List<Player>"))
+        assertTrue(
+            "Vector<Struct> element must decode via decodePlayer: $src",
+            src.contains("List(a0.length()) { i0 -> decodePlayer(a0.get(i0) as JSONObject) }"),
+        )
+        assertTrue("nested struct decoder must be emitted: $src", src.contains("internal fun decodePlayer(o: JSONObject): Player"))
+
+        // Tuple<Uint,Bytes> -> Tuple2, read positionally.
+        assertTrue("Tuple read signature wrong: $src", src.contains("readGetPair(): Tuple2"))
+        assertTrue(
+            "Tuple must decode positionally into its data class: $src",
+            src.contains("Tuple2(BigInteger(a0.get(0).toString()), decodeBytes(a0.get(1)))"),
+        )
+
+        // Two DISTINCT Tuple2 shapes must NOT collide onto one type.
+        assertTrue("first Tuple2 shape must be emitted: $src", src.contains("data class Tuple2("))
+        assertTrue("distinct second Tuple2 shape must get its own type: $src", src.contains("data class Tuple2_2("))
+        assertTrue("second tuple return must use the disambiguated type: $src", src.contains("readGetFlagCount(): Tuple2_2"))
+        assertTrue(
+            "the two tuple types must differ in field types (no silent collapse): $src",
+            src.contains("public val field1: ByteArray") && src.contains("public val field0: Boolean"),
         )
     }
 
@@ -549,6 +585,32 @@ class ContractApiGeneratorTest {
         }
         """.trimIndent()
 
+        // Vector/Tuple RETURN types (#48A): a Vector<Uint> list, a Vector<Struct>, a Tuple<Uint,Bytes>,
+        // and a SECOND distinct Tuple2<Boolean,Uint> — the two Tuple2 shapes must NOT collide onto one
+        // generated type.
+        val VECTOR_TUPLE_RETURN_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "getScores", "pure": false, "proof": false, "arguments": [],
+              "result-type": { "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } },
+            { "name": "getPlayers", "pure": false, "proof": false, "arguments": [],
+              "result-type": { "type-name": "Vector", "length": 2, "type": {
+                "type-name": "Struct", "name": "Player",
+                "elements": [ { "name": "id", "type": { "type-name": "Uint", "maxval": 255 } } ] } } },
+            { "name": "getPair", "pure": false, "proof": false, "arguments": [],
+              "result-type": { "type-name": "Tuple", "types": [
+                { "type-name": "Uint", "maxval": 18446744073709551615 },
+                { "type-name": "Bytes", "length": 32 } ] } },
+            { "name": "getFlagCount", "pure": false, "proof": false, "arguments": [],
+              "result-type": { "type-name": "Tuple", "types": [
+                { "type-name": "Boolean" },
+                { "type-name": "Uint", "maxval": 255 } ] } }
+          ],
+          "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
         // Synthetic: Enum + Vector circuit ARGS (drawn from the penalty Phase enum
         // + a Vector<Uint> shoot list) to cover the recursive mapper's branches.
         // A pure circuit (computed via readLocal, no deploy) + a non-pure on-chain read sibling.
@@ -568,15 +630,17 @@ class ContractApiGeneratorTest {
 
         // A struct ARG whose field is a Vector — marshallable as an arg (Vector<scalar> passes
         // through toCallArg) but NOT decodable, so no read-decoder should be generated for it.
-        val STRUCT_ARG_VECTOR_FIELD_ABI = """
+        // A struct used only as an ARG whose field can't be decoded — a non-string Opaque (marshals as
+        // a passthrough, but has no read-decoder). Guards that such a struct still emits call() + the
+        // data class without trying (and crashing) to emit a decode<Struct>.
+        val STRUCT_ARG_UNDECODABLE_FIELD_ABI = """
         {
           "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
           "circuits": [
             { "name": "setItems", "pure": false, "proof": true,
               "arguments": [ { "name": "bag", "type": {
                 "type-name": "Struct", "name": "Bag",
-                "elements": [ { "name": "items", "type": {
-                  "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } } ] } } ],
+                "elements": [ { "name": "blob", "type": { "type-name": "Opaque", "tsType": "Uint8Array" } } ] } } ],
               "result-type": { "type-name": "Tuple", "types": [] } }
           ],
           "witnesses": [], "contracts": [], "ledger": []
