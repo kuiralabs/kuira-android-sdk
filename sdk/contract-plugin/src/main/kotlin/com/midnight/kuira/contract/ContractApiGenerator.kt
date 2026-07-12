@@ -196,7 +196,16 @@ internal object ContractApiGenerator {
             // deployed instance — it's not a transaction, so it gets ONLY a local<Name>() view
             // (handle.readLocal + decode), never a call() or an on-chain read<Name>().
             if ((obj["pure"] as? JsonBoolean)?.value == true) {
-                buildViewFun(obj, supporting, local = true)?.let { facade.addFunction(it) }
+                val view = buildViewFun(obj, supporting, local = true)
+                if (view != null) {
+                    facade.addFunction(view)
+                } else {
+                    // Symmetry with the non-pure path: a pure circuit the typed API can't yet model
+                    // (an unmarshallable arg, an un-decodable / Unit result) is recorded as a skip
+                    // breadcrumb rather than silently vanishing.
+                    val name = (obj["name"] as? JsonString)?.value ?: "?"
+                    skipNotices.add("$name (pure): not generated — its argument or result type isn't yet marshalled/decoded by the typed API")
+                }
                 continue
             }
             when (val built = buildCircuitFun(obj, supporting)) {
@@ -296,9 +305,10 @@ internal object ContractApiGenerator {
             .build()
 
     /**
-     * The shared `internal fun decodeBytes(v: Any?): ByteArray`. `read` emits a top-level Bytes as a
-     * hex string but a struct-nested Bytes as a JSON array of byte values — accept both (and a raw
-     * ByteArray, defensively).
+     * The shared `internal fun decodeBytes(v: Any?): ByteArray`, accepting every shape a `Bytes` value
+     * arrives in across the read paths: a hex `String` (a top-level circuit `read` result), a raw
+     * `ByteArray` (the common ledger shape), a `List<*>` of numbers (the ledger's number-array shape —
+     * mirrors `MidnightLedger.getBytes`), and a `JSONArray` (defensive, struct-nested).
      */
     private fun decodeBytesHelper(): FunSpec =
         FunSpec.builder(DECODE_BYTES)
@@ -310,8 +320,9 @@ internal object ContractApiGenerator {
                     .beginControlFlow("return when (v)")
                     .addStatement("is %T -> v", BYTE_ARRAY)
                     .addStatement("is %T -> v.chunked(2).map·{ it.toInt(16).toByte() }.toByteArray()", STRING)
+                    .addStatement("is %T -> %T(v.size)·{ ((v[it] as %T).toInt() and 0xFF).toByte() }", LIST.parameterizedBy(STAR), BYTE_ARRAY, ClassName("kotlin", "Number"))
                     .addStatement("is %T -> %T(v.length())·{ (v.getInt(it) and 0xFF).toByte() }", JSON_ARRAY, BYTE_ARRAY)
-                    .addStatement("else -> error(%S)", "cannot decode Bytes from a non-string/array JSON value")
+                    .addStatement("else -> error(%S)", "cannot decode Bytes from a non-string/array value")
                     .endControlFlow()
                     .build(),
             )
@@ -381,8 +392,14 @@ internal object ContractApiGenerator {
             }
             "Vector" -> (type["type"] as? JsonObject)?.let(::resolveAlias)?.let { inner ->
                 when ((inner["type-name"] as? JsonString)?.value) {
-                    "Uint", "Field" -> ledgerListProp(name, BIG_INTEGER)
-                    "Bytes" -> ledgerListProp(name, BYTE_ARRAY)
+                    // Decode each element robustly (not a blind cast): a ledger Uint can come back as
+                    // BigInteger/Long/Int, and a ledger Bytes as ByteArray OR a number List — same
+                    // shapes MidnightLedger.getUintBig / getBytes handle.
+                    "Uint", "Field" -> ledgerListProp(name, BIG_INTEGER, CodeBlock.of("%T(it.toString())", BIG_INTEGER))
+                    "Bytes" -> {
+                        supporting.markUsesBytesDecoderIf(true)
+                        ledgerListProp(name, BYTE_ARRAY, CodeBlock.of("%L(it)", DECODE_BYTES))
+                    }
                     else -> null // Vector<Struct/Enum/...> in a Cell — Phase 2+
                 }
             }
@@ -398,12 +415,12 @@ internal object ContractApiGenerator {
             .getter(FunSpec.getterBuilder().addStatement("return %L", getter).build())
             .build()
 
-    /** `val <name>: List<E> get() = (raw.getRaw("<name>") as List<*>).map·{ it as E }` — Vector<scalar>. */
-    private fun ledgerListProp(name: String, element: TypeName): PropertySpec =
+    /** `val <name>: List<E> get() = (raw.getRaw("<name>") as List<*>).map·{ <decode it> }` — Vector<scalar>. */
+    private fun ledgerListProp(name: String, element: TypeName, elementDecode: CodeBlock): PropertySpec =
         PropertySpec.builder(name, LIST.parameterizedBy(element))
             .getter(
                 FunSpec.getterBuilder()
-                    .addStatement("return (raw.getRaw(%S) as %T).map·{ it as %T }", name, LIST.parameterizedBy(STAR), element)
+                    .addStatement("return (raw.getRaw(%S) as %T).map·{ %L }", name, LIST.parameterizedBy(STAR), elementDecode)
                     .build(),
             )
             .build()

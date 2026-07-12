@@ -455,8 +455,10 @@ class ContractApiGeneratorTest {
         assertTrue("Cell<Bytes<32>> -> getBytes(name,len): $src", src.contains("""get() = raw.getBytes("owner", 32)"""))
         assertTrue("Cell<Enum> -> entries[ordinal]: $src", src.contains("""get() = Phase.entries[raw.getUintBig("phase").toInt()]"""))
         assertTrue("Cell<Opaque string> -> getString: $src", src.contains("""get() = raw.getString("label")"""))
-        assertTrue("Cell<Vector<Uint>> -> List<BigInteger>: $src", src.contains("""get() = (raw.getRaw("scores") as List<*>).map { it as BigInteger }"""))
-        assertTrue("Cell<Vector<Bytes>> -> List<ByteArray>: $src", src.contains("""get() = (raw.getRaw("roster") as List<*>).map { it as ByteArray }"""))
+        // Vector elements decode robustly (not blind casts): Uint via BigInteger(it.toString()) so a
+        // Long/Int shape is handled; Bytes via decodeBytes which accepts ByteArray OR a number List.
+        assertTrue("Cell<Vector<Uint>> -> List<BigInteger>: $src", src.contains("""get() = (raw.getRaw("scores") as List<*>).map { BigInteger(it.toString()) }"""))
+        assertTrue("Cell<Vector<Bytes>> -> List<ByteArray>: $src", src.contains("""get() = (raw.getRaw("roster") as List<*>).map { decodeBytes(it) }"""))
         assertTrue("Cell<Maybe<string>> -> getMaybeString (String?): $src", src.contains("""get() = raw.getMaybeString("note")"""))
         assertTrue("Maybe accessor is nullable String: $src", src.contains("public val note: String?"))
 
