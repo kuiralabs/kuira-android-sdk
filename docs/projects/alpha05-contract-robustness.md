@@ -93,9 +93,15 @@ no deploy) for a `pure:true` circuit. A shape the walker can't yet marshal/decod
 nested `Vector<Vector<Enum>>` arg, a non-string `Opaque` return) is **gracefully
 skipped** with a facade KDoc note — never emitted broken.
 
-Not generated (tracked separately): typed **ledger accessors** for the `ledger`
-section's ADTs (`Map`/`Set`/`Counter`/`MerkleTree`) — dApps read those via
-`handle.ledger()` today.
+**Typed ledger accessors (Phase 1, shipped).** The facade also gets `ledger():
+<Alias>Ledger` (a snapshot) and `observeLedger(): Flow<<Alias>Ledger>` (reactive), where
+`<Alias>Ledger` exposes a typed `val` per readable `ledger` field — driven by the ABI's
+`storage` discriminator: `Counter` → `BigInteger`; `Cell<T>` → `T` for Uint/Field/Boolean/
+`Bytes<N>`/string `Opaque`/`Enum`/`Vector<Uint|Bytes>`/`Maybe<string>`, delegating to the
+`MidnightLedger` getters. A field the runtime can't type yet (`Map`/`Set`/`MerkleTree`, or
+a Cell of a struct/complex value) is **skipped and listed in the class KDoc** — read it via
+`handle.ledger().getRaw(...)`. Phase 2 (typed `Map`/`Set` reads) needs native ADT queries
+and is tracked separately.
 
 ## The regression guard — tests that can't lag
 

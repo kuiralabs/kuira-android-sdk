@@ -14,6 +14,7 @@ import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
@@ -90,6 +91,9 @@ internal object ContractApiGenerator {
 
     /** Runtime wrapper the ArgConverter recognizes for a Compact enum: `CompactEnum(ordinal)`. */
     private val COMPACT_ENUM = ClassName("com.midnight.kuira.core.compact", "CompactEnum")
+    private val MIDNIGHT_LEDGER = ClassName("com.midnight.kuira.core.compact", "MidnightLedger")
+    private val FLOW = ClassName("kotlinx.coroutines.flow", "Flow")
+    private val FLOW_MAP = MemberName("kotlinx.coroutines.flow", "map")
 
     /** `org.json.JSONTokener` — parses the bare-scalar JSON `MidnightContract.read` returns. */
     private val JSON_TOKENER = ClassName("org.json", "JSONTokener")
@@ -208,6 +212,12 @@ internal object ContractApiGenerator {
             }
         }
 
+        // Typed ledger snapshot (#64): a `<Alias>Ledger` over the [MidnightLedger] with a `val` per
+        // readable `ledger` field, plus `ledger()` / `observeLedger()` on the facade. Counter + Cell
+        // fields are typed here; Map/Set/MerkleTree are skipped (Phase 2 needs native ADT queries) and
+        // noted so a host knows to read them via `handle.ledger()` raw.
+        val ledgerType = buildLedger(root, alias, pkg, supporting, facade)
+
         // Skipped circuits (Enum / non-empty Tuple args) are recorded as a comment
         // on the facade rather than as a crashing method — the caller invokes them
         // via MidnightContract.call(...) directly until their typed marshalling is
@@ -227,6 +237,9 @@ internal object ContractApiGenerator {
                 alias,
             )
             .addType(facade.build())
+
+        // The typed ledger snapshot class, right after the facade it belongs to.
+        ledgerType?.let { fileBuilder.addType(it) }
 
         // Emit supporting types after the facade, in a stable (insertion) order.
         for (type in supporting.all()) {
@@ -323,11 +336,147 @@ internal object ContractApiGenerator {
             .build()
     }
 
-    /** `voting` -> `VotingContract`, `penalty` -> `PenaltyContract`. */
-    private fun facadeClassName(alias: String): String =
+    /** `voting` -> `Voting`, `private-vault` -> `PrivateVault`. Base for the facade / ledger names. */
+    private fun pascalCaseAlias(alias: String): String =
         alias.split('-', '_', '.')
             .filter { it.isNotEmpty() }
-            .joinToString("") { part -> part.replaceFirstChar { it.uppercaseChar() } } + "Contract"
+            .joinToString("") { part -> part.replaceFirstChar { it.uppercaseChar() } }
+
+    /** `voting` -> `VotingContract`, `penalty` -> `PenaltyContract`. */
+    private fun facadeClassName(alias: String): String = pascalCaseAlias(alias) + "Contract"
+
+    /** `voting` -> `VotingLedger` — the typed snapshot of the contract's `ledger` section. */
+    private fun ledgerClassName(alias: String): String = pascalCaseAlias(alias) + "Ledger"
+
+    /**
+     * Read accessor for one `ledger` entry, or null when not yet supported. Phase 1 covers `Counter`
+     * and `Cell<simple>`; `Map`/`Set`/`MerkleTree` need native ADT queries (Phase 2) and return null
+     * (the caller records the skip). The returned property is a computed `val` over the
+     * [MidnightLedger] snapshot bound as `raw`.
+     */
+    private fun ledgerAccessor(entry: JsonObject, supporting: SupportingTypes): PropertySpec? {
+        val name = (entry["name"] as? JsonString)?.value ?: return null
+        return when ((entry["storage"] as? JsonString)?.value) {
+            // A Counter is a monotonic Uint; read it big to cover u64+ counters.
+            "Counter" -> ledgerProp(name, BIG_INTEGER, CodeBlock.of("raw.getUintBig(%S)", name))
+            "Cell" -> (entry["type"] as? JsonObject)?.let { cellAccessor(name, resolveAlias(it), supporting) }
+            // Map / Set / MerkleTree: not readable without native ADT queries (Phase 2).
+            else -> null
+        }
+    }
+
+    /** A `Cell<T>` accessor by the element type `T`, or null for a T the runtime can't yet type. */
+    private fun cellAccessor(name: String, type: JsonObject, supporting: SupportingTypes): PropertySpec? =
+        when ((type["type-name"] as? JsonString)?.value) {
+            "Uint", "Field" -> ledgerProp(name, BIG_INTEGER, CodeBlock.of("raw.getUintBig(%S)", name))
+            "Boolean" -> ledgerProp(name, BOOLEAN, CodeBlock.of("raw.getBoolean(%S)", name))
+            "Bytes" -> (type["length"] as? JsonNumber)?.raw?.let { len ->
+                ledgerProp(name, BYTE_ARRAY, CodeBlock.of("raw.getBytes(%S, %L)", name, len))
+            }
+            "Opaque" -> if ((type["tsType"] as? JsonString)?.value == "string")
+                ledgerProp(name, STRING, CodeBlock.of("raw.getString(%S)", name)) else null
+            "Enum" -> {
+                val enumType = registerEnum(type, supporting)
+                ledgerProp(name, enumType, CodeBlock.of("%T.entries[raw.getUintBig(%S).toInt()]", enumType, name))
+            }
+            "Vector" -> (type["type"] as? JsonObject)?.let(::resolveAlias)?.let { inner ->
+                when ((inner["type-name"] as? JsonString)?.value) {
+                    "Uint", "Field" -> ledgerListProp(name, BIG_INTEGER)
+                    "Bytes" -> ledgerListProp(name, BYTE_ARRAY)
+                    else -> null // Vector<Struct/Enum/...> in a Cell — Phase 2+
+                }
+            }
+            // Compact models `Maybe<T>` as a Struct { is_some, value }. When value is an Opaque string
+            // the runtime's getMaybeString reads it → String?. Other payloads / structs: not yet.
+            "Struct" -> if (isMaybeStringStruct(type))
+                ledgerProp(name, STRING.copy(nullable = true), CodeBlock.of("raw.getMaybeString(%S)", name)) else null
+            else -> null
+        }
+
+    private fun ledgerProp(name: String, type: TypeName, getter: CodeBlock): PropertySpec =
+        PropertySpec.builder(name, type)
+            .getter(FunSpec.getterBuilder().addStatement("return %L", getter).build())
+            .build()
+
+    /** `val <name>: List<E> get() = (raw.getRaw("<name>") as List<*>).map·{ it as E }` — Vector<scalar>. */
+    private fun ledgerListProp(name: String, element: TypeName): PropertySpec =
+        PropertySpec.builder(name, LIST.parameterizedBy(element))
+            .getter(
+                FunSpec.getterBuilder()
+                    .addStatement("return (raw.getRaw(%S) as %T).map·{ it as %T }", name, LIST.parameterizedBy(STAR), element)
+                    .build(),
+            )
+            .build()
+
+    /**
+     * Build the `<Alias>Ledger` snapshot class and wire `ledger()` / `observeLedger()` onto [facade].
+     * Returns the class, or null when no `ledger` field is typeable yet (so no empty class / methods
+     * are emitted). Fields the runtime can't type yet (Map/Set/MerkleTree, unsupported Cells) are
+     * recorded in the class KDoc so a host knows to read them via `handle.ledger()` raw.
+     */
+    private fun buildLedger(
+        root: JsonObject,
+        alias: String,
+        pkg: String,
+        supporting: SupportingTypes,
+        facade: TypeSpec.Builder,
+    ): TypeSpec? {
+        val entries = (root["ledger"] as? JsonArray)?.items.orEmpty().mapNotNull { it as? JsonObject }
+        if (entries.isEmpty()) return null
+
+        val accessors = mutableListOf<PropertySpec>()
+        val skipped = mutableListOf<String>()
+        for (entry in entries) {
+            val fieldName = (entry["name"] as? JsonString)?.value ?: continue
+            val accessor = ledgerAccessor(entry, supporting)
+            if (accessor != null) accessors.add(accessor)
+            else skipped.add("$fieldName (${(entry["storage"] as? JsonString)?.value ?: "?"})")
+        }
+        if (accessors.isEmpty()) return null
+
+        val ledgerCn = ClassName(pkg, ledgerClassName(alias))
+        facade.addFunction(
+            FunSpec.builder("ledger")
+                .addModifiers(KModifier.SUSPEND)
+                .returns(ledgerCn)
+                .addStatement("return %T(handle.ledger())", ledgerCn)
+                .build(),
+        )
+        facade.addFunction(
+            FunSpec.builder("observeLedger")
+                .returns(FLOW.parameterizedBy(ledgerCn))
+                .addStatement("return handle.observeLedger().%M·{ %T(it) }", FLOW_MAP, ledgerCn)
+                .build(),
+        )
+
+        val classBuilder = TypeSpec.classBuilder(ledgerCn)
+            .primaryConstructor(
+                FunSpec.constructorBuilder().addParameter("raw", MIDNIGHT_LEDGER).build(),
+            )
+            .addProperty(
+                PropertySpec.builder("raw", MIDNIGHT_LEDGER, KModifier.PRIVATE).initializer("raw").build(),
+            )
+            .addProperties(accessors)
+        if (skipped.isNotEmpty()) {
+            classBuilder.addKdoc(
+                "Fields not yet typed here (read raw via %T.getRaw / the Phase-2 ADT queries):\n%L",
+                MIDNIGHT_LEDGER,
+                skipped.joinToString("\n") { " - $it" },
+            )
+        }
+        return classBuilder.build()
+    }
+
+    /** True for a `Maybe<Opaque<"string">>` (the Compact Maybe struct with a string `value`). */
+    private fun isMaybeStringStruct(type: JsonObject): Boolean {
+        if ((type["name"] as? JsonString)?.value != "Maybe") return false
+        val value = ((type["elements"] as? JsonArray)?.items.orEmpty()
+            .mapNotNull { it as? JsonObject }
+            .firstOrNull { (it["name"] as? JsonString)?.value == "value" }
+            ?.get("type") as? JsonObject)?.let(::resolveAlias) ?: return false
+        return (value["type-name"] as? JsonString)?.value == "Opaque" &&
+            (value["tsType"] as? JsonString)?.value == "string"
+    }
 
     /** Outcome of trying to generate a typed method for one circuit. */
     private sealed interface CircuitFun {

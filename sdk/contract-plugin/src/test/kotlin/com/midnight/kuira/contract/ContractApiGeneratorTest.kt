@@ -441,6 +441,36 @@ class ContractApiGeneratorTest {
     }
 
     @Test
+    fun `typed ledger accessors — Counter + Cell types, Map & Set gracefully skipped (#64)`() {
+        val src = render("bank", LEDGER_ABI)
+
+        // Facade gets a snapshot accessor + a reactive one over the typed ledger class.
+        assertTrue("ledger() snapshot: $src", src.contains("suspend fun ledger(): BankLedger = BankLedger(handle.ledger())"))
+        assertTrue("observeLedger() reactive: $src", src.contains("fun observeLedger(): Flow<BankLedger> = handle.observeLedger().map { BankLedger(it) }"))
+
+        // Each supported storage type maps to the right MidnightLedger getter.
+        assertTrue("Counter -> getUintBig: $src", src.contains("""get() = raw.getUintBig("nextId")"""))
+        assertTrue("Cell<Uint> -> getUintBig: $src", src.contains("""get() = raw.getUintBig("threshold")"""))
+        assertTrue("Cell<Boolean> -> getBoolean: $src", src.contains("""get() = raw.getBoolean("active")"""))
+        assertTrue("Cell<Bytes<32>> -> getBytes(name,len): $src", src.contains("""get() = raw.getBytes("owner", 32)"""))
+        assertTrue("Cell<Enum> -> entries[ordinal]: $src", src.contains("""get() = Phase.entries[raw.getUintBig("phase").toInt()]"""))
+        assertTrue("Cell<Opaque string> -> getString: $src", src.contains("""get() = raw.getString("label")"""))
+        assertTrue("Cell<Vector<Uint>> -> List<BigInteger>: $src", src.contains("""get() = (raw.getRaw("scores") as List<*>).map { it as BigInteger }"""))
+        assertTrue("Cell<Vector<Bytes>> -> List<ByteArray>: $src", src.contains("""get() = (raw.getRaw("roster") as List<*>).map { it as ByteArray }"""))
+        assertTrue("Cell<Maybe<string>> -> getMaybeString (String?): $src", src.contains("""get() = raw.getMaybeString("note")"""))
+        assertTrue("Maybe accessor is nullable String: $src", src.contains("public val note: String?"))
+
+        // The enum used only by a ledger field is still emitted.
+        assertTrue("ledger-only enum emitted: $src", src.contains("public enum class Phase"))
+
+        // Map/Set can't be read without native ADT queries — skipped, and documented, never emitted broken.
+        assertFalse("Map field must NOT get a typed accessor: $src", src.contains("public val balances"))
+        assertFalse("Set field must NOT get a typed accessor: $src", src.contains("public val members"))
+        assertTrue("skipped Map noted: $src", src.contains(" - balances (Map)"))
+        assertTrue("skipped Set noted: $src", src.contains(" - members (Set)"))
+    }
+
+    @Test
     fun `conformance — the full type surface composes in one contract (interactions)`() {
         // One contract exercising every supported type combined the way real contracts do: a struct
         // reused as arg + return + tuple-element + vector-element, a Vector<Uint> arg, a Tuple<Uint,
@@ -697,6 +727,32 @@ class ContractApiGeneratorTest {
               "result-type": { "type-name": "Bytes", "length": 32 } }
           ],
           "witnesses": [], "contracts": [], "ledger": []
+        }
+        """.trimIndent()
+
+        // The full ledger-section storage surface (#64 Phase 1): Counter + every supported Cell type,
+        // plus a Map and a Set that must be gracefully SKIPPED (Phase 2 needs native ADT queries).
+        val LEDGER_ABI = """
+        {
+          "compiler-version": "0.31.0", "language-version": "0.23.0", "runtime-version": "0.16.0",
+          "circuits": [
+            { "name": "touch", "pure": false, "proof": true, "arguments": [],
+              "result-type": { "type-name": "Tuple", "types": [] } }
+          ],
+          "witnesses": [], "contracts": [],
+          "ledger": [
+            { "name": "nextId", "index": 0, "storage": "Counter" },
+            { "name": "threshold", "index": 1, "storage": "Cell", "type": { "type-name": "Uint", "maxval": 255 } },
+            { "name": "active", "index": 2, "storage": "Cell", "type": { "type-name": "Boolean" } },
+            { "name": "owner", "index": 3, "storage": "Cell", "type": { "type-name": "Bytes", "length": 32 } },
+            { "name": "phase", "index": 4, "storage": "Cell", "type": { "type-name": "Enum", "name": "Phase", "elements": ["A", "B"] } },
+            { "name": "label", "index": 5, "storage": "Cell", "type": { "type-name": "Opaque", "tsType": "string" } },
+            { "name": "scores", "index": 6, "storage": "Cell", "type": { "type-name": "Vector", "length": 3, "type": { "type-name": "Uint", "maxval": 255 } } },
+            { "name": "roster", "index": 7, "storage": "Cell", "type": { "type-name": "Vector", "length": 2, "type": { "type-name": "Bytes", "length": 32 } } },
+            { "name": "note", "index": 8, "storage": "Cell", "type": { "type-name": "Struct", "name": "Maybe", "elements": [ { "name": "is_some", "type": { "type-name": "Boolean" } }, { "name": "value", "type": { "type-name": "Opaque", "tsType": "string" } } ] } },
+            { "name": "balances", "index": 9, "storage": "Map", "key": { "type-name": "Bytes", "length": 32 }, "value": { "type-name": "Uint", "maxval": 255 } },
+            { "name": "members", "index": 10, "storage": "Set", "type": { "type-name": "Bytes", "length": 32 } }
+          ]
         }
         """.trimIndent()
 
