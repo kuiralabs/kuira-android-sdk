@@ -259,6 +259,187 @@ class MidnightWalletTest {
         verify(nodeRpc).close()
     }
 
+    // Regression (PreProd genesis replay on back-to-back txs): a balance-time FFI failure went
+    // STRAIGHT to a genesis rebuild — deleting the checkpoint and replaying the full event stream
+    // (1.27M events, ~10 min of dead wallet on PreProd). The common cause is benign staleness:
+    // the previous tx just spent the wallet's dust and its events haven't reached the indexer yet
+    // (the freshness probe sees "nothing new" during that lag), so the cached state's only UTXO is
+    // pending → FFI returns null. The recovery must mirror balanceAndSubmit's 170/171 ladder —
+    // delta re-sync FIRST (picks up the spend + change UTXO in seconds); genesis only if the delta
+    // didn't cure it. Before the fix this test fails on forceResync being invoked.
+    @Test
+    fun `balance-time failure delta re-syncs and retries — no genesis checkpoint wipe`() = runTest {
+        var balanceCalls = 0
+        // First balance fails (stale state: own spend not yet indexed); the retry after the
+        // delta re-sync succeeds — the exact PreProd shape.
+        val nativeBalance = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ ->
+            if (++balanceCalls == 1) null else "cafe;"
+        }
+        val dustState = mock<DustLocalState> {
+            on { getStatePointer() } doReturn 1L
+            on { currentNullifiers(any()) } doReturn null
+            on { syncTimeMs() } doReturn 1_000L
+        }
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced(anyOrNull()) } doReturn dustState
+            onBlocking { refreshIncremental(anyOrNull()) } doReturn dustState
+        }
+        val indexer = mock<IndexerClient> {
+            onBlocking { getCurrentBlockWithParams() } doReturn BlockInfo(
+                height = 100L,
+                hash = "a".repeat(64),
+                timestamp = 1704067200000L,
+                ledgerParameters = "params_hex",
+            )
+        }
+        val wallet = createWallet(
+            dustSyncManager = syncManager,
+            indexerClient = indexer,
+            nativeBalance = nativeBalance,
+        )
+
+        val balanced = wallet.balanceTransaction("proven_hex")
+
+        assertEquals("cafe", balanced)
+        assertEquals("the retry after the delta re-sync must re-balance", 2, balanceCalls)
+        verify(syncManager).refreshIncremental(anyOrNull())
+        // The alpha04 lesson (#297): recoverable staleness must NOT nuke the checkpoint.
+        verify(syncManager, never()).forceResync()
+    }
+
+    // ── balanceAndSubmit 170/171 submit-time recovery ladder ──
+    //
+    // Pins the alpha04 escalation ladder itself: a submit rejected with 170 (stale dust root)
+    // or 171 (dust ctime out of the validity window) recovers with a delta re-sync FIRST, a
+    // genesis rebuild only if the delta didn't cure it, and gives up after both. The ladder
+    // shipped verified on-device only (the FFI boundary was unmockable before the
+    // NativeBalanceInvoker seam), so until these tests nothing guarded its escalation order —
+    // the exact blind spot that let doBalance keep its genesis-first recovery for months.
+
+    private fun rejected(code: Int) = TransactionRejected("Invalid Transaction", customErrorCode = code)
+
+    /** Wallet whose balance always succeeds, so the tests drive recovery purely from submit. */
+    private fun submitLadderWallet(nodeRpc: NodeRpcClient): Pair<MidnightWallet, DustSyncManager> {
+        val dustState = mock<DustLocalState> {
+            on { getStatePointer() } doReturn 1L
+            on { currentNullifiers(any()) } doReturn null
+            on { syncTimeMs() } doReturn 1_000L
+        }
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { ensureSynced(anyOrNull()) } doReturn dustState
+            onBlocking { refreshIncremental(anyOrNull()) } doReturn dustState
+        }
+        val indexer = mock<IndexerClient> {
+            onBlocking { getCurrentBlockWithParams() } doReturn BlockInfo(
+                height = 100L,
+                hash = "a".repeat(64),
+                timestamp = 1704067200000L,
+                ledgerParameters = "params_hex",
+            )
+        }
+        val wallet = createWallet(
+            dustSyncManager = syncManager,
+            indexerClient = indexer,
+            nodeRpcClient = nodeRpc,
+            nativeBalance = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ -> "cafe;" },
+        )
+        return wallet to syncManager
+    }
+
+    @Test
+    fun `submit-time 170 recovers with a delta re-sync first — no genesis rebuild`() = runTest {
+        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        var submits = 0
+        // doSuspendableAnswer, not doThrow: Mockito validates doThrow's exception against the
+        // compiled signature, and a suspend fun declares no `throws` — so any checked exception
+        // (TransactionRejected extends Exception) is rejected at stubbing time.
+        val nodeRpc = mock<NodeRpcClient> {
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
+                if (++submits == 1) throw rejected(170) else finalized
+            }
+        }
+        val (wallet, syncManager) = submitLadderWallet(nodeRpc)
+
+        wallet.balanceAndSubmit("proven_hex", null)
+
+        verify(syncManager).refreshIncremental(anyOrNull())
+        verify(syncManager, never()).forceResync()
+        assertEquals("one rejected submit + one successful retry", 2, submits)
+    }
+
+    @Test
+    fun `submit-time 171 takes the same delta-first ladder`() = runTest {
+        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        var submits = 0
+        val nodeRpc = mock<NodeRpcClient> {
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
+                if (++submits == 1) throw rejected(171) else finalized
+            }
+        }
+        val (wallet, syncManager) = submitLadderWallet(nodeRpc)
+
+        wallet.balanceAndSubmit("proven_hex", null)
+
+        verify(syncManager).refreshIncremental(anyOrNull())
+        verify(syncManager, never()).forceResync()
+    }
+
+    @Test
+    fun `submit-time 170 persisting after the delta escalates to a genesis rebuild — in that order`() = runTest {
+        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        var submits = 0
+        val nodeRpc = mock<NodeRpcClient> {
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
+                if (++submits <= 2) throw rejected(170) else finalized
+            }
+        }
+        val (wallet, syncManager) = submitLadderWallet(nodeRpc)
+
+        wallet.balanceAndSubmit("proven_hex", null)
+
+        // Escalation ORDER is the contract: the cheap delta must be tried before the wipe.
+        val order = inOrder(syncManager)
+        order.verify(syncManager).refreshIncremental(anyOrNull())
+        order.verify(syncManager).forceResync()
+        assertEquals("initial + one retry per rung", 3, submits)
+    }
+
+    @Test
+    fun `submit-time 170 surviving both recoveries propagates — bounded, no infinite loop`() = runTest {
+        var submits = 0
+        val nodeRpc = mock<NodeRpcClient> {
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
+                submits++; throw rejected(170)
+            }
+        }
+        val (wallet, _) = submitLadderWallet(nodeRpc)
+
+        val thrown = runCatching { wallet.balanceAndSubmit("proven_hex", null) }.exceptionOrNull()
+
+        assertTrue("the exhausted ladder must rethrow the rejection", thrown is TransactionRejected)
+        // Initial attempt + one retry per rung — then stop.
+        assertEquals(3, submits)
+    }
+
+    @Test
+    fun `non-recoverable submit rejection propagates immediately — no dust recovery`() = runTest {
+        // 115 (stale UTXO) is NOT in the ladder's recoverable set — re-syncing dust can't cure it.
+        var submits = 0
+        val nodeRpc = mock<NodeRpcClient> {
+            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
+                submits++; throw rejected(115)
+            }
+        }
+        val (wallet, syncManager) = submitLadderWallet(nodeRpc)
+
+        val thrown = runCatching { wallet.balanceAndSubmit("proven_hex", null) }.exceptionOrNull()
+
+        assertTrue(thrown is TransactionRejected)
+        verify(syncManager, never()).refreshIncremental(anyOrNull())
+        verify(syncManager, never()).forceResync()
+        assertEquals(1, submits)
+    }
+
     // ── balanceFlow reactivity (the auto-update-on-credit fix) ──
 
     @Test
@@ -325,6 +506,11 @@ class MidnightWalletTest {
         spentDustNullifierStore: SpentDustNullifierStore = mock {
             onBlocking { spentNullifiers(any()) } doReturn emptySet()
         },
+        // Fails loudly if a test unexpectedly reaches the FFI boundary — every path that should
+        // is stubbed explicitly, and the real JNI object can't load in a JVM test.
+        nativeBalance: NativeBalanceInvoker = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ ->
+            throw AssertionError("native balance reached but not stubbed in this test")
+        },
     ) = MidnightWallet(
         dustSyncManager = dustSyncManager,
         dustRepository = dustRepository,
@@ -337,5 +523,6 @@ class MidnightWalletTest {
         provingKeysDir = provingKeysDir,
         networkId = networkId,
         spentDustNullifierStore = spentDustNullifierStore,
+        nativeBalance = nativeBalance,
     )
 }

@@ -61,6 +61,16 @@ class MidnightWallet internal constructor(
     private val appStateCloudBackup: AppStateCloudBackup? = null,
     receiptEvents: Flow<ReceiptEvent> = emptyFlow(),
     private val unshieldedSubscription: UnshieldedSubscription? = null,
+    // Test seam: the JNI object loads the native lib on first touch, which a JVM unit test
+    // can't — the recovery-ladder tests inject a fake. The default is a lambda (NOT a method
+    // reference) so the object is touched at first BALANCE, not at construction — the same
+    // load timing as before the seam, and construction stays JVM-test-safe.
+    private val nativeBalance: NativeBalanceInvoker =
+        NativeBalanceInvoker { tx, ptr, seed, params, time, keys, net, exclude, ttl ->
+            TransactionBalancerNative.nativeBalanceProvenTransaction(
+                tx, ptr, seed, params, time, keys, net, exclude, ttl,
+            )
+        },
 ) : TransactionBalancer {
 
     /**
@@ -482,14 +492,26 @@ class MidnightWallet internal constructor(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
     ): BalanceEnvelope {
+        tryBalance(provenTxHex, onProgress)?.let { return it }
+        // Same escalation ladder as the submit-time 170/171 recovery in [balanceAndSubmit]:
+        // delta re-sync first, genesis rebuild only as a last resort (#297). The common
+        // balance-time failure is our OWN just-finalized spend not yet reflected locally —
+        // back-to-back txs consume the previous tx's dust before its events reach the
+        // indexer, and the freshness probe in [ensureDustFresh] sees "nothing new" during
+        // that lag. The at-tip delta sync WAITS for those events, picks up the spend + the
+        // change UTXO in seconds, and the retry balances. A genesis rebuild replays the
+        // same event stream to the same state — minutes on a real chain (PreProd) for
+        // nothing delta can't do, except a corrupt checkpoint, which is why it stays as
+        // the final rung.
+        Log.w(TAG, "Balance failed — delta re-sync and retry")
+        onProgress?.invoke(BalanceProgress.RetryingDustSync)
+        dustSyncManager.refreshIncremental()
+        tryBalance(provenTxHex, onProgress)?.let { return it }
+        Log.w(TAG, "Balance still failing after delta re-sync — genesis rebuild")
+        onProgress?.invoke(BalanceProgress.RetryingDustSync)
+        forceFullSync()
         return tryBalance(provenTxHex, onProgress)
-            ?: run {
-                Log.w(TAG, "Balance failed, forcing full dust re-sync")
-                onProgress?.invoke(BalanceProgress.RetryingDustSync)
-                forceFullSync()
-                tryBalance(provenTxHex, onProgress)
-                    ?: throw IllegalStateException("Balance failed after full re-sync, check logcat")
-            }
+            ?: throw IllegalStateException("Balance failed after full re-sync, check logcat")
     }
 
     /** Durably record dust nullifiers the node just accepted as spent, so the
@@ -619,7 +641,7 @@ class MidnightWallet internal constructor(
         val dustSyncTimeMs = dustState.syncTimeMs()
         val chainTimeMs = DustCtime.anchorMs(dustSyncTimeMs = dustSyncTimeMs, tipMs = blockInfo.timestamp)
 
-        val raw = TransactionBalancerNative.nativeBalanceProvenTransaction(
+        val raw = nativeBalance.balance(
             provenTxHex = provenTxHex,
             dustStatePtr = dustState.getStatePointer(),
             seed = dustSeed,

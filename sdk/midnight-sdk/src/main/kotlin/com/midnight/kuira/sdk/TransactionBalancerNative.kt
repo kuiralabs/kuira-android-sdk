@@ -9,6 +9,26 @@ package com.midnight.kuira.sdk
  * This replaces the remote `DAppConnectorClient.balanceTransaction()` call,
  * enabling standalone dApp operation without `mn serve`.
  */
+/**
+ * Invocation seam for [TransactionBalancerNative.nativeBalanceProvenTransaction]. Touching the
+ * JNI object load-links the native library, which a JVM unit test can't do — the balance
+ * recovery-ladder tests inject a fake here; production wires the real method reference
+ * (see [MidnightWallet]'s constructor default).
+ */
+internal fun interface NativeBalanceInvoker {
+    fun balance(
+        provenTxHex: String,
+        dustStatePtr: Long,
+        seed: ByteArray,
+        ledgerParamsHex: String,
+        currentTimeMs: Long,
+        keysDir: String,
+        networkId: String,
+        excludeNullifiers: String,
+        ttlAnchorMs: Long,
+    ): String?
+}
+
 internal object TransactionBalancerNative {
 
     init {
