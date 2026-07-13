@@ -34,7 +34,7 @@ class SdkSendNightIsolatedE2ETest {
     private val wallet = IsolatedWalletE2E(context)
 
     @After
-    fun tearDown() = wallet.close()
+    fun tearDown() = runBlocking { wallet.close() }
 
     /** Single-input: one coin covers the amount → no consolidation. */
     @Test

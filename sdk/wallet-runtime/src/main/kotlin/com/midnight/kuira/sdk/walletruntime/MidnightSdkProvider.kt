@@ -8,7 +8,10 @@ import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.walletseed.WalletRecovery
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,8 +46,8 @@ import javax.inject.Singleton
  * **Lifecycle.** The SDK is a process-singleton, not view-model-scoped. It
  * survives activity recreation (rotation) — a net win, since rebuilding means
  * a fresh biometric prompt + resync. Teardown is therefore explicit via
- * [close] (logout / wallet reset). No caller invokes [close] today; it's the
- * seam a future session-auto-lock (idle timeout) will use.
+ * [close] — a session hard-lock (idle / screen-off) and logout / wallet reset
+ * both invoke it.
  *
  * @see MidnightSdkFactory for the construction seam this delegates to.
  */
@@ -62,6 +65,14 @@ class MidnightSdkProvider @Inject constructor(
      * [sdk] (a StateFlow), not this lock, so they don't contend here.
      */
     private val buildMutex = Mutex()
+
+    /**
+     * Scope for the fire-and-forget teardown launched by [close]. Tearing down suspends (it waits
+     * for an in-flight balance before freeing the dust state — see [teardownLocked]), but close()'s
+     * callers (a session hard-lock, a logout) are non-suspend. Overridable so a unit test can drive
+     * it with a virtual-time [kotlinx.coroutines.test.TestScope].
+     */
+    internal var teardownScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _sdk = MutableStateFlow<MidnightSdk?>(null)
 
@@ -120,7 +131,9 @@ class MidnightSdkProvider @Inject constructor(
             _sdk.value?.let { existing ->
                 if (_activeConfig.value == config) return@withLock existing
                 Log.i(TAG, "Config changed (${_activeConfig.value} → $config) — rebuilding SDK")
-                teardown()
+                // Already inside buildMutex — call the locked teardown directly (and await it) so the
+                // old SDK's dust state is fully freed before the new one builds.
+                teardownLocked()
             }
 
             // Seed unlock may show a biometric prompt — keep it on the main thread.
@@ -170,13 +183,22 @@ class MidnightSdkProvider @Inject constructor(
      * in flight, not for racing an in-progress [ensureSdk].
      */
     fun close() {
-        teardown()
+        // Fire-and-forget: [teardownLocked] suspends (it waits for an in-flight balance before
+        // freeing the dust state), but close()'s callers — a session hard-lock, a logout — are
+        // non-suspend. buildMutex serializes the teardown against [ensureSdk] so a concurrent rebuild
+        // can't interleave and have its fresh SDK torn down, or the old one closed twice.
+        teardownScope.launch { buildMutex.withLock { teardownLocked() } }
     }
 
-    private fun teardown() {
-        _sdk.value?.close()
+    // Caller MUST hold [buildMutex]. Suspends: [MidnightSdk.close] waits for an in-flight balance
+    // before freeing the dust state, so tearing down a config change / logout can't yank the state
+    // out from under a running deploy (the PreProd "DustLocalState has been closed" regression —
+    // localnet's instant dust sync hid the window; PreProd's seconds-long sync exposed it).
+    private suspend fun teardownLocked() {
+        val toClose = _sdk.value ?: return
         _sdk.value = null
         _activeConfig.value = null
+        toClose.close()
     }
 
     private companion object {

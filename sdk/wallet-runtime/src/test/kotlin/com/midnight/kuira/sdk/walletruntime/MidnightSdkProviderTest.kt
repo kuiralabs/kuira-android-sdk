@@ -109,7 +109,9 @@ class MidnightSdkProviderTest {
         val rebuilt = provider.ensureSdk(activity, configPreprod)
 
         assertSame("Config change must hand back the freshly built SDK", sdkB, rebuilt)
-        verify(exactly = 1) { sdkA.close() } // old instance torn down
+        // The rebuild awaits teardownLocked() inside buildMutex, so sdkA is fully closed by the
+        // time the second ensureSdk returns — no scheduler advance needed. close() is suspend now.
+        coVerify(exactly = 1) { sdkA.close() } // old instance torn down
         verify(exactly = 2) { sdkFactory.create(any(), any()) }
         coVerify(exactly = 2) { walletSeedSource.ensureSeedReady(activity) }
         assertSame(sdkB, provider.sdk.value)
@@ -152,11 +154,14 @@ class MidnightSdkProviderTest {
         val sdk = mockk<MidnightSdk>(relaxed = true)
         every { sdkFactory.create(any(), any()) } returns sdk
 
-        val provider = newProvider()
+        // close() launches the (suspend) teardown on teardownScope — drive it with the test scope
+        // so runCurrent() deterministically runs it before we assert.
+        val provider = newProvider().also { it.teardownScope = this }
         provider.ensureSdk(activity, configUndeployed)
         provider.close()
+        runCurrent()
 
-        verify(exactly = 1) { sdk.close() }
+        coVerify(exactly = 1) { sdk.close() }
         assertNull("close must clear the live SDK", provider.sdk.value)
         assertNull("close must clear the active config", provider.activeConfig.value)
     }

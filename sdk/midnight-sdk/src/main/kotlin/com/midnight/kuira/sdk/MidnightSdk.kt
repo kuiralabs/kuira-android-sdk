@@ -877,10 +877,17 @@ class MidnightSdk private constructor(
      */
     fun observeBlocks(): Flow<BlockInfo> = indexerClient.subscribeToBlocks()
 
-    /** Release all resources. */
-    fun close() {
+    /**
+     * Release all resources. Suspends because [wallet].close() serializes the dust-state close
+     * against an in-flight balance (see [MidnightWallet.close]) — a teardown that raced a running
+     * balance is exactly what threw "DustLocalState has been closed" on PreProd.
+     */
+    suspend fun close() {
         // Cancels every job launched on the scope — incl. the unshielded subscription
         // controller's collect and the shielded tracker — so no separate job handle is needed.
+        // The in-flight balance runs on the caller's scope (not this one), so cancelling here does
+        // not cancel it; wallet.close() below still waits for it. The node client stays open until
+        // after wallet.close() so that balance's submit can complete — no deadlock.
         subscriptionScope.cancel()
         shieldedTracker.close()
         dustTracker?.close()

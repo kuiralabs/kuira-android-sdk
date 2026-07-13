@@ -14,11 +14,16 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import com.midnight.kuira.core.ledger.api.TransactionRejected
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.*
 import org.junit.Test
 import org.mockito.kotlin.*
@@ -201,13 +206,57 @@ class MidnightWalletTest {
     // ── close ──
 
     @Test
-    fun `close delegates to NodeRpcClient and DustSyncManager`() {
+    fun `close delegates to NodeRpcClient and DustSyncManager`() = runTest {
         val nodeRpc = mock<NodeRpcClient>()
         val syncManager = mock<DustSyncManager>()
         val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = syncManager)
         wallet.close()
         verify(nodeRpc).close()
         verify(syncManager).close()
+    }
+
+    // Regression (PreProd "DustLocalState has been closed"): a teardown (network switch / logout)
+    // froze the shared dust state while a balance was mid-flight reading it. refresh() already
+    // guarded the dust-state swap under balanceMutex; close() did NOT — it freed the state without
+    // the mutex, so a balance holding it resumed onto a closed state. localnet's instant dust sync
+    // never opened the window; PreProd's seconds-long sync did.
+    //
+    // This reproduces the race deterministically: a refresh() holds balanceMutex while its dust work
+    // is in progress (blocked on a latch), and a concurrent close() must WAIT for that mutex before
+    // freeing the dust state. Before the fix close() completed immediately (assertNull fails +
+    // close() is observed on the sync manager); after, it blocks until refresh releases.
+    @Test
+    fun `close waits for an in-flight balance before freeing the dust state`() = runBlocking {
+        val balanceHoldsMutex = CompletableDeferred<Unit>()
+        val releaseBalance = CompletableDeferred<Unit>()
+        val syncManager = mock<DustSyncManager> {
+            // refreshIncremental runs under balanceMutex (see MidnightWallet.refresh). Signal that
+            // the balance now holds the mutex, then block — simulating a slow PreProd dust sync.
+            onBlocking { refreshIncremental(anyOrNull()) } doSuspendableAnswer {
+                balanceHoldsMutex.complete(Unit)
+                releaseBalance.await()
+                mock<DustLocalState>()
+            }
+        }
+        val nodeRpc = mock<NodeRpcClient>()
+        val wallet = createWallet(dustSyncManager = syncManager, nodeRpcClient = nodeRpc)
+
+        val balancing = launch(Dispatchers.IO) { wallet.refresh() }
+        balanceHoldsMutex.await() // deterministic: refresh now holds balanceMutex
+
+        val tearing = launch(Dispatchers.IO) { wallet.close() }
+
+        // close() must block on balanceMutex — it cannot free the dust state while the balance holds
+        // it. A non-null result would mean close() completed early (the pre-fix bug).
+        val closedEarly = withTimeoutOrNull(1_000) { tearing.join(); true }
+        assertNull("close() must not complete while a balance holds balanceMutex", closedEarly)
+        verify(syncManager, never()).close()
+
+        releaseBalance.complete(Unit) // balance finishes, releases the mutex
+        balancing.join()
+        withTimeout(5_000) { tearing.join() } // now close() proceeds
+        verify(syncManager).close()
+        verify(nodeRpc).close()
     }
 
     // ── balanceFlow reactivity (the auto-update-on-credit fix) ──

@@ -104,7 +104,7 @@ class IsolatedWalletE2E(private val context: Context) {
     }
 
     /** Close the SDK (cancels subscriptions, closes its Room + clients). Safe to call once. */
-    fun close() {
+    suspend fun close() {
         if (::sdk.isInitialized) runCatching { sdk.close() }
     }
 

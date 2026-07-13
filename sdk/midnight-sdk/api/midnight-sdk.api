@@ -130,7 +130,7 @@ public final class com/midnight/kuira/sdk/MidnightSdk {
 	public final fun buildUnshieldedWithdrawalJson ([BLjava/math/BigInteger;Ljava/lang/String;)Ljava/lang/String;
 	public static synthetic fun buildUnshieldedWithdrawalJson$default (Lcom/midnight/kuira/sdk/MidnightSdk;[BLjava/math/BigInteger;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
 	public final fun checkVersionCoherence (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun close ()V
+	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getAccessKeyPath ()Ljava/lang/String;
 	public final fun getAccessKeyPublicKey ()[B
 	public final fun getCoinPublicKey ()[B
@@ -261,7 +261,7 @@ public final class com/midnight/kuira/sdk/MidnightWallet : com/midnight/kuira/co
 	public fun balanceAndSubmit (Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun balanceFlow ()Lkotlinx/coroutines/flow/Flow;
 	public fun balanceTransaction (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun close ()V
+	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun disableAppStateCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun disableDustCloudBackup (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fetchAppState (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

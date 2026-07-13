@@ -28,6 +28,10 @@ from its release and history.
 
 ### Fixed
 - **Sigil chip status color** — the floating sigil chip's status dot showed the reserved "protected" green regardless of state; it now derives from the sigil state via a new `SigilChipUi.tone` (`Protected` / `Neutral` / `Error`), so an absent / initializing / failed sigil no longer reads as protected. Adds the `SigilChipUi.Tone` enum + a `tone` field on `SigilChipUi` (`dapp-ui`).
+- **Dust state closed under an in-flight balance** — a wallet teardown (network switch, logout, session hard-lock) could free the shared Dust local state while a balance/deploy was mid-flight reading it, throwing `DustLocalState has been closed` on the real chain (PreProd) where dust sync spans seconds; localnet's instant sync hid the window. The teardown now serializes against the balance mutex, so it waits for an in-flight balance before releasing the Dust state, and is serialized against an SDK rebuild so a config change can't tear down a freshly-built SDK (`midnight-sdk` / `wallet-runtime`).
+
+### Changed
+- **`MidnightSdk.close()` and `MidnightWallet.close()` are now `suspend`** — closing suspends until any in-flight balance releases the Dust state (see the Dust-state fix above). `MidnightSdkProvider.close()` is unchanged (non-suspend; it launches the teardown), so dApps that tear down through the provider need no change (`midnight-sdk`).
 
 ## [0.1.0-alpha04] — 2026-06-21
 

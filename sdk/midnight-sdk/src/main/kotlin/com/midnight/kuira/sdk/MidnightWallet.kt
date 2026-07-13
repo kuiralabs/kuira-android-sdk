@@ -914,8 +914,17 @@ class MidnightWallet internal constructor(
         else -> false
     }
 
-    fun close() {
-        dustSyncManager.close()
+    /**
+     * Release resources. Suspends because closing the dust state must be serialized against an
+     * in-flight balance: `balanceAgainst` reads the shared [DustLocalState]'s nullifiers under
+     * [balanceMutex], so closing it out from under a running balance throws "DustLocalState has been
+     * closed" (regression — every other dust-close path already holds this mutex; the teardown one
+     * added later did not). Under localnet the balance is instant so the window never opened; on
+     * PreProd it spans seconds of dust sync, so a teardown mid-deploy raced the close. Acquiring the
+     * mutex here makes the teardown WAIT for the balance instead of yanking its state.
+     */
+    suspend fun close() {
+        balanceMutex.withLock { dustSyncManager.close() }
         nodeRpcClient.close()
     }
 
