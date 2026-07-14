@@ -21,6 +21,7 @@ import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
 import com.midnight.kuira.sdk.SyncStatus
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.dapp.sigil.IdentityProvenanceStore
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.NetworkPreferenceStore
 import com.midnight.kuira.sdk.walletruntime.SessionLock
@@ -86,6 +87,12 @@ class WalletPanelViewModel @Inject constructor(
      * uploader but never its source.
      */
     private val appDataProvider: Optional<AppDataBackupProvider>,
+    /** Single owner of the durable dust-backup choice — shared with the restore gate (#61). */
+    private val backupState: DustBackupStateStore,
+    /** The restore gate impl (a @Singleton) — the VM only relays its consent round-trips. */
+    private val restoreGate: DustRestoreGateImpl,
+    /** Identity provenance — written on phrase-restore so the gate sees the restored signal. */
+    private val identityProvenance: IdentityProvenanceStore,
 ) : ViewModel() {
 
     /**
@@ -105,18 +112,9 @@ class WalletPanelViewModel @Inject constructor(
     private val appStateSnapshot: (suspend () -> ByteArray?)? =
         appDataProvider.orElse(null)?.let { provider -> { provider.snapshot() } }
 
-    /** Persists the dust-backup opt-out across launches + SDK rebuilds. */
-    private val backupPrefs = appContext.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
-
-    /** True → the user disabled dust cloud backup (we stop uploading). */
-    private val _dustOptedOut = MutableStateFlow(backupPrefs.getBoolean(KEY_DUST_OPTED_OUT, false))
-
-    /**
-     * True → the user has dust cloud backup ENABLED — a durable choice, persisted across launches.
-     * Drives the toggle's on/off position so the live sync status (which churns on every balance
-     * refresh) never moves the Switch. Set on a successful enable+sync, cleared on opt-out/disable.
-     */
-    private val _dustBackupEnabled = MutableStateFlow(backupPrefs.getBoolean(KEY_DUST_BACKUP_ENABLED, false))
+    // The durable dust-backup choice (opt-out / enabled toggle) lives in [DustBackupStateStore] —
+    // a singleton shared with the restore gate, so gate-committed truth reaches this VM's UI
+    // state live instead of through hand-synced copies.
 
     private val _status = MutableStateFlow<WalletStatus>(WalletStatus.None)
     val status: StateFlow<WalletStatus> = _status
@@ -168,7 +166,7 @@ class WalletPanelViewModel @Inject constructor(
         sdkProvider.sdk.flatMapLatest { it?.wallet?.backupStatus ?: flowOf(BackupStatusSnapshot()) },
         sigilStateStore.snapshotFlow,
         _dustEnabling,
-        _dustBackupEnabled,
+        backupState.enabled,
     ) { backup, sigil, dustEnabling, enabled ->
         BackupSectionState(
             identity = if (sigil != null) BackupLaneState.Ok("Protected", confirm = true)
@@ -196,6 +194,56 @@ class WalletPanelViewModel @Inject constructor(
      */
     private val _consentRequests = MutableSharedFlow<IntentSenderRequest>(extraBufferCapacity = 1)
     val consentRequests: SharedFlow<IntentSenderRequest> = _consentRequests.asSharedFlow()
+
+    /**
+     * The restore gate's consent launches (#61) — the panel collects these into the SAME
+     * launcher as [consentRequests]; results route back through [onConsentResult], which
+     * offers them to the gate first.
+     */
+    val gateConsentRequests: SharedFlow<IntentSenderRequest> get() = restoreGate.consentRequests
+
+    /**
+     * True while the restore gate is offering a restore — the panel renders the blocking
+     * "Restore your wallet data?" step ([connectRestore] / [skipRestore]). Making the skip an
+     * explicit choice (with the re-sync cost stated) is the point: the naked system consent
+     * was too easy to dismiss by accident, silently costing a full genesis replay.
+     */
+    val restoreOffer: StateFlow<Boolean> get() = restoreGate.restoreOffer
+
+    /** The user chose Connect & Restore on the offer step. */
+    fun connectRestore() = restoreGate.connectRestore()
+
+    /** The user explicitly chose to re-sync from scratch. */
+    fun skipRestore() = restoreGate.skipRestore()
+
+    /**
+     * One-time backup-setup offer for a NEW wallet (the enable side of restore continuity):
+     * the one Drive connect granted here is what makes every FUTURE install of any Kuira app
+     * on this account restore silently by default. Shown once, after the wallet's first
+     * Ready; a restored identity is the restore gate's domain and is never double-prompted.
+     */
+    private val _backupSetupOffer = MutableStateFlow(false)
+    val backupSetupOffer: StateFlow<Boolean> = _backupSetupOffer
+
+    private fun maybeOfferBackupSetup() {
+        if (backupState.onboardingOffered) return
+        if (backupState.enabled.value || backupState.optedOut.value) return
+        if (identityProvenance.identityRestored) return
+        _backupSetupOffer.value = true
+    }
+
+    /** Accept the setup offer: run the normal enable flow (consent + bidirectional sync). */
+    fun acceptBackupSetup(config: WalletConfig, activity: FragmentActivity) {
+        backupState.onboardingOffered = true
+        _backupSetupOffer.value = false
+        enableCloudBackup(config, activity)
+    }
+
+    /** Dismiss the setup offer — never nagged again; the BackupSection toggle remains. */
+    fun dismissBackupSetup() {
+        backupState.onboardingOffered = true
+        _backupSetupOffer.value = false
+    }
 
     /**
      * Live balance observer (collects [com.midnight.kuira.sdk.MidnightWallet.balanceFlow]).
@@ -265,6 +313,11 @@ class WalletPanelViewModel @Inject constructor(
     init {
         observeSigilLifecycle()
         observeSessionLock()
+        viewModelScope.launch {
+            // First Ready of this session → the one-time backup-setup offer (new wallets).
+            status.first { it is WalletStatus.Ready }
+            maybeOfferBackupSetup()
+        }
     }
 
     /**
@@ -413,8 +466,13 @@ class WalletPanelViewModel @Inject constructor(
                 // Re-apply the persisted backup opt-out to this (possibly freshly built)
                 // wallet so a disabled user never silently resumes uploading after a rebuild —
                 // BOTH the dust checkpoint and the app-state blob (#246).
-                built.wallet.dustBackupEnabled = !_dustOptedOut.value
-                built.wallet.appStateBackupEnabled = !_dustOptedOut.value
+                built.wallet.dustBackupEnabled = !backupState.optedOut.value
+                built.wallet.appStateBackupEnabled = !backupState.optedOut.value
+                // Wallet-level prefs ride the app-state blob (#61). A SUPPLIER, read at
+                // upload time — so a gate-committed toggle or mirrored opt-out is always
+                // reflected in the next blob (a pushed snapshot went stale and clobbered
+                // restored cloud truth).
+                built.wallet.walletBackupPrefsProvider = { backupState.currentPrefs() }
                 // Connect the host's app-state source so refresh() actually backs
                 // it up (null host provider → lane stays "None yet", e.g. BBoard).
                 built.wallet.appStateProvider = appStateSnapshot
@@ -760,6 +818,9 @@ class WalletPanelViewModel @Inject constructor(
             _restoreState.value = RestoreUiState.Restoring
             try {
                 sdkProvider.recovery.restoreFromPhrase(activity, words)
+                // A phrase-restored wallet existed before this install — the restore gate's
+                // cross-dApp signal, same as a passkey sign-in.
+                identityProvenance.identityRestored = true
                 _restoreState.value = RestoreUiState.Success
             } catch (e: CancellationException) {
                 throw e
@@ -786,14 +847,11 @@ class WalletPanelViewModel @Inject constructor(
      *          is the disable — no consent revoke.
      */
     fun setDustBackup(enabled: Boolean, config: WalletConfig, activity: FragmentActivity) {
-        _dustOptedOut.value = !enabled
-        // Turning OFF is durable immediately; turning ON only commits [_dustBackupEnabled] once the
-        // enable+sync actually succeeds (see [cloudSyncNow]) — until then [_dustEnabling] drives the
-        // optimistic on+spinner, and a failed enable falls back to off.
-        if (!enabled) _dustBackupEnabled.value = false
-        val edit = backupPrefs.edit().putBoolean(KEY_DUST_OPTED_OUT, !enabled)
-        if (!enabled) edit.putBoolean(KEY_DUST_BACKUP_ENABLED, false)
-        edit.apply()
+        // Turning OFF is durable immediately; turning ON clears the opt-out now but only
+        // commits the durable toggle once the enable+sync actually succeeds (see
+        // [cloudSyncNow]) — until then [_dustEnabling] drives the optimistic on+spinner,
+        // and a failed enable falls back to off.
+        if (enabled) backupState.clearOptOut() else backupState.commitOptedOut()
         sdkProvider.sdk.value?.wallet?.let { it.dustBackupEnabled = enabled }
         if (enabled) {
             enableCloudBackup(config, activity)
@@ -839,12 +897,7 @@ class WalletPanelViewModel @Inject constructor(
             bestEffortDisable("dust blob delete") { built.wallet.disableDustCloudBackup() }
             bestEffortDisable("app-state blob delete") { built.wallet.disableAppStateCloudBackup() }
             // Opt out locally (re-applied on every rebuild to gate BOTH blobs — see ensureSdk above).
-            _dustOptedOut.value = true
-            _dustBackupEnabled.value = false
-            backupPrefs.edit()
-                .putBoolean(KEY_DUST_OPTED_OUT, true)
-                .putBoolean(KEY_DUST_BACKUP_ENABLED, false)
-                .apply()
+            backupState.commitOptedOut()
             Log.i(TAG, "disableBackup: deleted both cloud blobs, opted out (Drive grant kept for instant re-enable)")
         }
     }
@@ -875,6 +928,24 @@ class WalletPanelViewModel @Inject constructor(
             // Immediate optimistic feedback (switch flips on + spinner) before the
             // slow Drive round-trip reports anything.
             _dustEnabling.value = true
+            // If the restore gate's consent dialog is already on screen (the toggle tap
+            // raced the fresh-install gate), SHARE its verdict instead of stacking a second
+            // dialog: on grant the gate has already unblocked the silent checkpoint restore
+            // and committed the toggle; this flow just follows with the upload sync. The old
+            // cancel-the-gate takeover abandoned the restore mid-dialog → genesis replay.
+            restoreGate.awaitPendingVerdict()?.let { verdict ->
+                try {
+                    if (verdict == ConsentVerdict.GRANTED) {
+                        Log.i(TAG, "enableCloudBackup: joined the restore gate's grant — syncing")
+                        cloudSyncNow(config, activity)
+                    } else {
+                        Log.i(TAG, "enableCloudBackup: shared consent unanswered — toggle reverts")
+                    }
+                } finally {
+                    _dustEnabling.value = false
+                }
+                return@launch
+            }
             Log.i(TAG, "enableCloudBackup: requesting Drive authorize()…")
             try {
                 when (val outcome = driveAuth.authorize()) {
@@ -900,6 +971,17 @@ class WalletPanelViewModel @Inject constructor(
 
     /** Continue after the Drive consent activity returns. */
     fun onConsentResult(config: WalletConfig, activity: FragmentActivity, data: Intent?) {
+        // Offer the result to the restore gate first: a pending gate prompt consumes it
+        // INSTEAD of the enable flow — the gate is holding the dust-sync mutex, and
+        // cloudSyncNow → refresh() from inside it would deadlock. If a manual enable was ALSO
+        // in flight (its own consent racing a gate that became pending after enableCloudBackup's
+        // join-check), the gate just consumed its result — so clear the enable spinner here.
+        // The gate's own grant path commits the toggle + restores, so the enable goal is met;
+        // the next refresh uploads. Clearing when no enable was in flight is a safe no-op.
+        if (restoreGate.completeConsent(data)) {
+            _dustEnabling.value = false
+            return
+        }
         viewModelScope.launch {
             try {
                 // Confirms the grant; throws if the user dismissed consent.
@@ -929,20 +1011,17 @@ class WalletPanelViewModel @Inject constructor(
         built.wallet.dustBackupEnabled = true  // enabling — make sure uploads are on
         built.wallet.refresh()
         // The enable+sync succeeded — commit the durable ON so the toggle stays on through later
-        // background-sync status churn (a balance refresh must not flip it).
-        _dustBackupEnabled.value = true
-        backupPrefs.edit().putBoolean(KEY_DUST_BACKUP_ENABLED, true).apply()
+        // background-sync status churn (a balance refresh must not flip it). The blob uploaded
+        // during THIS refresh still carried enabled=false (the supplier reads live state);
+        // the digest change from this commit re-uploads the corrected prefs on the next
+        // refresh — a short lag, never a wrong-truth clobber.
+        backupState.commitEnabled()
         Log.i(TAG, "cloudSyncNow: Drive sync complete")
     }
 
     companion object {
         private const val TAG = "WalletPanel"
 
-        /** Prefs key: true → user opted out of dust cloud backup. */
-        private const val KEY_DUST_OPTED_OUT = "dust_backup_opted_out"
-
-        /** Prefs key: true → user has dust cloud backup enabled (durable toggle position). */
-        private const val KEY_DUST_BACKUP_ENABLED = "dust_backup_enabled"
 
         /** Upper bound on the post-registration Dust-visibility poll. */
         private const val DUST_VISIBLE_TIMEOUT_MS = 20_000L

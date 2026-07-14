@@ -55,6 +55,56 @@ class DustCloudBackupCoordinatorTest {
         assertNull(coordinator(FakeStorage()).fetch("mn_addr_preprod1abc"))
     }
 
+    // ── Network pinning (#61) ──
+    //
+    // The blob is ONE bundle for the whole wallet; the address embeds the network
+    // (`mn_addr_preprod…` vs `mn_addr_undeployed…`), so per-address entry selection IS the
+    // network selection. Pin it: a wallet on PreProd must restore the PreProd checkpoint —
+    // seeding another network's dust state would corrupt sync — and uploading one network's
+    // checkpoint must never clobber the other's.
+
+    @Test
+    fun `fetch selects the requested network's entry from a multi-network bundle`() = runTest {
+        val storage = FakeStorage()
+        val c = coordinator(storage)
+        val preprodState = ByteArray(1024) { 1 }
+        val undeployedState = ByteArray(1024) { 2 }
+        c.upload("mn_addr_preprod1abc", preprodState, 111L)
+        c.upload("mn_addr_undeployed1xyz", undeployedState, 222L)
+
+        val preprod = c.fetch("mn_addr_preprod1abc")!!
+        val undeployed = c.fetch("mn_addr_undeployed1xyz")!!
+
+        assertEquals(111L, preprod.lastEventId)
+        assertArrayEquals(preprodState, preprod.stateBytes)
+        assertEquals(222L, undeployed.lastEventId)
+        assertArrayEquals(undeployedState, undeployed.stateBytes)
+    }
+
+    @Test
+    fun `uploading one network's checkpoint preserves the other's entry`() = runTest {
+        val storage = FakeStorage()
+        val c = coordinator(storage)
+        c.upload("mn_addr_preprod1abc", ByteArray(64) { 1 }, 10L)
+        c.upload("mn_addr_undeployed1xyz", ByteArray(64) { 2 }, 20L)
+
+        // Re-upload preprod with a newer checkpoint — the merge must not drop undeployed.
+        c.upload("mn_addr_preprod1abc", ByteArray(64) { 3 }, 30L)
+
+        assertEquals(30L, c.fetch("mn_addr_preprod1abc")!!.lastEventId)
+        assertEquals("the merge dropped the sibling network's checkpoint",
+            20L, c.fetch("mn_addr_undeployed1xyz")!!.lastEventId)
+    }
+
+    @Test
+    fun `fetch for an address with no entry returns null, never another network's state`() = runTest {
+        val c = coordinator(FakeStorage())
+        c.upload("mn_addr_undeployed1xyz", ByteArray(64) { 2 }, 20L)
+
+        assertNull("a PreProd wallet must NEVER be seeded with another network's checkpoint",
+            c.fetch("mn_addr_preprod1abc"))
+    }
+
     @Test
     fun `clear deletes the blob and resets the digest guard so the same checkpoint re-uploads`() = runTest {
         val storage = FakeStorage()

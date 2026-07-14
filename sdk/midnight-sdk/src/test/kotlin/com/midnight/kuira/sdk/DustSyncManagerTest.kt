@@ -229,17 +229,121 @@ class DustSyncManagerTest {
         verify(dustRepo, never()).saveCheckpoint(any(), any(), any())
     }
 
+    // ── Restore gate (dust-backup restore continuity) ──
+    //
+    // The gate is the host's one chance to obtain Drive consent BEFORE the first
+    // no-checkpoint sync, so the cloud-checkpoint fetch can succeed instead of the sync
+    // silently replaying from genesis on a fresh install. Ordering is the contract:
+    // gate → cloud seed → sync.
+
+    @Test
+    fun `restore gate awaited before the cloud fetch when no checkpoint exists`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
+        }
+        val order = mutableListOf<String>()
+        val source = DustCloudBackupSource { order.add("fetch"); null }
+
+        createManager(dustRepo = dustRepo, cloudSource = source, restoreGate = { order.add("gate") })
+            .ensureSynced()
+
+        assertEquals("the gate must resolve consent BEFORE the silent fetch", listOf("gate", "fetch"), order)
+    }
+
+    @Test
+    fun `restore gate not run when a local checkpoint exists`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn true
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
+        }
+        var gateRan = false
+
+        createManager(dustRepo = dustRepo, restoreGate = { gateRan = true }).ensureSynced()
+
+        assertFalse("a warm install must never pay the gate (no prompt risk)", gateRan)
+    }
+
+    @Test
+    fun `restore gate runs at most once per manager`() = runTest {
+        var syncCount = 0
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            // refreshIncremental path: state closed → ensureSynced again with no cached state
+            on { getLastSyncedState() } doAnswer { syncCount++; dustState }
+        }
+        var gateRuns = 0
+        val manager = createManager(dustRepo = dustRepo, restoreGate = { gateRuns++ })
+
+        manager.ensureSynced()
+        manager.refreshIncremental() // closes the state, re-enters ensureSynced cold
+
+        assertEquals("the gate must not re-prompt within one session", 1, gateRuns)
+    }
+
+    @Test
+    fun `restore gate throwing degrades to a normal sync, never blocks`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
+        }
+
+        val result = createManager(dustRepo = dustRepo, restoreGate = { error("host gate broke") })
+            .ensureSynced()
+
+        assertEquals(dustState, result)
+    }
+
+    @Test
+    fun `restore gate cancellation propagates — the sync must not continue torn down`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
+        }
+        val manager = createManager(
+            dustRepo = dustRepo,
+            restoreGate = { throw kotlinx.coroutines.CancellationException("SDK torn down") },
+        )
+
+        val thrown = runCatching { manager.ensureSynced() }.exceptionOrNull()
+
+        assertTrue(
+            "cancellation must propagate, not be logged-and-continued",
+            thrown is kotlinx.coroutines.CancellationException,
+        )
+        verify(dustRepo, never()).syncFromBlockchain(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `no gate wired keeps today's behavior exactly`() = runTest {
+        val dustRepo = mock<DustRepository> {
+            onBlocking { hasCheckpoint("test_addr") } doReturn false
+            onBlocking { syncFromBlockchain(any(), any(), any(), anyOrNull()) } doReturn true
+            on { getLastSyncedState() } doReturn dustState
+        }
+
+        val result = createManager(dustRepo = dustRepo).ensureSynced()
+
+        assertEquals(dustState, result)
+        verify(dustRepo, times(1)).syncFromBlockchain(any(), any(), any(), anyOrNull())
+    }
+
     // ── Helpers ──
 
     private fun createManager(
         dustRepo: DustRepository = mock(),
         nodeRpc: NodeRpcClient = mock(),
         cloudSource: DustCloudBackupSource? = null,
+        restoreGate: (suspend () -> Unit)? = null,
     ) = DustSyncManager(
         dustRepository = dustRepo,
         nodeRpcClient = nodeRpc,
         walletAddress = "test_addr",
         dustSeed = ByteArray(32),
         cloudBackupSource = cloudSource,
+        restoreGate = restoreGate,
     )
 }

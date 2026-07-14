@@ -203,6 +203,48 @@ class MidnightWalletTest {
         wallet.balanceTransaction("proven_hex")
     }
 
+    // ── walletBackupPrefsProvider (the blob-borne prefs supplier, #61) ──
+
+    @Test
+    fun `app-state upload stamps the SUPPLIER's prefs at upload time`() = runTest {
+        // The supplier (not a pushed snapshot) is the fix for the stale-prefs clobber: a
+        // pref change after bootstrap must be reflected in the very next upload.
+        var uploaded: ByteArray? = null
+        val backup = mock<AppStateCloudBackup> {
+            onBlocking { uploadAppState(any()) } doAnswer { uploaded = it.arguments[0] as ByteArray; Unit }
+        }
+        var prefs = WalletBackupPrefs(dustBackupEnabled = false, dustBackupOptedOut = false)
+        val wallet = createWallet(appStateCloudBackup = backup)
+        wallet.walletBackupPrefsProvider = { prefs }
+
+        prefs = WalletBackupPrefs(dustBackupEnabled = true, dustBackupOptedOut = false) // post-bootstrap change
+        wallet.backupAppStateToCloud(byteArrayOf(7))
+
+        val decoded = AppStateEnvelope.decode(uploaded!!)
+        assertEquals("the upload must carry the prefs CURRENT at upload time", prefs, decoded.prefs)
+        assertArrayEquals(byteArrayOf(7), decoded.hostPayload)
+    }
+
+    @Test
+    fun `opted-out supplier blocks both uploads even when the flags say enabled`() = runTest {
+        // Belt over the flags: a restore-gate-mirrored opt-out must stop uploads BEFORE the
+        // next bootstrap pass re-applies the flags — a #246-disabled wallet must never
+        // re-create the blobs it deleted.
+        val dustBackup = mock<DustCloudBackup>()
+        val appBackup = mock<AppStateCloudBackup>()
+        val wallet = createWallet(dustCloudBackup = dustBackup, appStateCloudBackup = appBackup)
+        wallet.dustBackupEnabled = true          // flags still say enabled (pre-gate bootstrap)
+        wallet.appStateBackupEnabled = true
+        wallet.walletBackupPrefsProvider =
+            { WalletBackupPrefs(dustBackupEnabled = false, dustBackupOptedOut = true) }
+
+        wallet.backupDustToCloud()
+        wallet.backupAppStateToCloud(byteArrayOf(1))
+
+        verify(dustBackup, never()).upload(any(), any(), any())
+        verify(appBackup, never()).uploadAppState(any())
+    }
+
     // ── close ──
 
     @Test
@@ -511,6 +553,8 @@ class MidnightWalletTest {
         nativeBalance: NativeBalanceInvoker = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ ->
             throw AssertionError("native balance reached but not stubbed in this test")
         },
+        dustCloudBackup: DustCloudBackup? = null,
+        appStateCloudBackup: AppStateCloudBackup? = null,
     ) = MidnightWallet(
         dustSyncManager = dustSyncManager,
         dustRepository = dustRepository,
@@ -524,5 +568,7 @@ class MidnightWalletTest {
         networkId = networkId,
         spentDustNullifierStore = spentDustNullifierStore,
         nativeBalance = nativeBalance,
+        dustCloudBackup = dustCloudBackup,
+        appStateCloudBackup = appStateCloudBackup,
     )
 }

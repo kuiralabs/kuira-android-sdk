@@ -114,6 +114,21 @@ class MidnightWallet internal constructor(
     var appStateBackupEnabled: Boolean = true
 
     /**
+     * SUPPLIER of the wallet-level backup prefs carried INSIDE the app-state blob (see
+     * [WalletBackupPrefs]) — the SDK can't derive them (the committed toggle is host UI
+     * state). A supplier, not a pushed field, on purpose: it's read at UPLOAD time, so a
+     * pref change (e.g. the restore gate committing the toggle ON, or mirroring an opt-out)
+     * is always reflected in the next blob without the host re-pushing a snapshot at every
+     * mutation site — a pushed snapshot went stale and clobbered restored cloud truth.
+     * The host sets this once per build. Null supplier / null result → prefs marked absent.
+     */
+    @Volatile
+    var walletBackupPrefsProvider: (() -> WalletBackupPrefs?)? = null
+
+    /** Current blob-borne prefs, or null when the host wired no supplier. */
+    private fun currentWalletBackupPrefs(): WalletBackupPrefs? = walletBackupPrefsProvider?.invoke()
+
+    /**
      * Live NIGHT-UTXO list (as the registration-filter JSON) wired by [MidnightSdk].
      * Lets [balance]/[balanceFlow] compute `dustRegistered` from true per-UTXO
      * registration state — "are all current NIGHT UTXOs generating dust?" — instead
@@ -813,8 +828,11 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupDustToCloud() = withContext(Dispatchers.IO) {
         val backup = dustCloudBackup ?: return@withContext
-        if (!dustBackupEnabled) {
-            // User opted out — never upload. Reflect "off" on the lane.
+        // Two gates: the flag the host pushes per build, AND the live prefs supplier. The
+        // supplier closes the window where a restore-gate-mirrored opt-out hasn't been
+        // re-applied to the flag yet (that only happens on the next bootstrap pass) — a
+        // #246-disabled wallet must never re-upload the blobs it deleted.
+        if (!dustBackupEnabled || currentWalletBackupPrefs()?.dustBackupOptedOut == true) {
             updateDustBackup(CloudBackupStatus.Idle)
             return@withContext
         }
@@ -886,14 +904,18 @@ class MidnightWallet internal constructor(
      */
     suspend fun backupAppStateToCloud(appMetadata: ByteArray? = null) = withContext(Dispatchers.IO) {
         val backup = appStateCloudBackup ?: return@withContext
-        if (!appStateBackupEnabled) {
+        if (!appStateBackupEnabled || currentWalletBackupPrefs()?.dustBackupOptedOut == true) {
             // User disabled backup — never upload (else a deleted blob silently re-uploads on the
             // next refresh). Reflect "off" on the lane. Mirrors backupDustToCloud's gate.
             updateAppDataBackup(CloudBackupStatus.Idle)
             return@withContext
         }
         updateAppDataBackup(CloudBackupStatus.Syncing)
-        runCatching { backup.uploadAppState(appMetadata ?: ByteArray(0)) }
+        // Wrap the host payload in the SDK envelope so wallet-level prefs travel with the
+        // blob. The coordinator digests the envelope bytes, so a prefs-only change (toggle
+        // flip) correctly forces a re-upload even with an unchanged host payload.
+        val envelope = AppStateEnvelope.encode(currentWalletBackupPrefs(), appMetadata ?: ByteArray(0))
+        runCatching { backup.uploadAppState(envelope) }
             .onSuccess { updateAppDataBackup(CloudBackupStatus.UpToDate(System.currentTimeMillis())) }
             .onFailure {
                 if (it is CancellationException) throw it // cancelled, not failed — runCatching swallows it, so rethrow
@@ -913,8 +935,18 @@ class MidnightWallet internal constructor(
      * coordinator / unavailable. Decryption is seed-derived (no biometric), so
      * a freshly-signed-in device recovers its app state silently.
      */
-    suspend fun fetchAppState(): ByteArray? = withContext(Dispatchers.IO) {
-        appStateCloudBackup?.let { runCatching { it.fetchAppState() }.getOrNull() }
+    suspend fun fetchAppState(): ByteArray? = fetchRestoredAppState()?.hostPayload
+
+    /**
+     * Fetch the full restored app state: wallet-level [WalletBackupPrefs] (when the blob
+     * carries the SDK envelope) + the host payload. [fetchAppState] is the host-payload
+     * shortcut; this variant exists for the bootstrap restore flow, which needs the prefs
+     * to decide restore-over-genesis. One Block Store read serves both.
+     */
+    suspend fun fetchRestoredAppState(): RestoredAppState? = withContext(Dispatchers.IO) {
+        appStateCloudBackup
+            ?.let { runCatching { it.fetchAppState() }.getOrNull() }
+            ?.let { AppStateEnvelope.decode(it) }
     }
 
     /** Node error 170 = InvalidDustSpendProof. Submit throws it as a

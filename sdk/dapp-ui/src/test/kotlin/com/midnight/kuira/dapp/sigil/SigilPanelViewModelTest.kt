@@ -326,6 +326,7 @@ class SigilPanelViewModelTest {
     ): SigilPanelViewModel = SigilPanelViewModel(
         sigilSession = sigilSession,
         sigilStateStore = SigilStateStore(context),
+        identityProvenance = IdentityProvenanceStore(context),
         blockStoreStorage = blockStoreStorage,
         biometricGate = biometricGate,
         sdkProvider = sdkProvider,

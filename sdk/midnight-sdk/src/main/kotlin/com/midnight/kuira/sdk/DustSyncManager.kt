@@ -30,9 +30,16 @@ class DustSyncManager(
     private val dustSeed: ByteArray,
     private val cloudBackupSource: DustCloudBackupSource? = null,
     private val chainResetGuard: ChainResetGuard? = null,
+    private val restoreGate: (suspend () -> Unit)? = null,
 ) {
     private val mutex = Mutex()
     private var state: DustLocalState? = null
+
+    /**
+     * The [restoreGate] runs at most once per manager instance (a network switch builds a
+     * new SDK → new manager → the gate runs again for that network's address, as intended).
+     */
+    private var restoreGateRan = false
 
     /**
      * Set by [forceResync] so the next [ensureSynced] rebuilds from genesis instead
@@ -67,6 +74,7 @@ class DustSyncManager(
             skipCloudSeedOnce = false
             Log.i(TAG, "cloud-restore: skipped — error-170 recovery rebuilds from genesis")
         } else {
+            awaitRestoreGateIfCold()
             maybeSeedCheckpointFromCloud()
         }
 
@@ -99,6 +107,28 @@ class DustSyncManager(
 
         state = freshState
         freshState
+    }
+
+    /**
+     * Await the host's restore gate before the first NO-CHECKPOINT sync, so
+     * [maybeSeedCheckpointFromCloud]'s silent fetch can succeed instead of falling to a
+     * genesis replay. Runs at most once; a non-cancellation failure never blocks syncing; no
+     * gate wired (the default) → today's behavior exactly. The gate's full behavioral
+     * contract lives on [MidnightSdk.Builder.dustRestoreGate] — the one canonical copy.
+     */
+    private suspend fun awaitRestoreGateIfCold() {
+        val gate = restoreGate ?: return
+        if (restoreGateRan) return
+        if (dustRepository.hasCheckpoint(walletAddress)) return
+        restoreGateRan = true
+        Log.i(TAG, "cloud-restore: no local checkpoint — awaiting host restore gate")
+        try {
+            gate()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            throw ce // sync cancelled (SDK teardown / network switch) — propagate, never "continue"
+        } catch (e: Exception) {
+            Log.w(TAG, "cloud-restore: restore gate failed — continuing: ${e.message}")
+        }
     }
 
     /**

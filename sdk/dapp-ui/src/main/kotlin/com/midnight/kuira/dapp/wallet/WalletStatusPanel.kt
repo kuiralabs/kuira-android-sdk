@@ -26,7 +26,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -368,6 +370,62 @@ fun WalletStatusPanel(
     LaunchedEffect(Unit) {
         viewModel.consentRequests.collect { request -> consentLauncher.launch(request) }
     }
+    // Restore-gate consent launches (#61) go through the SAME launcher; results return via
+    // onConsentResult, which offers them to the gate before the enable flow.
+    LaunchedEffect(Unit) {
+        viewModel.gateConsentRequests.collect { request -> consentLauncher.launch(request) }
+    }
+
+    // Restore-over-genesis offer (#61): a blocking sign-in step. Deliberately NOT dismissible
+    // by outside-tap/back — the whole point is that skipping a restore must be an explicit
+    // choice with the cost stated, never an accidental dismissal (which used to silently cost
+    // a full genesis replay). The dust sync waits on this answer.
+    val restoreOffer by viewModel.restoreOffer.collectAsStateWithLifecycle()
+    if (restoreOffer) {
+        AlertDialog(
+            onDismissRequest = { /* blocking — answer via the buttons */ },
+            containerColor = activeColors.sheetBackground,
+            titleContentColor = activeColors.onSheet,
+            textContentColor = activeColors.onSheet,
+            title = { Text(RESTORE_OFFER_TITLE, fontWeight = FontWeight.SemiBold) },
+            text = { Text(RESTORE_OFFER_BODY, fontSize = 13.sp, lineHeight = 18.sp) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.connectRestore() }) {
+                    Text(RESTORE_OFFER_CONNECT, color = activeColors.positive, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.skipRestore() }) {
+                    Text(RESTORE_OFFER_SKIP, color = activeColors.onSheetDim)
+                }
+            },
+        )
+    }
+
+    // One-time backup-setup offer for a NEW wallet (the enable side of #61): the one Drive
+    // connect granted here is what makes every future install restore silently. Dismissible —
+    // a new wallet has nothing at stake yet, and the BackupSection toggle remains.
+    val backupSetupOffer by viewModel.backupSetupOffer.collectAsStateWithLifecycle()
+    if (backupSetupOffer && activity != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissBackupSetup() },
+            containerColor = activeColors.sheetBackground,
+            titleContentColor = activeColors.onSheet,
+            textContentColor = activeColors.onSheet,
+            title = { Text(SETUP_OFFER_TITLE, fontWeight = FontWeight.SemiBold) },
+            text = { Text(SETUP_OFFER_BODY, fontSize = 13.sp, lineHeight = 18.sp) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acceptBackupSetup(config, activity) }) {
+                    Text(SETUP_OFFER_CONNECT, color = activeColors.positive, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissBackupSetup() }) {
+                    Text(SETUP_OFFER_SKIP, color = activeColors.onSheetDim)
+                }
+            },
+        )
+    }
 
     if (sheetOpen) {
         ModalBottomSheet(
@@ -586,6 +644,23 @@ internal val MidnightNetwork.pillName: String
  * [WalletBalance.hasShielded] is true, so non-shielded users never see it.
  */
 private const val SHIELD_GLYPH = "🛡"
+
+// Restore-over-genesis offer copy (#61). Benefit-first: lead with what the user gets.
+private const val RESTORE_OFFER_TITLE = "Restore your wallet data?"
+private const val RESTORE_OFFER_BODY =
+    "We found a previous wallet for this account. Connect Google Drive to restore its synced " +
+        "state in seconds — otherwise your wallet re-syncs from scratch, which can take hours."
+private const val RESTORE_OFFER_CONNECT = "Connect & Restore"
+private const val RESTORE_OFFER_SKIP = "Skip — re-sync from scratch"
+
+// One-time backup-setup offer copy (new wallets).
+private const val SETUP_OFFER_TITLE = "Keep your wallet synced"
+private const val SETUP_OFFER_BODY =
+    "Back up your wallet's sync data to your Google Drive (private app storage). Reinstalls " +
+        "and new devices pick up where you left off in seconds — otherwise re-syncing from " +
+        "scratch can take hours. You can change this anytime in the backup settings."
+private const val SETUP_OFFER_CONNECT = "Turn on backup"
+private const val SETUP_OFFER_SKIP = "Not now"
 
 // ── Sheet content ──
 

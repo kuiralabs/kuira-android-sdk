@@ -49,6 +49,7 @@ import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -912,6 +913,7 @@ class MidnightSdk private constructor(
         private var provingMode: ProvingMode = ProvingMode.DEFAULT
         private var proofServerUrl: String? = null
         private var dustCloudBackupFactory: ((address: String, dustSeed: ByteArray) -> DustCloudBackup)? = null
+        private var dustRestoreGate: (suspend (RestoredAppState?) -> Unit)? = null
         private var appStateBackupFactory: ((seed: ByteArray) -> AppStateCloudBackup)? = null
         private var proactiveDustSync: Boolean = false
 
@@ -978,6 +980,22 @@ class MidnightSdk private constructor(
         fun appStateBackupFactory(
             factory: (seed: ByteArray) -> AppStateCloudBackup,
         ) = apply { this.appStateBackupFactory = factory }
+
+        /**
+         * Optional restore gate awaited ONCE before the first dust sync that finds no local
+         * checkpoint (a fresh install / new device / new network). The host's chance to
+         * obtain Drive consent so the cloud-checkpoint restore can succeed instead of the
+         * sync silently replaying from genesis. The SDK hands the gate the restored
+         * [RestoredAppState] (prefs + host payload, null when nothing is in the cloud) —
+         * the gate can fire during build, before the host holds any SDK handle, so it can't
+         * fetch that itself. Must resolve promptly (grant, decline, or nothing-to-do) and
+         * must NOT call back into wallet sync APIs (it runs inside the dust-sync critical
+         * section). Omit it (the default) and behavior is unchanged. Registered as a builder
+         * option — not a post-build property — because the proactive dust sync starts at
+         * build time and would otherwise race past the gate into genesis.
+         */
+        fun dustRestoreGate(gate: suspend (RestoredAppState?) -> Unit) =
+            apply { this.dustRestoreGate = gate }
 
         /**
          * Build the SDK. This is a blocking operation on first launch:
@@ -1130,6 +1148,32 @@ class MidnightSdk private constructor(
             // reproducible from the passkey on any device → same key → decryptable).
             val appStateCloudBackup = appStateBackupFactory?.invoke(seedBytes)
 
+            // The restore gate can fire during build (the proactive sync starts here), BEFORE
+            // any host-visible handle to this SDK exists — so the SDK fetches + decodes the
+            // restored app state itself and hands it to the host gate, which only resolves
+            // consent from it. Best-effort: a fetch failure gates with null (unknown prefs).
+            val restoreGate: (suspend () -> Unit)? = dustRestoreGate?.let { hostGate ->
+                {
+                    // Mirrors MidnightWallet.fetchRestoredAppState (IO dispatcher + best-effort),
+                    // which can't be called here — the wallet is constructed after this closure.
+                    // CancellationException propagates: a torn-down sync must not gate-then-sync.
+                    val restored = withContext(Dispatchers.IO) {
+                        appStateCloudBackup
+                            ?.let { b ->
+                                try {
+                                    b.fetchAppState()
+                                } catch (ce: kotlinx.coroutines.CancellationException) {
+                                    throw ce
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                            ?.let { AppStateEnvelope.decode(it) }
+                    }
+                    hostGate(restored)
+                }
+            }
+
             val dustSyncManager = DustSyncManager(
                 dustRepository = dustRepository,
                 nodeRpcClient = nodeRpcClient,
@@ -1137,6 +1181,7 @@ class MidnightSdk private constructor(
                 dustSeed = keys.dustSeed,
                 cloudBackupSource = dustCloudBackup,
                 chainResetGuard = chainResetGuard,
+                restoreGate = restoreGate,
             )
 
             val wallet = MidnightWallet(

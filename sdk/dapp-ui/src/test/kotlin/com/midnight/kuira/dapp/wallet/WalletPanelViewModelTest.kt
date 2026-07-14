@@ -10,6 +10,7 @@ import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.testing.MainDispatcherRule
+import com.midnight.kuira.dapp.sigil.IdentityProvenanceStore
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.MidnightWallet
 import com.midnight.kuira.sdk.WalletBalance
@@ -64,7 +65,7 @@ class WalletPanelViewModelTest {
     private val lockedFlow = MutableStateFlow(false)
 
     private fun dustPrefs() =
-        context.getSharedPreferences("kuira_dust_backup", Context.MODE_PRIVATE)
+        context.getSharedPreferences(DustBackupStateStore.PREFS_NAME, Context.MODE_PRIVATE)
 
     private lateinit var context: Context
 
@@ -79,6 +80,8 @@ class WalletPanelViewModelTest {
             .edit().clear().commit()
         // Same for the dust-backup opt-out prefs so each test starts opted-in.
         dustPrefs().edit().clear().commit()
+        context.getSharedPreferences(com.midnight.kuira.dapp.sigil.IdentityProvenanceStore.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().clear().commit()
         // Real (empty) SDK flow — the relaxed mock's .value returns an uncastable
         // Object, which setDustBackup's `sdk.value?.wallet` would choke on.
         every { sdkProvider.sdk } returns MutableStateFlow<MidnightSdk?>(null)
@@ -94,19 +97,19 @@ class WalletPanelViewModelTest {
         vm.setDustBackup(enabled = false, config = devConfig(), activity = activity)
 
         // Persisted so the disable survives restarts / SDK rebuilds…
-        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        assertEquals(true, dustPrefs().getBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, false))
         // …and turning it OFF is purely local — no Drive round-trip.
         coVerify(exactly = 0) { driveAuth.authorize() }
     }
 
     @Test
     fun `enabling dust backup clears the opt-out and starts the Drive consent flow`() = runTest {
-        dustPrefs().edit().putBoolean("dust_backup_opted_out", true).commit()
+        dustPrefs().edit().putBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, true).commit()
         val vm = newVm()
 
         vm.setDustBackup(enabled = true, config = devConfig(), activity = activity)
 
-        assertEquals(false, dustPrefs().getBoolean("dust_backup_opted_out", true))
+        assertEquals(false, dustPrefs().getBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, true))
         coVerify { driveAuth.authorize() }
     }
 
@@ -134,7 +137,7 @@ class WalletPanelViewModelTest {
         // The grant is KEPT — revoking would make re-enable hang/fail (ApiException 22).
         coVerify(exactly = 0) { driveAuth.revoke() }
         // Opted out locally so the lane reflects off + survives a restart.
-        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        assertEquals(true, dustPrefs().getBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, false))
     }
 
     @Test
@@ -155,7 +158,7 @@ class WalletPanelViewModelTest {
         // Still never revokes — keeps re-enable instant.
         coVerify(exactly = 0) { driveAuth.revoke() }
         // …and the user is opted out (the UI never lies "still backed up").
-        assertEquals(true, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        assertEquals(true, dustPrefs().getBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, false))
     }
 
     @Test
@@ -167,7 +170,7 @@ class WalletPanelViewModelTest {
         advanceUntilIdle()
 
         // Nothing was deleted/revoked → must NOT flip the lane to "off" (no false "disabled").
-        assertEquals(false, dustPrefs().getBoolean("dust_backup_opted_out", false))
+        assertEquals(false, dustPrefs().getBoolean(DustBackupStateStore.KEY_DUST_OPTED_OUT, false))
         coVerify(exactly = 0) { driveAuth.revoke() }
     }
 
@@ -603,5 +606,12 @@ class WalletPanelViewModelTest {
         networkStore = networkStore,
         appContext = context,
         appDataProvider = java.util.Optional.empty(),
+        backupState = DustBackupStateStore(context),
+        restoreGate = DustRestoreGateImpl(
+            driveAuth,
+            DustBackupStateStore(context),
+            com.midnight.kuira.dapp.sigil.IdentityProvenanceStore(context),
+        ),
+        identityProvenance = com.midnight.kuira.dapp.sigil.IdentityProvenanceStore(context),
     )
 }

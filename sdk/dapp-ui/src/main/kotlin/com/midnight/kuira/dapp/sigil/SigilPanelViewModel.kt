@@ -50,6 +50,7 @@ import javax.inject.Inject
 class SigilPanelViewModel @Inject constructor(
     private val sigilSession: SigilSession,
     private val sigilStateStore: SigilStateStore,
+    private val identityProvenance: IdentityProvenanceStore,
     private val blockStoreStorage: BlockStoreBackupStorage,
     /** Presence-only biometric gate for sign-out (confirms "it's you"). */
     private val biometricGate: BiometricGate,
@@ -172,6 +173,10 @@ class SigilPanelViewModel @Inject constructor(
                 // (a GET can't return it), matching the sign-in path.
                 val result = sigilSession.establishSigil(activity)
 
+                // Provenance feeds the dust restore gate: a REUSED identity means this wallet
+                // existed before this install, so a cloud dust checkpoint plausibly exists
+                // (the cross-dApp first-run signal). A fresh forge is a brand-new wallet.
+                identityProvenance.identityRestored = result.reused
                 Log.i(TAG, "Sigil ${if (result.reused) "reused" else "forged"} — DID: ${result.did}")
                 Log.i(TAG, "  Credential ID: ${result.credentialId}")
                 persistSigil(
@@ -229,6 +234,8 @@ class SigilPanelViewModel @Inject constructor(
                 // second ceremony (two biometrics, same correctness).
                 Log.i(TAG, "Starting sign-in via SigilSession (one ceremony, two salts)…")
                 val derivation = sigilSession.signIn(activity)
+                // Sign-in is by definition a restored identity — feed the dust restore gate.
+                identityProvenance.identityRestored = true
                 Log.i(TAG, "  DID: ${derivation.did}")
                 Log.i(TAG, "  Credential ID: ${derivation.credentialId}")
                 _status.value = SigilStatus.Forged(
@@ -302,6 +309,9 @@ class SigilPanelViewModel @Inject constructor(
                 return@launch
             }
             sigilStateStore.clear()
+            // The next identity on this install must not inherit this wallet's restore
+            // signals (identityRestored / restore-prompt-declined) — see the store's KDoc.
+            identityProvenance.clear()
             sdkProvider.close()
             _status.value = SigilStatus.None
             Log.i(TAG, "Signed out — local sigil cleared, SDK closed")

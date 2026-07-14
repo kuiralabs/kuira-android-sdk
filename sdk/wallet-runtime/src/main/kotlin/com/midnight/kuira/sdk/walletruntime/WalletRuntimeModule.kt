@@ -41,11 +41,16 @@ object WalletRuntimeModule {
     fun provideMidnightSdkFactory(
         @ApplicationContext context: Context,
         driveAuth: DriveAuthManager,
+        restoreGate: java.util.Optional<DustRestoreGate>,
     ): MidnightSdkFactory = MidnightSdkFactory { config, seed ->
         MidnightSdk.Builder(context)
             .network(config.network)
             .seed(seed)
             .provingMode(config.provingMode)
+            // Restore-over-genesis (roadmap #61): the gate is a Hilt-optional @Singleton, so
+            // it exists (or doesn't) BEFORE any SDK build — no registration race, and a host
+            // without one wires NO gate, keeping the SDK's once-only gate opportunity intact.
+            .also { b -> restoreGate.ifPresent { g -> b.dustRestoreGate(g::onColdRestore) } }
             // #235: the embedded-wallet provider keeps dust pre-synced in the
             // background (live tip-advance subscription) so a tx never waits on a
             // cold sync. The SDK Builder default is off (for raw SDK consumers);
