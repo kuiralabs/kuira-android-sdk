@@ -1,5 +1,11 @@
 package com.midnight.kuira.dapp.wallet
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -78,6 +84,9 @@ data class WalletChipUi(
     val dustRegistered: Boolean,
     val synced: Boolean,
     val network: String,
+    /** True whenever a sync is in flight — determinate OR indeterminate. Drives the status
+     *  indicator; [syncProgress] only carries a fraction when one is measurable. */
+    val syncing: Boolean = false,
     /** Live sync fraction (0..1) when a determinate sync is in flight; null = idle/indeterminate →
      *  the Panel tier hides the progress bar rather than showing a frozen mock. */
     val syncProgress: Float? = null,
@@ -131,8 +140,10 @@ internal fun WalletChip(
     when (tier) {
         ChipTier.Peek -> PeekTab(colors, modifier)
         ChipTier.Pill -> FrostPill(colors, modifier) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(colors.onSheetDim))
-            Spacer(Modifier.width(8.dp))
+            if (ui.syncing) {
+                SyncPulseDot(colors.accent)
+                Spacer(Modifier.width(8.dp))
+            }
             Text(ui.night, color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300)
             Spacer(Modifier.width(4.dp))
             Text("NIGHT", color = colors.onSheetDim, fontSize = 11.sp, letterSpacing = 1.sp)
@@ -144,7 +155,10 @@ internal fun WalletChip(
         ChipTier.Card -> GlassCard(colors, modifier.width(width)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Label("NIGHT", colors)
-                if (ui.synced) Text("Synced", color = colors.positive, fontSize = 12.sp)
+                when {
+                    ui.syncing -> Text("Syncing", color = colors.accent, fontSize = 12.sp)
+                    ui.synced -> Text("Synced", color = colors.positive, fontSize = 12.sp)
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text(ui.night, color = colors.onSheet, fontSize = 30.sp, fontWeight = FontWeight.W200, letterSpacing = (-0.5).sp)
@@ -162,9 +176,13 @@ internal fun WalletChip(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Label("NIGHT · ", colors)
-                    if (ui.synced) Text("Synced", color = colors.positive, fontSize = 11.sp, letterSpacing = 1.sp)
+                    when {
+                        ui.syncing -> Text("Syncing", color = colors.accent, fontSize = 11.sp, letterSpacing = 1.sp)
+                        ui.synced -> Text("Synced", color = colors.positive, fontSize = 11.sp, letterSpacing = 1.sp)
+                    }
                 }
-                if (ui.synced) Text("✓", color = colors.positive, fontSize = 13.sp)
+                if (ui.syncing) SyncPulseDot(colors.accent)
+                else if (ui.synced) Text("✓", color = colors.positive, fontSize = 13.sp)
             }
             Text(ui.night, color = colors.onSheet, fontSize = 40.sp, fontWeight = FontWeight.W200, letterSpacing = (-1).sp)
             Spacer(Modifier.height(12.dp))
@@ -193,6 +211,17 @@ internal fun WalletChip(
             Spacer(Modifier.height(PanelGripClearance))
         }
     }
+}
+
+@Composable
+private fun SyncPulseDot(color: Color) {
+    val alpha by rememberInfiniteTransition(label = "syncPulse").animateFloat(
+        initialValue = 1f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "syncPulseAlpha",
+    )
+    Box(Modifier.size(6.dp).clip(CircleShape).background(color.copy(alpha = alpha)))
 }
 
 // ── Sigil chip ───────────────────────────────────────────────────────────────

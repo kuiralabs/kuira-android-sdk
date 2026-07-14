@@ -313,6 +313,7 @@ fun WalletStatusPanel(
             network = network,
             formatter = formatter,
             colors = activeColors,
+            syncing = syncProgress != null,
             modifier = modifier.dappPressable(
                 shape = RoundedCornerShape(PanelDimens.PillCornerRadius),
             ) { sheetOpen = true },
@@ -511,6 +512,7 @@ private fun WalletPill(
     network: MidnightNetwork,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
+    syncing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val label = pillLabel(status, network, formatter)
@@ -530,7 +532,7 @@ private fun WalletPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(PanelDimens.PillItemGap),
     ) {
-        if (status is WalletStatus.Loading || (status is WalletStatus.Ready && status.busy != null)) {
+        if (syncing || status is WalletStatus.Loading || (status is WalletStatus.Ready && status.busy != null)) {
             CircularProgressIndicator(
                 modifier = Modifier.size(PanelDimens.PillSpinnerSize),
                 strokeWidth = PanelDimens.PillSpinnerStroke,
@@ -580,9 +582,13 @@ internal fun walletChipUi(
             dustRegistered = b.dustRegistered,
             synced = syncProgress == null && s.busy == null,
             network = net,
+            syncing = syncProgress != null,
             syncProgress = syncProgress?.fraction,
         )
-    } ?: WalletChipUi("—", "—", "—", "—", dustRegistered = false, synced = false, network = net)
+    } ?: WalletChipUi(
+        "—", "—", "—", "—",
+        dustRegistered = false, synced = false, network = net, syncing = syncProgress != null,
+    )
 }
 
 internal fun pillLabel(
