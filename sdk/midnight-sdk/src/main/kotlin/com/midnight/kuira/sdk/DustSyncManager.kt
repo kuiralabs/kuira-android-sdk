@@ -6,6 +6,7 @@ import com.midnight.kuira.core.indexer.repository.DustRepository
 import com.midnight.kuira.core.indexer.sync.ChainResetGuard
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -124,7 +125,7 @@ class DustSyncManager(
         Log.i(TAG, "cloud-restore: no local checkpoint — awaiting host restore gate")
         try {
             gate()
-        } catch (ce: kotlinx.coroutines.CancellationException) {
+        } catch (ce: CancellationException) {
             throw ce // sync cancelled (SDK teardown / network switch) — propagate, never "continue"
         } catch (e: Exception) {
             Log.w(TAG, "cloud-restore: restore gate failed — continuing: ${e.message}")

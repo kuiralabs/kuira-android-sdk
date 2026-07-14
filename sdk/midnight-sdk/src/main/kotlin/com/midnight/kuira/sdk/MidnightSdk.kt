@@ -1162,7 +1162,7 @@ class MidnightSdk private constructor(
                             ?.let { b ->
                                 try {
                                     b.fetchAppState()
-                                } catch (ce: kotlinx.coroutines.CancellationException) {
+                                } catch (ce: CancellationException) {
                                     throw ce
                                 } catch (_: Exception) {
                                     null

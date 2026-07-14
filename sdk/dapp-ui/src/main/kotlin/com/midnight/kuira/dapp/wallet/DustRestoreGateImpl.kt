@@ -15,6 +15,8 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withTimeoutOrNull
@@ -61,7 +63,7 @@ class DustRestoreGateImpl @Inject constructor(
     /** Collected by the wallet panel into the same consent launcher as the enable flow. */
     val consentRequests: SharedFlow<IntentSenderRequest> = _consentRequests.asSharedFlow()
 
-    private val _restoreOffer = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val _restoreOffer = MutableStateFlow(false)
 
     /**
      * True while the gate is offering a restore — the panel renders the blocking
@@ -70,7 +72,7 @@ class DustRestoreGateImpl @Inject constructor(
      * (the explicit re-sync-from-scratch choice). The naked system dialog was too easy to
      * dismiss by accident — this step makes skipping a restore deliberate.
      */
-    val restoreOffer: kotlinx.coroutines.flow.StateFlow<Boolean> = _restoreOffer
+    val restoreOffer: StateFlow<Boolean> = _restoreOffer
 
     private val pending = AtomicReference<CompletableDeferred<ConsentVerdict>?>(null)
 
