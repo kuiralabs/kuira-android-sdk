@@ -31,6 +31,24 @@ production-bug-driven hardening that preceded it.
   `DustCloudBackupSource` + cold-start seeding in `DustSyncManager`
   (`sdk:midnight-sdk`).
 
+- **Dust-backup restore continuity** (roadmap #61) — makes the cloud sync
+  above **restore-by-default** on a fresh install instead of silently
+  replaying from genesis (up to hours on a real chain). The backup
+  preference now travels with the wallet inside the seed-keyed app-state
+  blob, so a reinstall knows a backup exists. Before the first
+  no-checkpoint dust sync the panel runs a restore gate: a silent Drive
+  probe (same-app reinstall / new device restore with zero prompts), else
+  a **blocking** "Restore your wallet data?" step where Connect & Restore
+  is the default and only an explicit "Skip — re-sync from scratch"
+  proceeds without restoring (never durable; a dismissed system dialog
+  returns to the step). New wallets get a one-time "Keep your wallet
+  synced" setup offer after first bootstrap. The toggle position a fresh
+  install couldn't know is restored, and an explicitly opted-out wallet is
+  never prompted. `DustRestoreGate` (`sdk:wallet-runtime`, Hilt-optional);
+  `DustRestoreGateImpl`, `DustBackupStateStore`, `IdentityProvenanceStore`,
+  the two offer dialogs in `WalletStatusPanel`, and the gate wiring in
+  `WalletPanelViewModel`.
+
 - **`dapp-ui` module** at `sdk/dapp-ui` (formerly `examples/common`).
   First-class SDK module: published to Maven Local via the parent
   project's `publishToMavenLocal`, consumed by BBoard + Kicks as
