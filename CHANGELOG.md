@@ -14,7 +14,18 @@ Public-API entries from `alpha03` onward are reconciled against each module's ch
 `api/*.api` binary-compatibility dump; `alpha01` (which predates those dumps) is described
 from its release and history.
 
-## [Unreleased] — `0.1.0-alpha05` (in development)
+## [Unreleased]
+
+### Fixed
+- **Unshielded money-path calls** — a contract call to a circuit that uses `receiveUnshielded` /
+  `sendUnshielded` no longer fails with an opaque node error when no offer is supplied. A deposit
+  auto-funds from the wallet (toggle via `MidnightSdk.Builder.autoFundUnshieldedDeposits`, on by
+  default); when auto-funding is off, or for a withdrawal, the SDK throws a clear
+  `ContractCallException.UnshieldedValueUnfunded` naming the builder to call
+  (`buildUnshieldedFundingJson` / `buildUnshieldedWithdrawalJson`). An explicitly supplied
+  `unshieldedFundingJson` / `unshieldedWithdrawalJson` always takes precedence.
+
+## [0.1.0-alpha05] — 2026-07-14
 
 ### Added
 - **Contract constructor arguments** — deploy a contract passing constructor args, threaded through the circuit-call path (`compact-engine`).

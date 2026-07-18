@@ -916,6 +916,11 @@ class MidnightSdk private constructor(
         private var dustRestoreGate: (suspend (RestoredAppState?) -> Unit)? = null
         private var appStateBackupFactory: ((seed: ByteArray) -> AppStateCloudBackup)? = null
         private var proactiveDustSync: Boolean = false
+        // Auto-fund the unshielded money path (kuira-sdk-android#4): a plain call to a
+        // receiveUnshielded circuit builds + attaches the funding offer from this wallet. Explicit
+        // offers always win; set false to require them (callers then get the clear "provide funding"
+        // error instead of auto-funding).
+        private var autoFundUnshieldedDeposits: Boolean = true
 
         /**
          * Keep dust pre-synced in the background (#235). When enabled, the SDK
@@ -926,6 +931,10 @@ class MidnightSdk private constructor(
          * still O(chain) but now runs ahead of need.
          */
         fun proactiveDustSync(enabled: Boolean = true) = apply { this.proactiveDustSync = enabled }
+
+        /** Auto-fund a receiveUnshielded deposit from this wallet when the caller supplies no offer
+         *  (kuira-sdk-android#4). Explicit offers always take precedence. Default: enabled. */
+        fun autoFundUnshieldedDeposits(enabled: Boolean = true) = apply { this.autoFundUnshieldedDeposits = enabled }
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
         fun network(network: MidnightNetwork) = apply { this.network = network }
@@ -1287,7 +1296,7 @@ class MidnightSdk private constructor(
                 .networkId(net.rustNetworkId)
                 .build()
 
-            return MidnightSdk(
+            val sdk = MidnightSdk(
                 config = config,
                 wallet = wallet,
                 coinPublicKey = keys.coinPublicKey,
@@ -1309,6 +1318,13 @@ class MidnightSdk private constructor(
                 indexerClient = indexerClient,
                 shieldedTracker = shieldedTracker,
             )
+            // Wire the unshielded auto-fund path (kuira-sdk-android#4): the provider needs the
+            // wallet, so it's set after construction. Explicit offers bypass it — it only fills an
+            // empty deposit offer when the policy is on.
+            config.configureUnshieldedAutoFund(autoFundUnshieldedDeposits) { tokenHex, amount ->
+                sdk.buildUnshieldedFundingJson(amount, tokenHex)
+            }
+            return sdk
         }
     }
 

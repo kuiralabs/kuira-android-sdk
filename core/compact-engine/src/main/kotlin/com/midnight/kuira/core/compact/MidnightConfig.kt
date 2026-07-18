@@ -57,6 +57,29 @@ class MidnightConfig private constructor(
     internal val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
 
     /**
+     * Auto-fund the unshielded money path (kuira-sdk-android#4). When [autoFundUnshieldedDeposits]
+     * is on and a circuit receives unshielded value with no offer supplied, [MidnightContract]
+     * calls this provider to build the funding offer from the wallet and re-runs the call. Set by
+     * the SDK after construction (the provider needs the wallet). `null` provider or a `false`
+     * policy → the caller must supply the offer, which surfaces as the Layer 1 clear error.
+     */
+    internal var unshieldedFundingProvider: (suspend (tokenHex: String, amount: java.math.BigInteger) -> String)? = null
+    internal var autoFundUnshieldedDeposits: Boolean = false
+
+    /**
+     * Wire unshielded auto-funding (kuira-sdk-android#4). Called by the SDK, which owns the wallet
+     * the [provider] draws from — dApps don't call this directly. A `null` provider or `enabled =
+     * false` leaves the caller responsible for the offer (the Layer 1 clear error).
+     */
+    fun configureUnshieldedAutoFund(
+        enabled: Boolean,
+        provider: (suspend (tokenHex: String, amount: java.math.BigInteger) -> String)?,
+    ) {
+        this.autoFundUnshieldedDeposits = enabled
+        this.unshieldedFundingProvider = provider
+    }
+
+    /**
      * A tick each time the chain may have advanced — drives [MidnightContract.observeLedger].
      * Rides the SDK-injected block subscription ([Builder.blockSignals]); when none is wired (a
      * raw compact-engine consumer), falls back to a poll so observeLedger still works. Neither

@@ -235,30 +235,59 @@ class MidnightContract private constructor(
         // Step 2: Execute circuit
         onProgress?.invoke(ContractCallStage.Executing)
         val executeStart = System.currentTimeMillis()
+        suspend fun runExecute(funding: String?) = config.executor.executeCircuit(
+            contractJs = contractJsContent,
+            contractAddress = contractAddress,
+            circuitName = circuitName,
+            circuitArgs = jsArgs,
+            witnesses = witnesses,
+            initialPrivateState = privateStateJs,
+            coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
+            networkId = config.networkId,
+            onChainStateHex = onChainStateHex,
+            ledgerParametersHex = ledgerParamsHex,
+            ttlSecs = ttlSecs,
+            blockTimeSecs = blockTimeSecs,
+            // A constructor-args contract's circuit-call path calls initialState() (then swaps in
+            // on-chain state), so pass the args to satisfy its validation. Empty = no-arg contract.
+            constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
+            unshieldedFundingJson = funding,
+            unshieldedWithdrawalJson = unshieldedWithdrawalJson,
+        )
+
+        // The funding offer actually used (the caller's, or an auto-funded one) — the post-prove
+        // signing below must sign THIS, not the original param.
+        var effectiveFundingJson = unshieldedFundingJson
         val executionResult = try {
-            config.executor.executeCircuit(
-                contractJs = contractJsContent,
-                contractAddress = contractAddress,
-                circuitName = circuitName,
-                circuitArgs = jsArgs,
-                witnesses = witnesses,
-                initialPrivateState = privateStateJs,
-                coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
-                networkId = config.networkId,
-                onChainStateHex = onChainStateHex,
-                ledgerParametersHex = ledgerParamsHex,
-                ttlSecs = ttlSecs,
-                blockTimeSecs = blockTimeSecs,
-                // A constructor-args contract's circuit-call path calls initialState() (then swaps in
-                // on-chain state), so pass the args to satisfy its validation. Empty = no-arg contract.
-                constructorArgs = ArgConverter.toJsExpressions(*constructorArgs.toTypedArray()),
-                unshieldedFundingJson = unshieldedFundingJson,
-                unshieldedWithdrawalJson = unshieldedWithdrawalJson,
-            )
+            runExecute(unshieldedFundingJson)
         } catch (e: Exception) {
-            throw ContractCallException.CircuitExecutionFailed(
-                "Circuit '$circuitName' failed: ${e.message}", e,
-            )
+            // The circuit moves unshielded value with no offer supplied (kuira-sdk-android#4). The
+            // FFI signal is `UNSHIELDED_VALUE_UNFUNDED:<kind>:<token>:<amount>|<human message>`.
+            val raw = e.message ?: ""
+            if (!raw.contains(UNSHIELDED_UNFUNDED_MARKER)) {
+                throw ContractCallException.CircuitExecutionFailed(
+                    "Circuit '$circuitName' failed: ${e.message}", e,
+                )
+            }
+            val payload = raw.substringAfter("$UNSHIELDED_UNFUNDED_MARKER:")
+            val human = payload.substringAfter("|").substringBefore("\"}").trim().ifEmpty { raw }
+            val meta = payload.substringBefore("|").split(":")
+            val provider = config.unshieldedFundingProvider
+            if (meta.firstOrNull() == "funding" && config.autoFundUnshieldedDeposits &&
+                provider != null && unshieldedFundingJson == null
+            ) {
+                // Layer 2 — auto-fund the deposit from the wallet, then re-run the call. Custom /
+                // explicit offers never reach here (they'd have satisfied the FFI check on pass 1).
+                val token = meta.getOrElse(1) { "" }
+                val amount = meta.getOrElse(2) { "0" }.toBigInteger()
+                Log.i(TAG, "auto-funding unshielded deposit ($amount) for '$circuitName'")
+                onProgress?.invoke(ContractCallStage.Executing)
+                effectiveFundingJson = provider(token, amount)
+                runExecute(effectiveFundingJson)
+            } else {
+                // Layer 1 — clear, typed error naming the builder (withdrawals, policy off, no provider).
+                throw ContractCallException.UnshieldedValueUnfunded(human, e)
+            }
         }
         val executeMs = System.currentTimeMillis() - executeStart
 
@@ -274,8 +303,9 @@ class MidnightContract private constructor(
         // Step 3b: Sign the unshielded funding offer AFTER proving. Proving rewrites the contract
         // call's erased serialization, so the offer (attached unsigned at assembly) must be signed
         // now — signing before proving yields a signature the node rejects (error 175). Only runs
-        // when the caller funded a receiveUnshielded; a plain call leaves the tx untouched.
-        val provenTxHex = unshieldedFundingJson?.let { fundingJson ->
+        // when a receiveUnshielded was funded — by the caller OR auto-funded above; a plain call
+        // leaves the tx untouched.
+        val provenTxHex = effectiveFundingJson?.let { fundingJson ->
             val nightKey = JSONObject(fundingJson).optString("night_private_key").ifEmpty {
                 throw ContractCallException.ProvingFailed(
                     "Unshielded funding missing night_private_key; cannot sign the offer.", null,
@@ -678,6 +708,9 @@ class MidnightContract private constructor(
 
     companion object {
         private const val TAG = "MidnightContract"
+        // Prefix the native assembler emits when a circuit moves unshielded value with no offer
+        // supplied (kuira-sdk-android#4). Kept in sync with contract_ffi.rs check_unshielded_offer_present.
+        private const val UNSHIELDED_UNFUNDED_MARKER = "UNSHIELDED_VALUE_UNFUNDED"
         private const val CONTRACT_ADDRESS_HEX_LENGTH = 64
 
         /** Informational op name for a deploy (no circuit name); see [ContractOperationListener]. */
