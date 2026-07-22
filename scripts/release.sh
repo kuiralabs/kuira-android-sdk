@@ -32,11 +32,13 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
 fi
 
 # Repo checkout locations — override via env if your layout differs.
-MONOREPO="${KUIRA_MONOREPO:-/Users/norman/Development/android/projects/kuira-android-wallet}"
-STARTER="${KUIRA_STARTER:-/Users/norman/Development/kuira-starter-android}"
-DOCS="${KUIRA_DOCS:-/Users/norman/Development/kuira-sdk-android}"
-BBOARD="${KUIRA_BBOARD:-/Users/norman/Development/example-bboard-android}"
-TALLY="${KUIRA_TALLY:-/Users/norman/Development/kuira-examples/midnight-tally}"
+# MONOREPO defaults to this repo (the script lives in scripts/); siblings default
+# under $HOME/Development. Set KUIRA_* env vars for any other layout.
+MONOREPO="${KUIRA_MONOREPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+STARTER="${KUIRA_STARTER:-$HOME/Development/kuira-starter-android}"
+DOCS="${KUIRA_DOCS:-$HOME/Development/kuira-sdk-android}"
+BBOARD="${KUIRA_BBOARD:-$HOME/Development/example-bboard-android}"
+TALLY="${KUIRA_TALLY:-$HOME/Development/kuira-examples/midnight-tally}"
 
 # Portable in-place sed (GNU vs BSD/macOS).
 sedi() { if sed --version >/dev/null 2>&1; then sed -i -E "$@"; else sed -i '' -E "$@"; fi; }
