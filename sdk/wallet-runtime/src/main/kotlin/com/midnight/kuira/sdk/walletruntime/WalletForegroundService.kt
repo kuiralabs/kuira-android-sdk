@@ -59,20 +59,20 @@ private data class StartTrigger(
 )
 
 /**
- * Pure start/stop policy for [WalletForegroundService] (#261-264, generalizing #235) —
+ * Pure start/stop policy for [WalletForegroundService] (#261-264, generalizing ) —
  * extracted so the lifecycle matrix is unit-testable without a Service harness.
  *
  * Rules, in order:
  *  1. **Hard-locked → tear down.** A HARD lock already had `provider.close()` cancel the SDK; a
- *     lingering notification would be stale + a privacy leak. A *soft* lock (app backgrounded,
- *     SDK kept alive) is deliberately NOT a teardown trigger — stopping the FGS while an
- *     operation is still in flight would defeat #261-264 (the op would lose process survival).
+ *  lingering notification would be stale + a privacy leak. A *soft* lock (app backgrounded,
+ *  SDK kept alive) is deliberately NOT a teardown trigger — stopping the FGS while an
+ *  operation is still in flight would defeat -264 (the op would lose process survival).
  *  2. Surface the Live-Update notification whenever a value-bearing **operation** is in
- *     flight OR the wallet is **syncing** — foreground AND background — so it appears the
- *     moment work starts and the process is kept alive while it runs.
+ *  flight OR the wallet is **syncing** — foreground AND background — so it appears the
+ *  moment work starts and the process is kept alive while it runs.
  *  3. Otherwise: stop if running; nothing if not.
  *
- * The sync-only case ([activeOps] = false) reduces EXACTLY to the prior #235 behaviour, so
+ * The sync-only case ([activeOps] = false) reduces EXACTLY to the prior behaviour, so
  * the dust-sync foreground service is preserved as a strict subset.
  */
 internal fun decideForegroundService(
@@ -95,7 +95,7 @@ internal fun decideForegroundService(
  * Foreground service that keeps a backgrounded **wallet operation** (send, dust
  * registration, contract call — or any [com.midnight.kuira.sdk.MidnightSdk.runForegroundOperation])
  * OR a wallet **sync** alive, and shows its progress as an Android Live-Update notification
- * (#261-264, generalizing the #235 dust-sync service).
+ * (#261-264, generalizing the dust-sync service).
  *
  * It does NOT run the work — operations run on the SDK's `subscriptionScope`, syncs on the
  * wallet's tracker; this service exists so the OS doesn't kill the process while the app is
@@ -235,7 +235,7 @@ class WalletForegroundService : Service() {
          * `Application.onCreate`. Watches (operations, syncStatus, locked) and starts the FGS
          * whenever an operation or sync is in flight; the service self-stops on completion /
          * lock. A SEPARATE observer rides the operation terminal stream and posts the
-         * dismissible finalization notification (#264) — app-scoped, so it fires even after the
+         * dismissible finalization notification — app-scoped, so it fires even after the
          * FGS has already stopped. No-op if not called.
          *
          * [walletContentIntent] is where a received-funds alert taps to — the host's wallet
@@ -259,7 +259,7 @@ class WalletForegroundService : Service() {
             val alerter = AlertNotifier(application)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-            // Background receive polling (#271): a Doze-aware periodic poll + an expedited
+            // Background receive polling: a Doze-aware periodic poll + an expedited
             // one-shot when the app backgrounds, so incoming unshielded NIGHT is noticed while
             // the app is backgrounded / locked (when the live observer below isn't running).
             // The worker self-gates on a persisted target + foreground state.
@@ -305,7 +305,7 @@ class WalletForegroundService : Service() {
                     }
             }
 
-            // Fire the dismissible finalization notification on each terminal outcome (#264).
+            // Fire the dismissible finalization notification on each terminal outcome.
             // FinalizationNotifier uses ONE stable id, so each completion replaces the previous —
             // only the latest is ever shown.
             scope.launch {
@@ -340,7 +340,7 @@ class WalletForegroundService : Service() {
                     }
             }
 
-            // Incoming-funds alert (#264 inbound, #284): tell the user when NIGHT ARRIVES — even
+            // Incoming-funds alert (#264 inbound, ): tell the user when NIGHT ARRIVES — even
             // while they're USING the app, since being in the app (mid-game, on another screen) is
             // not the same as watching the wallet balance.
             //
@@ -383,7 +383,7 @@ class WalletForegroundService : Service() {
         }
 
         /**
-         * Schedule the background receive poll (#271). Idempotent: the periodic poll is unique
+         * Schedule the background receive poll. Idempotent: the periodic poll is unique
          * work (KEEP across launches); the on-background one-shot replaces any pending one.
          */
         private fun scheduleReceivePolling(

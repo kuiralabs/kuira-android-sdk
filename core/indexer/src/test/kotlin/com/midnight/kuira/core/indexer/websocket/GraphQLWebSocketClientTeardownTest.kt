@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Teardown CONTRACT test for [GraphQLWebSocketClient] (#247).
+ * Teardown CONTRACT test for [GraphQLWebSocketClient].
  *
  * Runs the client against a REAL in-memory CIO WebSocket server (no mocks) that
  * implements the minimum graphql-transport-ws handshake and records when a
@@ -43,7 +43,7 @@ import org.robolectric.RobolectricTestRunner
  * dropping the `Complete` send, or breaking the connect/subscribe handshake.
  *
  * SCOPE / HONESTY: this is NOT a discriminating regression test for the specific
- * swallowed-on-cancellation bug the #247 fix addresses. That bug only manifests
+ * swallowed-on-cancellation bug the fix addresses. That bug only manifests
  * when the teardown send actually SUSPENDS (contended writer / full socket buffer)
  * — under this lightweight test the send takes Channel.send's non-suspending fast
  * path, so it succeeds with OR without the NonCancellable wrap. The fix itself is

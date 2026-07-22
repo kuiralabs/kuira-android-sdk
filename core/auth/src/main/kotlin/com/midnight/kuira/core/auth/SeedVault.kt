@@ -19,9 +19,9 @@ import java.io.File
  * keeping them in memory longer than necessary is a security risk.
  *
  * @property mnemonicEntropy 32-byte BIP-39 entropy (for a 24-word mnemonic).
- *   Used to reconstruct the human-readable phrase when the user requests it.
+ *  Used to reconstruct the human-readable phrase when the user requests it.
  * @property bip39Seed 64-byte BIP-39 seed derived from the mnemonic via PBKDF2.
- *   Used directly for BIP-32 key derivation — skips PBKDF2 on every signing.
+ *  Used directly for BIP-32 key derivation — skips PBKDF2 on every signing.
  */
 class PlaintextSeed(
     val mnemonicEntropy: ByteArray,
@@ -67,10 +67,10 @@ class CorruptedSeedException(message: String) : Exception(message)
  *
  * **Layered security model:**
  * - **Local layer (this class):** Seed encrypted with device-bound Keystore
- *   master key. Biometric-gated for every access.
+ *  master key. Biometric-gated for every access.
  * - **Backup layer (future — `core:backup`):** Separate encrypted blob using a
- *   transferable key (passkey PRF or backup password). Needed for cross-device
- *   recovery because the Keystore master key cannot transfer to a new device.
+ *  transferable key (passkey PRF or backup password). Needed for cross-device
+ *  recovery because the Keystore master key cannot transfer to a new device.
  *
  * **Storage format:**
  * The on-disk file is a single blob:
@@ -119,7 +119,7 @@ class SeedVault(
     }
 
     /**
-     * Session-lock flag (#14). When set, the NEXT [loadSeed] skips the silent
+     * Session-lock flag. When set, the NEXT [loadSeed] skips the silent
      * auth-validity-window fast path and forces a full biometric prompt — then
      * clears the flag. This is what makes session lock real: dropping the cached
      * SDK isn't enough, because within [AuthPolicy.VALIDITY_DURATION_SECONDS]
@@ -155,7 +155,7 @@ class SeedVault(
      *
      * @param activity The FragmentActivity hosting the biometric prompt
      * @param seedProducer Lambda that produces the plaintext seed. Called once,
-     *   immediately after successful biometric authentication.
+     *  immediately after successful biometric authentication.
      * @throws IllegalStateException if a seed already exists (call [deleteSeed] first)
      * @throws AuthenticationCancelledException if the user cancelled the biometric prompt
      * @throws AuthenticationFailedException if biometric authentication failed

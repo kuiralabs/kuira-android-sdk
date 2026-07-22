@@ -88,15 +88,15 @@ class NodeRpcError(
  *
  * **Custom Error Codes (authoritative, from midnight-node):**
  * - 115: InvalidProof (the ZK proof failed verification — regenerate the proof /
- *   check the proving-key & contract verifier-key versions match)
+ *  check the proving-key & contract verifier-key versions match)
  * - 186: EffectsCheckFailure
  * - 171: OutOfDustValidityWindow (the dust spend's `ctime` fell outside the node's
- *   `[tblock - grace, tblock]` validity window — typically an idle dust state on a long
- *   chain whose `sync_time` drifted more than `dust_grace_period` behind the tip; re-sync
- *   dust to the tip so its `sync_time` advances, then retry)
+ *  `[tblock - grace, tblock]` validity window — typically an idle dust state on a long
+ *  chain whose `sync_time` drifted more than `dust_grace_period` behind the tip; re-sync
+ *  dust to the tip so its `sync_time` advances, then retry)
  * - 195: InputNotInUtxos (an unshielded UTXO input is already spent or missing)
  * - 196: DustDoubleSpend (the dust UTXO paying the fee was already spent on-chain — re-sync
- *   dust to the tip, reselect an unspent dust UTXO, and retry)
+ *  dust to the tip, reselect an unspent dust UTXO, and retry)
  *
  * **Recovery:** Don't retry (fix transaction)
  */
@@ -114,7 +114,7 @@ class TransactionRejected(
          * The dust spend proof is invalid because the dust commitment root it commits
          * to isn't one the node accepts — a stale/lagging local root, or a `ctime` that
          * resolved to a different root via the node's `dust.root_history.get(ctime)`
-         * predecessor lookup. Recovery: re-sync dust to the chain tip and retry. See #287.
+         * predecessor lookup. Recovery: re-sync dust to the chain tip and retry. See.
          */
         const val ERROR_INVALID_DUST_SPEND_PROOF = 170
 

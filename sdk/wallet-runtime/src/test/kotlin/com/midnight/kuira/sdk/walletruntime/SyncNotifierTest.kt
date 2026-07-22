@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The notification text/percentage seam (#235). The notification rendering is
+ * The notification text/percentage seam. The notification rendering is
  * Android-framework, but the (text, percent) mapping from a resolved label +
  * fraction is pure and load-bearing — it's what the user reads in the status
  * bar. The label itself is now resolved from string resources (see

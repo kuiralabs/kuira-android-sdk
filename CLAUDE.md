@@ -16,7 +16,7 @@ Build the Kuira Wallet (Midnight blockchain) for Android following elite enginee
 - Multi-module architecture
 - Pure Compose UI
 
-**Reference Repository:** `../now-in-android-reference/`
+**Reference Repository:** a reference architecture sample
 - Google's Now in Android sample app
 - Use as architectural reference when needed
 - Reference for: convention plugins, multi-module patterns, Compose best practices, testing setup
@@ -60,16 +60,16 @@ Build the Kuira Wallet (Midnight blockchain) for Android following elite enginee
 
 ## Implementation Context (Reference When Implementing)
 
-**Planning Documentation:** `../../android/docs/projects/`
+**Planning Documentation:** the internal docs
 - `midnightWallet.md` - Main implementation plan (6 phases, 80-120 hours)
-- `midnight-implementation-verification.md` - Crypto & transaction flows
-- `midnight-deep-dive-round-3.md` - Configuration & state management
+- the internal design notes - Crypto & transaction flows
+- the internal design notes - Configuration & state management
 
-**Midnight Libraries (TypeScript SDK):** `../../midnight-libraries/`
+**Midnight Libraries (TypeScript SDK):** the Midnight TypeScript SDK
 - Reference for understanding Midnight blockchain patterns
 - We're porting/reimplementing in Kotlin (NOT using WASM)
 
-**Architecture Reference:** `../now-in-android-reference/`
+**Architecture Reference:** a reference architecture sample
 - Google's official modern Android architecture sample
 - Multi-module structure with convention plugins
 - **Use for:**

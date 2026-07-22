@@ -17,7 +17,7 @@ import org.junit.Test
  * be restored in Lace (official Midnight wallet) and vice versa.
  *
  * Test vectors extracted from:
- * - `/Users/norman/Development/midnight/MidnightWasmTest/test-zswap-official.mjs`
+ * - the Midnight WASM reference test (`test-zswap-official.mjs`)
  * - Using @scure/bip39 (Midnight's BIP-39 library)
  * - Using @midnight-ntwrk/wallet-sdk-hd (Midnight's HD wallet)
  *
@@ -76,16 +76,16 @@ class BIP39MidnightCompatibilityTest {
          */
         @Suppress("unused") // Will be used when implementing HDWallet
         private object ExpectedBIP32Keys {
-            // m/44'/2400'/0'/0/0 (NightExternal #0)
+            // m/44'/2400'/0'/0/0 (NightExternal )
             const val NIGHT_EXTERNAL_0 = "0e1d589e6833e42e61a0a639419dc4cf02caafd0afc0e17b5769cf3c9fc7c699"
 
-            // m/44'/2400'/0'/0/1 (NightExternal #1)
+            // m/44'/2400'/0'/0/1 (NightExternal )
             const val NIGHT_EXTERNAL_1 = "d6e5488bca677c9e97f173f555c181f50dc67c5948d6fc4c76c8c1bd2f0cdae9"
 
-            // m/44'/2400'/0'/0/2 (NightExternal #2)
+            // m/44'/2400'/0'/0/2 (NightExternal )
             const val NIGHT_EXTERNAL_2 = "7572bcabe36636e1a8f520d5511bff8b2e7c1c90176be493aebc4ecca74130ae"
 
-            // m/44'/2400'/0'/3/0 (Zswap #0)
+            // m/44'/2400'/0'/3/0 (Zswap )
             const val ZSWAP_0 = "4da0c7b3dd5118acda8038a6be0ebc87e67199f531f703f35cde21858b95f546"
         }
     }

@@ -17,15 +17,15 @@ import java.math.BigInteger
  *
  * Conventions exercised here:
  *  - Network prefix is the asymmetric, lower-case short name (`localnet`,
- *    `preview`, `preprod`) — never the full enum constant or "UNDEPLOYED".
+ *  `preview`, `preprod`) — never the full enum constant or "UNDEPLOYED".
  *  - NIGHT is abbreviated via [BalanceFormatter.formatAbbreviated] (K/M/B/T
- *    suffixes, integer below 1K). DUST gets a "D" suffix.
+ *  suffixes, integer below 1K). DUST gets a "D" suffix.
  *  - Unshielded NIGHT always takes its own slot; shielded NIGHT gets a
- *    second slot prefixed with `🛡` **only when non-zero** — so users
- *    without any shielded balance don't pay UI tax for it.
+ *  second slot prefixed with `🛡` **only when non-zero** — so users
+ *  without any shielded balance don't pay UI tax for it.
  *  - `dustRegistered = true` adds a trailing `✓`.
  *  - None / Loading / Error states still carry the network prefix so the
- *    user knows which chain the failure is on.
+ *  user knows which chain the failure is on.
  */
 class PillLabelTest {
 
@@ -98,7 +98,7 @@ class PillLabelTest {
 
     @Test
     fun `locked shows a lock marker`() {
-        // Session-locked (#14): distinct from None so the user sees the wallet
+        // Session-locked: distinct from None so the user sees the wallet
         // is locked (tap to unlock), not just "no wallet yet".
         val label = pillLabel(WalletStatus.Locked, MidnightNetwork.PREPROD, formatter)
         assertEquals("preprod · 🔒 locked", label)

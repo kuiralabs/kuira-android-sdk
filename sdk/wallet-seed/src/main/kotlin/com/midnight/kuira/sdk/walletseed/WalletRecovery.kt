@@ -4,7 +4,7 @@ import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Sovereign recovery-phrase capability (#252): reveal and restore a wallet's 24-word BIP-39
+ * Sovereign recovery-phrase capability: reveal and restore a wallet's 24-word BIP-39
  * recovery phrase.
  *
  * This is the SDK's recommended building block for ANY recovery experience. The bundled wallet
@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
  * **Why a phrase exists at all.** The Sigil seed is `PRF(passkey)`, but that PRF output *is*
  * standard BIP-39 entropy, so every wallet has a canonical 24-word phrase that reconstructs it
  * exactly — independent of the passkey, the device, or any provider. It is the final, self-custody
- * recovery path (see `docs/security/recovery-model.md`).
+ * recovery path (see internal design notes).
  *
  * **Caller security contract.** The words from [revealPhrase] are the keys to the wallet: render
  * them only on a secured screen (`FLAG_SECURE`), never log them, never persist or transmit them,

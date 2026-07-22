@@ -87,8 +87,8 @@ class OperationAttention internal constructor(
  * (#261-264). Mirrors [MidnightWallet.syncStatus]'s observable-state model:
  *
  *  - [active] — the set of operations in flight. The foreground service keeps the
- *    process alive while it is non-empty; [com.midnight.kuira.sdk] callers in
- *    wallet-runtime hold the session-lock off it.
+ *  process alive while it is non-empty; [com.midnight.kuira.sdk] callers in
+ *  wallet-runtime hold the session-lock off it.
  *  - [outcomes] — a one-shot terminal stream the finalization notifier rides.
  *
  * The SDK's built-ins (send / dust-registration / contract call) and any
@@ -181,7 +181,7 @@ class OperationRegistry {
     }
 
     /**
-     * Request the user's ATTENTION for the operation the CURRENT coroutine is inside (#264):
+     * Request the user's ATTENTION for the operation the CURRENT coroutine is inside:
      * emits an [OperationAttention] a presentation edge turns into a heads-up notification, to
      * pull a user who left the app back to a step that needs them. Tagged with the op's
      * [OperationDescriptor.contentIntent] so the alert taps back to the right screen. No-op

@@ -8,7 +8,7 @@ import androidx.core.content.ContextCompat
 
 /**
  * POST_NOTIFICATIONS helper for ALL of the wallet's foreground notifications (#261-264,
- * generalizing the original #235 dust-sync use): the ongoing operation/sync progress, the
+ * generalizing the original dust-sync use): the ongoing operation/sync progress, the
  * dismissible finalization push, and the received-funds / "your turn" alerts.
  *
  * The runtime permission (API 33+) only controls notification *visibility* — the foreground

@@ -21,15 +21,15 @@ import org.json.JSONObject
  * ```
  * val executor = CircuitExecutor(context)
  * val result = executor.executeCircuit(
- *     contractJs = loadContractIife(),
- *     contractAddress = "abcd...",
- *     circuitName = "post",
- *     circuitArgs = listOf("'Hello from Android!'"),
- *     witnesses = mapOf("localSecretKey" to WitnessProvider {
- *         WitnessResult(null, secretKeyBytes)
- *     }),
- *     initialPrivateState = "{ secretKey: new Uint8Array(32) }",
- *     coinPublicKey = ByteArray(32),
+ *  contractJs = loadContractIife(),
+ *  contractAddress = "abcd...",
+ *  circuitName = "post",
+ *  circuitArgs = listOf("'Hello from Android!'"),
+ *  witnesses = mapOf("localSecretKey" to WitnessProvider {
+ *  WitnessResult(null, secretKeyBytes)
+ *  }),
+ *  initialPrivateState = "{ secretKey: new Uint8Array(32) }",
+ *  coinPublicKey = ByteArray(32),
  * )
  * // result.unprovenTxHex is ready for proving
  * ```
@@ -54,13 +54,13 @@ class CircuitExecutor(
      * @param coinPublicKey The coin public key bytes (32 bytes)
      * @param networkId Network ID for the transaction (default: "undeployed")
      * @param onChainStateHex SCALE-encoded on-chain contract state from the indexer.
-     *   When provided, circuit execution uses this state instead of `contract.initialState()`.
-     *   Required for calling already-deployed contracts where the on-chain state
-     *   may differ from the contract's initial state.
+     *  When provided, circuit execution uses this state instead of `contract.initialState()`.
+     *  Required for calling already-deployed contracts where the on-chain state
+     *  may differ from the contract's initial state.
      * @param ledgerParametersHex SCALE-encoded ledger parameters from the indexer.
-     *   Required for correct gas computation — the node uses these parameters' cost model
-     *   to validate the transaction. If omitted, falls back to the initial cost model
-     *   (only correct on a fresh chain with no parameter updates).
+     *  Required for correct gas computation — the node uses these parameters' cost model
+     *  to validate the transaction. If omitted, falls back to the initial cost model
+     *  (only correct on a fresh chain with no parameter updates).
      * @return The assembled UnprovenTransaction as hex-encoded SCALE bytes
      * @throws CircuitExecutionException if circuit execution or tx assembly fails
      */
@@ -79,7 +79,7 @@ class CircuitExecutor(
         // caller; null lets the native fall back to its own (over-wide) default — see IntentTtl.
         ttlSecs: Long? = null,
         // Chain block time (Unix SECONDS) for the native gas-query context. Sourced from the chain
-        // tip by the caller; null lets the native fall back to its own wall-clock — see #16.
+        // tip by the caller; null lets the native fall back to its own wall-clock — see.
         blockTimeSecs: Long? = null,
         // Constructor args (JS expressions). The circuit-call path calls initialState() to build a
         // throwaway state skeleton, then swaps in the on-chain state — so a constructor-args contract
@@ -294,8 +294,8 @@ class CircuitExecutor(
      */
     /**
      * @param verifierKeys Map of circuit name → hex-encoded verifier key bytes.
-     *   These are registered in the contract state during deploy so circuits
-     *   are immediately callable (no separate maintenance tx needed).
+     *  These are registered in the contract state during deploy so circuits
+     *  are immediately callable (no separate maintenance tx needed).
      */
     suspend fun executeConstructor(
         contractJs: String,
@@ -310,7 +310,7 @@ class CircuitExecutor(
         // block_time_secs is needed here (unlike the contract-CALL path).
         ttlSecs: Long? = null,
         // Constructor arguments as JS expressions, in declaration order, appended to the
-        // contract.initialState(context, ...args) call. Empty for a no-arg constructor
+        // contract.initialState(context,...args) call. Empty for a no-arg constructor
         // (counter/bboard); a configurable contract (e.g. a multisig's signer set +
         // threshold) supplies them.
         constructorArgs: List<String> = emptyList(),
@@ -330,7 +330,7 @@ class CircuitExecutor(
 
             val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
             val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
-            // Compact's generated initialState is `initialState(context, ...constructorArgs)`.
+            // Compact's generated initialState is `initialState(context,...constructorArgs)`.
             // Append the (already JS-encoded) args after the context object; empty = no-arg.
             val constructorArgsJs = if (constructorArgs.isEmpty()) "" else ", ${constructorArgs.joinToString(", ")}"
 
@@ -762,7 +762,7 @@ class CircuitExecutor(
                     try {
                         // Called as persistentCommit(alignment, value, [opening])
                         // from persistentCommit2(rtType, value, opening):
-                        //   persistentCommit(rtType.alignment(), rtType.toValue(value), [opening])
+                        //  persistentCommit(rtType.alignment(), rtType.toValue(value), [opening])
                         // persistent_commit = SHA-256(opening || binary_repr(aligned_value))
                         var alignment = arguments[0];
                         var value = arguments[1];
@@ -875,12 +875,12 @@ fun interface WitnessProvider {
  * future format changes can't drift between the two execution paths.
  *
  * Wire format: each native witness call returns
- *   `"privateState|KIND|byte1,byte2,…"`
+ *  `"privateState|KIND|byte1,byte2,…"`
  * where KIND is the [WitnessKind] enum name. The JS branches:
  *  - `VECTOR_OF_UINT8` → `Array<bigint>` of the byte values, matching
- *    the Compact `Vector<N, Uint<8>>` type
+ *  the Compact `Vector<N, Uint<8>>` type
  *  - `BYTES` (default) → length-1 ⇒ `BigInt`, length-N ⇒ `Uint8Array`,
- *    matching scalar `Uint<…>` and `Bytes<N>` respectively
+ *  matching scalar `Uint<…>` and `Bytes<N>` respectively
  */
 private fun buildWitnessEntriesJs(witnessNames: Collection<String>): String =
     witnessNames.joinToString(",\n") { name ->
@@ -961,9 +961,9 @@ enum class WitnessKind {
  * @param privateState The private state to pass back (null to keep current)
  * @param data The witness byte array (e.g., secret key, signature, packed picks)
  * @param kind How [data] should be presented to the Compact runtime —
- *   defaults to [WitnessKind.BYTES] which matches the existing behavior.
- *   Set to [WitnessKind.VECTOR_OF_UINT8] for `Vector<N, Uint<8>>`
- *   witnesses.
+ *  defaults to [WitnessKind.BYTES] which matches the existing behavior.
+ *  Set to [WitnessKind.VECTOR_OF_UINT8] for `Vector<N, Uint<8>>`
+ *  witnesses.
  */
 data class WitnessResult(
     val privateState: Any?,

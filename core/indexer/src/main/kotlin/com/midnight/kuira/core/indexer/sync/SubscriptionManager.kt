@@ -48,14 +48,14 @@ import kotlin.math.min
  *
  * // Start syncing (will resume from last processed transaction)
  * viewModelScope.launch {
- *     subscriptionManager.startSubscription(address)
- *         .collect { state ->
- *             when (state) {
- *                 is SyncState.Syncing -> updateUI("Syncing: ${state.processedCount} txs")
- *                 is SyncState.Synced -> updateUI("Synced up to block ${state.blockHeight}")
- *                 is SyncState.Error -> showError(state.message)
- *             }
- *         }
+ *  subscriptionManager.startSubscription(address)
+ * .collect { state ->
+ *  when (state) {
+ *  is SyncState.Syncing -> updateUI("Syncing: ${state.processedCount} txs")
+ *  is SyncState.Synced -> updateUI("Synced up to block ${state.blockHeight}")
+ *  is SyncState.Error -> showError(state.message)
+ *  }
+ *  }
  * }
  * ```
  */
@@ -96,14 +96,14 @@ class SubscriptionManager(
 
         /**
          * Classify a transaction as an inbound NIGHT receipt for [selfAddress], or null if it
-         * isn't one (#284). The provenance rule, pure and testable:
+         * isn't one. The provenance rule, pure and testable:
          *
          * - A FAILURE transaction created nothing on-chain → not a receipt.
          * - A transaction that spent ANY of our UTXOs is OUR OWN send; the NIGHT it created
-         *   back to us is CHANGE, not a receipt → null. This is what stops a user from being
-         *   told they "received" their own NIGHT.
+         *  back to us is CHANGE, not a receipt → null. This is what stops a user from being
+         *  told they "received" their own NIGHT.
          * - Otherwise the receipt amount is the sum of NIGHT outputs created to us IN THIS
-         *   transaction — the true per-transaction amount, not a balance delta.
+         *  transaction — the true per-transaction amount, not a balance delta.
          */
         internal fun classifyReceipt(
             selfAddress: String,
@@ -127,7 +127,7 @@ class SubscriptionManager(
         }
 
         /**
-         * Whether a receipt at [txId] is past the announce [baseline] (#284). Null baseline
+         * Whether a receipt at [txId] is past the announce [baseline]. Null baseline
          * (first sync before reaching tip) suppresses, so pre-existing history isn't announced.
          */
         internal fun isNewReceipt(baseline: Int?, txId: Int): Boolean =
@@ -137,7 +137,7 @@ class SubscriptionManager(
     // Track last save time per address for throttling
     private val lastSaveTimestamps = mutableMapOf<String, Long>()
 
-    // #284: per-transaction inbound NIGHT receipts, classified by UTXO-set provenance.
+    // : per-transaction inbound NIGHT receipts, classified by UTXO-set provenance.
     // Emits ONLY genuine receipts (a tx that created NIGHT to us without spending any of our
     // UTXOs) — never our own change — and only for transactions past the sync baseline, so a
     // first sync / resync doesn't re-announce pre-existing history. Replaces the old scalar
@@ -224,11 +224,11 @@ class SubscriptionManager(
      *
      * @param address Unshielded address to sync.
      * @param forceFullResync When true, clear sync state + UTXOs for [address]
-     *        before subscribing, forcing a replay from genesis. Default false
-     *        (incremental). Intended for explicit recovery paths (Developer
-     *        Options button, user-initiated "reset wallet cache" action) —
-     *        NOT for normal launches. Reorg / indexer-wipe detection is
-     *        automatic and doesn't need this flag.
+     *  before subscribing, forcing a replay from genesis. Default false
+     *  (incremental). Intended for explicit recovery paths (Developer
+     *  Options button, user-initiated "reset wallet cache" action) —
+     *  NOT for normal launches. Reorg / indexer-wipe detection is
+     *  automatic and doesn't need this flag.
      * @return Flow of sync states (Syncing, Synced, Error).
      */
     fun startSubscription(address: String, forceFullResync: Boolean = false): Flow<SyncState> = flow {
@@ -324,7 +324,7 @@ class SubscriptionManager(
             Log.i(TAG, "⏩ INCREMENTAL: Resuming $address from transaction id $lastId")
         }
 
-        // #284 receipt baseline. A receipt is announced only for transactions PAST this
+        //  receipt baseline. A receipt is announced only for transactions PAST this
         // baseline, so a first sync / resync (which replays history from genesis) doesn't
         // re-announce pre-existing receipts. On an incremental resume we've synced before,
         // so the resume cursor IS the baseline and new txs announce immediately. On a first
@@ -376,7 +376,7 @@ class SubscriptionManager(
                         latestTransactionId = result.transactionId
                         highestSeenBySession = maxOf(highestSeenBySession, result.transactionId)
 
-                        // #284: classify this transaction by UTXO-set provenance and emit a
+                        // : classify this transaction by UTXO-set provenance and emit a
                         // receipt for genuine inbound NIGHT — never for our own change (a tx that
                         // spends our UTXOs). Gated by the baseline so history isn't re-announced.
                         (update as? UnshieldedTransactionUpdate.Transaction)?.let { tx ->

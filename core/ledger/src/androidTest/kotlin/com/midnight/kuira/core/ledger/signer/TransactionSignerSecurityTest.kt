@@ -36,19 +36,19 @@ class TransactionSignerSecurityTest {
          * Source: https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
          */
         private val BIP340_TEST_VECTORS = listOf(
-            // Test Vector #0: Very small private key
+            // Test Vector : Very small private key
             Triple(
                 hexToBytes("0000000000000000000000000000000000000000000000000000000000000003"),
                 hexToBytes("F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9"),
                 "message"
             ),
-            // Test Vector #1: Another small private key
+            // Test Vector : Another small private key
             Triple(
                 hexToBytes("B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF"),
                 hexToBytes("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659"),
                 "message"
             ),
-            // Test Vector #2: Max-1 private key
+            // Test Vector : Max-1 private key
             Triple(
                 hexToBytes("C90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B14E5C9"),
                 hexToBytes("DD308AFEC5777E13121FA72B9CC1B7CC0139715309B086C960E18FD969774EB8"),
@@ -224,7 +224,7 @@ class TransactionSignerSecurityTest {
 
     @Test
     fun testInvalidPrivateKey_TooShort() {
-        val shortKey = ByteArray(16) { 0x42 }  // 16 bytes instead of 32
+        val shortKey = ByteArray(16) { 0x42 } // 16 bytes instead of 32
 
         try {
             TransactionSigner.signData(shortKey, "data".toByteArray())
@@ -236,7 +236,7 @@ class TransactionSignerSecurityTest {
 
     @Test
     fun testInvalidPrivateKey_TooLong() {
-        val longKey = ByteArray(64) { 0x42 }  // 64 bytes instead of 32
+        val longKey = ByteArray(64) { 0x42 } // 64 bytes instead of 32
 
         try {
             TransactionSigner.signData(longKey, "data".toByteArray())
@@ -280,7 +280,7 @@ class TransactionSignerSecurityTest {
                 synchronized(results) {
                     results.add(Pair(1, sig))
                 }
-                Thread.sleep(1)  // Small delay to encourage interleaving
+                Thread.sleep(1) // Small delay to encourage interleaving
             }
         }
 

@@ -36,7 +36,7 @@ class UtxoManagerTest {
         ctime: Long = 1,
         registeredForDustGeneration: Boolean = false,
         state: UtxoState = UtxoState.AVAILABLE,
-        transactionHash: String = "tx_$intentHash"  // Default to derived from intentHash for tests
+        transactionHash: String = "tx_$intentHash" // Default to derived from intentHash for tests
     ): UnshieldedUtxoEntity {
         return UnshieldedUtxoEntity(
             id = id,
@@ -111,11 +111,11 @@ class UtxoManagerTest {
         // Then
         verify(mockDao).insertUtxos(argThat { list ->
             list.size == 1 &&
-            list[0].intentHash == "0x123" &&  // Check intentHash, not id
+            list[0].intentHash == "0x123" && // Check intentHash, not id
             list[0].value == "1000" &&
             list[0].state == UtxoState.AVAILABLE
         })
-        verify(mockDao).markAsSpent(listOf("tx_0x456:0"))  // Uses database ID (transactionHash:outputIndex)
+        verify(mockDao).markAsSpent(listOf("tx_0x456:0")) // Uses database ID (transactionHash:outputIndex)
 
         assertTrue(result is UtxoManager.ProcessingResult.TransactionProcessed)
         val txResult = result as UtxoManager.ProcessingResult.TransactionProcessed
@@ -201,7 +201,7 @@ class UtxoManagerTest {
 
         // Then
         verify(mockDao, never()).insertUtxos(any())
-        verify(mockDao).markAsSpent(listOf("tx_0x123:0"))  // Uses database ID
+        verify(mockDao).markAsSpent(listOf("tx_0x123:0")) // Uses database ID
     }
 
     @Test
@@ -315,7 +315,7 @@ class UtxoManagerTest {
 
     @Test
     fun `given largestFirst selectAndLockUtxos picks fewest largest coins, default stays smallest-first`() = runBlocking {
-        // #240: a fee-paying NIGHT transfer must minimize its input count (ledger
+        // : a fee-paying NIGHT transfer must minimize its input count (ledger
         // time-to-dismiss ceiling ~2 inputs), so sendNight selects largest-first.
         val address = "mn_addr"
         val token = "NIGHT"
@@ -482,7 +482,7 @@ class UtxoManagerTest {
 
         // Then
         // Should mark as AVAILABLE (unlock) instead of marking as SPENT
-        verify(mockDao).markAsAvailable(listOf("tx_0x123:0", "tx_0x456:0"))  // Uses database IDs
+        verify(mockDao).markAsAvailable(listOf("tx_0x123:0", "tx_0x456:0")) // Uses database IDs
         verify(mockDao, never()).markAsSpent(any<List<String>>())
         verify(mockDao, never()).insertUtxos(any())
 
@@ -596,10 +596,10 @@ class UtxoManagerTest {
         // PARTIAL_SUCCESS should behave like SUCCESS: insert created, mark spent
         verify(mockDao).insertUtxos(argThat { list ->
             list.size == 1 &&
-            list[0].intentHash == "0x123" &&  // Check intentHash, not id
+            list[0].intentHash == "0x123" && // Check intentHash, not id
             list[0].state == UtxoState.AVAILABLE
         })
-        verify(mockDao).markAsSpent(listOf("tx_0x456:0"))  // Uses database ID
+        verify(mockDao).markAsSpent(listOf("tx_0x456:0")) // Uses database ID
 
         assertTrue(result is UtxoManager.ProcessingResult.TransactionProcessed)
         val txResult = result as UtxoManager.ProcessingResult.TransactionProcessed

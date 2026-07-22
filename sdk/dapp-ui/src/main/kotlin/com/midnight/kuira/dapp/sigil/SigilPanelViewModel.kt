@@ -24,27 +24,27 @@ import javax.inject.Inject
  *
  * Owns two flows:
  *  - **Forge** ([forgeSigil]): create a passkey via Credential Manager,
- *    then derive the sigil DID via `SigilIdentityProvider`
- *    (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
- *    default impl). Two biometric prompts on first run.
+ *  then derive the sigil DID via `SigilIdentityProvider`
+ *  (`PRF(passkey, SIGIL_SALT)` → Ed25519 → `did:key:z6Mk…` in the
+ *  default impl). Two biometric prompts on first run.
  *  - **Sign in** ([restoreSeed]): one biometric covers BOTH the
- *    sigil DID derivation AND the wallet seed pre-warm via the
- *    multi-salt PRF ceremony in `SigilSession.signIn`. The wallet
- *    panel's first refresh after sign-in hits SeedVault cache
- *    instead of running its own PRF ceremony — no second prompt.
- *    Falls back to two biometrics on authenticators that don't
- *    support multi-salt PRF. Host-app state is restored (best-effort)
- *    via the wallet's silent seed-keyed [com.midnight.kuira.sdk.MidnightWallet.fetchAppState].
+ *  sigil DID derivation AND the wallet seed pre-warm via the
+ *  multi-salt PRF ceremony in `SigilSession.signIn`. The wallet
+ *  panel's first refresh after sign-in hits SeedVault cache
+ *  instead of running its own PRF ceremony — no second prompt.
+ *  Falls back to two biometrics on authenticators that don't
+ *  support multi-salt PRF. Host-app state is restored (best-effort)
+ *  via the wallet's silent seed-keyed [com.midnight.kuira.sdk.MidnightWallet.fetchAppState].
  *
  * Backup is no longer a manual action here — host app state is written
- * automatically + silently by the wallet's seed-keyed path (#244). The
+ * automatically + silently by the wallet's seed-keyed path. The
  * old PRF `AppStateBackup` backup/restore was retired (it clobbered the
  * same Block Store slot with a different key).
  *
  * **Held in BBoard's VM** (not migrated):
  *  - `authorizeAccessKey` — needs a `MidnightSdk` instance to derive
- *    the access key being authorized. The host bridges sigil + wallet
- *    for that flow.
+ *  the access key being authorized. The host bridges sigil + wallet
+ *  for that flow.
  */
 @HiltViewModel
 class SigilPanelViewModel @Inject constructor(
@@ -140,7 +140,7 @@ class SigilPanelViewModel @Inject constructor(
      * they change their mind. The flag just controls the auto-prompt.
      */
     fun dismissBackup() {
-        // SigilStateStore.markBackupDismissed uses .commit() — same
+        // SigilStateStore.markBackupDismissed uses.commit() — same
         // durability contract as persistSigil. The status transition +
         // wallet-panel re-evaluation that follow happen on the next
         // composition frame; we want the flag durable before any of
@@ -201,18 +201,18 @@ class SigilPanelViewModel @Inject constructor(
      * the old "restore from cloud" flow.
      *
      * **What changed.** Pre-PRF this method:
-     *   1. Pulled an encrypted blob from Block Store
-     *   2. Decrypted it to recover (seed, sigil triple, appMetadata)
-     *   3. Wrote the seed into SeedVault
-     *   4. SIGKILL'd the process so the wallet panel rebuilt cleanly
+     *  1. Pulled an encrypted blob from Block Store
+     *  2. Decrypted it to recover (seed, sigil triple, appMetadata)
+     *  3. Wrote the seed into SeedVault
+     *  4. SIGKILL'd the process so the wallet panel rebuilt cleanly
      *
      * Post-PRF none of (1)–(4) is necessary for the SIGIL ITSELF:
-     *   - The seed derives from `PRF(passkey, SEED_SALT)` — `WalletSeedSource`
-     *     handles that on the next wallet action, no blob needed.
-     *   - The sigil DID derives from `PRF(passkey, SIGIL_SALT)` via
-     *     `SigilIdentityProvider` — that's what step 1 below does.
-     *   - The SDK lives on a stable PRF-derived seed regardless of how
-     *     long ago the user last authenticated, so no SIGKILL needed.
+     *  - The seed derives from `PRF(passkey, SEED_SALT)` — `WalletSeedSource`
+     *  handles that on the next wallet action, no blob needed.
+     *  - The sigil DID derives from `PRF(passkey, SIGIL_SALT)` via
+     *  `SigilIdentityProvider` — that's what step 1 below does.
+     *  - The SDK lives on a stable PRF-derived seed regardless of how
+     *  long ago the user last authenticated, so no SIGKILL needed.
      *
      * The Block Store blob is now narrower in scope: it carries only
      * the host-app's metadata (Kicks's match state, etc.). Step 2
@@ -241,7 +241,7 @@ class SigilPanelViewModel @Inject constructor(
                 _status.value = SigilStatus.Forged(
                     did = derivation.did,
                     credentialId = derivation.credentialId,
-                    publicKeyHex = "",  // assertion doesn't return pubkey
+                    publicKeyHex = "", // assertion doesn't return pubkey
                 )
 
                 // Step 2 — app-state restore (best-effort) via the wallet's
@@ -320,7 +320,7 @@ class SigilPanelViewModel @Inject constructor(
 
     /**
      * On a forge/sign-in failure, never strand a still-valid identity behind an
-     * Error screen whose forge button could overwrite it (#15): if a sigil is
+     * Error screen whose forge button could overwrite it: if a sigil is
      * persisted, return to it; only surface [SigilStatus.Error] when there is
      * genuinely no identity to fall back to.
      */
@@ -343,7 +343,7 @@ class SigilPanelViewModel @Inject constructor(
     }
 
     private fun persistSigil(did: String, credentialId: String, publicKeyHex: String) {
-        // SigilStateStore.persistSigil uses .commit() — durability
+        // SigilStateStore.persistSigil uses.commit() — durability
         // contract documented there. Cost is negligible since this
         // runs once per forge / restore, not on a hot path.
         sigilStateStore.persistSigil(did = did, credentialId = credentialId, publicKeyHex = publicKeyHex)

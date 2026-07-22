@@ -20,9 +20,9 @@ package com.midnight.kuira.core.crypto.bip39
  * // Convert to seed (CRITICAL: wipe seed after use!)
  * val seed = BIP39.mnemonicToSeed(mnemonic)
  * try {
- *     // Use seed...
+ *  // Use seed...
  * } finally {
- *     Arrays.fill(seed, 0.toByte())
+ *  Arrays.fill(seed, 0.toByte())
  * }
  *
  * // Validate mnemonic
@@ -68,7 +68,7 @@ object BIP39 {
      * ## Why This Non-Standard Behavior?
      *
      * Lace wallet uses a truncated seed due to a "documentation gap" (confirmed by
-     * Lace team in GitHub issue #2133). This creates an ecosystem split:
+     * Lace team in GitHub issue ). This creates an ecosystem split:
      * - **Lace Standard**: First 32 bytes only
      * - **Official Midnight SDK**: Full 64 bytes
      *
@@ -88,7 +88,7 @@ object BIP39 {
      *
      * ## References
      *
-     * - **Full Explanation**: See `docs/LACE_COMPATIBILITY.md`
+     * - **Full Explanation**: See internal design notes
      * - **Lace GitHub Issue**: https://github.com/input-output-hk/lace/issues/2133
      * - **BIP-39 Spec**: https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
      *
@@ -98,7 +98,7 @@ object BIP39 {
      * @throws IllegalArgumentException if mnemonic is invalid
      */
     fun mnemonicToSeed(mnemonic: String, passphrase: String = ""): ByteArray {
-        return service.mnemonicToSeed(mnemonic, passphrase)  // 64 bytes from standard BIP-39
+        return service.mnemonicToSeed(mnemonic, passphrase) // 64 bytes from standard BIP-39
     }
 
     /**

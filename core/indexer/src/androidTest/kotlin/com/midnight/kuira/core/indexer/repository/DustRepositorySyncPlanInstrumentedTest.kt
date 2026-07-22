@@ -36,7 +36,7 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * On-device proof of #279 (#2): an at-tip dust refresh must NOT open the delta
+ * On-device proof of : an at-tip dust refresh must NOT open the delta
  * subscription — which would otherwise block the full `DELTA_FIRST_EVENT_TIMEOUT_MS`
  * (30s) on a live subscription the indexer never feeds (the chain hasn't advanced
  * past our cursor). Needs the real native [DustLocalState] (loadCheckpoint

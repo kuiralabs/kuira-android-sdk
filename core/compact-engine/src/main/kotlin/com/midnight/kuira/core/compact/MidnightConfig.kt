@@ -30,17 +30,17 @@ import java.net.URL
  *
  * // Remote wallet (existing pattern)
  * val config = MidnightConfig.Builder(context)
- *     .indexerUrl(previewConfig.indexerBaseUrl)
- *     .walletUrl("ws://10.0.2.2:9932")
- *     .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
- *     .build()
+ * .indexerUrl(previewConfig.indexerBaseUrl)
+ * .walletUrl("ws://10.0.2.2:9932")
+ * .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
+ * .build()
  *
  * // Embedded wallet (new pattern)
  * val config = MidnightConfig.Builder(context)
- *     .indexerUrl(previewConfig.indexerBaseUrl)
- *     .transactionBalancer(myWallet)
- *     .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
- *     .build()
+ * .indexerUrl(previewConfig.indexerBaseUrl)
+ * .transactionBalancer(myWallet)
+ * .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
+ * .build()
  * ```
  */
 class MidnightConfig private constructor(
@@ -57,7 +57,7 @@ class MidnightConfig private constructor(
     internal val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
 
     /**
-     * Auto-fund the unshielded money path (kuira-sdk-android#4). When [autoFundUnshieldedDeposits]
+     * Auto-fund the unshielded money path (kuira-sdk-android). When [autoFundUnshieldedDeposits]
      * is on and a circuit receives unshielded value with no offer supplied, [MidnightContract]
      * calls this provider to build the funding offer from the wallet and re-runs the call. Set by
      * the SDK after construction (the provider needs the wallet). `null` provider or a `false`
@@ -67,7 +67,7 @@ class MidnightConfig private constructor(
     internal var autoFundUnshieldedDeposits: Boolean = false
 
     /**
-     * Wire unshielded auto-funding (kuira-sdk-android#4). Called by the SDK, which owns the wallet
+     * Wire unshielded auto-funding (kuira-sdk-android). Called by the SDK, which owns the wallet
      * the [provider] draws from — dApps don't call this directly. A `null` provider or `enabled =
      * false` leaves the caller responsible for the offer (the Layer 1 clear error).
      */
@@ -175,7 +175,7 @@ class MidnightConfig private constructor(
      * Read a deployed contract's on-chain state as parsed JSON.
      *
      * Returns the state tree with cells decoded as hex, text (if UTF-8), and numbers.
-     * Example for bboard: `[{"type":"cell","hex":"01...","number":1}, {"type":"cell","hex":"...","text":"Hello"}, ...]`
+     * Example for bboard: `[{"type":"cell","hex":"01...","number":1}, {"type":"cell","hex":"...","text":"Hello"},...]`
      *
      * @param address Contract address (64 hex chars)
      * @return Parsed state as a JSONArray or JSONObject

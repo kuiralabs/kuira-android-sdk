@@ -35,7 +35,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Session auto-lock (#14). The decrypted seed lives in the process-singleton
+ * Session auto-lock. The decrypted seed lives in the process-singleton
  * [MidnightSdk] owned by [MidnightSdkProvider]; after one biometric every
  * value-bearing call runs with zero re-auth (the SDK cache bypasses Keystore's
  * short auth window). This locks the session by dropping that cache —
@@ -106,7 +106,7 @@ class SessionLock @Inject constructor(
      * (`provider.close()`), as opposed to a [softLock] that gates the UI but keeps the SDK
      * alive. The foreground service keys its immediate-teardown on THIS, not [locked]: a
      * soft-lock must not stop the FGS while a value-bearing operation is still in flight
-     * (that would defeat #261-264). Cleared when the SDK is rebuilt (re-auth / network switch).
+     * (that would defeat -264). Cleared when the SDK is rebuilt (re-auth / network switch).
      */
     val hardLocked: StateFlow<Boolean> = _hardLocked.asStateFlow()
 
@@ -114,7 +114,7 @@ class SessionLock @Inject constructor(
 
     /**
      * Whether the app is currently foregrounded (≥1 started Activity). Flipped by
-     * the activity-lifecycle callbacks. The dust-sync foreground service (#235)
+     * the activity-lifecycle callbacks. The dust-sync foreground service
      * uses this to decide when a background notification is warranted — in-app the
      * `WalletSyncIndicator` already shows progress, so the service only surfaces
      * while backgrounded.
@@ -164,7 +164,7 @@ class SessionLock @Inject constructor(
             delay(backgroundGraceMs)
             softLock("backgrounded")
         }
-        // Bound the backgrounded seed lifetime (#276): a soft-lock keeps the SDK alive for
+        // Bound the backgrounded seed lifetime: a soft-lock keeps the SDK alive for
         // monitoring, but not forever. After the ceiling, route through the hold-aware [lock] —
         // a held op / Kicks match DEFERS the wipe; an idle, unheld session is torn down. Never a
         // blind wipe (the earlier naive version killed in-flight matches; the hold gate is the fix).
@@ -265,7 +265,7 @@ class SessionLock @Inject constructor(
 
     /**
      * Hold off the auto-lock while a wallet sync is in flight, so a backgrounded
-     * sync isn't cut mid-stream by the background grace (#235): the SDK stays
+     * sync isn't cut mid-stream by the background grace: the SDK stays
      * alive until the sync settles, so the whole sequence — and every phase it
      * publishes to the notification — completes. A foreground `refreshBalance`
      * already holds across its own chain; this extends the same protection to
@@ -381,7 +381,7 @@ class SessionLock @Inject constructor(
      * network (it tears the live sockets down — see [WalletForegroundService]'s abort root
      * cause), so monitoring is BEST-EFFORT — a receipt is caught when a subscription retry
      * reconnects, not instantly. Reliable always-on background receive needs a kept-alive FGS or
-     * a server/indexer push (the #264 follow-on).
+     * a server/indexer push (the follow-on).
      *
      * Deliberately does NOT arm a background idle-wipe. A dual-process consumer (Midnight Kicks)
      * backgrounds the main process for the ENTIRE match — gameplay runs in another process — so a
@@ -495,7 +495,7 @@ class SessionLock @Inject constructor(
 
         /**
          * 30 minutes: the longest the decrypted seed may live while backgrounded before the
-         * hold-aware lifetime ceiling (#276) wipes an idle, unheld session. A held op / Kicks match
+         * hold-aware lifetime ceiling wipes an idle, unheld session. A held op / Kicks match
          * defers it. Long enough not to disrupt a quick app-switch or a backgrounded match; short
          * enough that a forgotten, backgrounded app doesn't hold the seed in memory all day.
          */

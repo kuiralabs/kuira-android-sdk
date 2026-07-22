@@ -7,12 +7,12 @@ package com.midnight.kuira.sdk
  * Why: on a fresh install the dust-backup toggle state was unrecoverable, so the app
  * couldn't know a cloud checkpoint existed and silently fell back to a genesis replay.
  * These prefs restore silently with the app-state blob (Block Store — no consent), letting
- * the host drive the restore-over-genesis flow. See `docs/projects/dust-backup-restore-continuity.md`.
+ * the host drive the restore-over-genesis flow. See internal design notes.
  *
  * @property dustBackupEnabled the user actually enabled dust cloud backup (the committed
- *   toggle — consent granted at least once), not merely "never opted out".
- * @property dustBackupOptedOut the user explicitly disabled backup (#246). A restored
- *   opted-out wallet must never be re-prompted for consent.
+ *  toggle — consent granted at least once), not merely "never opted out".
+ * @property dustBackupOptedOut the user explicitly disabled backup. A restored
+ *  opted-out wallet must never be re-prompted for consent.
  */
 data class WalletBackupPrefs(
     val dustBackupEnabled: Boolean,

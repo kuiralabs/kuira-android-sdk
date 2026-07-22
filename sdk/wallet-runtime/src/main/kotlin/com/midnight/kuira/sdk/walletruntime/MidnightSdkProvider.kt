@@ -35,13 +35,13 @@ import javax.inject.Singleton
  *
  * **Ownership model — one authority, many followers.**
  *  - The **config authority** (the wallet panel — the only UI with the
- *    network / proving-mode / proof-server toggles) calls [ensureSdk] with a
- *    full [WalletConfig]. That is the sole place config changes enter the
- *    system, which is what makes [activeConfig] a single source of truth.
+ *  network / proving-mode / proof-server toggles) calls [ensureSdk] with a
+ *  full [WalletConfig]. That is the sole place config changes enter the
+ *  system, which is what makes [activeConfig] a single source of truth.
  *  - **Followers** (BBoard's contract ops, Kicks's match manager) don't own
- *    config. They call [awaitSdk] for the shared handle and read
- *    [activeConfig] for "which chain am I on". They never pass a competing
- *    config, so the provider never thrashes between two configs.
+ *  config. They call [awaitSdk] for the shared handle and read
+ *  [activeConfig] for "which chain am I on". They never pass a competing
+ *  config, so the provider never thrashes between two configs.
  *
  * **Lifecycle.** The SDK is a process-singleton, not view-model-scoped. It
  * survives activity recreation (rotation) — a net win, since rebuilding means
@@ -89,7 +89,7 @@ class MidnightSdkProvider @Inject constructor(
 
     /**
      * The user's selected network — the SINGLE durable source every consumer should
-     * build its [WalletConfig] from (#285). Delegates to the process-wide
+     * build its [WalletConfig] from. Delegates to the process-wide
      * [NetworkPreferenceStore] so the wallet panel, this provider, and host apps
      * (Kicks, BBoard, …) all read ONE value that survives process death; no per-app
      * SharedPreferences mirror to drift out of sync. Read [selectedNetwork].value when
@@ -101,10 +101,10 @@ class MidnightSdkProvider @Inject constructor(
     fun selectNetwork(network: MidnightNetwork) = networkStore.set(network)
 
     /**
-     * Sovereign recovery-phrase capability (#252): reveal the wallet's 24-word phrase, restore a
+     * Sovereign recovery-phrase capability: reveal the wallet's 24-word phrase, restore a
      * wallet from one, and observe whether it's been saved. Surfaced here for the bundled wallet
      * UI; a dApp building its own recovery screens can equally `@Inject` [WalletRecovery] directly.
-     * See `docs/security/recovery-model.md`.
+     * See internal design notes.
      */
     val recovery: WalletRecovery get() = recoveryManager
 
@@ -124,7 +124,7 @@ class MidnightSdkProvider @Inject constructor(
      * [WalletSeedSource.ensureSeedReady].
      *
      * @throws com.midnight.kuira.core.identity.backup.SigilRequiredException
-     *   if no passkey is forged yet (propagated from the seed source).
+     *  if no passkey is forged yet (propagated from the seed source).
      */
     suspend fun ensureSdk(activity: FragmentActivity, config: WalletConfig): MidnightSdk =
         buildMutex.withLock {
@@ -161,7 +161,7 @@ class MidnightSdkProvider @Inject constructor(
             _activeConfig.value = config
             _sdk.value = built
             // Record the active (network, receive address) so the background receive poll
-            // (#271) knows what to check even after the SDK is dropped (lock / background).
+            // knows what to check even after the SDK is dropped (lock / background).
             runCatching { ReceiveTargetStore(appContext).setTarget(config.network, built.walletAddress) }
             Log.i(TAG, "SDK ready for $config")
             built

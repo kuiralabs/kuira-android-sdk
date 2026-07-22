@@ -39,12 +39,12 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **Usage:**
  * ```kotlin
- * val seed = deriveSeedFromBIP32()  // 32 bytes at m/44'/2400'/0'/2/0
+ * val seed = deriveSeedFromBIP32() // 32 bytes at m/44'/2400'/0'/2/0
  * try {
- *     val dustPublicKey = DustKeyDeriver.derivePublicKey(seed)
- *     println("Dust PK: ${dustPublicKey}")
+ *  val dustPublicKey = DustKeyDeriver.derivePublicKey(seed)
+ *  println("Dust PK: ${dustPublicKey}")
  * } finally {
- *     MemoryUtils.wipe(seed)  // CRITICAL: Always wipe seed
+ *  MemoryUtils.wipe(seed) // CRITICAL: Always wipe seed
  * }
  * ```
  *
@@ -55,7 +55,7 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **References:**
  * - Rust FFI: `kuira-crypto-ffi/src/lib.rs`
- * - Dust Spec: `midnight-libraries/midnight-ledger/spec/dust.md`
+ * - Dust Spec: the Midnight TypeScript SDK
  */
 @ThreadSafe
 object DustKeyDeriver {
@@ -124,7 +124,7 @@ object DustKeyDeriver {
      * The output matches Midnight SDK:
      * ```typescript
      * const dustSecretKey = DustSecretKey.fromSeed(seed);
-     * const dustPublicKey = dustSecretKey.toPublicKey();  // Matches our output
+     * const dustPublicKey = dustSecretKey.toPublicKey(); // Matches our output
      * ```
      *
      * **Error Handling:**

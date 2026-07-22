@@ -29,23 +29,23 @@ import java.math.BigInteger
  * **Design.**
  *  1. Fetch the on-chain SCALE state hex (caller responsibility).
  *  2. Spin up QuickJs with the same polyfills + compact-runtime
- *     bindings [CircuitExecutor] uses (registers `__native_*` FFI).
+ *  bindings [CircuitExecutor] uses (registers `__native_*` FFI).
  *  3. Load the contract JS so `ledger()` is in scope.
  *  4. Construct a [ChargedState][com.midnight.kuira.core.compact] whose
- *     `_rustHandle` points at the on-chain state — that's the single
- *     hook `QueryContext.query` looks for to route to `__native_contractQuery`.
+ *  `_rustHandle` points at the on-chain state — that's the single
+ *  hook `QueryContext.query` looks for to route to `__native_contractQuery`.
  *  5. Call `ledger(chargedState)` and enumerate its getter properties.
- *     Each getter returns the type-decoded value (BigInt, Boolean,
- *     Uint8Array, Array<BigInt>, …).
+ *  Each getter returns the type-decoded value (BigInt, Boolean,
+ *  Uint8Array, Array<BigInt>, …).
  *  6. Marshal each value to a JSON envelope `{type, value}` so it
- *     survives the QuickJs → Kotlin boundary, then convert envelopes
- *     to Kotlin primitives ([BigInteger], [Boolean], [ByteArray],
- *     [List]).
+ *  survives the QuickJs → Kotlin boundary, then convert envelopes
+ *  to Kotlin primitives ([BigInteger], [Boolean], [ByteArray],
+ *  [List]).
  *
  * **Why not parse `MidnightConfig.queryState` cells manually:** the
  * cell hex doesn't carry enough information to reconstruct
  * `Vector<N, Uint<8>>` with internal zeros. Months of testing the
- * Kicks contract surfaced this — see PLAN.md wishlist #9 and the
+ * Kicks contract surfaced this — see PLAN.md wishlist and the
  * sibling deleted `ContractStateSnapshot` parser for the post-mortem.
  *
  * **Performance notes:** the QuickJs context can be reused across
@@ -113,13 +113,13 @@ internal class LedgerEvaluator(private val context: Context) {
      * The JS that does the actual reading. Lifecycle:
      *  - Open a Rust state handle for the on-chain hex.
      *  - Wrap it in a JS [ChargedState] so `QueryContext.query` finds
-     *    `_rustHandle` and routes through the native FFI.
+     *  `_rustHandle` and routes through the native FFI.
      *  - Call `ledger()` (the contract's exported function) which
-     *    returns an object literal of getters.
+     *  returns an object literal of getters.
      *  - For each own property whose descriptor has a `get`, invoke
-     *    it and marshal the return value.
+     *  it and marshal the return value.
      *  - Always free the Rust handle in a finally block, even on
-     *    error, to avoid leaking native state across calls.
+     *  error, to avoid leaking native state across calls.
      *
      * The state hex is interpolated into the JS string. It's
      * validated upstream by [validateHex] — only `[0-9a-fA-F]` is
@@ -215,13 +215,13 @@ internal class LedgerEvaluator(private val context: Context) {
      * Convert the JS-side envelope JSON into Kotlin types.
      *
      *  - `bigint` → [BigInteger]. Callers downcast via [MidnightLedger]
-     *    typed accessors (`getUint8`, `getUint64`) which enforce range.
+     *  typed accessors (`getUint8`, `getUint64`) which enforce range.
      *  - `bytes` → [ByteArray] (each entry is 0..255).
      *  - `array` → [List]`<Any?>` with each element recursively unmarshalled.
      *  - `struct` → [Map]`<String, Any?>` (future-proof; no contract
-     *    today exposes a struct ledger field).
+     *  today exposes a struct ledger field).
      *  - `error` → throws [LedgerReadException] *eagerly* — a per-field
-     *    JS error usually indicates schema drift and we want it loud.
+     *  JS error usually indicates schema drift and we want it loud.
      */
     private fun parseMarshalledMap(json: String): Map<String, Any?> {
         val root = JSONObject(json)

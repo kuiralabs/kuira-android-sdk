@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pure tests for [ReceiveCheckpointStore]'s announce cursor (#284) — the idempotency guard that
+ * Pure tests for [ReceiveCheckpointStore]'s announce cursor — the idempotency guard that
  * makes a per-transaction receipt announce at most once across the live observer and the
  * background poll (and across process death). Provenance + amount are decided upstream; this is
  * purely "have we already announced this transaction id?".

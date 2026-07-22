@@ -147,7 +147,7 @@ class PlayServicesDriveAuthManager(
         private const val TAG = "DriveAuthManager"
         const val DRIVE_APPDATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
 
-        /** Google's OAuth 2.0 token/grant revocation endpoint (#246). */
+        /** Google's OAuth 2.0 token/grant revocation endpoint. */
         private const val REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
     }
 }

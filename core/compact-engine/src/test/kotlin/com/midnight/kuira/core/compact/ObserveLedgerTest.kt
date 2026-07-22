@@ -8,7 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The pure seam behind [MidnightContract.observeLedger] (#255): turn a block-tick flow into a
+ * The pure seam behind [MidnightContract.observeLedger]: turn a block-tick flow into a
  * stream of contract-state hex that emits the CURRENT state once, then only on genuine changes —
  * so the expensive QuickJs decode downstream runs once per real change, not once per block.
  * The decode itself is native (covered by `ledger()` tests); this pins the reactive plumbing.
@@ -46,10 +46,10 @@ class ObserveLedgerTest {
     fun `a transient fetch failure skips that tick instead of terminating the stream`() = runTest {
         // onStart adds the initial read, then 3 ticks → 4 fetches; the 2nd throws (indexer hiccup).
         val script = listOf<() -> String>(
-            { "A" },                                       // initial (onStart)
-            { throw RuntimeException("indexer hiccup") },   // tick 1 → skipped, NOT fatal
-            { "B" },                                       // tick 2
-            { "C" },                                       // tick 3
+            { "A" }, // initial (onStart)
+            { throw RuntimeException("indexer hiccup") }, // tick 1 → skipped, NOT fatal
+            { "B" }, // tick 2
+            { "C" }, // tick 3
         )
         var i = 0
         val out = ledgerStateHexSignals(flowOf(Unit, Unit, Unit)) { script[i++]() }.toList()

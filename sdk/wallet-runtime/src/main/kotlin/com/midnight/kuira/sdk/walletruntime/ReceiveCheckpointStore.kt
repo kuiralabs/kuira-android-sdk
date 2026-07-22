@@ -4,7 +4,7 @@ import android.content.Context
 import com.midnight.kuira.core.network.MidnightNetwork
 
 /**
- * Idempotency cursor for inbound-receipt notifications (#284): the highest receipt transaction
+ * Idempotency cursor for inbound-receipt notifications: the highest receipt transaction
  * id already announced per (network, address). Two paths can see the same receipt — the live
  * in-app observer ([WalletForegroundService]) and the background poll ([ReceivePollWorker]) —
  * and both run across process deaths; this persisted id makes a receipt announce at most once.
@@ -45,8 +45,8 @@ class ReceiveCheckpointStore(context: Context) {
          * Whether a receipt at [txId] is not-yet-announced for this (network, address).
          *
          * - `lastAnnouncedTxId == null` (nothing announced yet) → announce. The upstream
-         *   baseline already suppressed pre-existing history, so the first event that reaches
-         *   here is a genuine new receipt.
+         *  baseline already suppressed pre-existing history, so the first event that reaches
+         *  here is a genuine new receipt.
          * - `txId > lastAnnouncedTxId` → a newer receipt → announce.
          * - otherwise → already announced (a replay or the other path beat us) → skip.
          */

@@ -127,7 +127,7 @@ class ContractApiGeneratorTest {
         )
 
         // …and a marshalling extension that builds the JS-object Map keyed by the
-        // ABI field name. This is the form ArgConverter turns into `{ bytes: ... }`.
+        // ABI field name. This is the form ArgConverter turns into `{ bytes:... }`.
         assertTrue(
             "UserAddress.toCallArg() extension missing: $src",
             Regex(
@@ -370,7 +370,7 @@ class ContractApiGeneratorTest {
 
     @Test
     fun `each Uint arg is range-guarded by its own width, Field is not, and the helper is emitted once`() {
-        // #34 class: a value that fits Uint<128> was silently decoded as u64. The typed API now
+        //  class: a value that fits Uint<128> was silently decoded as u64. The typed API now
         // range-checks every bounded Uint at the boundary — with the CORRECT per-width bound.
         val src = render("widths", UINT_WIDTHS_ABI)
 

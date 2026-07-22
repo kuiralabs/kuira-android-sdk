@@ -18,13 +18,13 @@ import org.junit.runner.RunWith
 
 /**
  * Instrumented end-to-end coverage for the wallet's received-funds signal notifications
- * (feat/261 review — #261-264 / #274). It posts through the REAL [NotificationManager] and
+ * (feat/261 review — -264 / ). It posts through the REAL [NotificationManager] and
  * reads them back via [NotificationManager.getActiveNotifications], verifying the two behaviors
  * a JVM/Robolectric test can't prove on a real device:
  *  - concurrent receipts land as DISTINCT notifications (the rolling-id guard — a later receipt
- *    must never silently overwrite an earlier one), and
+ *  must never silently overwrite an earlier one), and
  *  - each is lock-screen-redacted (VISIBILITY_PRIVATE + a neutral public version), so the amount
- *    never renders on a locked screen.
+ *  never renders on a locked screen.
  */
 @RunWith(AndroidJUnit4::class)
 class WalletNotificationSignalsTest {

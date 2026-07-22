@@ -9,7 +9,7 @@ import com.midnight.kuira.sdk.formatNight
 import dagger.hilt.android.EntryPointAccessors
 
 /**
- * Doze-aware background poll for incoming UNSHIELDED NIGHT (#271). Scheduled by
+ * Doze-aware background poll for incoming UNSHIELDED NIGHT. Scheduled by
  * [WalletForegroundService.attach] — periodically (~15 min) and as an expedited one-shot
  * when the app backgrounds — so a receipt is noticed even while the app is backgrounded /
  * the device is locked, when the live observer isn't running.
@@ -21,7 +21,7 @@ import dagger.hilt.android.EntryPointAccessors
  * Skipped when the wallet UI is foreground (the live observer covers that, and there's no point
  * summoning someone who's already here).
  *
- * Shielded receipts are out of scope here — they need the seed-derived viewing key (#280).
+ * Shielded receipts are out of scope here — they need the seed-derived viewing key.
  */
 class ReceivePollWorker(
     appContext: Context,

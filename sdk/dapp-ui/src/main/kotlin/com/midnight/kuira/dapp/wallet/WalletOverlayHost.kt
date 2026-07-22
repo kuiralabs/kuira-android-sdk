@@ -241,7 +241,7 @@ private fun WalletSettingsOverlayContent(
             recoveryPhraseSaved = recoveryPhraseSaved,
             onViewRecoveryPhrase = { recoveryRevealOpen = true },
             onResyncBalance = {
-                // Rebuild the unshielded UTXO cache from genesis (#52). Close back to the
+                // Rebuild the unshielded UTXO cache from genesis. Close back to the
                 // wallet so the user watches the balance self-correct via the live indicator.
                 activity?.let { viewModel.forceResyncBalance(it) }
                 onClose()

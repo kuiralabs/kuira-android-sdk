@@ -10,7 +10,7 @@ package com.midnight.kuira.sdk
  * itself) can reflect whichever phase is in flight; the presentation layer maps
  * the phase to a localized label.
  *
- * Until #235 progress was only a per-call `syncDust(onProgress)` lambda — fine
+ * Until progress was only a per-call `syncDust(onProgress)` lambda — fine
  * for the in-app `WalletSyncIndicator`, but a *background* observer needs an
  * observable source. This is that source.
  *
@@ -26,11 +26,11 @@ sealed interface SyncStatus {
      * A sync is in progress.
      *
      * @property fraction 0f..1f when a count is known; null = indeterminate
-     *   (the native replay tail, or a phase with no event count).
+     *  (the native replay tail, or a phase with no event count).
      * @property eventsProcessed raw count from the indexer stream (-1 = replaying).
      * @property totalEvents the chain's dust-event tip (indexer `maxId`), 0 if unknown.
      * @property phase which sync is running — the presentation layer resolves the
-     *   user-facing label from this.
+     *  user-facing label from this.
      */
     data class Syncing(
         val fraction: Float?,

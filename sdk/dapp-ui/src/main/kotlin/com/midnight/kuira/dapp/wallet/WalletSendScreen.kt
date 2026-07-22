@@ -49,7 +49,7 @@ import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
- * Full-screen Send wizard (#240) — the dapp-ui port of the design-sprint Send
+ * Full-screen Send wizard — the dapp-ui port of the design-sprint Send
  * wireframe ([com.midnight.kuira.dev.wireframes.send]), which lives in the app
  * module and so can't be reached from the published SDK. Reskins the pill's
  * Send onto the wireframe's visual language (StarField + GlassPanel + hero
@@ -57,7 +57,7 @@ import java.math.BigInteger
  *
  * Three steps + review, then the post-submit state machine driven by
  * [sendState]:
- *   Token+Mode → Recipient → Amount → Review → (Confirm) → Pending → Success/Failure
+ *  Token+Mode → Recipient → Amount → Review → (Confirm) → Pending → Success/Failure
  *
  * The SDK pill only sends unshielded NIGHT today, so the Token+Mode screen
  * offers NIGHT/Unshielded and shows Shielded as "soon". The screen stays
@@ -66,7 +66,7 @@ import java.math.BigInteger
  * outcome back through [sendState].
  *
  * @param spendableNightRaw unshielded NIGHT available, in base units
- *   (1 NIGHT = 1,000,000) — drives the Available hint + MAX shortcut.
+ *  (1 NIGHT = 1,000,000) — drives the Available hint + MAX shortcut.
  * @param sendState live send-flow state (idle / sending / success / failure).
  * @param onSubmit (recipient, amount-in-base-units) — fired on Confirm.
  * @param onResetState clear the flow back to Idle.
@@ -111,14 +111,14 @@ internal fun WalletSendScreen(
     // Returns true when it consumed the back; false tells the host to close.
     val handleBack: () -> Boolean = {
         when {
-            sendState is SendUiState.Sending -> true                 // don't abandon an in-flight submit
+            sendState is SendUiState.Sending -> true // don't abandon an in-flight submit
             scanning -> { scanning = false; true }
-            fieldFocused -> { focusManager.clearFocus(); true }      // hide keyboard, stay put
+            fieldFocused -> { focusManager.clearFocus(); true } // hide keyboard, stay put
             sendState is SendUiState.Success -> { onResetState(); false }
             step == SendStep.REVIEW -> { step = SendStep.AMOUNT; true }
             step == SendStep.AMOUNT -> { step = SendStep.RECIPIENT; true }
             step == SendStep.RECIPIENT -> { step = SendStep.TOKEN_MODE; true }
-            else -> { onResetState(); false }                        // TOKEN_MODE → host closes
+            else -> { onResetState(); false } // TOKEN_MODE → host closes
         }
     }
     SideEffect { registerBack(handleBack) }

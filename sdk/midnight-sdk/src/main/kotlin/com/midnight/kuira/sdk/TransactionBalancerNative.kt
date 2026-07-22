@@ -43,20 +43,20 @@ internal object TransactionBalancerNative {
      * @param seed 32-byte dust seed (derived from HD wallet)
      * @param ledgerParamsHex Tagged-SCALE hex of ledger parameters (from indexer)
      * @param currentTimeMs Dust SYNC time (ms) — used for the dust ctime + spend, which must
-     *   resolve to the synced dust root (#287).
+     *  resolve to the synced dust root.
      * @param ttlAnchorMs Chain-tip time (ms) for the dust-fee intent's TTL. Distinct from the
-     *   sync time, which lags the chain when dust events are sparse → a sync-anchored TTL is
-     *   already expired and the node rejects it (custom error 182 / IntentTtlExpired).
+     *  sync time, which lags the chain when dust events are sparse → a sync-anchored TTL is
+     *  already expired and the node rejects it (custom error 182 / IntentTtlExpired).
      * @param keysDir Path to cached proving keys directory
      * @param networkId Network ID string (e.g., "undeployed", "preview", "preprod")
      * @param excludeNullifiers Comma-separated lowercase-hex dust nullifiers to skip
-     *   during UTXO selection — UTXOs the wallet already spent but the indexer's
-     *   event stream hasn't reflected. Empty string skips nothing. Re-selecting an
-     *   already-spent UTXO makes the node reject the tx with error 115.
+     *  during UTXO selection — UTXOs the wallet already spent but the indexer's
+     *  event stream hasn't reflected. Empty string skips nothing. Re-selecting an
+     *  already-spent UTXO makes the node reject the tx with error 115.
      * @return `<balanced+sealed tagged-SCALE hex>;<spent nullifier hex>,<...>` (the
-     *   nullifier list may be empty), or null on error. The caller records the spent
-     *   nullifiers durably and passes them back via [excludeNullifiers] on
-     *   subsequent balances. Parse with [BalanceEnvelope.parse].
+     *  nullifier list may be empty), or null on error. The caller records the spent
+     *  nullifiers durably and passes them back via [excludeNullifiers] on
+     *  subsequent balances. Parse with [BalanceEnvelope.parse].
      */
     external fun nativeBalanceProvenTransaction(
         provenTxHex: String,

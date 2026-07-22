@@ -20,15 +20,15 @@ import java.io.File
  * (non-empty) state, on-device:
  *
  *  1. **checkpoint + delta == genesis** — replaying a delta on top of a
- *     serialize→deserialize-restored state lands on the IDENTICAL Merkle roots
- *     (and balance / UTXO set) as replaying every event from genesis in one
- *     pass. This is what lets `DustRepository` resume from a saved checkpoint
- *     instead of re-syncing ~900k PREPROD events on every cold start.
+ *  serialize→deserialize-restored state lands on the IDENTICAL Merkle roots
+ *  (and balance / UTXO set) as replaying every event from genesis in one
+ *  pass. This is what lets `DustRepository` resume from a saved checkpoint
+ *  instead of re-syncing ~900k PREPROD events on every cold start.
  *
  *  2. **DustLocalState serialize/deserialize is root-lossless** on non-empty
- *     state — closing the gap left by the unit-level
- *     `serialize_deserialize_reproduces_root` (which proved it at the MerkleTree
- *     level only). Refutes the old "SDK-001 corrupts roots" belief end-to-end.
+ *  state — closing the gap left by the unit-level
+ *  `serialize_deserialize_reproduces_root` (which proved it at the MerkleTree
+ *  level only). Refutes the old "SDK-001 corrupts roots" belief end-to-end.
  *
  * Both run against a bundled event fixture (real PREPROD dust events captured
  * once + the matching testnet dust seed). If the fixture is absent the tests
@@ -56,8 +56,8 @@ class DustCheckpointResumeTest {
         genesis.close()
 
         // (B) Checkpoint + delta: replay the first half, persist through the
-        //     real checkpoint path (serialize → deserialize), then replay the
-        //     remaining events on top of the restored state.
+        //  real checkpoint path (serialize → deserialize), then replay the
+        //  remaining events on top of the restored state.
         val mid = events.size / 2
         val checkpoint = replayAll(seed, events.subList(0, mid))
         val serialized = checkpoint.serialize()
@@ -102,7 +102,7 @@ class DustCheckpointResumeTest {
     }
 
     /**
-     * The negative half of #1: a **torn** checkpoint — a state resumed at the
+     * The negative half of : a **torn** checkpoint — a state resumed at the
      * wrong offset relative to the events fed to it — must be *rejected*, not
      * silently accepted with a divergent root. Re-feeding already-applied events
      * onto a fully-synced state makes the first commitment event land below the

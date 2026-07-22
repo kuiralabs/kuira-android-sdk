@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * Unit coverage for [VersionCoherence.evaluate] — the pure warn-vs-fail decision point of the
- * ledger-version pre-flight (#16). The matrix is known to LAG the live node, so the contract is:
+ * ledger-version pre-flight. The matrix is known to LAG the live node, so the contract is:
  * a known-compatible specVersion is Coherent; anything else is a non-blocking Warning (under the
  * default policy) whose message names BOTH versions + the remedy. No I/O here — the SDK does the
  * RPC/native read and passes the values in.

@@ -558,7 +558,7 @@ class TransactionSubmitter(
             // Step 3a: Calculate fee + select fee UTXOs against the already-loaded state
             val dustActions = try {
                 dustActionsBuilder.buildDustActions(
-                    transactionHex = baseSealedHex,  // Use SEALED transaction
+                    transactionHex = baseSealedHex, // Use SEALED transaction
                     ledgerParamsHex = ledgerParamsHex,
                     address = fromAddress,
                     seed = seed,
@@ -600,7 +600,7 @@ class TransactionSubmitter(
             //
             // The stored binding_randomness will be automatically used by serializeWithDust().
 
-            // Chain-anchored dust ctime (#287): the node validates the dust spend via
+            // Chain-anchored dust ctime: the node validates the dust spend via
             // `dust.root_history.get(ctime)`, so ctime must resolve to the SAME dust root
             // our proof commits to. That root is whatever block our local dust state has
             // synced to — NOT the chain tip. Anchoring to the indexer's *current* tip
@@ -687,7 +687,7 @@ class TransactionSubmitter(
                 is TransactionFinalizationResult.Finalized -> {
                     Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
 
-                    // #297: do NOT delete the dust checkpoint here. The post-send refresh
+                    // : do NOT delete the dust checkpoint here. The post-send refresh
                     // (MidnightSdk.sendNight → wallet.refresh → DustSyncManager.refreshIncremental,
                     // and the per-tx ensureDustFresh on the contract path) does a cheap DELTA
                     // resume from the SURVIVING checkpoint — applying this tx's dust-spend event
@@ -711,7 +711,7 @@ class TransactionSubmitter(
 
                 is TransactionFinalizationResult.InBlock -> {
                     Log.w(TAG, "Transaction in block but not finalized")
-                    // #297: keep the dust checkpoint intact (see the Finalized branch). The
+                    // : keep the dust checkpoint intact (see the Finalized branch). The
                     // post-send refresh deltas from it; deleting would force a full genesis replay.
                     if (spentUtxoIntents.isNotEmpty()) {
                         utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
@@ -755,7 +755,7 @@ class TransactionSubmitter(
     /**
      * Builds JSON array of dust UTXO selections for Rust FFI.
      *
-     * Format: [{"utxo_index": 0, "v_fee": "1000000"}, ...]
+     * Format: [{"utxo_index": 0, "v_fee": "1000000"},...]
      *
      * @param utxoIndices Indices of UTXOs to spend
      * @param totalFee Total fee to be paid (only first UTXO pays the fee)
@@ -825,8 +825,8 @@ class TransactionSubmitter(
          * @property txHash Transaction hash (null if never submitted)
          * @property reason Human-readable failure reason
          * @property customErrorCode The node's ledger error code when the node rejected
-         *   the tx (e.g. 170 = stale dust spend root), else null. Lets callers apply a
-         *   targeted recovery (re-sync + retry) without parsing [reason]. See #287.
+         *  the tx (e.g. 170 = stale dust spend root), else null. Lets callers apply a
+         *  targeted recovery (re-sync + retry) without parsing [reason]. See.
          */
         data class Failed(
             val txHash: String?,

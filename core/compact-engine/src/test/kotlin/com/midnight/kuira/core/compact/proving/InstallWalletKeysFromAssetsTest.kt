@@ -18,7 +18,7 @@ import java.nio.file.Files
 
 /**
  * Coverage for [ProvingKeyManager.installWalletKeysFromAssets] — the offline
- * bundle path for the protocol-level wallet keys (#256), the in-APK alternative
+ * bundle path for the protocol-level wallet keys, the in-APK alternative
  * to the S3 [ProvingKeyManager.downloadWalletKeys]. Mirrors
  * [InstallCircuitKeysFromAssetsTest] (mockk AssetManager, real temp filesDir).
  *

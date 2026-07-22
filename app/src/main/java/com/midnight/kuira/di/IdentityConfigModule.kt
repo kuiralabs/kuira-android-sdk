@@ -13,7 +13,7 @@ import javax.inject.Singleton
  * The SDK ([com.midnight.kuira.core.identity.di.IdentityModule]) deliberately
  * provides NO default `PasskeyConfig` — `rpId` is the passkey domain and must
  * match the `assetlinks.json` this app hosts, so each consuming app declares
- * its own (wishlist #22). This is the wallet app's declaration; third-party
+ * its own (wishlist ). This is the wallet app's declaration; third-party
  * dApps ship the equivalent with their own domain + name.
  */
 @Module

@@ -4,17 +4,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Unit tests for [dustSyncPlan] — the pure decision seam behind #279 (#2): the
+ * Unit tests for [dustSyncPlan] — the pure decision seam behind : the
  * dust delta-sync routing that keeps an at-tip refresh from blocking the full
  * `DELTA_FIRST_EVENT_TIMEOUT_MS` (30s) on a live subscription that has nothing to
  * send.
  *
  * `tip` is the chain's highest dust-event id (the reorg-guard `maxId` probe);
  * `lastEventId` is our checkpoint cursor. The contract:
- *  - `tip < cursor` → REORG  (chain reset under us)
+ *  - `tip < cursor` → REORG (chain reset under us)
  *  - `tip == cursor` → AT_TIP (caught up — short-circuit, no network)
- *  - `tip > cursor` → DELTA  (real events to fetch)
- *  - `tip == null` → DELTA  (probe timed out → fall back, preserve old behavior)
+ *  - `tip > cursor` → DELTA (real events to fetch)
+ *  - `tip == null` → DELTA (probe timed out → fall back, preserve old behavior)
  */
 class DustSyncPlanTest {
 

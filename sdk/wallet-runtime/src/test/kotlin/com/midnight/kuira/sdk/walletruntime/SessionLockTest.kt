@@ -32,7 +32,7 @@ class SessionLockTest {
     private fun newLock() = SessionLock(provider, walletSeedSource).apply {
         idleTimeoutMs = 1_000
         backgroundGraceMs = 500
-        backgroundLifetimeMs = 5_000   // background seed-lifetime ceiling (#276)
+        backgroundLifetimeMs = 5_000 // background seed-lifetime ceiling
     }
 
     @Test
@@ -153,7 +153,7 @@ class SessionLockTest {
         verify(exactly = 0) { provider.close() }
     }
 
-    // ── Background seed-lifetime ceiling (#276) ──
+    // ── Background seed-lifetime ceiling ──
 
     @Test
     fun `a held backgrounded session (Kicks match) never wipes past the lifetime ceiling — the hold defers it`() = runTest {

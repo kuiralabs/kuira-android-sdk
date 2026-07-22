@@ -181,4 +181,4 @@ make the contract harder to honor later.
 - [`SECURITY.md`](SECURITY.md) — threat model + reporting + verification.
 - [`RELEASE.md`](RELEASE.md) — how releases are produced.
 - [`INTEGRATION.md`](INTEGRATION.md) — consumer recipe.
-- [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) — current alpha cycle plan.
+- the internal docs — current alpha cycle plan.

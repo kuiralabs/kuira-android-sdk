@@ -30,13 +30,13 @@ import org.robolectric.RobolectricTestRunner
  * Pins:
  *  - Empty initial state on a fresh install.
  *  - Round-trip persistence of the (did, credentialId, publicKeyHex)
- *    triple.
+ *  triple.
  *  - `hasSigil` derives from credentialId presence (not did/publicKeyHex)
- *    — important contract because external consumers
- *    (`WalletSeedSource`) use this as their gate.
+ *  — important contract because external consumers
+ *  (`WalletSeedSource`) use this as their gate.
  *  - `clear` removes the triple but leaves the dismissed flag alone.
  *  - Backup-dismissed flag round-trip + durability (it's the gate that
- *    prevents the restore prompt from re-appearing on every launch).
+ *  prevents the restore prompt from re-appearing on every launch).
  */
 @RunWith(RobolectricTestRunner::class)
 class SigilStateStoreTest {
@@ -204,7 +204,7 @@ class SigilStateStoreTest {
 
         // A subsequent write with a DIFFERENT credential is a legitimate identity
         // replacement (the "start fresh" / restore path), so it passes replace=true
-        // — the #250 overwrite guard rejects a silent overwrite otherwise. The seam
+        // — the overwrite guard rejects a silent overwrite otherwise. The seam
         // under test is that the flow tracks the latest write either way.
         store.persistSigil("did:key:z6MkB", "cred-b", "0214", replace = true)
         assertEquals(

@@ -22,7 +22,7 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * Pins the checkpoint-consistency invariant behind #236: a dust checkpoint is a
+ * Pins the checkpoint-consistency invariant behind : a dust checkpoint is a
  * (serialized state, resume cursor) pair that must be all-or-nothing. A half
  * that is present without its partner — a torn pair — must read as ABSENT so the
  * caller falls back to a clean genesis sync, never resumes a delta on a state

@@ -83,8 +83,8 @@ plus a tag.
 | Security policy, threat model, signature verification | [`SECURITY.md`](SECURITY.md) |
 | API stability + deprecation policy | [`STABILITY.md`](STABILITY.md) |
 | Per-release ritual (tag → CI → Central) | [`RELEASE.md`](RELEASE.md) |
-| What's landing in the next alpha cycle | [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) |
-| SDK-connector wishlist (open friction + design rationales) | `examples/midnight-kicks/docs/PLAN.md` |
+| What's landing in the next alpha cycle | the internal docs |
+| SDK-connector wishlist (open friction + design rationales) | the internal docs |
 | Engineering guidelines | [`guidelines/`](guidelines/) |
 | Day-to-day collaboration approach | [`LEARNING_STRATEGY.md`](LEARNING_STRATEGY.md) |
 
@@ -97,7 +97,7 @@ plus a tag.
 - **Kotlin 2.3.x** and **AGP 8.13.x**.
 - **`compactc`** matching `@midnight-ntwrk/compact-runtime` pinned in each
   example's `contract/package.json`. The version is sensitive — read
-  `examples/midnight-kicks/docs/PLAN.md` § wishlist `#13` if you hit
+  the internal docs § wishlist `#13` if you hit
   a bytecode mismatch.
 
 For the Rust FFI submodule (`kuira-crypto-ffi`), the local build needs

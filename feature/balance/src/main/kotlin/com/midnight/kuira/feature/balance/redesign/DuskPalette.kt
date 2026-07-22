@@ -31,8 +31,8 @@ data class DuskPalette(
      * Fill color for content panels sitting over the StarField. Picks the
      * elevation token that gives the strongest perceived lift against the
      * bg per mode:
-     *   Dark mode  → VoidElevated (#111111, ~7% luminance delta vs #000)
-     *   Light mode → VoidSoft (#FFFFFF, pure white vs #F7F7F7 bg)
+     *  Dark mode → VoidElevated (#111111, ~7% luminance delta vs )
+     *  Light mode → VoidSoft (#FFFFFF, pure white vs #F7F7F7 bg)
      *
      * Using a single "VoidSoft" token for both modes gives only a 4%
      * delta in dark mode — too subtle. This helper picks the right

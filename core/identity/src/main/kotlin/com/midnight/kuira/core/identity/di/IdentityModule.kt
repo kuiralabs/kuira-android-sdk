@@ -33,14 +33,14 @@ object IdentityModule {
     // SDK default would silently route every consumer through the maintainer's
     // domain and break PRF unless the maintainer added them to a maintainer-
     // hosted assetlinks.json — i.e. the SDK would be effectively permissioned
-    // (wishlist #22). So each consuming app MUST bind its own:
+    // (wishlist ). So each consuming app MUST bind its own:
     //
-    //   @Module @InstallIn(SingletonComponent::class)
-    //   object MyAppIdentityModule {
-    //       @Provides @Singleton
-    //       fun providePasskeyConfig() =
-    //           PasskeyConfig(rpId = "myapp.example.com", rpName = "My App")
-    //   }
+    //  @Module @InstallIn(SingletonComponent::class)
+    //  object MyAppIdentityModule {
+    //  @Provides @Singleton
+    //  fun providePasskeyConfig() =
+    //  PasskeyConfig(rpId = "myapp.example.com", rpName = "My App")
+    //  }
     //
     // Omitting it is a fail-fast Dagger missing-binding error at build time —
     // the intended "declare your domain" signal.

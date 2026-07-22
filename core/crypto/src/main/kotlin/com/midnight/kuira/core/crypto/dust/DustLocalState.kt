@@ -27,14 +27,14 @@ import javax.annotation.concurrent.ThreadSafe
  * **Value Units (IMPORTANT):**
  * The Midnight dust system uses different units for different purposes:
  * - **Specks:** Smallest dust unit (balance, initial_value)
- *   - 1 Dust = 1,000,000 Specks
- *   - Used for dust token values and balances
+ *  - 1 Dust = 1,000,000 Specks
+ *  - Used for dust token values and balances
  * - **Stars:** Night (native token) unit
- *   - 1 NIGHT = 1,000,000 Stars
- *   - Used for backing Night UTXO values that generate dust
+ *  - 1 NIGHT = 1,000,000 Stars
+ *  - Used for backing Night UTXO values that generate dust
  * - **Dust vs Night:** These are DIFFERENT tokens with DIFFERENT units!
- *   - Dust is generated FROM Night tokens over time
- *   - Dust is used to pay transaction fees
+ *  - Dust is generated FROM Night tokens over time
+ *  - Dust is used to pay transaction fees
  *
  * **Thread Safety:**
  * This class is NOT thread-safe. Do not share instances across threads.
@@ -46,10 +46,10 @@ import javax.annotation.concurrent.ThreadSafe
  * ```kotlin
  * val state = DustLocalState.create()
  * try {
- *     val balance = state.getBalance(System.currentTimeMillis())
- *     println("Balance: $balance Specks")
+ *  val balance = state.getBalance(System.currentTimeMillis())
+ *  println("Balance: $balance Specks")
  * } finally {
- *     state.close()
+ *  state.close()
  * }
  * ```
  *
@@ -58,16 +58,16 @@ import javax.annotation.concurrent.ThreadSafe
  * // Create new state
  * val state = DustLocalState.create() ?: error("Failed to create state")
  * try {
- *     // Get current balance
- *     val now = System.currentTimeMillis()
- *     val balance = state.getBalance(now)
- *     println("Current balance: $balance Specks")
+ *  // Get current balance
+ *  val now = System.currentTimeMillis()
+ *  val balance = state.getBalance(now)
+ *  println("Current balance: $balance Specks")
  *
- *     // Serialize state for storage
- *     val serialized = state.serialize()
- *     database.saveState(serialized)
+ *  // Serialize state for storage
+ *  val serialized = state.serialize()
+ *  database.saveState(serialized)
  * } finally {
- *     state.close()
+ *  state.close()
  * }
  * ```
  *
@@ -78,7 +78,7 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **References:**
  * - Rust FFI: `kuira-crypto-ffi/src/dust_ffi.rs`
- * - Dust Spec: `midnight-libraries/midnight-ledger/spec/dust.md`
+ * - Dust Spec: the Midnight TypeScript SDK
  */
 class DustLocalState private constructor(
     /**
@@ -194,12 +194,12 @@ class DustLocalState private constructor(
          * // Deserialize
          * val state = DustLocalState.deserialize(serialized)
          * if (state != null) {
-         *     try {
-         *         val balance = state.getBalance(System.currentTimeMillis())
-         *         println("Loaded balance: $balance Specks")
-         *     } finally {
-         *         state.close()
-         *     }
+         *  try {
+         *  val balance = state.getBalance(System.currentTimeMillis())
+         *  println("Loaded balance: $balance Specks")
+         *  } finally {
+         *  state.close()
+         *  }
          * }
          * ```
          *
@@ -317,7 +317,7 @@ class DustLocalState private constructor(
      * A dust spend's `ctime` must anchor to THIS, not the chain tip: the node validates
      * a spend via `dust.root_history.get(ctime)`, so using our own synced block time
      * makes the looked-up root equal our local commitment root regardless of how far the
-     * tip has advanced past us — preventing the intermittent error 170 (#287).
+     * tip has advanced past us — preventing the intermittent error 170.
      */
     fun syncTimeMs(): Long {
         checkNotClosed()
@@ -338,7 +338,7 @@ class DustLocalState private constructor(
      * ```kotlin
      * val serialized = state.serialize()
      * if (serialized != null) {
-     *     database.saveDustState(serialized)
+     *  database.saveDustState(serialized)
      * }
      * ```
      *
@@ -380,24 +380,24 @@ class DustLocalState private constructor(
      * ```kotlin
      * val state = DustLocalState.create()!!
      * try {
-     *     // Get events from blockchain (hex-encoded SCALE bytes)
-     *     val eventsHex = "0x..." // From blockchain indexer
+     *  // Get events from blockchain (hex-encoded SCALE bytes)
+     *  val eventsHex = "0x..." // From blockchain indexer
      *
-     *     // Replay events to sync wallet
-     *     val newState = state.replayEvents(seed, eventsHex)
+     *  // Replay events to sync wallet
+     *  val newState = state.replayEvents(seed, eventsHex)
      *
-     *     if (newState != null) {
-     *         // Use new state (old state is now invalid)
-     *         state.close()
+     *  if (newState != null) {
+     *  // Use new state (old state is now invalid)
+     *  state.close()
      *
-     *         // Check new balance
-     *         val balance = newState.getBalance(System.currentTimeMillis())
-     *         println("New balance: $balance Specks")
+     *  // Check new balance
+     *  val balance = newState.getBalance(System.currentTimeMillis())
+     *  println("New balance: $balance Specks")
      *
-     *         newState.close()
-     *     }
+     *  newState.close()
+     *  }
      * } finally {
-     *     if (!state.isClosed()) state.close()
+     *  if (!state.isClosed()) state.close()
      * }
      * ```
      *
@@ -482,10 +482,10 @@ class DustLocalState private constructor(
      * ```kotlin
      * val state = DustLocalState.create()!!
      * try {
-     *     val count = state.getUtxoCount()
-     *     println("You have $count dust tokens")
+     *  val count = state.getUtxoCount()
+     *  println("You have $count dust tokens")
      * } finally {
-     *     state.close()
+     *  state.close()
      * }
      * ```
      *
@@ -515,14 +515,14 @@ class DustLocalState private constructor(
      * ```kotlin
      * val state = DustLocalState.create()!!
      * try {
-     *     for (i in 0 until state.getUtxoCount()) {
-     *         val utxoHex = state.getUtxoAt(i)
-     *         if (utxoHex != null) {
-     *             println("UTXO $i: $utxoHex")
-     *         }
-     *     }
+     *  for (i in 0 until state.getUtxoCount()) {
+     *  val utxoHex = state.getUtxoAt(i)
+     *  if (utxoHex != null) {
+     *  println("UTXO $i: $utxoHex")
+     *  }
+     *  }
      * } finally {
-     *     state.close()
+     *  state.close()
      * }
      * ```
      *
@@ -579,13 +579,13 @@ class DustLocalState private constructor(
      * ```kotlin
      * val state = DustLocalState.create()!!
      * try {
-     *     val utxos = state.getAllUtxos()
-     *     println("Total UTXOs: ${utxos.size}")
-     *     utxos.forEach { utxoHex ->
-     *         // Process each UTXO
-     *     }
+     *  val utxos = state.getAllUtxos()
+     *  println("Total UTXOs: ${utxos.size}")
+     *  utxos.forEach { utxoHex ->
+     *  // Process each UTXO
+     *  }
      * } finally {
-     *     state.close()
+     *  state.close()
      * }
      * ```
      *
@@ -614,8 +614,8 @@ class DustLocalState private constructor(
      *
      * @param seed 32-byte dust seed
      * @return the nullifier hex list (empty if the state has no UTXOs), or **null**
-     *   if the native call failed. Callers MUST treat null as "unknown" and skip
-     *   pruning — treating it as empty would wrongly drop the whole skip-set.
+     *  if the native call failed. Callers MUST treat null as "unknown" and skip
+     *  pruning — treating it as empty would wrongly drop the whole skip-set.
      */
     fun currentNullifiers(seed: ByteArray): List<String>? {
         checkNotClosed()

@@ -16,7 +16,7 @@ import org.mockito.kotlin.mock
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Unit tests for [DustBalanceTracker] (#235): the proactive dust subscription
+ * Unit tests for [DustBalanceTracker]: the proactive dust subscription
  * resyncs (via the wallet's [onTipAdvance]) only when the chain tip advances,
  * after a best-effort initial sync. Mirrors [ShieldedBalanceTrackerTest]; the
  * injected test dispatcher lets us drive the IO loop under virtual time.

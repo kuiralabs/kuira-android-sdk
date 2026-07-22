@@ -10,7 +10,7 @@ import org.junit.Test
  * a full-screen overlay (Send / Receive / Settings) returns the user to the sheet they launched it
  * from. That is correct ONLY when the overlay was launched from a sheet. An enlarged floating chip
  * has its OWN action buttons that open overlays directly, with no sheet behind them — reopening one
- * on close springs a surprise sheet over the persistent widget (#52). These lock down that the
+ * on close springs a surprise sheet over the persistent widget. These lock down that the
  * `reopenSheetOnClose = false` launches do not bump the counter, while the default launches do.
  */
 class WalletOverlayControllerTest {

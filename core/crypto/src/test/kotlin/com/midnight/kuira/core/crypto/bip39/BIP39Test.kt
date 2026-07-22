@@ -170,7 +170,7 @@ class BIP39Test {
         val seed = BIP39.mnemonicToSeed(mnemonic)
 
         // Then - Full 64-byte PBKDF2 output (Lace compatible)
-        // See docs/LACE_COMPATIBILITY.md for explanation
+        // See internal design notes for explanation
         assertEquals(64, seed.size)
     }
 }

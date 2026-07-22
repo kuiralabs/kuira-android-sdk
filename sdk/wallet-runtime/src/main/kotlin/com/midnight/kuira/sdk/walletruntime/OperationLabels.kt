@@ -6,7 +6,7 @@ import com.midnight.kuira.sdk.OperationTerminalStatus
 
 /**
  * Presentation-edge mapping from an [OperationKind] (domain state) to its localized
- * DEFAULT label resource (#259) — used for the ongoing foreground-service notification
+ * DEFAULT label resource — used for the ongoing foreground-service notification
  * when the caller didn't supply its own label (i.e. the SDK's own built-in send / dust
  * / contract operations). A caller-provided label always wins; this is only the
  * fallback. The exhaustive `when` fails to compile if a kind is added without a label,

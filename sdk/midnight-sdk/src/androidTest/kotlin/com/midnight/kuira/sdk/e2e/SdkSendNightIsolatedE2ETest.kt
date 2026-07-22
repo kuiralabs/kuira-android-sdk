@@ -23,7 +23,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Covers both money-path shapes on fresh per-test wallets — single-input (no consolidation) and
  * multi-input (consolidation). Run via the funding host harness
  * (it services the per-test `KUIRA_FUND_REQ` markers):
- *   `ANDROID_SERIAL=emulator-5554 ./sdk/midnight-sdk/run-sdk-e2e.sh`
+ *  `ANDROID_SERIAL=emulator-5554./sdk/midnight-sdk/run-sdk-e2e.sh`
  *
  * SKIPs (never fails) when localnet/funding is absent — see [IsolatedWalletE2E].
  */
@@ -71,7 +71,7 @@ class SdkSendNightIsolatedE2ETest {
             result is MidnightSdk.SendResult.Success || result is MidnightSdk.SendResult.Pending,
         )
 
-        // #265: the send's change UTXO has no dust backing; sendNight must auto-register it (in the
+        // : the send's change UTXO has no dust backing; sendNight must auto-register it (in the
         // background) so the wallet keeps generating dust. Poll until it reads fully registered.
         var registered = false
         val deadline = System.currentTimeMillis() + POST_SEND_REGISTER_TIMEOUT_MS

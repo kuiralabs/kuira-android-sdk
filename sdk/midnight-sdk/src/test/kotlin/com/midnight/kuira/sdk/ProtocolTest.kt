@@ -9,7 +9,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * The durable protocol-saga engine (#253 + #254): ledger-anchored idempotent steps and
+ * The durable protocol-saga engine (#253 + ): ledger-anchored idempotent steps and
  * the counterparty-wait boundary. Tests the [ProtocolScopeImpl] directly with fake
  * `doneWhen`/`action` lambdas — no chain needed.
  */

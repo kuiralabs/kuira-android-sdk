@@ -58,7 +58,7 @@ import com.midnight.kuira.core.designsystem.effect.StarField
 import kotlinx.coroutines.delay
 
 /**
- * Reveal flow for the sovereign recovery phrase (#252). The bundled UI for
+ * Reveal flow for the sovereign recovery phrase. The bundled UI for
  * [com.midnight.kuira.sdk.walletseed.WalletRecovery] — a dApp can build its own against the same
  * contract.
  *

@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Unit tests for [shieldedSyncPlan] — the pure decision seam behind #279 (#1): the shielded
+ * Unit tests for [shieldedSyncPlan] — the pure decision seam behind : the shielded
  * (zswap) sync routing that lets a refresh resume from a saved checkpoint instead of re-replaying
  * every event from genesis.
  *

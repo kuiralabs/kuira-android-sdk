@@ -55,7 +55,7 @@ class DustCloudBackupCoordinatorTest {
         assertNull(coordinator(FakeStorage()).fetch("mn_addr_preprod1abc"))
     }
 
-    // ── Network pinning (#61) ──
+    // ── Network pinning ──
     //
     // The blob is ONE bundle for the whole wallet; the address embeds the network
     // (`mn_addr_preprod…` vs `mn_addr_undeployed…`), so per-address entry selection IS the

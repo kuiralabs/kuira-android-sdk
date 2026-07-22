@@ -22,23 +22,23 @@ import java.util.concurrent.Callable
  * Behaviour:
  *
  * 1. Reads the configured `source` directory and resolves the alias
- *    (default = `source` dirname).
+ *  (default = `source` dirname).
  * 2. Registers a `syncContractAssets` task that copies, from `source`:
- *    - `contract/index.js` to `assets/runtime/<alias>-contract.js`
- *    - prover and verifier files (`.prover`, `.verifier`) under `keys`
- *      to `assets/keys`
- *    - bzkir files (`.bzkir`) under `zkir` to `assets/keys`
+ *  - `contract/index.js` to `assets/runtime/<alias>-contract.js`
+ *  - prover and verifier files (`.prover`, `.verifier`) under `keys`
+ *  to `assets/keys`
+ *  - bzkir files (`.bzkir`) under `zkir` to `assets/keys`
  * 3. Wires `syncContractAssets` as a dependency of the Android module's
- *    `preBuild` task, so assets are synced before any APK is assembled.
+ *  `preBuild` task, so assets are synced before any APK is assembled.
  * 4. Fails fast at task execution time with a clear message if the
- *    source directory is missing.
+ *  source directory is missing.
  * 5. Cross-checks the compiled contract's
- *    `compiler/contract-info.json` `runtime-version` against the
- *    consumer's pinned `@midnight-ntwrk/compact-runtime` version (either
- *    auto-discovered from a co-located `package.json`, or explicitly
- *    set via `kuiraContract.expectedRuntimeVersion`). Fails the build
- *    on mismatch so the consumer doesn't ship an APK that crashes at
- *    runtime with "Unsupported bytecode version."
+ *  `compiler/contract-info.json` `runtime-version` against the
+ *  consumer's pinned `@midnight-ntwrk/compact-runtime` version (either
+ *  auto-discovered from a co-located `package.json`, or explicitly
+ *  set via `kuiraContract.expectedRuntimeVersion`). Fails the build
+ *  on mismatch so the consumer doesn't ship an APK that crashes at
+ *  runtime with "Unsupported bytecode version."
  *
  * The plugin requires an Android plugin (`com.android.application` or
  * `com.android.library`) to be applied to the same project.
@@ -317,7 +317,7 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val ASSETS_RUNTIME_SUBDIR = "runtime"
         internal const val ASSETS_KEYS_SUBDIR = "keys"
 
-        // Wallet-key offline bundle (#256). Subdir kept distinct from contract
+        // Wallet-key offline bundle. Subdir kept distinct from contract
         // keys ("keys") so the two asset installers never collide. Matches the
         // SDK's ProvingKeyManager.WALLET_ASSET_DIR.
         internal const val ASSETS_WALLET_KEYS_SUBDIR = "wallet-keys"

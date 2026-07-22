@@ -12,13 +12,13 @@ import com.midnight.kuira.sdk.OperationKind
 import com.midnight.kuira.sdk.OperationOutcome
 
 /**
- * Builds + posts the DISMISSIBLE finalization notification (#264): when a tracked
+ * Builds + posts the DISMISSIBLE finalization notification: when a tracked
  * operation finishes (success / pending / failed), the user — who may have left the
  * app — gets a notification they clear THEMSELVES, so they know the transaction
  * landed. Distinct from [SyncNotifier]'s ONGOING progress notification: its own
  * channel, NOT ongoing, auto-cancels on tap, alerts once.
  *
- * Labels follow #259: the operation's caller-provided label (or the kind default via
+ * Labels follow : the operation's caller-provided label (or the kind default via
  * [defaultLabelRes]) renders the title; the terminal status renders the body — the
  * SDK emits enums, the host strings.
  */
@@ -95,11 +95,11 @@ class FinalizationNotifier(private val context: Context) {
         /**
          * Id map within the reserved finalization block 0xD058..0xD067:
          *  - [ONLY_LATEST_ID] (0xD058): stale / non-value op completions (dust, contract,
-         *    custom). A new one REPLACES the previous so only the latest shows (#282); [cancel]
-         *    clears it on a new op.
+         *  custom). A new one REPLACES the previous so only the latest shows; [cancel]
+         *  clears it on a new op.
          *  - [SENT_BASE_ID] + id % [SENT_SPAN] (0xD059..0xD067): value sends. Each distinct send
-         *    keeps its own slot so transactions don't replace each other; keyed by the op id so
-         *    a single send's terminal outcome can't duplicate.
+         *  keeps its own slot so transactions don't replace each other; keyed by the op id so
+         *  a single send's terminal outcome can't duplicate.
          */
         internal const val ONLY_LATEST_ID = 0xD058
         internal const val SENT_BASE_ID = 0xD059
@@ -112,7 +112,7 @@ class FinalizationNotifier(private val context: Context) {
  * [OperationKind.Send] is a value transaction — it gets its OWN id, keyed by the op [id], so
  * distinct sends are separate, persistent records while a single send can't duplicate. Every
  * other kind shares the single only-latest slot, so stale operation completions keep collapsing
- * to the latest (#282).
+ * to the latest.
  */
 internal fun finalizationNotificationId(kind: OperationKind, id: Long): Int =
     if (kind == OperationKind.Send) {

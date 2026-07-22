@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * The `blocks`-subscription payload parse behind [IndexerClientImpl.subscribeToBlocks] (#255). The
+ * The `blocks`-subscription payload parse behind [IndexerClientImpl.subscribeToBlocks]. The
  * WS round-trip needs a live indexer to verify end-to-end, so the parse is split out and pinned
  * here: a well-formed payload → [com.midnight.kuira.core.indexer.model.BlockInfo]; a malformed /
  * partial one → null (so subscribeToBlocks skips it rather than crashing the stream).

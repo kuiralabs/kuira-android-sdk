@@ -31,16 +31,16 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * On-device proof of the #279 (#1) shielded checkpoint/delta WIRING in
+ * On-device proof of the shielded checkpoint/delta WIRING in
  * [ShieldedRepository.syncFromBlockchain] against real native [ZswapLocalState]:
  *
  *  - **AT_TIP** (tip == cursor): the genesis re-replay is skipped — only the tip probe is opened,
- *    never the delta subscription. This is the "slow even at the tip" fix.
+ *  never the delta subscription. This is the "slow even at the tip" fix.
  *  - **FULL** (no checkpoint): streams from genesis and writes a checkpoint at the last event id —
- *    with no wasteful tip probe.
+ *  with no wasteful tip probe.
  *  - **DELTA** (tip > cursor): opens the subscription at cursor+1, replays only the new events onto
- *    the restored checkpoint, and the resulting persisted state is **byte-identical to a genesis
- *    replay** of the whole prefix — end-to-end correctness through the repository.
+ *  the restored checkpoint, and the resulting persisted state is **byte-identical to a genesis
+ *  replay** of the whole prefix — end-to-end correctness through the repository.
  *
  * The native delta==genesis identity itself is proven exhaustively in `ZswapCheckpointResumeTest`
  * (core:crypto); the routing decision in `ShieldedSyncPlanTest` (pure). The event source is faked
@@ -119,7 +119,7 @@ class ShieldedRepositorySyncPlanInstrumentedTest {
         val indexer = repo { fromId ->
             when (fromId) {
                 null -> listOf(ev(2, "00", maxId = 5)) // probe → tip 5
-                4L -> realEvents(maxId = 5).drop(2)     // delta → events 4, 5
+                4L -> realEvents(maxId = 5).drop(2) // delta → events 4, 5
                 else -> error("unexpected fromId $fromId")
             }
         }

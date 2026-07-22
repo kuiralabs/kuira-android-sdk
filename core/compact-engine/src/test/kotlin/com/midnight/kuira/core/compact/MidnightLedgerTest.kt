@@ -20,15 +20,15 @@ import java.math.BigInteger
  *
  * Coverage:
  *  - Each typed getter (Uint8/Uint64/UintBig/Boolean/Bytes/VectorUint8)
- *    decodes the correct Kotlin type from the marshalled value.
+ *  decodes the correct Kotlin type from the marshalled value.
  *  - Range / shape mismatches throw [WrongLedgerFieldTypeException]
- *    with a descriptive message.
+ *  with a descriptive message.
  *  - Missing field names throw [MissingLedgerFieldException] carrying
- *    the known-fields list.
+ *  the known-fields list.
  *  - `*OrNull` variants return null on missing fields, NOT on zero
- *    values (zero values are real data, not absence).
+ *  values (zero values are real data, not absence).
  *  - Zero values round-trip correctly (the bug-class this whole work
- *    set out to eliminate — see PLAN.md wishlist #9 post-mortem).
+ *  set out to eliminate — see PLAN.md wishlist post-mortem).
  */
 class MidnightLedgerTest {
 
@@ -435,7 +435,7 @@ class MidnightLedgerTest {
                 "bad" to listOf(
                     BigInteger.ONE,
                     BigInteger.ONE,
-                    BigInteger.valueOf(256),  // out of Uint8 range
+                    BigInteger.valueOf(256), // out of Uint8 range
                     BigInteger.ONE,
                     BigInteger.ONE,
                 ),
@@ -454,7 +454,7 @@ class MidnightLedgerTest {
             mapOf(
                 "mixed" to listOf<Any>(
                     BigInteger.ONE,
-                    "not-a-bigint",  // wrong type
+                    "not-a-bigint", // wrong type
                     BigInteger.ONE,
                     BigInteger.ONE,
                     BigInteger.ONE,

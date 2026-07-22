@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import com.midnight.kuira.core.designsystem.effect.StarField
 
 /**
- * Settings panel (#252) — the SDK port of the design-sprint `SettingsWireframe`. Consolidates the
+ * Settings panel — the SDK port of the design-sprint `SettingsWireframe`. Consolidates the
  * vital sections behind one entry so the pill sheet stays lean, and gives the recovery phrase a
  * deliberately hidden home under SECURITY. Themed via [SendPalette]; StarField + GlassPanel match
  * the rest of the wallet surface.
@@ -80,7 +80,7 @@ internal fun WalletSettingsScreen(
                     SettingsRow(label = "Sync", palette = palette, rightValue = syncLabel, readOnly = true)
                     SettingsDivider(palette)
                     // Recovery for a stale NIGHT count (ghost coins from a missed spent-event / a
-                    // sibling app spending on the shared wallet, roadmap #52). Rebuilds the
+                    // sibling app spending on the shared wallet, roadmap ). Rebuilds the
                     // unshielded UTXO cache from the chain; balance dips then climbs back.
                     SettingsRow(
                         label = "Re-sync balance",

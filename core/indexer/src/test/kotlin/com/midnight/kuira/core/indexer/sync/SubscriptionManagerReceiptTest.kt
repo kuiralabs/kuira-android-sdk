@@ -13,7 +13,7 @@ import org.junit.Test
 import java.math.BigInteger
 
 /**
- * Pure tests for the #284 per-transaction receipt classifier in [SubscriptionManager].
+ * Pure tests for the per-transaction receipt classifier in [SubscriptionManager].
  *
  * The headline guarantee these pin: a user is NEVER told they "received" their own NIGHT. A
  * transaction that spends any of our UTXOs is our own send, and the NIGHT it returns to us is

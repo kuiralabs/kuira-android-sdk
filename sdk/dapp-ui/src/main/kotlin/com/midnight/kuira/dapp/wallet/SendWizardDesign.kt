@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Design tokens, palette adapter, and vector icons for the Send wizard
- * (#240). The wizard ports the `app/` design-sprint Send wireframe
+ *. The wizard ports the `app/` design-sprint Send wireframe
  * (StarField + GlassPanel + hero amount) down into the published SDK,
  * which can't reach the app/feature modules where the originals live.
  *
@@ -52,7 +52,7 @@ internal object SendDimens {
     val RadiusFull: Dp = 9999.dp
 
     val TopBarHeight: Dp = 56.dp
-    val ButtonHeight: Dp = 54.dp   // prominent CTA — above the 48dp HIG floor
+    val ButtonHeight: Dp = 54.dp // prominent CTA — above the 48dp HIG floor
     val RowMinHeight: Dp = 56.dp
     val RowMinHeightAccessibility: Dp = 48.dp
 
@@ -68,7 +68,7 @@ internal object SendDimens {
 
 internal object SendType {
     val HeroNumber = 44.sp
-    val HeroNumberLg = 60.sp     // amount square + review hero — extra prominence
+    val HeroNumberLg = 60.sp // amount square + review hero — extra prominence
     val HeroDenom = 18.sp
     val Title = 14.sp
     val SectionLabel = 11.sp
@@ -76,8 +76,8 @@ internal object SendType {
     val Caption = 13.sp
     val Hint = 12.sp
     val Badge = 11.sp
-    val Button = 15.sp           // was 13 — readable CTA label (Material labelLarge is 14, iOS 17pt)
-    val TopBarAction = 16.sp     // top-bar text actions (Continue / Done) — bigger, in a 48dp target
+    val Button = 15.sp // was 13 — readable CTA label (Material labelLarge is 14, iOS 17pt)
+    val TopBarAction = 16.sp // top-bar text actions (Continue / Done) — bigger, in a 48dp target
     val Max = 11.sp
     val SuccessHeadline = 18.sp
 
@@ -98,17 +98,17 @@ private const val ALPHA_SOFT = 0.80f
 private const val LUMINANCE_MIDPOINT = 0.5f
 
 internal class SendPalette(
-    val bg: Color,        // surface behind the StarField (DuskPalette.Void)
-    val text: Color,      // primary text (Light)
-    val textSoft: Color,  // 80% text (LightSoft)
+    val bg: Color, // surface behind the StarField (DuskPalette.Void)
+    val text: Color, // primary text (Light)
+    val textSoft: Color, // 80% text (LightSoft)
     val textMuted: Color, // 50% text (LightMuted)
-    val hairline: Color,  // borders / dividers (LightFaint)
-    val barely: Color,    // chip / badge fill (LightBarely)
-    val panel: Color,     // GlassPanel fill over stars (contentPanel)
-    val confirm: Color,   // primary-button fill (Confirm)
+    val hairline: Color, // borders / dividers (LightFaint)
+    val barely: Color, // chip / badge fill (LightBarely)
+    val panel: Color, // GlassPanel fill over stars (contentPanel)
+    val confirm: Color, // primary-button fill (Confirm)
     val onConfirm: Color, // text on the primary button
-    val error: Color,     // ErrorText
-    val success: Color,   // SuccessText
+    val error: Color, // ErrorText
+    val success: Color, // SuccessText
     val isLight: Boolean, // drives StarField brightness
 ) {
     companion object {
@@ -178,10 +178,10 @@ internal fun ScanGlyph(color: Color, size: Dp = SendDimens.Icon20, modifier: Mod
             drawLine(color, Offset(cx, cy), Offset(cx + dx, cy), sw, StrokeCap.Round)
             drawLine(color, Offset(cx, cy), Offset(cx, cy + dy), sw, StrokeCap.Round)
         }
-        corner(inset, inset, arm, arm)                       // top-left
-        corner(w - inset, inset, -arm, arm)                  // top-right
-        corner(inset, h - inset, arm, -arm)                  // bottom-left
-        corner(w - inset, h - inset, -arm, -arm)             // bottom-right
+        corner(inset, inset, arm, arm) // top-left
+        corner(w - inset, inset, -arm, arm) // top-right
+        corner(inset, h - inset, arm, -arm) // bottom-left
+        corner(w - inset, h - inset, -arm, -arm) // bottom-right
         // Center module hint (a small QR-like square).
         val s = w * 0.16f
         drawRect(color, Offset(w / 2f - s / 2f, h / 2f - s / 2f), Size(s, s))

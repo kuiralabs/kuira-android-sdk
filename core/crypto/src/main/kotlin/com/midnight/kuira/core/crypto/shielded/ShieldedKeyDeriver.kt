@@ -41,13 +41,13 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **Usage:**
  * ```kotlin
- * val seed = deriveSeedFromBIP32()  // 32 bytes at m/44'/2400'/0'/3/0
+ * val seed = deriveSeedFromBIP32() // 32 bytes at m/44'/2400'/0'/3/0
  * try {
- *     val keys = ShieldedKeyDeriver.deriveKeys(seed)
- *     println("Coin PK: ${keys.coinPublicKey}")
- *     println("Enc PK: ${keys.encryptionPublicKey}")
+ *  val keys = ShieldedKeyDeriver.deriveKeys(seed)
+ *  println("Coin PK: ${keys.coinPublicKey}")
+ *  println("Enc PK: ${keys.encryptionPublicKey}")
  * } finally {
- *     MemoryUtils.wipe(seed)  // CRITICAL: Always wipe seed
+ *  MemoryUtils.wipe(seed) // CRITICAL: Always wipe seed
  * }
  * ```
  *
@@ -58,8 +58,8 @@ import javax.annotation.concurrent.ThreadSafe
  *
  * **References:**
  * - Rust FFI: `kuira-crypto-ffi/src/lib.rs`
- * - Algorithm: `docs/SHIELDED_ADDRESS_ALGORITHM.md`
- * - POC Results: `docs/SHIELDED_JNI_POC_RESULTS.md`
+ * - Algorithm: internal design notes
+ * - POC Results: internal design notes
  */
 @ThreadSafe
 object ShieldedKeyDeriver {
@@ -99,7 +99,7 @@ object ShieldedKeyDeriver {
      * Call this during app initialization to fail fast if the library is missing:
      * ```kotlin
      * if (!ShieldedKeyDeriver.isLibraryLoaded()) {
-     *     throw IllegalStateException("Shielded crypto not available: ${getLoadError()}")
+     *  throw IllegalStateException("Shielded crypto not available: ${getLoadError()}")
      * }
      * ```
      *
@@ -147,8 +147,8 @@ object ShieldedKeyDeriver {
      * The output matches Midnight SDK (key derivation version-abstract via Rust FFI):
      * ```javascript
      * const zswapKeys = ZswapSecretKeys.fromSeed(seed);
-     * const coinPk = zswapKeys.coinPublicKey;  // Matches our coinPublicKey
-     * const encPk = zswapKeys.encPublicKey;     // Matches our encryptionPublicKey
+     * const coinPk = zswapKeys.coinPublicKey; // Matches our coinPublicKey
+     * const encPk = zswapKeys.encPublicKey; // Matches our encryptionPublicKey
      * ```
      *
      * **Error Handling:**

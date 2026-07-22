@@ -10,7 +10,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Wires the recovery feature (#252) into the Hilt graph so any dApp component can
+ * Wires the recovery feature into the Hilt graph so any dApp component can
  * `@Inject lateinit var recovery: WalletRecovery` and build its own recovery UX — independent of
  * the bundled wallet pill / panel.
  *

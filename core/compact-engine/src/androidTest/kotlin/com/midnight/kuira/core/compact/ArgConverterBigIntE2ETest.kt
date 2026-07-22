@@ -11,7 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * End-to-end guard for the alpha05 bigint fix (#21).
+ * End-to-end guard for the alpha05 bigint fix.
  *
  * [ArgConverter] now emits a JS BigInt literal (`42n`) for a Kotlin integer. The
  * compactc-generated circuit wrapper guards every `Uint<N>` argument with

@@ -38,18 +38,18 @@ import java.util.Optional
  *
  * Coverage areas:
  *  - **Init probe gating:** the VM probes Block Store for an existing
- *    backup unless the user dismissed the prompt. Four branches:
- *    blob present, blob absent, probe failure, dismissed flag short-
- *    circuit.
+ *  backup unless the user dismissed the prompt. Four branches:
+ *  blob present, blob absent, probe failure, dismissed flag short-
+ *  circuit.
  *  - **dismissBackup durability:** the flag must be `commit()`-written.
  *  - **forgeSigil:** create passkey → derive sigil DID via
- *    `SigilIdentityProvider` → persist triple → status = Forged.
- *    Two ceremonies on forge.
+ *  `SigilIdentityProvider` → persist triple → status = Forged.
+ *  Two ceremonies on forge.
  *  - **restoreSeed (sign-in):** derive sigil DID via SigilSession, then
- *    pull host app-state through the wallet's silent seed-keyed
- *    [com.midnight.kuira.sdk.MidnightWallet.fetchAppState] into the
- *    [AppDataBackupProvider]. The old PRF backup/restore path is retired
- *    (it clobbered the same Block Store slot with a different key).
+ *  pull host app-state through the wallet's silent seed-keyed
+ *  [com.midnight.kuira.sdk.MidnightWallet.fetchAppState] into the
+ *  [AppDataBackupProvider]. The old PRF backup/restore path is retired
+ *  (it clobbered the same Block Store slot with a different key).
  */
 @RunWith(RobolectricTestRunner::class)
 class SigilPanelViewModelTest {
@@ -247,7 +247,7 @@ class SigilPanelViewModelTest {
         coVerify(exactly = 1) { provider.restore(any()) }
     }
 
-    // ── persistSigil overwrite guard (#250) ──
+    // ── persistSigil overwrite guard ──
 
     @Test
     fun `persistSigil refuses to overwrite a different sigil unless replace is set`() {
@@ -273,7 +273,7 @@ class SigilPanelViewModelTest {
         assertEquals("cred-B", freshPrefs().getString(SigilStateStore.KEY_CREDENTIAL_ID, null))
     }
 
-    // ── signOut (#250) ──
+    // ── signOut ──
 
     @Test
     fun `signOut clears the local sigil and closes the SDK on biometric success`() = runTest {

@@ -47,8 +47,8 @@ class MidnightWalletTest {
     }
 
     // ── Error-170 (InvalidDustSpendProof) detection drives the balanceAndSubmit
-    //    recovery loop. Regression: a submit-time 170 arrives as TransactionRejected,
-    //    not NodeRpcError — the loop used to miss it and fail without recovering. ──
+    //  recovery loop. Regression: a submit-time 170 arrives as TransactionRejected,
+    //  not NodeRpcError — the loop used to miss it and fail without recovering. ──
 
     @Test
     fun `isDustSpendProofError detects 170 from TransactionRejected and NodeRpcError, not others`() {
@@ -62,9 +62,9 @@ class MidnightWalletTest {
     }
 
     // ── Error-171 (OutOfDustValidityWindow) detection drives the same balanceAndSubmit
-    //    re-sync recovery loop as 170 — an idle dust state whose ctime drifted out of the
-    //    node's [tblock-grace, tblock] window. Must be detected as TransactionRejected
-    //    (customErrorCode) AND raw NodeRpcError, and kept distinct from 170/115. ──
+    //  re-sync recovery loop as 170 — an idle dust state whose ctime drifted out of the
+    //  node's [tblock-grace, tblock] window. Must be detected as TransactionRejected
+    //  (customErrorCode) AND raw NodeRpcError, and kept distinct from 170/115. ──
 
     @Test
     fun `isOutOfDustValidityWindowError detects 171 from TransactionRejected and NodeRpcError, not others`() {
@@ -95,8 +95,8 @@ class MidnightWalletTest {
         verify(syncManager).invalidateMemo()
     }
 
-    // ── #226: heavy SDK work runs off the caller's thread (withContext IO),
-    //    so a main-thread caller (wallet panel, match flow) doesn't jank. ──
+    // ── : heavy SDK work runs off the caller's thread (withContext IO),
+    //  so a main-thread caller (wallet panel, match flow) doesn't jank. ──
 
     @Test
     fun `balance offloads its work off the caller thread`() = runTest {
@@ -142,7 +142,7 @@ class MidnightWalletTest {
         wallet.syncDust()
 
         // syncDust now always supplies a progress callback — it publishes to
-        // syncStatus (#235) in addition to forwarding the caller's onProgress.
+        // syncStatus in addition to forwarding the caller's onProgress.
         verify(syncManager).ensureSynced(any())
     }
 
@@ -203,7 +203,7 @@ class MidnightWalletTest {
         wallet.balanceTransaction("proven_hex")
     }
 
-    // ── walletBackupPrefsProvider (the blob-borne prefs supplier, #61) ──
+    // ── walletBackupPrefsProvider (the blob-borne prefs supplier, ) ──
 
     @Test
     fun `app-state upload stamps the SUPPLIER's prefs at upload time`() = runTest {
@@ -228,12 +228,12 @@ class MidnightWalletTest {
     @Test
     fun `opted-out supplier blocks both uploads even when the flags say enabled`() = runTest {
         // Belt over the flags: a restore-gate-mirrored opt-out must stop uploads BEFORE the
-        // next bootstrap pass re-applies the flags — a #246-disabled wallet must never
+        // next bootstrap pass re-applies the flags — a -disabled wallet must never
         // re-create the blobs it deleted.
         val dustBackup = mock<DustCloudBackup>()
         val appBackup = mock<AppStateCloudBackup>()
         val wallet = createWallet(dustCloudBackup = dustBackup, appStateCloudBackup = appBackup)
-        wallet.dustBackupEnabled = true          // flags still say enabled (pre-gate bootstrap)
+        wallet.dustBackupEnabled = true // flags still say enabled (pre-gate bootstrap)
         wallet.appStateBackupEnabled = true
         wallet.walletBackupPrefsProvider =
             { WalletBackupPrefs(dustBackupEnabled = false, dustBackupOptedOut = true) }
@@ -345,7 +345,7 @@ class MidnightWalletTest {
         assertEquals("cafe", balanced)
         assertEquals("the retry after the delta re-sync must re-balance", 2, balanceCalls)
         verify(syncManager).refreshIncremental(anyOrNull())
-        // The alpha04 lesson (#297): recoverable staleness must NOT nuke the checkpoint.
+        // The alpha04 lesson: recoverable staleness must NOT nuke the checkpoint.
         verify(syncManager, never()).forceResync()
     }
 

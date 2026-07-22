@@ -112,7 +112,7 @@ class FfiTransactionSerializer(
             signaturesJson,
             dustActionsJson,
             intent.ttl,
-            commitment,  // CRITICAL: Use same binding_commitment from signing
+            commitment, // CRITICAL: Use same binding_commitment from signing
             networkId,
         ) ?: throw IllegalStateException("FFI SCALE serialization failed")
 
@@ -152,7 +152,7 @@ class FfiTransactionSerializer(
         // (predecessor lookup keyed by block time). A wall-clock ctime ahead of the
         // indexed tip makes the node return its tip root, which won't match our
         // locally-replayed root → rejected with InvalidDustSpendProof (error 170).
-        // Mirrors MidnightWallet's balance path (#287).
+        // Mirrors MidnightWallet's balance path.
         currentTimeMs: Long,
     ): String {
         // Validate
@@ -203,11 +203,11 @@ class FfiTransactionSerializer(
      * Format matches Rust JsonUtxoSpend struct:
      * ```json
      * [{
-     *   "value": "1000000",
-     *   "owner": "hex-encoded-verifying-key",
-     *   "type": "hex-encoded-token-type",
-     *   "intent_hash": "hex-encoded-intent-hash",  // Blockchain identifies UTXOs by intentHash + outputNo
-     *   "output_no": 0
+     *  "value": "1000000",
+     *  "owner": "hex-encoded-verifying-key",
+     *  "type": "hex-encoded-token-type",
+     *  "intent_hash": "hex-encoded-intent-hash", // Blockchain identifies UTXOs by intentHash + outputNo
+     *  "output_no": 0
      * }]
      * ```
      */
@@ -219,8 +219,8 @@ class FfiTransactionSerializer(
             println("[FfiSerializer]            intentHash.length=${input.intentHash.length} chars")
             val jsonObject = JSONObject().apply {
                 put("value", input.value.toString())
-                put("owner", input.ownerPublicKey)  // Hex-encoded public key (32 bytes BIP-340 x-only)
-                put("type", input.tokenType)  // Already hex string (64 chars)
+                put("owner", input.ownerPublicKey) // Hex-encoded public key (32 bytes BIP-340 x-only)
+                put("type", input.tokenType) // Already hex string (64 chars)
                 // CRITICAL: The blockchain identifies UTXOs by intentHash + outputNo.
                 put("intent_hash", input.intentHash)
                 put("output_no", input.outputNo)
@@ -236,9 +236,9 @@ class FfiTransactionSerializer(
      * Format matches Rust JsonUtxoOutput struct:
      * ```json
      * [{
-     *   "value": "1000000",
-     *   "owner": "hex-encoded-user-address",
-     *   "type": "hex-encoded-token-type"
+     *  "value": "1000000",
+     *  "owner": "hex-encoded-user-address",
+     *  "type": "hex-encoded-token-type"
      * }]
      * ```
      */
@@ -251,8 +251,8 @@ class FfiTransactionSerializer(
 
             val jsonObject = JSONObject().apply {
                 put("value", output.value.toString())
-                put("owner", userAddressHex)  // Hex-encoded UserAddress (32 bytes)
-                put("type", output.tokenType)  // Already hex string (64 chars)
+                put("owner", userAddressHex) // Hex-encoded UserAddress (32 bytes)
+                put("type", output.tokenType) // Already hex string (64 chars)
             }
             jsonArray.put(jsonObject)
         }
@@ -264,7 +264,7 @@ class FfiTransactionSerializer(
      *
      * Format: array of hex-encoded signature strings:
      * ```json
-     * ["hex-sig-1", "hex-sig-2", ...]
+     * ["hex-sig-1", "hex-sig-2",...]
      * ```
      */
     private fun serializeSignaturesToJson(signatures: List<ByteArray>): String {
@@ -281,16 +281,16 @@ class FfiTransactionSerializer(
      * Format matches Rust JsonDustSpend struct:
      * ```json
      * [{
-     *   "v_fee": "1000000",
-     *   "old_nullifier": "hex-encoded-nullifier",
-     *   "new_commitment": "hex-encoded-commitment",
-     *   "proof": "proof-preimage"
+     *  "v_fee": "1000000",
+     *  "old_nullifier": "hex-encoded-nullifier",
+     *  "new_commitment": "hex-encoded-commitment",
+     *  "proof": "proof-preimage"
      * }]
      * ```
      */
     private fun serializeDustActionsToJson(dustActions: List<DustSpendCreator.DustSpend>?): String {
         if (dustActions == null || dustActions.isEmpty()) {
-            return "[]"  // Empty array for no dust actions
+            return "[]" // Empty array for no dust actions
         }
 
         val jsonArray = JSONArray()
@@ -505,7 +505,7 @@ internal class StubTransactionSerializer : TransactionSerializer {
 
         // Generate deterministic mock hex based on intent data
         // Format: [magic][version][inputs_count][outputs_count][signatures_count][ttl]
-        val magic = "4d4e"  // "MN" in hex
+        val magic = "4d4e" // "MN" in hex
         val version = "01"
         val inputsCount = String.format("%02x", offer.inputs.size)
         val outputsCount = String.format("%02x", offer.outputs.size)

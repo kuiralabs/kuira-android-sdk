@@ -69,12 +69,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
  *
  *  - Pill anchored top-left in the panel bar; the wallet pill takes top-right.
  *  - Tap opens a TOP sheet — visual mirror of the wallet panel's bottom
- *    sheet. The sheet renders state-dependent content: a "forge sigil"
- *    CTA when there's no identity yet, a spinner during the passkey
- *    ceremony, the DID once forged, or an error + retry on
- *    failure.
+ *  sheet. The sheet renders state-dependent content: a "forge sigil"
+ *  CTA when there's no identity yet, a spinner during the passkey
+ *  ceremony, the DID once forged, or an error + retry on
+ *  failure.
  *  - Pill label: truncated DID (or "no sigil" / "forging…" / "sigil
- *    error" per state). Future: Midnames `.night` domain resolution.
+ *  error" per state). Future: Midnames `.night` domain resolution.
  *
  * **State ownership:** ships its own [SigilPanelViewModel] which owns the
  * passkey manager + persisted-DID prefs. Host apps don't need to wire
@@ -129,7 +129,7 @@ fun SigilStatusPanel(
     val activity = LocalContext.current as? FragmentActivity
 
     // Sign-out confirm is hoisted here so BOTH entry points — the sheet's "sign out" and the
-    // enlarged floating chip's Sign-out button — route through the SAME confirm dialog (#53). The
+    // enlarged floating chip's Sign-out button — route through the SAME confirm dialog. The
     // enlarged chip previously signed out on a single tap with no guard.
     var showSignOutConfirm by rememberSaveable { mutableStateOf(false) }
 
@@ -138,7 +138,7 @@ fun SigilStatusPanel(
             status.toSigilChipUi(),
             { sheetOpen = true },
             // Enlarged chip's own Settings button — no sheet to return to, so don't spring one
-            // open on close (#52). The sheet's gear (below) keeps the default reopen.
+            // open on close. The sheet's gear (below) keeps the default reopen.
             { overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Sigil), reopenSheetOnClose = false) },
             { showSignOutConfirm = true },
         )
@@ -274,14 +274,14 @@ private fun SigilPill(
  * Tiny round icon that anchors the left edge of the pill.
  *
  *  - [SigilStatus.None]: muted gray circle, no glyph — the "you have no
- *    identity yet" placeholder.
+ *  identity yet" placeholder.
  *  - [SigilStatus.Creating]: a spinner replaces the circle so the user
- *    sees their tap was registered. Same size as the circle so the pill
- *    width doesn't jump between states.
+ *  sees their tap was registered. Same size as the circle so the pill
+ *  width doesn't jump between states.
  *  - [SigilStatus.Forged]: filled circle whose color is derived from the
- *    DID (so the same DID always renders the same hue across sessions
- *    and devices) plus a single letter — the first multibase character
- *    after the `did:key:` prefix. Deterministic, no network round-trip.
+ *  DID (so the same DID always renders the same hue across sessions
+ *  and devices) plus a single letter — the first multibase character
+ *  after the `did:key:` prefix. Deterministic, no network round-trip.
  *  - [SigilStatus.Error]: red circle with `!`.
  *
  * Real avatars (Midnames profile, user-uploaded) replace this layer in a
@@ -523,11 +523,11 @@ private fun NoneBody(
  * Surface when a Block Store backup was detected on launch but no local
  * sigil exists yet. Two paths:
  *  - **restore previous** (primary): runs the PRF passkey flow,
- *    decrypts the cloud blob, re-creates the SeedVault entry,
- *    SIGKILL+relaunch for a clean rebootstrap.
+ *  decrypts the cloud blob, re-creates the SeedVault entry,
+ *  SIGKILL+relaunch for a clean rebootstrap.
  *  - **start fresh** (secondary): forges a brand-new sigil and lets
- *    the wallet panel auto-bootstrap with a freshly-generated seed.
- *    Wipes the prior cloud association going forward.
+ *  the wallet panel auto-bootstrap with a freshly-generated seed.
+ *  Wipes the prior cloud association going forward.
  */
 @Composable
 private fun BackupAvailableBody(
@@ -588,7 +588,7 @@ private fun ForgedBody(
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
     // Danger zone — deliberately understated (monochrome, not red: sign-out is recoverable, not a
     // financial-danger signal). [onSignOut] requests the shared confirm dialog (hoisted to the
-    // panel so the enlarged chip's Sign-out uses the same guard, #53); confirm + the VM's biometric
+    // panel so the enlarged chip's Sign-out uses the same guard, ); confirm + the VM's biometric
     // are the real guards.
     Text(
         text = "sign out",
@@ -679,7 +679,7 @@ private object SigilDimens {
     val PillItemGap = 8.dp
     val PillSpinnerSize = 14.dp
     val PillSpinnerStroke = 2.dp
-    val PillAvatarSize = 22.dp   // Matches the visual weight of the spinner that replaces it during Creating.
+    val PillAvatarSize = 22.dp // Matches the visual weight of the spinner that replaces it during Creating.
 
     // Top sheet.
     val SheetCornerRadius = 20.dp
@@ -690,16 +690,16 @@ private object SigilDimens {
     val SheetSmallGap = 8.dp
     val SheetLabelGap = 4.dp
     val SheetSpinnerSize = 16.dp
-    val RunnerMarkSize = 40.dp   // static runner brand mark on the forged identity card
+    val RunnerMarkSize = 40.dp // static runner brand mark on the forged identity card
 
     // Buttons inside the sheet.
-    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
+    val ButtonHeight = 54.dp // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
 }
 
 private object SigilType {
     val PillText = 14.sp
-    val PillAvatarGlyph = 11.sp   // Monogram letter inside the avatar circle.
+    val PillAvatarGlyph = 11.sp // Monogram letter inside the avatar circle.
     val SheetTitle = 14.sp
     val Body = 13.sp
     val FieldLabel = 11.sp

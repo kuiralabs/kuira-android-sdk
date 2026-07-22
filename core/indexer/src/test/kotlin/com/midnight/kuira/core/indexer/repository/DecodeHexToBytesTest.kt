@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * #291: [decodeHexToBytes] replaced `hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()`
+ * : [decodeHexToBytes] replaced `hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()`
  * (tens of MB of List/boxed-Byte churn per multi-MB dust checkpoint) with a streaming decode.
  * The decode gates the dust-state deserialize, so a byte-level bug would corrupt the wallet
  * state (wrong balance / error 115). These pin its correctness and parity with the old impl.

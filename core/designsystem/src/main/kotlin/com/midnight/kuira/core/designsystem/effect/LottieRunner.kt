@@ -52,7 +52,7 @@ fun LottieRunner(
     // Tint with Lottie's native COLOR_FILTER on every layer ("**") instead of an
     // offscreen graphics layer + per-frame SrcIn blend. The offscreen path allocated
     // a compositing buffer and re-blended each frame — heavy on the cold first frame
-    // (the send-screen mount hitch, #289) and wasteful while looping. A color filter
+    // (the send-screen mount hitch, ) and wasteful while looping. A color filter
     // recolors the monochrome runner with no extra layer. SimpleColorFilter is
     // SRC_ATOP, so it tints the silhouette to [color] while preserving its alpha —
     // same visual result as the old SrcIn.

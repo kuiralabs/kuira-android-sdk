@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.midnight.kuira.core.designsystem.effect.StarField
 
 /**
- * Restore flow for the sovereign recovery phrase (#252) — the bundled onboarding path for a user
+ * Restore flow for the sovereign recovery phrase — the bundled onboarding path for a user
  * who has lost their device/account but kept their 24 words. Stateless w.r.t. the SDK: it collects
  * the words, validates the BIP-39 checksum live, and hands them to [onRestore]; the host VM runs
  * [com.midnight.kuira.sdk.walletseed.WalletRecovery.restoreFromPhrase] and reports back via [state].

@@ -8,7 +8,7 @@ import java.math.BigInteger
 
 /**
  * Unit coverage for [MidnightSdk.validateSendRequest] — the chain-independent
- * front door of `sendNight` (#240). These are the user-facing rejections (bad
+ * front door of `sendNight`. These are the user-facing rejections (bad
  * amount, malformed / wrong-network recipient) that must fail fast before any
  * balance, dust, signing, or consolidation work. Addresses are real localnet
  * Bech32m strings so the checksum + HRP parsing run for real.

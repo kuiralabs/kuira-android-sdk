@@ -15,7 +15,7 @@ interface AppStateBackupDigestStore {
     fun get(): String?
     fun put(digest: String)
 
-    /** Drop the recorded digest (#246) — used when the cloud blob is deleted so a later
+    /** Drop the recorded digest — used when the cloud blob is deleted so a later
      *  re-enable re-uploads instead of the hash-guard skipping an "already-uploaded" blob. */
     fun clear()
 }

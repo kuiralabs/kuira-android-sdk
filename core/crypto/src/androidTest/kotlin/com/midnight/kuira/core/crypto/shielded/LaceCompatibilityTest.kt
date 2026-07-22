@@ -41,9 +41,9 @@ import org.junit.runner.RunWith
  *
  * ## References
  *
- * - **Full Documentation**: `docs/LACE_COMPATIBILITY.md`
+ * - **Full Documentation**: internal design notes
  * - **Lace GitHub Issue**: https://github.com/input-output-hk/lace/issues/2133
- * - **Test Mnemonic**: "abandon abandon abandon ... art" (BIP-39 standard test mnemonic)
+ * - **Test Mnemonic**: "abandon abandon abandon... art" (BIP-39 standard test mnemonic)
  *
  * @see com.midnight.kuira.core.crypto.bip39.BIP39.mnemonicToSeed
  */
@@ -62,7 +62,7 @@ class LaceCompatibilityTest {
      * Verifies that using the standard BIP-39 test mnemonic produces addresses
      * that match Lace wallet EXACTLY.
      *
-     * **Test Mnemonic**: "abandon abandon abandon ... art"
+     * **Test Mnemonic**: "abandon abandon abandon... art"
      * **Source**: BIP-39 specification (standard test vector)
      * **Verification**: Confirmed with actual Lace wallet
      */

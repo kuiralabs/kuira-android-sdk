@@ -28,21 +28,21 @@ import javax.inject.Singleton
  *
  * **Bootstrap contract:**
  *  1. Dev-seed escape hatch (debug only) — when `local.properties`
- *     defines `kuira.dev.seed`, decode + return without touching the
- *     vault or the passkey. See module-level KDoc in
- *     `build.gradle.kts`.
+ *  defines `kuira.dev.seed`, decode + return without touching the
+ *  vault or the passkey. See module-level KDoc in
+ *  `build.gradle.kts`.
  *  2. Sigil gate — no passkey forged ⇒ [SigilRequiredException].
- *     Consumers translate this to whatever UI affordance they own
- *     (`WalletStatus.SigilRequired` in the panel, a "forge sigil"
- *     screen in custom dApps, etc.). Throwing here is
- *     defense-in-depth — the host UI should also gate.
+ *  Consumers translate this to whatever UI affordance they own
+ *  (`WalletStatus.SigilRequired` in the panel, a "forge sigil"
+ *  screen in custom dApps, etc.). Throwing here is
+ *  defense-in-depth — the host UI should also gate.
  *  3. Cache hit — SeedVault holds a seed AND the
- *     `seedIsPrfDerived` flag is set ⇒ biometric prompt to decrypt,
- *     return the cached PRF-derived seed.
+ *  `seedIsPrfDerived` flag is set ⇒ biometric prompt to decrypt,
+ *  return the cached PRF-derived seed.
  *  4. Cache miss OR legacy unflagged vault ⇒ wipe the legacy entry
- *     (decision B — legacy random seeds are abandoned, not migrated),
- *     run ONE passkey PRF authentication to derive the new seed, store
- *     in the vault, set the flag, return.
+ *  (decision B — legacy random seeds are abandoned, not migrated),
+ *  run ONE passkey PRF authentication to derive the new seed, store
+ *  in the vault, set the flag, return.
  *
  * **Caller MUST wipe** the returned ByteArray once the SDK builder
  * has copied it (typically in a `finally` block).
@@ -72,7 +72,7 @@ class WalletSeedSource @Inject constructor(
     private val bootstrapMutex = Mutex()
 
     /**
-     * Session lock (#14): force the next [ensureSeedReady] to require a fresh
+     * Session lock: force the next [ensureSeedReady] to require a fresh
      * biometric, even if the Keystore auth-validity window is still open.
      * Delegates to [SeedVault.requireFreshAuthNext]; called by `SessionLock`
      * on lock so the unlock genuinely re-authenticates rather than silently
@@ -80,11 +80,11 @@ class WalletSeedSource @Inject constructor(
      */
     fun requireFreshAuthNext() = seedVault.requireFreshAuthNext()
 
-    /** #252: true if a wallet seed exists. Recovery restore must not clobber an existing wallet. */
+    /** : true if a wallet seed exists. Recovery restore must not clobber an existing wallet. */
     override suspend fun hasSeed(): Boolean = seedVault.hasSeed()
 
     /**
-     * #252: load the wallet's 32-byte BIP-39 entropy (biometric-gated) — the source for a recovery
+     * : load the wallet's 32-byte BIP-39 entropy (biometric-gated) — the source for a recovery
      * phrase. Serialized on [bootstrapMutex] so it can't race a concurrent [ensureSeedReady].
      * Returns a fresh copy the caller MUST wipe; throws if no wallet exists.
      *
@@ -175,11 +175,11 @@ class WalletSeedSource @Inject constructor(
      *
      * Flow:
      *  1. If SeedVault already holds a PRF-flagged entry, biometric-
-     *     decrypt and return its seed (no new write — the cached
-     *     entry is authoritative). This is the cache-hit branch.
+     *  decrypt and return its seed (no new write — the cached
+     *  entry is authoritative). This is the cache-hit branch.
      *  2. Legacy unflagged vault → wipe, then go to step 3.
      *  3. Run `entropyToBip39Seed(prfEntropy)` locally (pure compute,
-     *     no biometric), store into SeedVault, set the PRF flag.
+     *  no biometric), store into SeedVault, set the PRF flag.
      *
      * **Caller wipes** the input `prfEntropy` after the call returns —
      * `WalletSeedSource` only reads from it, never retains it.

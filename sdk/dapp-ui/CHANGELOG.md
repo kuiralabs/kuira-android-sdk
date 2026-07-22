@@ -3,7 +3,7 @@
 All notable changes to `sdk:dapp-ui` are documented here. Follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (see
-`docs/projects/dapp-ui-extraction.md` § "API stability commitments").
+the internal docs § "API stability commitments").
 
 ## [Unreleased] — `0.1.0-SNAPSHOT`
 

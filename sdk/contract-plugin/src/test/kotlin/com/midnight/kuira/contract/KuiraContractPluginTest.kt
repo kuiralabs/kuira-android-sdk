@@ -282,7 +282,7 @@ class KuiraContractPluginTest {
         )
     }
 
-    // ── Runtime-version pin enforcement (Fix #9) ─────────────────────
+    // ── Runtime-version pin enforcement (Fix ) ─────────────────────
 
     @Test
     fun `runtime match — contract and co-located package_json agree`() {
@@ -410,7 +410,7 @@ class KuiraContractPluginTest {
         )
     }
 
-    // ── kuiraDoctor (Fix #8) ─────────────────────────────────────────
+    // ── kuiraDoctor (Fix ) ─────────────────────────────────────────
 
     @Test
     fun `doctor — minSdk check fails when below 30`() {
@@ -634,7 +634,7 @@ class KuiraContractPluginTest {
 
         // First run stores the entry. A task action that captures the
         // Gradle `Project` (the regression this guards) fails here with
-        // "cannot serialize object of type ... DefaultProject"; .build()
+        // "cannot serialize object of type... DefaultProject";.build()
         // would then throw and fail the test.
         val first = runWithConfigCache("syncContractAssets")
         assertEquals(TaskOutcome.SUCCESS, first.task(":syncContractAssets")?.outcome)
@@ -696,11 +696,11 @@ class KuiraContractPluginTest {
      * Writes the canonical compactc output layout that every Kuira dApp
      * has under `contract/src/managed/<name>`:
      *
-     *   contract/index.js
-     *   keys/<circuit>.prover
-     *   keys/<circuit>.verifier
-     *   zkir/<circuit>.bzkir
-     *   compiler/contract-info.json   (only when [emittedRuntimeVersion] is set)
+     *  contract/index.js
+     *  keys/<circuit>.prover
+     *  keys/<circuit>.verifier
+     *  zkir/<circuit>.bzkir
+     *  compiler/contract-info.json (only when [emittedRuntimeVersion] is set)
      *
      * Passing null for [emittedRuntimeVersion] models the older-compactc
      * case where the contract-info.json file is absent.

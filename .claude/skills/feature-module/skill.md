@@ -9,7 +9,7 @@ When the user asks to create a new feature screen or module, follow this pattern
 
 ## Before scaffolding
 
-1. **Read the wireframe spec** in `docs/design/prompts/` for the screen being built
+1. **Read the wireframe spec** in the internal docs for the screen being built
 2. **Read the wireframe code** in `app/src/main/java/com/midnight/kuira/dev/wireframes/` to understand the visual contract
 3. **Identify data dependencies** — what repositories, use cases, or core modules does this screen need?
 

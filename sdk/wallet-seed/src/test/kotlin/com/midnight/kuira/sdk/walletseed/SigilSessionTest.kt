@@ -35,14 +35,14 @@ import org.robolectric.RobolectricTestRunner
  *
  * Coverage:
  *  - **Happy path** (multi-salt PRF supported by authenticator): one
- *    biometric, both PRF outputs arrive in the same assertion, sigil
- *    is persisted, wallet seed is pre-warmed.
+ *  biometric, both PRF outputs arrive in the same assertion, sigil
+ *  is persisted, wallet seed is pre-warmed.
  *  - **Fallback path** (authenticator returns null for `prfOutputSecond`):
- *    a second PRF ceremony is run for SEED_SALT; total of two
- *    biometric prompts, same correctness.
+ *  a second PRF ceremony is run for SEED_SALT; total of two
+ *  biometric prompts, same correctness.
  *  - **PRF unavailable**: throws BackupException.
  *  - **Side effects**: SigilStateStore persisted, WalletSeedSource
- *    pre-warmed exactly once.
+ *  pre-warmed exactly once.
  */
 @RunWith(RobolectricTestRunner::class)
 class SigilSessionTest {
@@ -72,7 +72,7 @@ class SigilSessionTest {
     @Test
     fun `signIn on multi-salt-supporting authenticator fires one PRF and pre-warms vault`() = runTest {
         // Authenticator returns BOTH outputs in a single assertion —
-        // the happy path that wishlist #24 unlocks.
+        // the happy path that wishlist unlocks.
         val sigilPrf = ByteArray(32) { 0xAA.toByte() }
         val seedPrf = ByteArray(32) { 0xBB.toByte() }
         coEvery {
@@ -208,7 +208,7 @@ class SigilSessionTest {
 
     @Test
     fun `forge with PRF-on-create derives the sigil without a follow-up GET`() = runTest {
-        // The #23 win: the create ceremony returned BOTH PRF outputs, so forge
+        // The win: the create ceremony returned BOTH PRF outputs, so forge
         // must NOT run a second GET (the ceremony that raced the fresh
         // credential → "cannot find credential in local KeyStore").
         val sigilPrf = ByteArray(32) { 0x11 }

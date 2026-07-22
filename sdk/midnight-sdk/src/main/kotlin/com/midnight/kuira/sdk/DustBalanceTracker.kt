@@ -12,7 +12,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Proactive dust bookkeeper (#235) — the dust analog of [ShieldedBalanceTracker].
+ * Proactive dust bookkeeper — the dust analog of [ShieldedBalanceTracker].
  *
  * Keeps dust state current **ahead of need** so a contract transaction never
  * waits on a cold dust sync. On [start]: one initial sync, then subscribe to

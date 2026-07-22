@@ -31,7 +31,7 @@ class UtxoManager(
     /**
      * Runs the given block in a single DB transaction. Production wires this to
      * `RoomDatabase.withTransaction` (see IndexerModule / the SDK builders) so a confirmed
-     * transaction's UTXO writes commit atomically (#284). Defaults to a pass-through so unit
+     * transaction's UTXO writes commit atomically. Defaults to a pass-through so unit
      * tests with a mocked DAO observe the same DAO calls without a real database.
      */
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { block -> block() },
@@ -44,11 +44,11 @@ class UtxoManager(
      *
      * For transaction updates (based on status):
      * - SUCCESS/PARTIAL_SUCCESS:
-     *   1. Insert created UTXOs (state = AVAILABLE)
-     *   2. Mark spent UTXOs as SPENT (permanent)
+     *  1. Insert created UTXOs (state = AVAILABLE)
+     *  2. Mark spent UTXOs as SPENT (permanent)
      * - FAILURE:
-     *   1. Don't insert created UTXOs (never created on-chain)
-     *   2. Unlock spent UTXOs (PENDING → AVAILABLE) so they can be reused
+     *  1. Don't insert created UTXOs (never created on-chain)
+     *  2. Unlock spent UTXOs (PENDING → AVAILABLE) so they can be reused
      *
      * For progress updates:
      * - Just return (nothing to do with UTXOs)
@@ -143,7 +143,7 @@ class UtxoManager(
                     emptyList()
                 }
 
-                // Apply BOTH writes in ONE transaction (#284). Insert-the-change and
+                // Apply BOTH writes in ONE transaction. Insert-the-change and
                 // mark-the-input-spent must commit together — otherwise observeUnspentUtxos
                 // can emit the in-between state where the spent input AND the new change are
                 // both AVAILABLE, a transient that overstates the balance by the change amount
@@ -322,7 +322,7 @@ class UtxoManager(
      */
     suspend fun debugDumpAllUtxos(address: String, tag: String) {
         // Off by default — also skips the DB read. Enable with:
-        //   adb shell setprop log.tag.UtxoManager VERBOSE
+        //  adb shell setprop log.tag.UtxoManager VERBOSE
         if (!Log.isLoggable("UtxoManager", Log.VERBOSE)) return
         val allUtxos = utxoDao.getAllUtxosForAddress(address)
         Log.v("UtxoManager", "[$tag] All UTXOs for address (${allUtxos.size} total):")
@@ -370,16 +370,16 @@ class UtxoManager(
      * **Why Atomic?**
      * ```
      * // ❌ WITHOUT @Transaction (RACE CONDITION):
-     * Thread A: SELECT utxos WHERE state = AVAILABLE  → [utxo1, utxo2]
-     * Thread B: SELECT utxos WHERE state = AVAILABLE  → [utxo1, utxo2]  // SAME UTXOs!
+     * Thread A: SELECT utxos WHERE state = AVAILABLE → [utxo1, utxo2]
+     * Thread B: SELECT utxos WHERE state = AVAILABLE → [utxo1, utxo2] // SAME UTXOs!
      * Thread A: UPDATE utxos SET state = PENDING
      * Thread B: UPDATE utxos SET state = PENDING
      * Result: DOUBLE-SPEND! Both threads use same UTXOs
      *
      * // ✅ WITH @Transaction (SAFE):
-     * Thread A: [SELECT + UPDATE in one transaction]  → LOCKS [utxo1, utxo2]
+     * Thread A: [SELECT + UPDATE in one transaction] → LOCKS [utxo1, utxo2]
      * Thread B: [waits for Thread A's transaction to complete]
-     * Thread B: SELECT utxos WHERE state = AVAILABLE  → [utxo3, utxo4]  // Different UTXOs!
+     * Thread B: SELECT utxos WHERE state = AVAILABLE → [utxo3, utxo4] // Different UTXOs!
      * Result: SAFE! Each thread gets different UTXOs
      * ```
      *
@@ -390,19 +390,19 @@ class UtxoManager(
      * ```kotlin
      * // Lock UTXOs for transaction
      * val result = utxoManager.selectAndLockUtxos(
-     *     address = senderAddress,
-     *     tokenType = "NIGHT",
-     *     requiredAmount = BigInteger("100000000")
+     *  address = senderAddress,
+     *  tokenType = "NIGHT",
+     *  requiredAmount = BigInteger("100000000")
      * )
      *
      * when (result) {
-     *     is SelectionResult.Success -> {
-     *         // Build transaction with result.selectedUtxos
-     *         // Create change output with result.change (if > 0)
-     *     }
-     *     is SelectionResult.InsufficientFunds -> {
-     *         // Show error to user
-     *     }
+     *  is SelectionResult.Success -> {
+     *  // Build transaction with result.selectedUtxos
+     *  // Create change output with result.change (if > 0)
+     *  }
+     *  is SelectionResult.InsufficientFunds -> {
+     *  // Show error to user
+     *  }
      * }
      *
      * // If transaction fails, unlock UTXOs:
@@ -462,8 +462,8 @@ class UtxoManager(
      * **Usage:**
      * ```kotlin
      * val requirements = mapOf(
-     *     "NIGHT" to BigInteger("100000000"),
-     *     "DUST" to BigInteger("50000000")
+     *  "NIGHT" to BigInteger("100000000"),
+     *  "DUST" to BigInteger("50000000")
      * )
      *
      * val result = utxoManager.selectAndLockUtxosMultiToken(address, requirements)
@@ -540,9 +540,9 @@ class UtxoManager(
      *
      * **spentByLocalTx flag:**
      * - `true` (default): Our transaction SUCCEEDED and spent this UTXO.
-     *   Healing will NOT restore it (we trust our local state over indexer lag).
+     *  Healing will NOT restore it (we trust our local state over indexer lag).
      * - `false`: Something else spent it (e.g., error 115 = node says already spent).
-     *   Healing CAN restore it if indexer shows it's actually available.
+     *  Healing CAN restore it if indexer shows it's actually available.
      *
      * **When to use each:**
      * - Node accepts our transaction → `spentByLocalTx=true`

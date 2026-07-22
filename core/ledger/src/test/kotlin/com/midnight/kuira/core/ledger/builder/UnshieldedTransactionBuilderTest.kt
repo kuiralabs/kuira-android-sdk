@@ -27,7 +27,7 @@ class UnshieldedTransactionBuilderTest {
     private val senderAddress = "mn_addr_test_sender"
     private val recipientAddress = "mn_addr_test_recipient"
     private val tokenType = UtxoOutput.NATIVE_TOKEN_TYPE
-    private val senderPublicKey = UtxoSpend.TEST_PUBLIC_KEY  // 64 hex chars (32 bytes BIP-340 x-only)
+    private val senderPublicKey = UtxoSpend.TEST_PUBLIC_KEY // 64 hex chars (32 bytes BIP-340 x-only)
 
     @Before
     fun setUp() {
@@ -43,12 +43,12 @@ class UnshieldedTransactionBuilderTest {
         transactionHash: String = "transaction_hash_abc"
     ): UnshieldedUtxoEntity {
         return UnshieldedUtxoEntity(
-            id = "$transactionHash:$outputIndex",  // Database ID uses transactionHash
+            id = "$transactionHash:$outputIndex", // Database ID uses transactionHash
             transactionHash = transactionHash,
             intentHash = intentHash,
             outputIndex = outputIndex,
             owner = senderAddress,
-            ownerPublicKey = UtxoSpend.TEST_PUBLIC_KEY,  // Test public key for spending
+            ownerPublicKey = UtxoSpend.TEST_PUBLIC_KEY, // Test public key for spending
             tokenType = tokenType,
             value = value.toString(),
             ctime = System.currentTimeMillis() / 1000,
@@ -91,7 +91,7 @@ class UnshieldedTransactionBuilderTest {
         // Verify offer
         val offer = intent.guaranteedUnshieldedOffer!!
         assertEquals(1, offer.inputs.size)
-        assertEquals(1, offer.outputs.size)  // Only recipient, no change
+        assertEquals(1, offer.outputs.size) // Only recipient, no change
         assertEquals(0, offer.signatures.size)
 
         // Verify input
@@ -140,7 +140,7 @@ class UnshieldedTransactionBuilderTest {
         val offer = success.intent.guaranteedUnshieldedOffer!!
 
         assertEquals(1, offer.inputs.size)
-        assertEquals(2, offer.outputs.size)  // Recipient + change
+        assertEquals(2, offer.outputs.size) // Recipient + change
 
         // Verify recipient output (first output)
         assertEquals(BigInteger("100"), offer.outputs[0].value)
@@ -149,7 +149,7 @@ class UnshieldedTransactionBuilderTest {
 
         // Verify change output (second output)
         assertEquals(BigInteger("50"), offer.outputs[1].value)
-        assertEquals(senderAddress, offer.outputs[1].owner)  // Back to sender
+        assertEquals(senderAddress, offer.outputs[1].owner) // Back to sender
         assertEquals(tokenType, offer.outputs[1].tokenType)
 
         // Verify lockedUtxos matches selected
@@ -212,10 +212,10 @@ class UnshieldedTransactionBuilderTest {
 
         // Verify outputs (recipient + change)
         assertEquals(2, offer.outputs.size)
-        assertEquals(BigInteger("100"), offer.outputs[0].value)  // Recipient
+        assertEquals(BigInteger("100"), offer.outputs[0].value) // Recipient
         assertEquals(recipientAddress, offer.outputs[0].owner)
         assertEquals(tokenType, offer.outputs[0].tokenType)
-        assertEquals(BigInteger("20"), offer.outputs[1].value)   // Change
+        assertEquals(BigInteger("20"), offer.outputs[1].value) // Change
         assertEquals(senderAddress, offer.outputs[1].owner)
         assertEquals(tokenType, offer.outputs[1].tokenType)
 
@@ -228,7 +228,7 @@ class UnshieldedTransactionBuilderTest {
 
     @Test
     fun `given largestFirst when building transfer then selects via largest-first (fewest inputs)`() = runTest {
-        // #240: NIGHT transfers pass largestFirst=true to minimize the input count
+        // : NIGHT transfers pass largestFirst=true to minimize the input count
         // (the ledger time-to-dismiss budget caps a fee-paying transfer at ~2 inputs).
         // The builder must forward the flag to the selector; default stays smallest-first.
         val selectedUtxo = createUtxo(150)
@@ -539,9 +539,9 @@ class UnshieldedTransactionBuilderTest {
 
         // Verify output ordering: recipient first, change second
         assertEquals(2, offer.outputs.size)
-        assertEquals(recipientAddress, offer.outputs[0].owner)  // Recipient MUST be first
+        assertEquals(recipientAddress, offer.outputs[0].owner) // Recipient MUST be first
         assertEquals(BigInteger("100"), offer.outputs[0].value)
-        assertEquals(senderAddress, offer.outputs[1].owner)     // Change MUST be second
+        assertEquals(senderAddress, offer.outputs[1].owner) // Change MUST be second
         assertEquals(BigInteger("50"), offer.outputs[1].value)
     }
 }

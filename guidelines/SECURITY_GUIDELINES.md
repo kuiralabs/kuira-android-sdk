@@ -142,7 +142,7 @@ KeyGenParameterSpec.Builder(alias, purposes).apply {
 
 Why centralized: the validity window (currently 30s) is a calibrated
 UX vs. snatched-unlocked-device trade-off (see
-`docs/security/SECURITY_NOTES.md` 2026-05-18 entry). Diverging from
+the internal docs 2026-05-18 entry). Diverging from
 `AuthPolicy` requires an explicit security review note in the
 SECURITY_NOTES log explaining the threat model the divergence
 addresses — same bar as adding a new VULN entry.

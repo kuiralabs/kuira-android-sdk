@@ -22,12 +22,12 @@ import java.io.InputStream
  *
  * ```kotlin
  * val bboard = MidnightContract.create(config) {
- *     name = "bboard"
- *     contractJs = assets.open("runtime/bboard-contract-iife.js")
- *     address = "4b459404..."
- *     witness("localSecretKey") { WitnessResult(null, secretKeyBytes) }
- *     initialPrivateState = mapOf("secretKey" to ByteArray(32))
- *     coinPublicKey = walletKeys.coinPublicKey
+ *  name = "bboard"
+ *  contractJs = assets.open("runtime/bboard-contract-iife.js")
+ *  address = "4b459404..."
+ *  witness("localSecretKey") { WitnessResult(null, secretKeyBytes) }
+ *  initialPrivateState = mapOf("secretKey" to ByteArray(32))
+ *  coinPublicKey = walletKeys.coinPublicKey
  * }
  *
  * val receipt = bboard.call("post", "Hello from Android!")
@@ -163,7 +163,7 @@ class MidnightContract private constructor(
     }
 
     /**
-     * Idempotent single call (#254): if [isDoneOnLedger] is already true the on-chain
+     * Idempotent single call: if [isDoneOnLedger] is already true the on-chain
      * effect is present, so this SKIPS the call and returns `null` (no double-submit);
      * otherwise it runs [call] and returns the receipt.
      *
@@ -242,7 +242,7 @@ class MidnightContract private constructor(
             circuitArgs = jsArgs,
             witnesses = witnesses,
             initialPrivateState = privateStateJs,
-            coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
+            coinPublicKey = coinPublicKey!!, // requireWriteCapable() above guarantees non-null
             networkId = config.networkId,
             onChainStateHex = onChainStateHex,
             ledgerParametersHex = ledgerParamsHex,
@@ -261,7 +261,7 @@ class MidnightContract private constructor(
         val executionResult = try {
             runExecute(unshieldedFundingJson)
         } catch (e: Exception) {
-            // The circuit moves unshielded value with no offer supplied (kuira-sdk-android#4). The
+            // The circuit moves unshielded value with no offer supplied (kuira-sdk-android). The
             // FFI signal is `UNSHIELDED_VALUE_UNFUNDED:<kind>:<token>:<amount>|<human message>`.
             val raw = e.message ?: ""
             if (!raw.contains(UNSHIELDED_UNFUNDED_MARKER)) {
@@ -351,12 +351,12 @@ class MidnightContract private constructor(
      * typed accessors are cheap.
      *
      * @throws ContractCallException.StateFetchFailed if the indexer
-     *   query fails.
+     *  query fails.
      * @throws LedgerReadException if the JS evaluation fails or the
-     *   contract JS doesn't export `ledger` (likely a contract /
-     *   client version mismatch).
+     *  contract JS doesn't export `ledger` (likely a contract /
+     *  client version mismatch).
      * @throws IllegalArgumentException if this contract was built
-     *   without an address.
+     *  without an address.
      */
     suspend fun ledger(): MidnightLedger {
         requireAddress("ledger")
@@ -366,7 +366,7 @@ class MidnightContract private constructor(
     }
 
     /**
-     * Observe this contract's ledger state as it changes on-chain (#255).
+     * Observe this contract's ledger state as it changes on-chain.
      *
      * Emits the CURRENT [MidnightLedger] immediately, then a fresh one each time the contract's
      * on-chain state actually changes — driven by the chain's block stream (the SDK wires
@@ -543,7 +543,7 @@ class MidnightContract private constructor(
                 contractJs = contractJsContent,
                 witnesses = witnesses,
                 initialPrivateState = privateStateJs,
-                coinPublicKey = coinPublicKey!!,  // requireWriteCapable() above guarantees non-null
+                coinPublicKey = coinPublicKey!!, // requireWriteCapable() above guarantees non-null
                 networkId = config.networkId,
                 verifierKeys = circuitVerifierKeys.mapValues { (_, bytes) ->
                     bytes.joinToString("") { "%02x".format(it) }
@@ -599,10 +599,10 @@ class MidnightContract private constructor(
         /**
          * Contract JavaScript as an InputStream. Accepts either:
          *  - Manually-preprocessed IIFE (the older BBoard pattern —
-         *    `import * as __compactRuntime` replaced with a comment,
-         *    `export` keywords stripped), or
+         *  `import * as __compactRuntime` replaced with a comment,
+         *  `export` keywords stripped), or
          *  - Raw `compactc` output with ES module syntax intact
-         *    (the natural shape of `contract/src/managed/<name>/contract/index.js`).
+         *  (the natural shape of `contract/src/managed/<name>/contract/index.js`).
          *
          * The builder normalizes ES module syntax to script-compatible
          * form via [normalizeContractJs] before handing the content to
@@ -709,7 +709,7 @@ class MidnightContract private constructor(
     companion object {
         private const val TAG = "MidnightContract"
         // Prefix the native assembler emits when a circuit moves unshielded value with no offer
-        // supplied (kuira-sdk-android#4). Kept in sync with contract_ffi.rs check_unshielded_offer_present.
+        // supplied (kuira-sdk-android). Kept in sync with contract_ffi.rs check_unshielded_offer_present.
         private const val UNSHIELDED_UNFUNDED_MARKER = "UNSHIELDED_VALUE_UNFUNDED"
         private const val CONTRACT_ADDRESS_HEX_LENGTH = 64
 
@@ -748,13 +748,13 @@ class MidnightContract private constructor(
          * declarations:
          *
          *  - Top-level `import …` lines — the IIFE-wrapped
-         *    `compact-runtime-iife.js` we load before the contract
-         *    already exposes `__compactRuntime` as a top-level `var`,
-         *    so the import is redundant.
+         *  `compact-runtime-iife.js` we load before the contract
+         *  already exposes `__compactRuntime` as a top-level `var`,
+         *  so the import is redundant.
          *  - `export ` prefix on `var` / `let` / `const` / `class` /
-         *    `function` / `async function` declarations. The
-         *    declarations themselves stay; only the keyword is
-         *    removed.
+         *  `function` / `async function` declarations. The
+         *  declarations themselves stay; only the keyword is
+         *  removed.
          *
          * Idempotent: an already-IIFE file (no `import`/`export`
          * lines) round-trips unchanged.

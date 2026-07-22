@@ -153,15 +153,15 @@ seed write, init-probe state machine.
   but consumers should resolve via `hiltViewModel()` only. Signature
   change = minor bump.
 
-See `docs/projects/dapp-ui-extraction.md` § "API stability
+See the internal docs § "API stability
 commitments" for the long form.
 
 ## Further reading
 
 - [CHANGELOG.md](CHANGELOG.md) — version history + per-version fix
   attribution back to the originating commits.
-- `docs/security/SECURITY_NOTES.md` — auth-window model, restore
+- the internal docs — auth-window model, restore
   flow security analysis, Block Store + PRF encryption design.
-- `docs/projects/dapp-ui-extraction.md` — migration plan +
+- the internal docs — migration plan +
   architectural decisions (Hilt rpId override pattern, why
   `DappUiConfig` was dropped, etc.).

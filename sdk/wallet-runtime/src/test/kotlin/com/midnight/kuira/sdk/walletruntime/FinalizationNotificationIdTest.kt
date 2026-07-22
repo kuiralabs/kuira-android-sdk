@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * [finalizationNotificationId] routing: a NIGHT send is a value transaction (its own,
  * persistent slot, keyed by op id), every other operation shares the single only-latest slot
- * (#282). Pure — no Context, no notification manager.
+ *. Pure — no Context, no notification manager.
  */
 class FinalizationNotificationIdTest {
 

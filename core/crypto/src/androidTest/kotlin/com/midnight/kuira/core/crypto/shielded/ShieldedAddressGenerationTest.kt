@@ -33,7 +33,7 @@ import org.junit.runner.RunWith
  *
  * **Reference:**
  * - Midnight SDK: @midnight-ntwrk/wallet-sdk-address-format
- * - Test vectors: midnight-libraries/midnight-wallet/packages/address-format/test/addresses.json
+ * - Test vectors: the Midnight TypeScript SDK
  */
 @RunWith(AndroidJUnit4::class)
 class ShieldedAddressGenerationTest {
@@ -216,7 +216,7 @@ class ShieldedAddressGenerationTest {
                     val encPkBytes = hexToBytes(shieldedKeys.encryptionPublicKey)
                     val fullAddressBytes = coinPkBytes + encPkBytes
 
-                    val hrp = "mn_shield-addr"  // NO network suffix for mainnet
+                    val hrp = "mn_shield-addr" // NO network suffix for mainnet
                     val address = Bech32m.encode(hrp, fullAddressBytes)
 
                     // Expected from Lace-compatible Midnight TypeScript SDK (64-byte seed)
@@ -263,7 +263,7 @@ class ShieldedAddressGenerationTest {
 
                     networks.forEach { networkId ->
                         val hrp = if (networkId == null) {
-                            "mn_shield-addr"  // Mainnet
+                            "mn_shield-addr" // Mainnet
                         } else {
                             "mn_shield-addr_$networkId"
                         }

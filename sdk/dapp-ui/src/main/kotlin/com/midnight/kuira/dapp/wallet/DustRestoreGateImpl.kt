@@ -35,7 +35,7 @@ import javax.inject.Singleton
 internal enum class ConsentVerdict { GRANTED, UNANSWERED }
 
 /**
- * The bundled wallet UI's [DustRestoreGate] (roadmap #61). Contract (canonical copy on
+ * The bundled wallet UI's [DustRestoreGate] (roadmap ). Contract (canonical copy on
  * `MidnightSdk.Builder.dustRestoreGate`): consent resolution ONLY, never a wallet sync call.
  * A `@Singleton` (not ViewModel state) so it exists before any SDK build and survives every
  * panel lifecycle — no registration race, nothing to clobber on ViewModel teardown.
@@ -44,12 +44,12 @@ internal enum class ConsentVerdict { GRANTED, UNANSWERED }
  *  - Restored prefs say OPTED OUT → mirror into [DustBackupStateStore], never prompt.
  *  - This identity already declined → nothing.
  *  - No backup signal (prefs don't say enabled AND the identity wasn't restored) → nothing —
- *    a brand-new wallet is never interrupted, and never even pays the Drive probe.
+ *  a brand-new wallet is never interrupted, and never even pays the Drive probe.
  *  - Silent Drive probe: grant already present (same-app reinstall / new device) → the SDK's
- *    checkpoint fetch right after this gate succeeds silently; just restore the toggle truth.
+ *  checkpoint fetch right after this gate succeeds silently; just restore the toggle truth.
  *  - Consent missing → ONE prompt through [consentRequests] (the panel launches it). GRANTED
- *    commits the toggle; DECLINED is remembered per-identity; UNANSWERED (timeout, or no UI
- *    attached to show the dialog) burns nothing and takes the genesis path, same as today.
+ *  commits the toggle; DECLINED is remembered per-identity; UNANSWERED (timeout, or no UI
+ *  attached to show the dialog) burns nothing and takes the genesis path, same as today.
  */
 @Singleton
 class DustRestoreGateImpl @Inject constructor(

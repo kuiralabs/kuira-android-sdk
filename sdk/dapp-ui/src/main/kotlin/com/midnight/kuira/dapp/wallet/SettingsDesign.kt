@@ -45,7 +45,7 @@ import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.dapp.dappPressable
 
 /**
- * Settings panel design (#252) — section headers, glass rows, and original line-art glyphs drawn
+ * Settings panel design — section headers, glass rows, and original line-art glyphs drawn
  * in the same Dusk idiom as the Send wizard's [BackGlyph]/[ScanGlyph]/… (fractional-coordinate
  * Canvas strokes, round caps). No Material icons, no emoji — every glyph is hand-drawn to the
  * theme. Themed via [SendPalette] so the panel's light/dark toggle carries.

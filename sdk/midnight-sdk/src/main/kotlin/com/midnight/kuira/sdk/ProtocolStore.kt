@@ -3,7 +3,7 @@ package com.midnight.kuira.sdk
 import android.content.Context
 
 /**
- * A tiny durable record of which protocol sagas are in flight (#253). NOT the source
+ * A tiny durable record of which protocol sagas are in flight. NOT the source
  * of truth for step progress — the LEDGER is (via each step's `doneWhen`); this only
  * answers "is there an unfinished saga with this id to resume?" so a dApp can re-launch
  * it after process death. Closures can't be serialized, so the saga DEFINITION is code

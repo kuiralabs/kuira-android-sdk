@@ -3,7 +3,7 @@ package com.midnight.kuira.sdk.walletseed
 import androidx.fragment.app.FragmentActivity
 
 /**
- * The minimal seed-layer capability the recovery feature (#252) needs.
+ * The minimal seed-layer capability the recovery feature needs.
  *
  * Factored out so [RecoveryPhraseManager] depends on a small, explicit contract (dependency
  * inversion) instead of the whole [WalletSeedSource]. That keeps the manager unit-testable with a

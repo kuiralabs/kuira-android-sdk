@@ -9,7 +9,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verifyBlocking
 
 /**
- * Pins the dust-sync **opt-out** contract (#244): when [MidnightWallet.dustBackupEnabled]
+ * Pins the dust-sync **opt-out** contract: when [MidnightWallet.dustBackupEnabled]
  * is false, [MidnightWallet.backupDustToCloud] must NOT touch the Drive backup and must
  * report the dust lane as [CloudBackupStatus.Idle]. "Disable = stop uploading" — the
  * user-facing guarantee behind the toggle — has to hold at the SDK layer, not just the UI.

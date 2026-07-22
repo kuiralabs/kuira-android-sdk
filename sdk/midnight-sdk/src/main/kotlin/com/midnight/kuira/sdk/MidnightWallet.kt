@@ -74,7 +74,7 @@ class MidnightWallet internal constructor(
 ) : TransactionBalancer {
 
     /**
-     * Per-transaction inbound NIGHT receipts (#284), classified by UTXO-set provenance in the
+     * Per-transaction inbound NIGHT receipts, classified by UTXO-set provenance in the
      * indexer subscription: a genuine receipt is a transaction that created NIGHT to us without
      * spending any of our UTXOs. Our own sends (which return change to us) are NEVER receipts,
      * so a consumer wiring this to a notification will never tell the user they "received" their
@@ -132,7 +132,7 @@ class MidnightWallet internal constructor(
      * Live NIGHT-UTXO list (as the registration-filter JSON) wired by [MidnightSdk].
      * Lets [balance]/[balanceFlow] compute `dustRegistered` from true per-UTXO
      * registration state — "are all current NIGHT UTXOs generating dust?" — instead
-     * of the dust>0 heuristic (#265). Null → fall back to the heuristic (e.g. before
+     * of the dust>0 heuristic. Null → fall back to the heuristic (e.g. before
      * the SDK wires it).
      */
     @Volatile
@@ -151,7 +151,7 @@ class MidnightWallet internal constructor(
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
 
     /**
-     * Observable wallet-sync status (#235). EVERY heavy sync this wallet runs
+     * Observable wallet-sync status. EVERY heavy sync this wallet runs
      * publishes here — [syncDust], the proactive [proactiveDustResync], the
      * shielded + dust [refresh], and the [forceFullSync] genesis rebuild — so a
      * background observer (the foreground-service Live-Update notification) can
@@ -163,7 +163,7 @@ class MidnightWallet internal constructor(
 
     // Atomic update: dust + app-state backups can report concurrently (a host
     // calling backupAppStateToCloud while refresh() runs backupDustToCloud), so a
-    // read-copy-write on .value could drop a lane's update.
+    // read-copy-write on.value could drop a lane's update.
     private fun updateDustBackup(status: CloudBackupStatus) {
         _backupStatus.update { it.copy(dust = status) }
     }
@@ -190,11 +190,11 @@ class MidnightWallet internal constructor(
      *
      * **Sources (all kept fresh by the SDK; no consumer action required):**
      *  - Unshielded NIGHT: [BalanceRepository] flow over the unshielded-tx
-     *    subscription started at SDK-build time.
+     *  subscription started at SDK-build time.
      *  - Shielded NIGHT: [ShieldedBalanceTracker]'s cache, refreshed by the
-     *    zswap-event subscription started at SDK-build time. Returns 0 until
-     *    the first sync lands (a few hundred ms on localnet, a few seconds
-     *    on PREPROD on first run).
+     *  zswap-event subscription started at SDK-build time. Returns 0 until
+     *  the first sync lands (a few hundred ms on localnet, a few seconds
+     *  on PREPROD on first run).
      *  - DUST: [DustRepository] local replay state.
      *
      * `dustRegistered` is a best-effort heuristic — true iff DUST > 0. A
@@ -365,13 +365,13 @@ class MidnightWallet internal constructor(
         runTrackedSync(SyncPhase.DustFull) { publish ->
             dustSyncManager.ensureSynced(onSyncProgress = { processed, total ->
                 onProgress?.invoke(processed, total) // external callback (back-compat)
-                publish(processed, total)            // observable syncStatus
+                publish(processed, total) // observable syncStatus
             })
         }
     }
 
     /**
-     * Proactive delta dust-sync for the live tip-advance path (#235). Runs the
+     * Proactive delta dust-sync for the live tip-advance path. Runs the
      * incremental refresh under [balanceMutex] — same discipline as [refresh] —
      * so it can't close the shared `DustLocalState` mid-balance. Publishes to
      * [syncStatus]. Used by the background `DustBalanceTracker`; never does a
@@ -509,7 +509,7 @@ class MidnightWallet internal constructor(
     ): BalanceEnvelope {
         tryBalance(provenTxHex, onProgress)?.let { return it }
         // Same escalation ladder as the submit-time 170/171 recovery in [balanceAndSubmit]:
-        // delta re-sync first, genesis rebuild only as a last resort (#297). The common
+        // delta re-sync first, genesis rebuild only as a last resort. The common
         // balance-time failure is our OWN just-finalized spend not yet reflected locally —
         // back-to-back txs consume the previous tx's dust before its events reach the
         // indexer, and the freshness probe in [ensureDustFresh] sees "nothing new" during
@@ -645,13 +645,13 @@ class MidnightWallet internal constructor(
         // window `ctime ∈ [tblock - grace, tblock]`. Two failure modes pull ctime opposite
         // ways, so [DustCtime] balances them:
         //  - Anchoring to the tip races ahead of the replayed state on an active chain →
-        //    resolves a newer root than ours → InvalidDustSpendProof (170). #287 anchored to
-        //    sync_time to fix this.
+        //  resolves a newer root than ours → InvalidDustSpendProof (170). anchored to
+        //  sync_time to fix this.
         //  - But anchoring to sync_time freezes ctime hours behind the tip when dust events
-        //    are sparse (idle wallet, long chain) → drifts past `grace` → OutOfDustValidity-
-        //    Window (171). DustCtime keeps a RECENT sync_time (170 protection intact) and
-        //    clamps toward the tip only once it has drifted (idle), where our replayed root
-        //    is already the current dust root so the clamped ctime still resolves to it.
+        //  are sparse (idle wallet, long chain) → drifts past `grace` → OutOfDustValidity-
+        //  Window (171). DustCtime keeps a RECENT sync_time (170 protection intact) and
+        //  clamps toward the tip only once it has drifted (idle), where our replayed root
+        //  is already the current dust root so the clamped ctime still resolves to it.
         // The residual indexer-lag race is the caller's 171 re-sync-and-retry (balanceAndSubmit).
         val dustSyncTimeMs = dustState.syncTimeMs()
         val chainTimeMs = DustCtime.anchorMs(dustSyncTimeMs = dustSyncTimeMs, tipMs = blockInfo.timestamp)
@@ -691,9 +691,9 @@ class MidnightWallet internal constructor(
      * Use cases:
      *  - Between sequential transactions (avoid stale UTXO state for fees).
      *  - When the UI shows a "refresh" affordance and the user wants
-     *    on-demand freshness rather than waiting on the natural cadence.
+     *  on-demand freshness rather than waiting on the natural cadence.
      *  - After [waitForFunding] returns, if you also need shielded NIGHT
-     *    fresh (waitForFunding only refreshes dust).
+     *  fresh (waitForFunding only refreshes dust).
      *
      * Errors in shielded resync don't abort the dust resync (and vice versa) —
      * partial freshness is better than no freshness.
@@ -763,7 +763,7 @@ class MidnightWallet internal constructor(
     /**
      * Force-rebuild the unshielded UTXO cache from genesis to self-heal a stale NIGHT balance.
      *
-     * **What it fixes (roadmap #52).** The unshielded UTXO cache is event-driven — it applies
+     * **What it fixes (roadmap ).** The unshielded UTXO cache is event-driven — it applies
      * created / spent deltas from the indexer's tx subscription with no reconcile against the
      * indexer's *current* set. If a spent-event is ever missed — a sibling app on the same shared
      * wallet spent a coin while this app was backgrounded, or a subscription gap — the spent UTXO
@@ -831,7 +831,7 @@ class MidnightWallet internal constructor(
         // Two gates: the flag the host pushes per build, AND the live prefs supplier. The
         // supplier closes the window where a restore-gate-mirrored opt-out hasn't been
         // re-applied to the flag yet (that only happens on the next bootstrap pass) — a
-        // #246-disabled wallet must never re-upload the blobs it deleted.
+        // -disabled wallet must never re-upload the blobs it deleted.
         if (!dustBackupEnabled || currentWalletBackupPrefs()?.dustBackupOptedOut == true) {
             updateDustBackup(CloudBackupStatus.Idle)
             return@withContext
@@ -1007,13 +1007,13 @@ class MidnightWallet internal constructor(
  *
  * **Pool semantics:**
  *  - Unshielded NIGHT lives in UTXOs on the public ledger; this is what
- *    external transfers ("fund this address") land in.
+ *  external transfers ("fund this address") land in.
  *  - Shielded NIGHT lives in Zswap coins on the private ledger; the wallet
- *    moves NIGHT here for transactions whose amounts/recipients shouldn't
- *    be public.
+ *  moves NIGHT here for transactions whose amounts/recipients shouldn't
+ *  be public.
  *  - DUST is a separate fee token, generated by the chain at a rate tied
- *    to the wallet's registered NIGHT. Not held in either pool's
- *    coin/UTXO graph; tracked in the ledger's dust state.
+ *  to the wallet's registered NIGHT. Not held in either pool's
+ *  coin/UTXO graph; tracked in the ledger's dust state.
  *
  * **Why DUST has no "shielded" half:** Midnight's protocol generates DUST
  * against a registered NIGHT key directly. It's never wrapped in a Zswap
@@ -1021,18 +1021,18 @@ class MidnightWallet internal constructor(
  * is the *fee* substrate, not a transferrable shielded asset.
  *
  * @property unshieldedNight Sum of unspent NIGHT UTXOs at this wallet's
- *   Bech32m address. u128 base units.
+ *  Bech32m address. u128 base units.
  * @property shieldedNight Sum of shielded NIGHT coins decryptable by this
- *   wallet's zswap key. u128 base units. Zero until the SDK's shielded
- *   subscription has completed its first replay (a few hundred ms on
- *   localnet, a few seconds on PREPROD).
+ *  wallet's zswap key. u128 base units. Zero until the SDK's shielded
+ *  subscription has completed its first replay (a few hundred ms on
+ *  localnet, a few seconds on PREPROD).
  * @property dust Wallet's locally-replayed DUST state — what the SDK would
- *   spend on the next fee. u128 base units.
+ *  spend on the next fee. u128 base units.
  * @property dustRegistered Best-effort signal: true iff the wallet currently
- *   holds spendable dust. A fresh wallet that hasn't run
- *   [MidnightSdk.registerForDustGeneration] reports `false` even with NIGHT
- *   funded, because the chain doesn't release spendable dust to an
- *   unregistered key.
+ *  holds spendable dust. A fresh wallet that hasn't run
+ *  [MidnightSdk.registerForDustGeneration] reports `false` even with NIGHT
+ *  funded, because the chain doesn't release spendable dust to an
+ *  unregistered key.
  */
 data class WalletBalance(
     val unshieldedNight: BigInteger,

@@ -25,11 +25,11 @@ import javax.inject.Singleton
  *  - `credentialId` — Credential Manager's opaque credential identifier
  *  - `publicKeyHex` — compressed P-256 pubkey, hex
  *  - `backupDismissed` — user chose "start fresh" over restoring a cloud
- *    backup; suppress the prompt on subsequent launches
+ *  backup; suppress the prompt on subsequent launches
  *
  * **Durability contract:** writes use `.commit()` rather than `.apply()`.
  * The restore flow SIGKILLs the process within a few ms of writing the
- * sigil triple (see `docs/security/SECURITY_NOTES.md` 2026-05-18 entry).
+ * sigil triple (see internal design notes 2026-05-18 entry).
  * `.apply()`'s async write doesn't fsync before the kill, so the next
  * launch reads an empty file and the sigil pill shows "no sigil"
  * despite a successful restore. `.commit()` blocks until durable —
@@ -147,7 +147,7 @@ class SigilStateStore @Inject constructor(
      * observer (e.g. [WalletPanelViewModel] auto-retry) sees the new
      * identity as soon as the next coroutine continuation runs.
      *
-     * **Overwrite guard (#15).** Writing a triple for a DIFFERENT
+     * **Overwrite guard.** Writing a triple for a DIFFERENT
      * [credentialId] over an existing one is refused unless [replace] is
      * explicitly true — a guard against a forge/restore path silently
      * clobbering a live sigil (one wrong tap = sigil gone). Re-persisting
@@ -157,7 +157,7 @@ class SigilStateStore @Inject constructor(
      * "start fresh", which passes `replace = true`.
      *
      * @throws SigilOverwriteException when a different sigil already exists
-     *   and [replace] is false.
+     *  and [replace] is false.
      */
     fun persistSigil(
         did: String,

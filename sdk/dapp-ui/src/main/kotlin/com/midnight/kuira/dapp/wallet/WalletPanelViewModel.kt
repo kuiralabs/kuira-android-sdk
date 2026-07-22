@@ -83,11 +83,11 @@ class WalletPanelViewModel @Inject constructor(
     /**
      * Host-bound app-state source (empty when the host binds none, e.g. BBoard).
      * Connected to [com.midnight.kuira.sdk.MidnightWallet.appStateProvider] so the
-     * pill's App-data lane actually backs up — #244's silent path wired its
+     * pill's App-data lane actually backs up — 's silent path wired its
      * uploader but never its source.
      */
     private val appDataProvider: Optional<AppDataBackupProvider>,
-    /** Single owner of the durable dust-backup choice — shared with the restore gate (#61). */
+    /** Single owner of the durable dust-backup choice — shared with the restore gate. */
     private val backupState: DustBackupStateStore,
     /** The restore gate impl (a @Singleton) — the VM only relays its consent round-trips. */
     private val restoreGate: DustRestoreGateImpl,
@@ -120,7 +120,7 @@ class WalletPanelViewModel @Inject constructor(
     val status: StateFlow<WalletStatus> = _status
 
     /**
-     * Send-flow state for the Send screen (#240). Idle until the user submits;
+     * Send-flow state for the Send screen. Idle until the user submits;
      * then Sending (with the coarse [MidnightSdk.SendProgress] stage as a label),
      * resolving to Success (tx hash) or Failure (a user-facing reason). Reset to
      * Idle when the Send screen closes.
@@ -131,7 +131,7 @@ class WalletPanelViewModel @Inject constructor(
     /**
      * Live sync progress for the sheet's [WalletSyncIndicator] — derived from the
      * SDK's [com.midnight.kuira.sdk.MidnightWallet.syncStatus], the SAME signal the
-     * background Live-Update notification uses (#259). So the in-app pill and the
+     * background Live-Update notification uses. So the in-app pill and the
      * notification are always consistent: it shows for EVERY sync (foreground
      * refresh, proactive background tracker, genesis), with the fraction + the
      * phase label resolved through the one shared [labelRes] mapping. Non-null only
@@ -196,7 +196,7 @@ class WalletPanelViewModel @Inject constructor(
     val consentRequests: SharedFlow<IntentSenderRequest> = _consentRequests.asSharedFlow()
 
     /**
-     * The restore gate's consent launches (#61) — the panel collects these into the SAME
+     * The restore gate's consent launches — the panel collects these into the SAME
      * launcher as [consentRequests]; results route back through [onConsentResult], which
      * offers them to the gate first.
      */
@@ -362,16 +362,16 @@ class WalletPanelViewModel @Inject constructor(
      * null when the user signs out (`SigilStateStore.clear`). Two transitions matter:
      *
      *  - **null → non-null (signed in):** if the wallet was parked on
-     *    [WalletStatus.SigilRequired], clear it to [WalletStatus.None] and emit a
-     *    one-shot retry so the host re-runs `refreshBalance` with the last config the
-     *    user asked for. No-op otherwise, so we never auto-trigger a biometric for a
-     *    user who only touched the sigil panel.
+     *  [WalletStatus.SigilRequired], clear it to [WalletStatus.None] and emit a
+     *  one-shot retry so the host re-runs `refreshBalance` with the last config the
+     *  user asked for. No-op otherwise, so we never auto-trigger a biometric for a
+     *  user who only touched the sigil panel.
      *  - **non-null → null (signed out):** the seed is gone and the SDK is closed, so
-     *    a live wallet must NOT keep showing a balance. Cancel the balance observer and
-     *    reset to [WalletStatus.SigilRequired] — the accurate "forge your sigil first"
-     *    state the sheet already renders. Re-forging takes the first branch back to a
-     *    live wallet. Skipped when already None/SigilRequired (fresh install's initial
-     *    null isn't a sign-out).
+     *  a live wallet must NOT keep showing a balance. Cancel the balance observer and
+     *  reset to [WalletStatus.SigilRequired] — the accurate "forge your sigil first"
+     *  state the sheet already renders. Re-forging takes the first branch back to a
+     *  live wallet. Skipped when already None/SigilRequired (fresh install's initial
+     *  null isn't a sign-out).
      */
     private fun observeSigilLifecycle() {
         viewModelScope.launch {
@@ -409,13 +409,13 @@ class WalletPanelViewModel @Inject constructor(
      *
      * **Why two emissions:**
      *  - Addresses are deterministic from the seed and available the moment
-     *    `MidnightSdk.Builder.build()` returns — no network round-trip needed.
+     *  `MidnightSdk.Builder.build()` returns — no network round-trip needed.
      *  - The shielded NIGHT resync replays every zswap event the wallet has
-     *    seen; on PREPROD/PREVIEW that's potentially thousands of events and
-     *    takes seconds. Forcing the user to stare at "Reading balance..." for
-     *    that whole window — when the addresses they need are already
-     *    derivable — is the bad UX `wallet-cli` already avoids by showing
-     *    unshielded first.
+     *  seen; on PREPROD/PREVIEW that's potentially thousands of events and
+     *  takes seconds. Forcing the user to stare at "Reading balance..." for
+     *  that whole window — when the addresses they need are already
+     *  derivable — is the bad UX `wallet-cli` already avoids by showing
+     *  unshielded first.
      *
      * The intermediate Ready carries a `busy = "Syncing balances…"` so the UI
      * can show a subtle "values are catching up" indicator without blocking
@@ -426,12 +426,12 @@ class WalletPanelViewModel @Inject constructor(
      * what the SDK was built with.
      *
      * @param force bypass the heavy-resync throttle and run [com.midnight.kuira.sdk.MidnightWallet.refresh]
-     *   (shielded + dust delta) now. The sheet's ⟳ button passes this — it's a "sync now", not a wipe.
+     *  (shielded + dust delta) now. The sheet's ⟳ button passes this — it's a "sync now", not a wipe.
      * @param resyncUnshielded ALSO rebuild the unshielded UTXO cache from genesis via
-     *   [com.midnight.kuira.sdk.MidnightWallet.forceResyncUnshielded] — the deliberate "Re-sync
-     *   balance" recovery for a stale NIGHT count (ghost AVAILABLE coins from a missed spent-event /
-     *   cross-app spend, roadmap #52). UTXO-cache only (never touches dust/shielded); the balance
-     *   momentarily drops toward 0 then rebuilds from the indexer. Routine refresh leaves this false.
+     *  [com.midnight.kuira.sdk.MidnightWallet.forceResyncUnshielded] — the deliberate "Re-sync
+     *  balance" recovery for a stale NIGHT count (ghost AVAILABLE coins from a missed spent-event /
+     *  cross-app spend, roadmap ). UTXO-cache only (never touches dust/shielded); the balance
+     *  momentarily drops toward 0 then rebuilds from the indexer. Routine refresh leaves this false.
      */
     fun refreshBalance(
         config: WalletConfig,
@@ -465,10 +465,10 @@ class WalletPanelViewModel @Inject constructor(
                 val built = sdkProvider.ensureSdk(activity, config)
                 // Re-apply the persisted backup opt-out to this (possibly freshly built)
                 // wallet so a disabled user never silently resumes uploading after a rebuild —
-                // BOTH the dust checkpoint and the app-state blob (#246).
+                // BOTH the dust checkpoint and the app-state blob.
                 built.wallet.dustBackupEnabled = !backupState.optedOut.value
                 built.wallet.appStateBackupEnabled = !backupState.optedOut.value
-                // Wallet-level prefs ride the app-state blob (#61). A SUPPLIER, read at
+                // Wallet-level prefs ride the app-state blob. A SUPPLIER, read at
                 // upload time — so a gate-committed toggle or mirrored opt-out is always
                 // reflected in the next blob (a pushed snapshot went stale and clobbered
                 // restored cloud truth).
@@ -527,7 +527,7 @@ class WalletPanelViewModel @Inject constructor(
                     // phases (dust → shielded → genesis) to syncStatus, which both
                     // this pill and the background notification render identically.
                     // They run sequentially (never concurrently) so they don't both
-                    // touch the shared DustLocalState (see #228).
+                    // touch the shared DustLocalState (see ).
                     built.wallet.syncDust()
                     runCatching { built.wallet.refresh() }
                         .onFailure { Log.w(TAG, "wallet.refresh failed (showing cached): ${it.message}") }
@@ -580,7 +580,7 @@ class WalletPanelViewModel @Inject constructor(
     /**
      * Deliberate "Re-sync balance" recovery: rebuild the unshielded UTXO cache from genesis to fix a
      * stale NIGHT count (ghost AVAILABLE coins left by a missed spent-event / cross-app spend on the
-     * shared wallet, roadmap #52). Reuses [lastRequestedConfig] — the config the user last acted on —
+     * shared wallet, roadmap ). Reuses [lastRequestedConfig] — the config the user last acted on —
      * so the Settings affordance can fire this without re-threading the config through the overlay.
      * No-op if no wallet action has run yet (nothing to resync, and no config to bootstrap with).
      *
@@ -673,14 +673,14 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Send unshielded NIGHT to [toAddress] (#240). Bootstraps/reuses the shared SDK,
+     * Send unshielded NIGHT to [toAddress]. Bootstraps/reuses the shared SDK,
      * then calls [MidnightSdk.sendNight], which validates, selects fewest coins,
      * auto-consolidates when needed, signs, pays dust fees, and submits. Surfaces
      * coarse progress (consolidating / submitting) and the typed outcome through
      * [sendState]; the live balance observer + a post-send refresh update the pill.
      *
      * @param amount NIGHT in the smallest unit (1 NIGHT = 1,000,000); the Send
-     *   screen parses the user's decimal NIGHT into this.
+     *  screen parses the user's decimal NIGHT into this.
      */
     fun sendNight(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) {
         lastRequestedConfig = config
@@ -710,7 +710,7 @@ class WalletPanelViewModel @Inject constructor(
                     return@launch
                 }
                 // Fire-and-forget on the SDK scope so the transfer survives the user leaving
-                // the app (#263). The registry / foreground service / finalization push own
+                // the app. The registry / foreground service / finalization push own
                 // the durable lifecycle; this VM only projects progress + the result while the
                 // Send screen is open (callbacks land on the SDK scope, so a dead VM is a no-op).
                 built.launchSendNight(
@@ -761,7 +761,7 @@ class WalletPanelViewModel @Inject constructor(
         _sendState.value = SendUiState.Idle
     }
 
-    // ── Sovereign recovery phrase (#252) ────────────────────────────────────────
+    // ── Sovereign recovery phrase ────────────────────────────────────────
     //
     // The panel is one consumer of the SDK's [com.midnight.kuira.sdk.walletseed.WalletRecovery]
     // contract; everything here just projects that contract into UI state. A dApp building its own
@@ -840,11 +840,11 @@ class WalletPanelViewModel @Inject constructor(
 
     /**
      * Two-way dust-backup toggle from the pill's Switch.
-     *  - on  → clear the opt-out + enable on the live wallet, then run the Drive
-     *          consent + sync ([enableCloudBackup]).
+     *  - on → clear the opt-out + enable on the live wallet, then run the Drive
+     *  consent + sync ([enableCloudBackup]).
      *  - off → opt out (persisted): flip the live wallet so [com.midnight.kuira.sdk.MidnightWallet.refresh]
-     *          stops uploading, and reflect "off" immediately. "No longer uploading"
-     *          is the disable — no consent revoke.
+     *  stops uploading, and reflect "off" immediately. "No longer uploading"
+     *  is the disable — no consent revoke.
      */
     fun setDustBackup(enabled: Boolean, config: WalletConfig, activity: FragmentActivity) {
         // Turning OFF is durable immediately; turning ON clears the opt-out now but only
@@ -861,7 +861,7 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * TRUE backup disable (#246): delete BOTH cloud blobs (dust + app-state), then revoke the Drive
+     * TRUE backup disable: delete BOTH cloud blobs (dust + app-state), then revoke the Drive
      * grant, and opt out locally. Order matters — delete the blobs (which need Drive access) BEFORE
      * revoking consent. The wallet + sigil are unaffected (recovery is the passkey); this only drops
      * the cloud copies. The host confirms first via the BackupSection dialog.
@@ -902,7 +902,7 @@ class WalletPanelViewModel @Inject constructor(
         }
     }
 
-    /** Run one disable leg, isolating its failure so the remaining legs still execute (#246). */
+    /** Run one disable leg, isolating its failure so the remaining legs still execute. */
     private suspend fun bestEffortDisable(label: String, block: suspend () -> Unit) {
         try {
             block()
@@ -1008,7 +1008,7 @@ class WalletPanelViewModel @Inject constructor(
     private suspend fun cloudSyncNow(config: WalletConfig, activity: FragmentActivity) {
         Log.i(TAG, "cloudSyncNow: syncing + uploading dust checkpoint to Drive…")
         val built = sdkProvider.ensureSdk(activity, config)
-        built.wallet.dustBackupEnabled = true  // enabling — make sure uploads are on
+        built.wallet.dustBackupEnabled = true // enabling — make sure uploads are on
         built.wallet.refresh()
         // The enable+sync succeeded — commit the durable ON so the toggle stays on through later
         // background-sync status churn (a balance refresh must not flip it). The blob uploaded
@@ -1054,7 +1054,7 @@ class WalletPanelViewModel @Inject constructor(
 internal const val NIGHT_DECIMALS = com.midnight.kuira.sdk.NIGHT_DECIMALS
 
 /**
- * Send-flow UI state for the Send screen (#240).
+ * Send-flow UI state for the Send screen.
  */
 sealed interface SendUiState {
     /** No send in progress — the recipient/amount form is editable. */
@@ -1073,7 +1073,7 @@ sealed interface SendUiState {
 /**
  * Wallet-sync progress for the sheet's [WalletSyncIndicator].
  * @param fraction 0f..1f when a count is known (determinate); null for the
- *   unmeasurable tail (e.g. Rust replay) — render as indeterminate.
+ *  unmeasurable tail (e.g. Rust replay) — render as indeterminate.
  * @param label Stage / detail text, e.g. "Syncing dust".
  */
 data class WalletSyncProgress(val fraction: Float?, val label: String)
@@ -1083,10 +1083,10 @@ data class WalletSyncProgress(val fraction: Float?, val label: String)
  * Switch reflects the user's DURABLE choice rather than the live sync status.
  *
  * - [enabling] (the user just tapped to enable) → on + spinner. This is the ONLY busy state, so a
- *   background/refresh-triggered sync never spins the Switch.
+ *  background/refresh-triggered sync never spins the Switch.
  * - else [enabled] (the persisted choice) → on, stable across refreshes: when the live [status]
- *   churns UpToDate→Syncing→Idle during a balance refresh, the Switch does NOT off→on snap. A
- *   persistent [status] failure surfaces as a quiet detail — no spinner, no off-flip.
+ *  churns UpToDate→Syncing→Idle during a balance refresh, the Switch does NOT off→on snap. A
+ *  persistent [status] failure surfaces as a quiet detail — no spinner, no off-flip.
  * - else → off.
  *
  * The live [status] deliberately does NOT decide on/off or busy; it only contributes a failure detail.

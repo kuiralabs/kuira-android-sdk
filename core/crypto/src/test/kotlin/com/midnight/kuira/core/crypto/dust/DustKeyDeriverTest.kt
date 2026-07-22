@@ -17,7 +17,7 @@ import org.junit.Before
  * - Integration tests with actual dust key derivation
  *
  * **Test Vectors Reference:**
- * - midnight-libraries/midnight-ledger/ledger/key-derivation-test-vectors.json
+ * - the Midnight TypeScript SDK
  * - TypeScript SDK: packages/dust-wallet/
  */
 class DustKeyDeriverTest {
@@ -96,7 +96,7 @@ class DustKeyDeriverTest {
      */
     @Test(expected = IllegalArgumentException::class)
     fun `given 64-byte seed when deriving then throws`() {
-        val seed = ByteArray(64) { it.toByte() }  // BIP-39 seed size, not dust seed
+        val seed = ByteArray(64) { it.toByte() } // BIP-39 seed size, not dust seed
 
         DustKeyDeriver.derivePublicKey(seed)
     }

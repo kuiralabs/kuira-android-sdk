@@ -101,7 +101,7 @@ data class BackupSectionState(
     val appData: BackupLaneState?,
 )
 
-private val RunnerSize = 30.dp        // smaller — the previous 40dp read as oversized
+private val RunnerSize = 30.dp // smaller — the previous 40dp read as oversized
 private val LaneIconGutter = 34.dp
 private val TrailLen = 44.dp
 
@@ -112,7 +112,7 @@ fun BackupSection(
     modifier: Modifier = Modifier,
     /** Turn dust/cloud backup ON (enable + sync). */
     onDustToggle: (Boolean) -> Unit = {},
-    /** TRUE disable (#246): delete the cloud blobs + revoke Drive consent. Confirmed first. */
+    /** TRUE disable: delete the cloud blobs + revoke Drive consent. Confirmed first. */
     onDisableBackup: () -> Unit = {},
     onAppDataAction: () -> Unit = {},
 ) {
@@ -149,9 +149,9 @@ fun BackupSection(
     }
 }
 
-// Approved copy (#246): lead with the outcome, reassure the sigil/wallet is safe (passkey
+// Approved copy: lead with the outcome, reassure the sigil/wallet is safe (passkey
 // recovery), name the real cost — never "lose funds". Externalized to resources with the rest of
-// the pill's strings in #277.
+// the pill's strings in.
 private const val DISABLE_TITLE = "Turn off cloud backup?"
 private const val DISABLE_BODY =
     "This deletes your cloud backup from Google Drive and turns it off. Your wallet and sigil " +
@@ -316,9 +316,9 @@ private fun Trailing(
  * Branded progress: the Rarámuri [LottieRunner] runs along a track, the [DustTrail]
  * kicking up behind it. **The runner's position is the progress** —
  *  - [progress] 0f..1f → the runner advances to that point and a bright accent
- *    fill highlights the distance covered.
+ *  fill highlights the distance covered.
  *  - null → the runner runs **in place at the start** (legs still animate, but it
- *    does NOT crawl across and reset) — we never fake motion we can't measure.
+ *  does NOT crawl across and reset) — we never fake motion we can't measure.
  *
  * Public; the labelled variant is [WalletSyncIndicator].
  */

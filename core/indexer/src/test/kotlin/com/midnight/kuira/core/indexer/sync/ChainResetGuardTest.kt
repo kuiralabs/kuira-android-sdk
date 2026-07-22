@@ -7,7 +7,7 @@ import org.junit.Test
 /**
  * Pins the chain-reset DECISION ([checkpointStatus]) — the heart of [ChainResetGuard]'s contract.
  *
- * **Why this looks the way it does (the #36 regression it guards):** the guard's ORIGINAL
+ * **Why this looks the way it does (the regression it guards):** the guard's ORIGINAL
  * discriminator was the GENESIS (height-0) block hash, on the premise "genesis differs across a
  * reset." That premise is FALSE for a localnet booting from a fixed chain spec — a full
  * volume-wiping `docker` down/up reproduces the SAME genesis hash byte-for-byte (verified against a
@@ -26,7 +26,7 @@ class ChainResetGuardTest {
 
     @Test
     fun `checkpoint height missing on the chain is a RESET (fresh chain is shorter)`() {
-        // THE #36 REGRESSION: identical genesis, but the pinned checkpoint height no longer exists →
+        // THE REGRESSION: identical genesis, but the pinned checkpoint height no longer exists →
         // the chain was replaced by a shorter fresh one. The genesis compare called this SAME.
         assertEquals(ChainStatus.RESET, checkpointStatus(pinnedHash = "abc", lookup = BlockHashLookup.NotOnChain))
     }

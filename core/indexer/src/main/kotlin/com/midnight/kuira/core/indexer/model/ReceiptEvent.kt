@@ -3,7 +3,7 @@ package com.midnight.kuira.core.indexer.model
 import java.math.BigInteger
 
 /**
- * A genuine inbound NIGHT receipt, identified per-transaction by UTXO-set provenance (#284):
+ * A genuine inbound NIGHT receipt, identified per-transaction by UTXO-set provenance:
  * a transaction that created one or more unshielded NIGHT outputs owned by us while spending
  * NONE of our UTXOs.
  *
@@ -14,10 +14,10 @@ import java.math.BigInteger
  * would occasionally announce the change as a receipt.
  *
  * @property transactionId Monotonic indexer transaction id. The dedup key: a re-sync or replay
- *   of an already-announced receipt carries the same id, so it is not re-announced.
+ *  of an already-announced receipt carries the same id, so it is not re-announced.
  * @property transactionHash The transaction hash (for display / deep-linking).
  * @property amount Total unshielded NIGHT created to us IN THIS transaction (smallest unit) —
- *   the true per-transaction received amount, not a balance delta.
+ *  the true per-transaction received amount, not a balance delta.
  */
 data class ReceiptEvent(
     val transactionId: Int,

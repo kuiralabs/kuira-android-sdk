@@ -18,7 +18,7 @@
 - 🔄 **Hypothesis** - Inferred from TypeScript SDK review, needs validation
 - ❓ **Unknown** - We don't know yet, needs investigation
 
-**Source:** These patterns are based on our analysis of the midnight-libraries TypeScript SDK, NOT official Midnight documentation. We will update this file as we implement and learn.
+**Source:** These patterns are based on our analysis of the the Midnight TypeScript SDK TypeScript SDK, NOT official Midnight documentation. We will update this file as we implement and learn.
 
 **Approach:**
 - Start with hypotheses from SDK review

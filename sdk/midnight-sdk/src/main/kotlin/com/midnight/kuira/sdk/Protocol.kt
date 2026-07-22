@@ -5,13 +5,13 @@ import kotlinx.coroutines.delay
 
 /**
  * The builder scope of a [MidnightSdk.runProtocol] saga — an ordered list of
- * **idempotent, ledger-anchored** steps (#253 + #254).
+ * **idempotent, ledger-anchored** steps (#253 + ).
  *
  * The engineering pattern: the blockchain is the durable execution journal. Each
  * [step] declares a `doneWhen` predicate that reads the CHAIN; before running a step
  * the engine asks the chain, and if the effect is already there it SKIPS. So:
  *  - re-running a saga (after process death, or on app resume) skips every
- *    already-landed step → resume-for-free, no fragile local workflow store, and
+ *  already-landed step → resume-for-free, no fragile local workflow store, and
  *  - no double-submit — re-running is always safe.
  *
  * The whole saga runs as ONE foreground operation (the Layer-1 framework keeps the

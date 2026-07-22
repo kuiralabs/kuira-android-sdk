@@ -20,10 +20,10 @@ sealed class WalletStatus {
      * SDK ready, latest balance known.
      *
      * @property address Unshielded Bech32m address — receives external NIGHT
-     *   transfers and is the address the SDK builds transactions against.
+     *  transfers and is the address the SDK builds transactions against.
      * @property shieldedAddress Shielded Bech32m address — destination for
-     *   private NIGHT transfers. Derived deterministically from the same seed
-     *   so it's stable for the wallet's lifetime.
+     *  private NIGHT transfers. Derived deterministically from the same seed
+     *  so it's stable for the wallet's lifetime.
      * @property balance Most recent snapshot from `sdk.wallet.balance()`.
      * @property busy Set while a long-running action (waitForFunding / register) is in flight; null when idle.
      * @property message One-line status from the last action (success or failure detail).
@@ -40,7 +40,7 @@ sealed class WalletStatus {
     data class Error(val message: String) : WalletStatus()
 
     /**
-     * Session locked (#14) — the cached wallet was dropped and the next access
+     * Session locked — the cached wallet was dropped and the next access
      * requires a fresh biometric. Distinct from [None]/[Loading] so the sheet
      * can render an explicit "Locked — tap to unlock" affordance instead of an
      * indefinite shimmer. The sigil stays Forged (lock ≠ sign out); unlocking is

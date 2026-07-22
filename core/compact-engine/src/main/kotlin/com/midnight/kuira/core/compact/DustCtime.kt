@@ -17,16 +17,16 @@ package com.midnight.kuira.core.compact
  * fixed sync-time anchor is safe alone:
  *
  *  - **Tip anchor → error 170 (`InvalidDustSpendProof`).** On an active chain the tip
- *    races ahead of our locally-replayed dust state between sync and balance. Anchoring
- *    `ctime` to the tip resolves a *newer* root than the one our proof commits to, so the
- *    node rejects the spend (#287). The cure was to anchor to the dust state's `sync_time`
- *    (the block time of the last replayed dust event), whose predecessor lookup lands on
- *    *our* root.
+ *  races ahead of our locally-replayed dust state between sync and balance. Anchoring
+ *  `ctime` to the tip resolves a *newer* root than the one our proof commits to, so the
+ *  node rejects the spend. The cure was to anchor to the dust state's `sync_time`
+ *  (the block time of the last replayed dust event), whose predecessor lookup lands on
+ *  *our* root.
  *
  *  - **Sync-time anchor → error 171 (`OutOfDustValidityWindow`).** When dust events are
- *    sparse (an idle wallet on a long-running chain), `sync_time` freezes at the last
- *    event's time — hours old — while the tip advances. `ctime = sync_time` then drifts
- *    more than `grace` behind `tblock` and the node rejects it as out-of-window.
+ *  sparse (an idle wallet on a long-running chain), `sync_time` freezes at the last
+ *  event's time — hours old — while the tip advances. `ctime = sync_time` then drifts
+ *  more than `grace` behind `tblock` and the node rejects it as out-of-window.
  *
  * The resolution: keep `sync_time` while it is *recent* (a racing tip with unapplied
  * events is always recent → preserves the 170 fix), and clamp toward the tip only once
@@ -62,12 +62,12 @@ object DustCtime {
      * The `ctime` to anchor a dust spend to.
      *
      * @param dustSyncTimeMs the dust state's `sync_time` in ms — the block time of its last
-     *   replayed dust event; `<= 0` means the state reported no sync time.
+     *  replayed dust event; `<= 0` means the state reported no sync time.
      * @param tipMs the indexer's current block (tip) time in ms.
      * @param safetyWindowMs how recent `sync_time` may be and still be kept verbatim; beyond
-     *   this it's treated as idle/drifted and clamped toward the tip. Defaults to
-     *   [SAFETY_WINDOW_MS]; injectable so a caller with the real `dust_grace_period` can pass
-     *   a window derived from it.
+     *  this it's treated as idle/drifted and clamped toward the tip. Defaults to
+     *  [SAFETY_WINDOW_MS]; injectable so a caller with the real `dust_grace_period` can pass
+     *  a window derived from it.
      * @param tipBackoffMs headroom below the tip when clamping (see [TIP_BACKOFF_MS]).
      */
     fun anchorMs(
@@ -85,7 +85,7 @@ object DustCtime {
 
         // Recent sync time → keep it verbatim. A tip that raced ahead with UNAPPLIED dust
         // events is always recent (the events are seconds/minutes old), so keeping
-        // sync_time here is exactly the #287 error-170 protection.
+        // sync_time here is exactly the error-170 protection.
         if (tipMs - dustSyncTimeMs <= safetyWindowMs) return dustSyncTimeMs
 
         // Drifted/idle sync time → clamp toward the tip, backing off so ctime stays

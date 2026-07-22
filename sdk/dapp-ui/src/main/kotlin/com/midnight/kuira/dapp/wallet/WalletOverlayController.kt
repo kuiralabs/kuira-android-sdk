@@ -94,7 +94,7 @@ class WalletOverlayController {
      * A sheet-launched overlay (the default) reopens so Back returns to the sheet it came from.
      * An overlay launched DIRECTLY from an enlarged floating chip's own action buttons (Send /
      * Receive / Settings on the widget itself) must NOT — there was no sheet, so springing one
-     * open on close is a surprise sheet over the persistent widget (#52).
+     * open on close is a surprise sheet over the persistent widget.
      */
     private var reopenSheetOnClose: Boolean = true
 
@@ -134,7 +134,7 @@ class WalletOverlayController {
     }
 
     /**
-     * Close the active overlay WITHOUT re-opening any sheet. Used when a session lock (#251) tears
+     * Close the active overlay WITHOUT re-opening any sheet. Used when a session lock tears
      * the overlay down: the lock cover must be the only surface, and the sheet must NOT spring back
      * on unlock. Deliberately does not bump a reopen counter.
      */

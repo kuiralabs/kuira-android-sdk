@@ -18,7 +18,7 @@ interface DustBackupDigestStore {
     fun get(address: String): String?
     fun put(address: String, digest: String)
 
-    /** Drop all recorded digests (#246) — used when the cloud blob is deleted so a later
+    /** Drop all recorded digests — used when the cloud blob is deleted so a later
      *  re-enable re-uploads instead of the hash-guard skipping an "already-uploaded" checkpoint. */
     fun clear()
 }

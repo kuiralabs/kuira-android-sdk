@@ -87,29 +87,29 @@ private object PanelDimens {
     // Sheet (expanded view on pill tap).
     val SheetHorizontalPadding = 24.dp
     val SheetVerticalPadding = 20.dp
-    val SheetActionsTopGap = 28.dp     // Above the action-button row.
-    val SheetButtonRowGap = 10.dp      // Between buttons + below the row.
-    val SheetSectionGap = 14.dp        // Between address / airdrop / balance sections.
-    val SheetLabelGap = 4.dp           // Section label → content.
-    val SheetMessageGap = 6.dp         // Before status.message.
-    val SheetBusyGap = 8.dp            // Before status.busy line.
+    val SheetActionsTopGap = 28.dp // Above the action-button row.
+    val SheetButtonRowGap = 10.dp // Between buttons + below the row.
+    val SheetSectionGap = 14.dp // Between address / airdrop / balance sections.
+    val SheetLabelGap = 4.dp // Section label → content.
+    val SheetMessageGap = 6.dp // Before status.message.
+    val SheetBusyGap = 8.dp // Before status.busy line.
     val SheetBottomGap = 8.dp
 
     // Action buttons.
-    val ButtonHeight = 54.dp     // prominent CTA — above the 48dp HIG floor
+    val ButtonHeight = 54.dp // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
     val ButtonHorizontalPadding = 8.dp
 }
 
 private object PanelType {
     val PillText = 14.sp
-    val SectionLabel = 11.sp           // Small uppercase: "address", "balance", etc.
+    val SectionLabel = 11.sp // Small uppercase: "address", "balance", etc.
     val ButtonText = 15.sp
-    val Body = 14.sp                   // Address, balance row.
-    val Caption = 13.sp                // Busy + message lines.
+    val Body = 14.sp // Address, balance row.
+    val Caption = 13.sp // Busy + message lines.
     val LoadingText = 16.sp
     val ErrorText = 14.sp
-    val AirdropCmd = 13.sp             // Monospace airdrop command.
+    val AirdropCmd = 13.sp // Monospace airdrop command.
 }
 
 /**
@@ -133,14 +133,14 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
  * **Typical usage:**
  * ```kotlin
  * Box(modifier = Modifier.fillMaxSize()) {
- *     // your app's main content
- *     YourScreen()
+ *  // your app's main content
+ *  YourScreen()
  *
- *     // pill anchored top-right; sheet appears on tap
- *     WalletStatusPanel(
- *         network = MidnightNetwork.UNDEPLOYED,
- *         modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
- *     )
+ *  // pill anchored top-right; sheet appears on tap
+ *  WalletStatusPanel(
+ *  network = MidnightNetwork.UNDEPLOYED,
+ *  modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+ *  )
  * }
  * ```
  *
@@ -150,16 +150,16 @@ internal const val DEFAULT_AIRDROP_AMOUNT = 10_000
  * (e.g. share the SDK with other features), pass a custom [viewModel].
  *
  * @param initialNetwork Network the panel starts on. The user can change it
- *   via the sheet's network chip row — that selection is owned inside the
- *   panel from then on, the host doesn't need to track it for wallet use.
+ *  via the sheet's network chip row — that selection is owned inside the
+ *  panel from then on, the host doesn't need to track it for wallet use.
  * @param modifier Modifier applied to the pill — typical placement is
- *   `Modifier.align(Alignment.TopEnd).padding(...)`.
+ *  `Modifier.align(Alignment.TopEnd).padding(...)`.
  * @param colors UI palette; defaults match dark-themed example apps.
  * @param viewModel Custom panel VM. Defaults to one obtained from Hilt via [hiltViewModel].
  * @param onNetworkChange Fires after the user picks a new network in the
- *   sheet's chip row. Defaults to no-op; useful for example apps whose
- *   contract operations (deploy / connect) need to target the same chain
- *   the wallet is on — they can mirror this into their own state.
+ *  sheet's chip row. Defaults to no-op; useful for example apps whose
+ *  contract operations (deploy / connect) need to target the same chain
+ *  the wallet is on — they can mirror this into their own state.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -243,7 +243,7 @@ fun WalletStatusPanel(
         if (overlay.walletSheetReopen > 0) sheetOpen = true
     }
 
-    // Whole-app session lock (#14): a ModalBottomSheet renders in its own window
+    // Whole-app session lock: a ModalBottomSheet renders in its own window
     // ABOVE the activity content, so if a lock fires while the sheet is open it would
     // float on top of the SessionLockGate. Close it on lock so the gate is the only
     // surface the user sees. (The full-screen overlays are handled by the host, which
@@ -302,7 +302,7 @@ fun WalletStatusPanel(
             chipUi,
             { sheetOpen = true },
             // Launched from the enlarged chip's own button — there's no sheet to return to, so
-            // don't spring one open on close (#52). The sheet's Send/Receive keep the default.
+            // don't spring one open on close. The sheet's Send/Receive keep the default.
             { viewModel.resetSendState(); overlay.open(WalletOverlay.Send, reopenSheetOnClose = false) },
             { overlay.open(WalletOverlay.Receive, reopenSheetOnClose = false) },
         )
@@ -371,13 +371,13 @@ fun WalletStatusPanel(
     LaunchedEffect(Unit) {
         viewModel.consentRequests.collect { request -> consentLauncher.launch(request) }
     }
-    // Restore-gate consent launches (#61) go through the SAME launcher; results return via
+    // Restore-gate consent launches go through the SAME launcher; results return via
     // onConsentResult, which offers them to the gate before the enable flow.
     LaunchedEffect(Unit) {
         viewModel.gateConsentRequests.collect { request -> consentLauncher.launch(request) }
     }
 
-    // Restore-over-genesis offer (#61): a blocking sign-in step. Deliberately NOT dismissible
+    // Restore-over-genesis offer: a blocking sign-in step. Deliberately NOT dismissible
     // by outside-tap/back — the whole point is that skipping a restore must be an explicit
     // choice with the cost stated, never an accidental dismissal (which used to silently cost
     // a full genesis replay). The dust sync waits on this answer.
@@ -403,7 +403,7 @@ fun WalletStatusPanel(
         )
     }
 
-    // One-time backup-setup offer for a NEW wallet (the enable side of #61): the one Drive
+    // One-time backup-setup offer for a NEW wallet (the enable side of ): the one Drive
     // connect granted here is what makes every future install restore silently. Dismissible —
     // a new wallet has nothing at stake yet, and the BackupSection toggle remains.
     val backupSetupOffer by viewModel.backupSetupOffer.collectAsStateWithLifecycle()
@@ -651,7 +651,7 @@ internal val MidnightNetwork.pillName: String
  */
 private const val SHIELD_GLYPH = "🛡"
 
-// Restore-over-genesis offer copy (#61). Benefit-first: lead with what the user gets.
+// Restore-over-genesis offer copy. Benefit-first: lead with what the user gets.
 private const val RESTORE_OFFER_TITLE = "Restore your wallet data?"
 private const val RESTORE_OFFER_BODY =
     "We found a previous wallet for this account. Connect Google Drive to restore its synced " +
@@ -719,7 +719,7 @@ private fun WalletSheetContent(
                 .padding(
                     start = PanelDimens.SheetHorizontalPadding,
                     end = PanelDimens.SheetHorizontalPadding,
-                    top = 4.dp,                          // tight top — was 20dp of dead space
+                    top = 4.dp, // tight top — was 20dp of dead space
                     bottom = PanelDimens.SheetVerticalPadding,
                 ),
         ) {

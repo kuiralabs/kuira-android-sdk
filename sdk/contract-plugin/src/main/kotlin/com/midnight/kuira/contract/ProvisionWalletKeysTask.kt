@@ -16,7 +16,7 @@ import java.security.MessageDigest
 /**
  * Downloads the protocol-level wallet proving keys (zswap/dust/BLS) ONCE at
  * build time and stages them into `assets/wallet-keys` so the APK ships them —
- * the offline-bundle half of #256. Pairs with the SDK's
+ * the offline-bundle half of. Pairs with the SDK's
  * `ProvingKeyManager.installWalletKeysFromAssets`, which installs them on device
  * with no network.
  *
@@ -60,7 +60,7 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
         val files = walletKeyFiles(v)
 
         // 1. Ensure each key is in the machine cache (download with retry only
-        //    when missing/empty — the keys are immutable per version).
+        //  when missing/empty — the keys are immutable per version).
         var downloaded = 0
         for ((remotePath, localRel) in files) {
             val cached = File(cache, localRel)
@@ -71,7 +71,7 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
         }
 
         // 2. Stage cache → assets (content-aware: copy only when bytes differ, so
-        //    an unchanged set leaves the assets untouched between builds).
+        //  an unchanged set leaves the assets untouched between builds).
         for ((_, localRel) in files) {
             val src = File(cache, localRel)
             val dst = File(out, localRel)

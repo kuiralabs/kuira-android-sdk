@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * the force re-sync both go through it, so there's never a second collector racing
  * the first on the same address.
  *
- * **Why force re-sync is needed (roadmap #52).** The unshielded UTXO cache is
+ * **Why force re-sync is needed (roadmap ).** The unshielded UTXO cache is
  * event-driven (created / spent deltas), with no reconcile against the indexer's
  * current set. A *missed* spent-event — a sibling app on the same shared wallet
  * spent a coin while this app was backgrounded, or a subscription gap — leaves a
@@ -50,10 +50,10 @@ internal class UnshieldedSubscription(
      * is intentionally not consumed here.
      *
      * @param forceFullResync true → wipe the sync cursor + unshielded UTXOs for
-     *   [address] ONCE before subscribing, forcing a genesis replay. The cache
-     *   rebuilds from the indexer, so the balance momentarily drops toward 0 then
-     *   climbs back as events replay. UTXO-cache only — dust and shielded state are
-     *   untouched. Default false (the normal incremental resume).
+     *  [address] ONCE before subscribing, forcing a genesis replay. The cache
+     *  rebuilds from the indexer, so the balance momentarily drops toward 0 then
+     *  climbs back as events replay. UTXO-cache only — dust and shielded state are
+     *  untouched. Default false (the normal incremental resume).
      */
     fun start(forceFullResync: Boolean = false) {
         job?.cancel()

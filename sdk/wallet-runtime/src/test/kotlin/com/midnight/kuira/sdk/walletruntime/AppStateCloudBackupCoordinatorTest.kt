@@ -11,7 +11,7 @@ import org.junit.Test
 /**
  * Pure JVM tests for the app-state cloud backup coordinator: the silent,
  * seed-keyed, idempotent sibling of the dust coordinator that makes automatic
- * app-state backup possible (#244).
+ * app-state backup possible.
  */
 class AppStateCloudBackupCoordinatorTest {
 

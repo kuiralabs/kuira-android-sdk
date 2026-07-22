@@ -21,7 +21,7 @@ object TestFixtures {
      * (Official Trezor test vectors use "TREZOR" passphrase for all vectors)
      *
      * Full 64-byte PBKDF2 output (Lace compatible).
-     * See docs/LACE_COMPATIBILITY.md for full explanation.
+     * See internal design notes for full explanation.
      */
     const val EXPECTED_SEED_TREZOR_PASSPHRASE =
         "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd30971" +
@@ -32,7 +32,7 @@ object TestFixtures {
      * (Most wallets use empty passphrase by default)
      *
      * Full 64-byte PBKDF2 output (Lace compatible).
-     * See docs/LACE_COMPATIBILITY.md for full explanation.
+     * See internal design notes for full explanation.
      */
     const val EXPECTED_SEED_EMPTY_PASSPHRASE =
         "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70" +

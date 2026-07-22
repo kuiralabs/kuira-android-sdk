@@ -16,7 +16,7 @@ import java.net.InetSocketAddress
 
 /**
  * Coverage for [ProvisionWalletKeysTask] — the build-time half of the wallet-key
- * offline bundle (#256). The end-to-end test serves fake keys from an in-process
+ * offline bundle. The end-to-end test serves fake keys from an in-process
  * [HttpServer] (no real network), so it proves the download → cache → stage →
  * version.txt pipeline hermetically.
  */

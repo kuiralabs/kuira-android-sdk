@@ -17,20 +17,20 @@ import java.io.File
 
 /**
  * Proves the correctness claim the shielded *incremental* (checkpoint + delta) sync depends
- * on — the gate for #279 (#1) before [com.midnight.kuira.core.indexer.repository.ShieldedRepository]
+ * on — the gate for before [com.midnight.kuira.core.indexer.repository.ShieldedRepository]
  * may resume from a saved checkpoint instead of re-replaying every zswap event from genesis on
  * each refresh.
  *
  *  1. **checkpoint + delta == genesis** — replaying a delta on top of a
- *     serialize→deserialize-restored [ZswapLocalState] lands on the IDENTICAL state (same
- *     serialized bytes, `firstFree`, coin count, balances) as replaying every event from
- *     genesis in one pass. If the native `replayEvents` rebuilt from scratch (instead of
- *     appending onto the restored tree), or appended at the wrong frontier, this fails —
- *     exactly the `NonLinearInsertion`/wrong-root bug class the dust side hit (#236). This is
- *     the experiment that decides whether the delta is safe to wire.
+ *  serialize→deserialize-restored [ZswapLocalState] lands on the IDENTICAL state (same
+ *  serialized bytes, `firstFree`, coin count, balances) as replaying every event from
+ *  genesis in one pass. If the native `replayEvents` rebuilt from scratch (instead of
+ *  appending onto the restored tree), or appended at the wrong frontier, this fails —
+ *  exactly the `NonLinearInsertion`/wrong-root bug class the dust side hit. This is
+ *  the experiment that decides whether the delta is safe to wire.
  *  2. **serialize/deserialize is lossless** on non-empty state.
  *  3. **genesis replay is deterministic** — replaying the same events twice yields identical
- *     serialized bytes (so the byte-equality used in #1 is a valid full-state comparison).
+ *  serialized bytes (so the byte-equality used in is a valid full-state comparison).
  *  4. **a torn (misaligned) resume is rejected**, not silently accepted wrong.
  *
  * Runs against a bundled zswap event fixture (real PREPROD events captured once + a fixed
@@ -58,7 +58,7 @@ class ZswapCheckpointResumeTest {
         genesis.close()
 
         // (B) Checkpoint + delta: replay the first half, persist through the real checkpoint
-        //     path (serialize → deserialize), then replay the remaining events on top.
+        //  path (serialize → deserialize), then replay the remaining events on top.
         val mid = events.size / 2
         val checkpoint = replayAll(seed, events.subList(0, mid))
         val serialized = checkpoint.serialize()
@@ -70,8 +70,8 @@ class ZswapCheckpointResumeTest {
         val resumed = replayOnto(restored!!, seed, events.subList(mid, events.size))
 
         // (C) The identity: restored + delta must equal genesis, exactly. Byte-equal serialized
-        //     state is the strongest proof (it captures the full commitment tree, for which the
-        //     wrapper exposes no root accessor); the derived values are belt-and-suspenders.
+        //  state is the strongest proof (it captures the full commitment tree, for which the
+        //  wrapper exposes no root accessor); the derived values are belt-and-suspenders.
         assertEquals("firstFree (tree position)", genFirstFree, resumed.getFirstFree())
         assertEquals("coin count", genCoins, resumed.getCoinCount())
         assertEquals("balances", genBalances, resumed.getBalances())
@@ -140,7 +140,7 @@ class ZswapCheckpointResumeTest {
     }
 
     /**
-     * #290: the streamed, 500-event-chunked file replay
+     * : the streamed, 500-event-chunked file replay
      * ([ZswapLocalState.replayEventsFromFile]) must land on the IDENTICAL state as the
      * in-memory single-pass [ZswapLocalState.replayEvents]. This is the device-level proof of
      * the cold-shielded-sync rewrite that removed the giant-hex-String GC freeze: the events

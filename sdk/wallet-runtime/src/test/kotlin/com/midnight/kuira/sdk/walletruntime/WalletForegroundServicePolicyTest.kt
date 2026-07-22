@@ -4,17 +4,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Lifecycle matrix for [decideForegroundService] (#261-264, generalizing #235) — the
+ * Lifecycle matrix for [decideForegroundService] (#261-264, generalizing ) — the
  * wallet foreground service's start/stop policy. Pure function, so every
  * (activeOps × syncing × hardLocked × running) combination that matters is pinned here.
  * The notification shows whenever an operation is in flight OR the wallet is syncing
  * (foreground OR background); only a HARD lock (the SDK actually torn down) suppresses it —
  * a soft-lock (app backgrounded, SDK kept alive) must NOT. The sync-only rows
- * (activeOps = false) are the #235 regression guard.
+ * (activeOps = false) are the regression guard.
  */
 class WalletForegroundServicePolicyTest {
 
-    // ── Sync dimension (activeOps = false) — preserves the #235 behaviour ──
+    // ── Sync dimension (activeOps = false) — preserves the behaviour ──
 
     @Test
     fun `syncing starts the service`() {
@@ -40,7 +40,7 @@ class WalletForegroundServicePolicyTest {
         )
     }
 
-    // ── Operation dimension (syncing = false) — the #261 generalization ──
+    // ── Operation dimension (syncing = false) — the generalization ──
 
     @Test
     fun `an active operation starts the service`() {
@@ -96,7 +96,7 @@ class WalletForegroundServicePolicyTest {
     fun `a soft-lock (not hard) keeps the service up while an operation is in flight`() {
         // App backgrounded + soft-locked (SDK still alive) while a send/contract op runs: the FGS
         // must KEEP the process alive. hardLocked = false, so an active op still drives Update/Start
-        // — the regression that #261-264 process-survival depends on not having.
+        // — the regression that -264 process-survival depends on not having.
         assertEquals(
             ForegroundServiceAction.Update,
             decideForegroundService(activeOps = true, syncing = false, hardLocked = false, running = true),

@@ -26,7 +26,7 @@ class TransactionSubmitterTest {
     fun `submitAndWait returns Success when transaction is confirmed`() = runTest {
         // Given: Mock node client that returns finalized result via WebSocket
         val nodeClient = mockk<NodeRpcClient>()
-        val expectedTxHash = "a".repeat(64)  // 64 hex chars
+        val expectedTxHash = "a".repeat(64) // 64 hex chars
         coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } returns
             TransactionFinalizationResult.Finalized(
                 txHash = expectedTxHash,
@@ -129,7 +129,7 @@ class TransactionSubmitterTest {
         assertTrue(failed.reason.contains("rejected"))
     }
 
-    // #287: error 170 (stale dust spend root) must be detectable so the send path can
+    // : error 170 (stale dust spend root) must be detectable so the send path can
     // re-sync dust and retry, rather than surfacing a dead "Invalid Transaction".
     @Test
     fun `TransactionRejected isDustSpendProof matches node error 170 only`() {
@@ -231,7 +231,7 @@ class TransactionSubmitterTest {
     // ==================== Test Helpers ====================
 
     /**
-     * #291: the dust-fee send must load the dust state ONCE, not twice. Pre-#291,
+     * : the dust-fee send must load the dust state ONCE, not twice. Pre-#291,
      * `buildDustActions` deserialized the multi-MB dust state internally AND `submitWithFees`
      * deserialized it again — ~2s/~350MB each, back-to-back, starving the UI (the PreProd
      * send-screen freeze). Now `submitWithFees` loads it once, BEFORE `buildDustActions`, and
@@ -295,7 +295,7 @@ class TransactionSubmitterTest {
         val input = UtxoSpend(
             intentHash = "1".repeat(64),
             outputNo = 0,
-            value = BigInteger("100000000000"),  // 100 NIGHT
+            value = BigInteger("100000000000"), // 100 NIGHT
             owner = "2".repeat(64),
             ownerPublicKey = UtxoSpend.TEST_PUBLIC_KEY,
             tokenType = "0".repeat(64)
@@ -307,7 +307,7 @@ class TransactionSubmitterTest {
             tokenType = "0".repeat(64)
         )
 
-        val signature = ByteArray(64) { 4 }  // Mock signature
+        val signature = ByteArray(64) { 4 } // Mock signature
 
         val offer = UnshieldedOffer(
             inputs = listOf(input),
@@ -318,7 +318,7 @@ class TransactionSubmitterTest {
         return Intent(
             guaranteedUnshieldedOffer = offer,
             fallibleUnshieldedOffer = null,
-            ttl = 1704067200000  // 2024-01-01
+            ttl = 1704067200000 // 2024-01-01
         )
     }
 }

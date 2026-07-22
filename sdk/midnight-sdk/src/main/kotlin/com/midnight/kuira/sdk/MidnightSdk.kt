@@ -72,15 +72,15 @@ import java.util.Arrays
  *
  * ```kotlin
  * val sdk = MidnightSdk.Builder(context)
- *     .network(MidnightNetwork.PREPROD)
- *     .seed(mnemonicSeed)
- *     .build()
+ * .network(MidnightNetwork.PREPROD)
+ * .seed(mnemonicSeed)
+ * .build()
  *
  * val contract = MidnightContract.create(sdk.config) {
- *     contractJs = assets.open("runtime/my-contract-iife.js")
- *     address = contractAddress
- *     coinPublicKey = sdk.coinPublicKey
- *     // ... witnesses, private state
+ *  contractJs = assets.open("runtime/my-contract-iife.js")
+ *  address = contractAddress
+ *  coinPublicKey = sdk.coinPublicKey
+ *  //... witnesses, private state
  * }
  *
  * val receipt = contract.call("myCircuit", arg1) // Fully standalone
@@ -148,7 +148,7 @@ class MidnightSdk private constructor(
     init {
         // Feed the wallet the live NIGHT-UTXO list so its `dustRegistered` signal
         // reflects true per-UTXO registration ("are all NIGHT UTXOs generating?")
-        // rather than the dust>0 heuristic (#265).
+        // rather than the dust>0 heuristic.
         wallet.nightUtxoJsonProvider = {
             nightUtxosToJson(
                 utxoManager.getUnspentUtxos(walletAddress)
@@ -159,7 +159,7 @@ class MidnightSdk private constructor(
 
     /**
      * One-time pre-flight: confirm the node's ledger is coherent with the client's bundled version,
-     * so a skew surfaces as a named warning rather than an opaque `Custom error: N` mid-submit (#16).
+     * so a skew surfaces as a named warning rather than an opaque `Custom error: N` mid-submit.
      *
      * Memoized via [VersionCoherenceChecker] — the RPC + native read run at most once per SDK
      * instance. NON-BLOCKING by policy ([VersionCoherence.HARD_FAIL_ON_SKEW]): a skew logs loudly and
@@ -193,10 +193,10 @@ class MidnightSdk private constructor(
      * [MidnightWallet.waitForFunding] first if the wallet is fresh.
      *
      * @return [SubmissionResult.Success] when the registration tx is finalized on
-     *   chain. [SubmissionResult.Pending] if the tx made it into a block but the
-     *   wait for finalization timed out (it'll usually finalize shortly after).
-     *   [SubmissionResult.Failed] if the chain rejected the tx, or no NIGHT UTXOs
-     *   are available, or the FFI builder returned null.
+     *  chain. [SubmissionResult.Pending] if the tx made it into a block but the
+     *  wait for finalization timed out (it'll usually finalize shortly after).
+     *  [SubmissionResult.Failed] if the chain rejected the tx, or no NIGHT UTXOs
+     *  are available, or the FFI builder returned null.
      */
     suspend fun registerForDustGeneration(): SubmissionResult = operations.run(
         OperationDescriptor(OperationKind.DustRegistration),
@@ -222,7 +222,7 @@ class MidnightSdk private constructor(
             )
         }
 
-        // One-time ledger-version pre-flight (#16): warns on skew (default) or hard-fails per policy.
+        // One-time ledger-version pre-flight: warns on skew (default) or hard-fails per policy.
         try {
             versionCoherenceChecker.ensure()
         } catch (e: VersionSkewException) {
@@ -238,12 +238,12 @@ class MidnightSdk private constructor(
 
         // Live ledger params drive two things, both read once (neither changes between iterations):
         //  - the registration TTL window: size it to the chain's global_ttl — a fixed 30-min window
-        //    overshoots a tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182);
+        //  overshoots a tight node (e.g. localnet ~100s) and the tx is rejected (custom error 182);
         //  - the dust maturity gate: the native builder uses these params to compute the
-        //    registration's actual fee and refuse to emit a tx the (fresh) coin can't self-pay
-        //    (which the node would reject as BalanceCheckOverspend / error 138). Without params the
-        //    gate is skipped, so a missing fetch would re-expose the 138 — we still proceed, but the
-        //    maturity wait below only engages when params are present.
+        //  registration's actual fee and refuse to emit a tx the (fresh) coin can't self-pay
+        //  (which the node would reject as BalanceCheckOverspend / error 138). Without params the
+        //  gate is skipped, so a missing fetch would re-expose the 138 — we still proceed, but the
+        //  maturity wait below only engages when params are present.
         val ledgerParamsHex = try {
             indexerClient.getCurrentBlockWithParams().ledgerParameters
         } catch (e: CancellationException) {
@@ -380,7 +380,7 @@ class MidnightSdk private constructor(
      * same `submitWithFees` path contract calls use. The wallet must have:
      *  - enough NIGHT to cover [amount] (else [SendResult.InsufficientFunds]), and
      *  - registered dust to pay the fee (call [registerForDustGeneration] once on a
-     *    fresh wallet); a missing/empty dust balance surfaces as [SendResult.Failed].
+     *  fresh wallet); a missing/empty dust balance surfaces as [SendResult.Failed].
      *
      * Inputs come from the SDK's already-derived state: NIGHT private key for the
      * per-input signatures, dust seed for the fee, the live [utxoManager] for the
@@ -390,12 +390,12 @@ class MidnightSdk private constructor(
      * the new balance immediately.
      *
      * @param toAddress Recipient's unshielded Bech32m address; must be the same
-     *   network (HRP) as this wallet.
+     *  network (HRP) as this wallet.
      * @param amount NIGHT to send, in the smallest unit (must be positive).
      * @param onProgress Optional coarse progress callback for driving a UI spinner.
      * @return a typed [SendResult] — never throws for an expected failure (invalid
-     *   address, insufficient funds, chain rejection); unexpected errors map to
-     *   [SendResult.Failed].
+     *  address, insufficient funds, chain rejection); unexpected errors map to
+     *  [SendResult.Failed].
      */
     suspend fun sendNight(
         toAddress: String,
@@ -417,7 +417,7 @@ class MidnightSdk private constructor(
         // same-network recipient) — pure + unit-tested in [validateSendRequest].
         validateSendRequest(amount, toAddress, walletAddress)?.let { return it }
 
-        // One-time ledger-version pre-flight (#16): a skew warns loudly (default) or, under a
+        // One-time ledger-version pre-flight: a skew warns loudly (default) or, under a
         // hard-fail policy, throws VersionSkewException — caught below and mapped to a typed failure.
         try {
             versionCoherenceChecker.ensure()
@@ -470,7 +470,7 @@ class MidnightSdk private constructor(
         onProgress?.invoke(SendProgress.SUBMITTING)
         var result = submitTransfer(toAddress, amount, senderPublicKey)
 
-        // #287: node error 170 (InvalidDustSpendProof) means our local dust commitment
+        // : node error 170 (InvalidDustSpendProof) means our local dust commitment
         // root lagged the chain at submit time (the indexer advanced between our
         // block-time anchor and the node's validation). Re-sync dust to the tip and
         // retry ONCE — the rebuild re-anchors ctime to the now-current indexed block,
@@ -501,7 +501,7 @@ class MidnightSdk private constructor(
         // Registration self-pays (allow_fee_payment), so it works even though this
         // transfer just consumed the prior backing. Runs on the SDK's subscriptionScope
         // so it survives this call returning; registerForDustGeneration enrolls as a
-        // tracked DustRegistration operation (#262), so it keeps the process alive under
+        // tracked DustRegistration operation, so it keeps the process alive under
         // the foreground service and fires its own finalization notification. The
         // accurate dustRegistered signal flips back to true on the next balance read.
         if (result is SubmissionResult.Success || result is SubmissionResult.Pending) {
@@ -784,7 +784,7 @@ class MidnightSdk private constructor(
 
     /**
      * Fire-and-forget [sendNight] on the SDK's lifecycle scope so the transfer survives
-     * the caller leaving the app (#263). Returns immediately; the durable lifecycle
+     * the caller leaving the app. Returns immediately; the durable lifecycle
      * (foreground service + finalization notification) is owned by the operation registry.
      * [onProgress] is best-effort for an in-app live view while the caller is still around;
      * [onResult] delivers the typed [SendResult] when done (also on the SDK scope, so it
@@ -805,13 +805,13 @@ class MidnightSdk private constructor(
         onResult?.invoke(result)
     }
 
-    // ── Durable protocol orchestrator (#253 + #254) ──
+    // ── Durable protocol orchestrator (#253 + ) ──
 
     private val protocolStore by lazy { ProtocolStore(config.context) }
 
     /**
      * Run a durable, idempotent multi-step protocol saga as ONE foreground operation
-     * (#253). Each [ProtocolScope.step] is skipped when its `doneWhen` is already true
+     *. Each [ProtocolScope.step] is skipped when its `doneWhen` is already true
      * on-ledger, so re-running [id] (after process death, or on app resume) resumes from
      * the first not-done step with no double-submit — the chain is the journal. The inner
      * `contract.call`s coalesce under this op, so it reads as ONE operation + one
@@ -851,7 +851,7 @@ class MidnightSdk private constructor(
         }
     }
 
-    /** Fire-and-forget [runProtocol] on the SDK's lifecycle scope (survives the caller); #253. */
+    /** Fire-and-forget [runProtocol] on the SDK's lifecycle scope (survives the caller);. */
     fun launchProtocol(
         id: String,
         label: String,
@@ -870,7 +870,7 @@ class MidnightSdk private constructor(
     fun inFlightProtocolIds(): Set<String> = protocolStore.inFlightIds()
 
     /**
-     * Observe the chain's new-block stream (#255). Each emission is a freshly-produced [BlockInfo]
+     * Observe the chain's new-block stream. Each emission is a freshly-produced [BlockInfo]
      * (height, hash, timestamp, ledger params). This is the same stream that drives
      * [com.midnight.kuira.core.compact.MidnightContract.observeLedger]; exposed here so a dApp can
      * react to chain progress directly (e.g. a tip indicator, time-gating). Cold — collecting opens
@@ -916,14 +916,14 @@ class MidnightSdk private constructor(
         private var dustRestoreGate: (suspend (RestoredAppState?) -> Unit)? = null
         private var appStateBackupFactory: ((seed: ByteArray) -> AppStateCloudBackup)? = null
         private var proactiveDustSync: Boolean = false
-        // Auto-fund the unshielded money path (kuira-sdk-android#4): a plain call to a
+        // Auto-fund the unshielded money path (kuira-sdk-android): a plain call to a
         // receiveUnshielded circuit builds + attaches the funding offer from this wallet. Explicit
         // offers always win; set false to require them (callers then get the clear "provide funding"
         // error instead of auto-funding).
         private var autoFundUnshieldedDeposits: Boolean = true
 
         /**
-         * Keep dust pre-synced in the background (#235). When enabled, the SDK
+         * Keep dust pre-synced in the background. When enabled, the SDK
          * runs a live tip-advance dust subscription so a transaction never waits
          * on a cold sync; progress is observable via `MidnightWallet.syncStatus`
          * (and surfaced by the foreground-service Live-Update notification). Off by
@@ -933,7 +933,7 @@ class MidnightSdk private constructor(
         fun proactiveDustSync(enabled: Boolean = true) = apply { this.proactiveDustSync = enabled }
 
         /** Auto-fund a receiveUnshielded deposit from this wallet when the caller supplies no offer
-         *  (kuira-sdk-android#4). Explicit offers always take precedence. Default: enabled. */
+         *  (kuira-sdk-android). Explicit offers always take precedence. Default: enabled. */
         fun autoFundUnshieldedDeposits(enabled: Boolean = true) = apply { this.autoFundUnshieldedDeposits = enabled }
 
         /** Set the Midnight network (PREPROD, PREVIEW, UNDEPLOYED). */
@@ -1122,7 +1122,7 @@ class MidnightSdk private constructor(
             // Held as a restartable controller (not a bare launch) so the wallet's
             // forceResyncUnshielded() can cancel + re-launch this same collect with
             // forceFullResync = true — a genesis rebuild of the UTXO cache to drop
-            // ghost AVAILABLE coins from a missed spent-event (roadmap #52).
+            // ghost AVAILABLE coins from a missed spent-event (roadmap ).
             val subscriptionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             val unshieldedSubscription = UnshieldedSubscription(
                 subscriptionManager = subscriptionManager,
@@ -1207,15 +1207,15 @@ class MidnightSdk private constructor(
                 spentDustNullifierStore = spentDustNullifierStore,
                 dustCloudBackup = dustCloudBackup,
                 appStateCloudBackup = appStateCloudBackup,
-                // #284: per-transaction inbound NIGHT receipts, classified by UTXO-set
+                // : per-transaction inbound NIGHT receipts, classified by UTXO-set
                 // provenance in the live subscription (own change is never a receipt).
                 receiptEvents = subscriptionManager.receipts,
                 // Restartable handle so wallet.forceResyncUnshielded() can rebuild the
-                // unshielded UTXO cache from genesis (roadmap #52 ghost-coin recovery).
+                // unshielded UTXO cache from genesis (roadmap ghost-coin recovery).
                 unshieldedSubscription = unshieldedSubscription,
             )
 
-            // ── Proactive dust tracker (#235) — opt-in ──
+            // ── Proactive dust tracker — opt-in ──
             //
             // Keeps dust current via a live tip-advance subscription so a tx never
             // waits on a cold sync. OFF by default (existing hosts unchanged). The
@@ -1234,11 +1234,11 @@ class MidnightSdk private constructor(
             // ── Transaction submitter for non-balanced txs (e.g. dust registration) ──
             //
             // [provingMode] picks where ZK proofs are generated:
-            //   - LOCAL  → on-device prover using cached keys; no proof-server
-            //              round-trip per transaction. Default.
-            //   - REMOTE → off-load to a proof server reachable at
-            //              [proofServerUrl] (falls back to the network's
-            //              local-dev proof server on `localhost:6300` when null).
+            //  - LOCAL → on-device prover using cached keys; no proof-server
+            //  round-trip per transaction. Default.
+            //  - REMOTE → off-load to a proof server reachable at
+            //  [proofServerUrl] (falls back to the network's
+            //  local-dev proof server on `localhost:6300` when null).
             //
             // [ProofServerClientImpl] always gets a non-null URL even in LOCAL
             // mode because the [TransactionSubmitter] constructor requires a
@@ -1250,7 +1250,7 @@ class MidnightSdk private constructor(
                 proofServerUrl = effectiveProofServerUrl,
                 developmentMode = networkConfig.developmentMode,
             )
-            // Dust-fee payment wiring (#240): submitWithFees / signAndSubmitTransfer
+            // Dust-fee payment wiring: submitWithFees / signAndSubmitTransfer
             // need a DustActionsBuilder + the shared dustRepository, otherwise they
             // throw "DustActionsBuilder required". FeeCalculator / DustSpendCreator
             // are stateless singletons.
@@ -1272,7 +1272,7 @@ class MidnightSdk private constructor(
             // made through `sdk.config` runs as a tracked foreground operation — the
             // FULL pipeline incl. ZK proving — with no per-call dApp code (#261-264).
             val operations = OperationRegistry()
-            // One memoized coherence checker shared by all submit paths (#16): send + dust
+            // One memoized coherence checker shared by all submit paths: send + dust
             // registration go through MidnightSdk; contract calls/deploys fire it here, in the
             // listener that brackets every MidnightContract operation made through `sdk.config`.
             val versionCoherenceChecker = VersionCoherenceChecker(nodeRpcClient)
@@ -1290,7 +1290,7 @@ class MidnightSdk private constructor(
                 .indexerUrl(networkConfig.indexerBaseUrl)
                 .transactionBalancer(wallet)
                 .operationListener(contractOperationListener)
-                // Reactive ledger reads (#255): contract.observeLedger() refreshes on each new
+                // Reactive ledger reads: contract.observeLedger() refreshes on each new
                 // block instead of polling. Map the indexer's block stream to bare ticks.
                 .blockSignals(indexerClient.subscribeToBlocks().map { })
                 .networkId(net.rustNetworkId)
@@ -1318,7 +1318,7 @@ class MidnightSdk private constructor(
                 indexerClient = indexerClient,
                 shieldedTracker = shieldedTracker,
             )
-            // Wire the unshielded auto-fund path (kuira-sdk-android#4): the provider needs the
+            // Wire the unshielded auto-fund path (kuira-sdk-android): the provider needs the
             // wallet, so it's set after construction. Explicit offers bypass it — it only fills an
             // empty deposit offer when the policy is on.
             config.configureUnshieldedAutoFund(autoFundUnshieldedDeposits) { tokenHex, amount ->

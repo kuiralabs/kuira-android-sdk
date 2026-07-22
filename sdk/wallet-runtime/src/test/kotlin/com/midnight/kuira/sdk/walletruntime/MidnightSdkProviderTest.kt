@@ -38,7 +38,7 @@ import org.robolectric.RobolectricTestRunner
  * or indexer socket required.
  *
  * Robolectric for `android.util.Log` shadowing (the provider logs build lifecycle).
- * The provider's only Context use is persisting the receive-poll target (#271),
+ * The provider's only Context use is persisting the receive-poll target,
  * wrapped in runCatching and given a relaxed mock here.
  */
 @OptIn(ExperimentalCoroutinesApi::class) // runCurrent — TestScope time control
@@ -62,14 +62,14 @@ class MidnightSdkProviderTest {
     )
 
     private fun newProvider() = MidnightSdkProvider(
-        // Relaxed: the provider only uses it to persist the receive-poll target (#271),
+        // Relaxed: the provider only uses it to persist the receive-poll target,
         // inside a runCatching — the write itself is covered by ReceiveCheckpointStore tests.
         appContext = mockk(relaxed = true),
         walletSeedSource = walletSeedSource,
         sdkFactory = sdkFactory,
-        // Network facade is unused by the build/rebuild paths under test (#285).
+        // Network facade is unused by the build/rebuild paths under test.
         networkStore = mockk(relaxed = true),
-        // Recovery contract (#252) is exposed by the provider but unused by the build/rebuild
+        // Recovery contract is exposed by the provider but unused by the build/rebuild
         // paths under test — a relaxed mock keeps the constructor satisfied.
         recoveryManager = mockk(relaxed = true),
     )

@@ -19,7 +19,7 @@ Adding the one line below brings:
 - **Wallet** — Midnight HD wallet (unshielded + shielded NIGHT, DUST gas), with live balance, send, receive, and a drop-in Compose **wallet panel** if you want it.
 - **Contract surface** — deploy / call / read state on any `.compact` contract; ZK proof generation runs on-device (no proof-server hop required).
 - **Indexer + chain client** — block / state / event subscription, backed by Midnight's official indexer.
-- **App-state cloud backup** — your dApp's per-user data rides the sigil's Block Store backup automatically (see [`examples/midnight-kicks/docs/CLOUD_PERSISTENCE.md`](examples/midnight-kicks/docs/CLOUD_PERSISTENCE.md)).
+- **App-state cloud backup** — your dApp's per-user data rides the sigil's Block Store backup automatically (see the internal docs).
 
 You can use it headless or pull in the panel UI — see the dependency choice below.
 
@@ -254,7 +254,7 @@ throws `SigilRequiredException` until a sigil exists. Forge it through
 | Dagger: *"PasskeyConfig cannot be provided without an @Provides-annotated method"* | Step 3 — declare your own `PasskeyConfig` module. |
 | Runtime: *"CLEARTEXT communication to 10.0.2.2 not permitted by network security policy"* | Step 5 — add the debug manifest. |
 | Biometric prompt fails / PRF returns null | Step 4 — `assetlinks.json` missing, wrong `package_name`, or wrong cert SHA-256. |
-| App balance stays at 0 after an airdrop | The wallet's background subscription is live; check `adb logcat` for indexer connectivity. If you're on localnet, see [`examples/midnight-kicks/docs/CLOUD_PERSISTENCE.md`](examples/midnight-kicks/docs/CLOUD_PERSISTENCE.md) — localnet state is ephemeral; restart wipes funds. |
+| App balance stays at 0 after an airdrop | The wallet's background subscription is live; check `adb logcat` for indexer connectivity. If you're on localnet, see the internal docs — localnet state is ephemeral; restart wipes funds. |
 | `IllegalArgumentException: Could not find io.github.kuiralabs:…` | Check the alpha version is current; the SDK is `0.1.0-alpha01` at the time of writing. |
 
 ---
@@ -301,7 +301,7 @@ version bump; no app-side code change.
 
 ## See also
 
-- [`docs/ALPHA02_PLAN.md`](docs/ALPHA02_PLAN.md) — what's landing in the next alpha cycle.
+- the internal docs — what's landing in the next alpha cycle.
 - [`examples/midnight-kicks/`](examples/midnight-kicks) — full PvP dApp, the deepest exercise of the SDK.
 - [`examples/bboard/`](examples/bboard) — simpler dApp, good first read.
-- [`examples/midnight-kicks/docs/PLAN.md`](examples/midnight-kicks/docs/PLAN.md#sdk-connector--wishlist-non-blockers) — SDK-connector wishlist (open items + accepted friction).
+- the internal docs — SDK-connector wishlist (open items + accepted friction).

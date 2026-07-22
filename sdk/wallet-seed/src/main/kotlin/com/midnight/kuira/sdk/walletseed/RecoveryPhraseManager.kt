@@ -11,10 +11,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Default [WalletRecovery] implementation (#252). Thin orchestration over the [RecoverySeedStore]
+ * Default [WalletRecovery] implementation. Thin orchestration over the [RecoverySeedStore]
  * (vault entropy + restore) and the pure [SeedDeriver] codec (entropy ↔ phrase). Holds no secret
  * state of its own: the only thing it persists is the user's "I've saved it" acknowledgment, a
- * local boolean — never the phrase or entropy (see `docs/security/recovery-model.md`).
+ * local boolean — never the phrase or entropy (see internal design notes).
  *
  * Internal: consumers depend on the [WalletRecovery] contract, not this class.
  */

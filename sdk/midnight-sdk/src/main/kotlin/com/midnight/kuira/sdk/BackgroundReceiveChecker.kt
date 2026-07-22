@@ -26,14 +26,14 @@ import kotlinx.coroutines.withTimeoutOrNull
  * IndexerClient — see [MidnightSdk]'s builder), as a bounded one-shot: start the unshielded-tx
  * subscription for the PUBLIC [address] (no seed — unshielded UTXOs are owned by the address,
  * not a private key), collect the per-transaction [ReceiptEvent]s the subscription classifies
- * (#284) while it catches up to tip ([SyncState.Synced]) or a budget elapses, then tear the
+ * while it catches up to tip ([SyncState.Synced]) or a budget elapses, then tear the
  * pipeline down and return what it saw.
  *
  * Receipts are classified by UTXO-set provenance in [SubscriptionManager], so this NEVER
  * reports a user's own change as a receipt — the same guarantee the live observer has. The
  * shared persisted sync cursor means a receipt already accounted for by the live SDK isn't
  * re-delivered here. Shielded receipts are out of scope (they need the seed-derived viewing
- * key — the #280 carve-out); this covers public NIGHT only.
+ * key — the carve-out); this covers public NIGHT only.
  *
  * Lives in midnight-sdk (which owns the indexer pipeline); wallet-runtime's worker calls it.
  * Lightweight — no DI, no live SDK instance.

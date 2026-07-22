@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The restore gate's decision ladder (#61), tested against the REAL stores (Robolectric
+ * The restore gate's decision ladder, tested against the REAL stores (Robolectric
  * prefs) — only the Drive boundary is mocked. These are the branches that decide whether a
  * fresh install restores in seconds or silently replays the whole event stream.
  */
@@ -131,10 +131,10 @@ class DustRestoreGateImplTest {
         val collector = launch(UnconfinedTestDispatcher(testScheduler)) {
             g.restoreOffer.collect { showing ->
                 if (showing) {
-                    g.connectRestore()      // user taps Connect & Restore…
+                    g.connectRestore() // user taps Connect & Restore…
                     g.completeConsent(null) // …but dismisses the system dialog
                     offerSurvivedDismissal = g.restoreOffer.value
-                    g.skipRestore()         // only this explicit choice proceeds
+                    g.skipRestore() // only this explicit choice proceeds
                 }
             }
         }

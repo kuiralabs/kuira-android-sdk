@@ -45,7 +45,7 @@ class DustCtimeTest {
     @Test
     fun `recent in-window sync time is kept verbatim (preserves the 170 fix)`() {
         // A tip that raced ahead with UNAPPLIED dust events is always recent; keeping
-        // sync_time here is exactly the #287 error-170 protection — do not clamp it.
+        // sync_time here is exactly the error-170 protection — do not clamp it.
         val recentSyncTime = tip - 5 * 60 * 1000L // 5 minutes behind, inside the 30-min window
 
         val ctime = DustCtime.anchorMs(dustSyncTimeMs = recentSyncTime, tipMs = tip)

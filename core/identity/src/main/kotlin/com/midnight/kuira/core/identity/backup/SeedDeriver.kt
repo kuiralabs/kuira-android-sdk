@@ -12,10 +12,10 @@ import java.security.SecureRandom
  *
  * Two outputs sit at different levels of the chain:
  *  - [derivePrfEntropy] — raw 32-byte PRF output. Suitable as
- *    BIP-39 entropy, an HKDF source, a symmetric key, etc.
+ *  BIP-39 entropy, an HKDF source, a symmetric key, etc.
  *  - [deriveBip39Seed] — full chain: PRF → 32-byte entropy →
- *    24-word mnemonic → 64-byte BIP-39 PBKDF2 seed. This is what
- *    `MidnightSdk.Builder.seed(...)` consumes.
+ *  24-word mnemonic → 64-byte BIP-39 PBKDF2 seed. This is what
+ *  `MidnightSdk.Builder.seed(...)` consumes.
  *
  * The PRF output is identical on every device + every Kuira
  * ecosystem app that shares the RP via `assetlinks.json`, so the
@@ -142,7 +142,7 @@ object SeedDeriver {
         return BIP39.mnemonicToSeed(mnemonic)
     }
 
-    // ── Recovery-phrase codec (#252) ───────────────────────────────────────────
+    // ── Recovery-phrase codec ───────────────────────────────────────────
     //
     // The wallet's 32-byte entropy IS BIP-39 entropy (see [entropyToBip39Seed]), so it has a
     // canonical 24-word phrase that reconstructs the exact wallet. These pure, deterministic

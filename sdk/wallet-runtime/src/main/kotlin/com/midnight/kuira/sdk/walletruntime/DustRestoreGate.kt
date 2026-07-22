@@ -7,7 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Host hook for dust-backup restore continuity (roadmap #61): awaited once before the first
+ * Host hook for dust-backup restore continuity (roadmap ): awaited once before the first
  * NO-CHECKPOINT dust sync of each SDK build — the host's chance to obtain Drive consent so
  * the cloud-checkpoint restore succeeds instead of the sync silently replaying from genesis.
  *

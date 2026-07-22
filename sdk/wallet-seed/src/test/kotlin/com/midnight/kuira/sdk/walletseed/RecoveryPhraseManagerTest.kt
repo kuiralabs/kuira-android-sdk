@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * #252: proves the reveal ↔ restore loop at the manager level, headless. A fake [RecoverySeedStore]
+ * : proves the reveal ↔ restore loop at the manager level, headless. A fake [RecoverySeedStore]
  * stands in for the real vault, so the test exercises the manager's orchestration (codec + the
  * saved-flag + the guards) without biometrics or a device. The headline test — reveal a phrase,
  * then restore from those exact words and confirm the SAME entropy is fed back — is what guarantees

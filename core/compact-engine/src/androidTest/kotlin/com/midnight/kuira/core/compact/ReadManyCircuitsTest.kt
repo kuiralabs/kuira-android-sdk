@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 /**
  * Batch view reads ([CircuitExecutor.readManyCircuits]): one engine session, one state snapshot,
  * each circuit isolated on a native clone, failures captured per key, and the state pool back to
- * baseline afterwards (the #55 leak invariant extended to the batch path).
+ * baseline afterwards (the leak invariant extended to the batch path).
  */
 @RunWith(AndroidJUnit4::class)
 class ReadManyCircuitsTest {

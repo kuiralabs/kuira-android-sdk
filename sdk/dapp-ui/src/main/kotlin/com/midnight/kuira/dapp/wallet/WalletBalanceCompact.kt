@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
  * @param statusLabel short status under the hero, e.g. "Synced" / "Syncing…".
  * @param dust formatted (abbreviated) dust, or null while first-loading.
  * @param dustRegistered true → ✓ on the dust row (only once a sync has settled, so
- *   it never contradicts an in-flight "Syncing dust…"); false → a Register affordance.
+ *  it never contradicts an in-flight "Syncing dust…"); false → a Register affordance.
  */
 data class WalletBalanceUi(
     val nightTotal: String,
@@ -117,7 +117,7 @@ fun WalletBalanceCompact(
             val synced = syncProgress == null
             // Status line + the ⓘ pinned bottom-RIGHT on the SAME row, so the ⓘ adds NO vertical space
             // to the card (it only grows for the sync indicator). The ⓘ explains the live-event NIGHT
-            // count can drift and points at Settings → Re-sync balance; gone once #52 lands.
+            // count can drift and points at Settings → Re-sync balance; gone once lands.
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     buildAnnotatedString {
@@ -212,7 +212,7 @@ fun WalletBalanceCompact(
  * The bottom-left ⓘ on the balance card. Tap → a persistent tooltip explaining the live-event NIGHT
  * count can drift out of sync, pointing at the Settings → Re-sync balance recovery. Mirrors the
  * Backup section's InfoDot; extensible (add lines as more wallet info is worth surfacing) and easy to
- * delete once reconciliation (#52) makes the drift impossible.
+ * delete once reconciliation makes the drift impossible.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

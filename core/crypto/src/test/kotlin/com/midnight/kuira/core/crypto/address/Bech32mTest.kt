@@ -17,7 +17,7 @@ import org.junit.Test
  *
  * **Reference:**
  * - BIP-350 test vectors: https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki
- * - Midnight SDK: /midnight-libraries/midnight-wallet/packages/address-format/test/addresses.json
+ * - Midnight SDK: the Midnight TypeScript SDK
  */
 class Bech32mTest {
 
@@ -43,14 +43,14 @@ class Bech32mTest {
 
     /**
      * Test Midnight SDK shielded coin public key encoding.
-     * From: midnight-libraries/midnight-wallet/packages/address-format/test/addresses.json
+     * From: the Midnight TypeScript SDK
      */
     @Test
     fun `test Midnight SDK shielded coin public key encoding`() {
         // From addresses.json entry 0 (mainnet):
         // "shieldedCPK": {
-        //   "hex": "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67",
-        //   "bech32m": "mn_shield-cpk1qe8qj25qkva7ug6qf3rvl3y0a366ydt2nvq30rwk5ckznavfdans20del8"
+        //  "hex": "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67",
+        //  "bech32m": "mn_shield-cpk1qe8qj25qkva7ug6qf3rvl3y0a366ydt2nvq30rwk5ckznavfdans20del8"
         // }
 
         val hex = "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67"
@@ -78,8 +78,8 @@ class Bech32mTest {
     fun `test Midnight SDK shielded coin public key with network`() {
         // From addresses.json entry 1 (my-private-net):
         // "shieldedCPK": {
-        //   "hex": "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67",
-        //   "bech32m": "mn_shield-cpk_my-private-net1qe8qj25qkva7ug6qf3rvl3y0a366ydt2nvq30rwk5ckznavfdansj6mrqy"
+        //  "hex": "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67",
+        //  "bech32m": "mn_shield-cpk_my-private-net1qe8qj25qkva7ug6qf3rvl3y0a366ydt2nvq30rwk5ckznavfdansj6mrqy"
         // }
 
         val hex = "064e092a80b33bee23404c46cfc48fec75a2356a9b01178dd6a62c29f5896f67"
@@ -105,9 +105,9 @@ class Bech32mTest {
     @Test
     fun `test encoding different data lengths`() {
         val testCases = listOf(
-            "mn_test" to ByteArray(20) { it.toByte() },  // 20 bytes
-            "mn_test" to ByteArray(32) { it.toByte() },  // 32 bytes (Midnight address length)
-            "mn_test" to ByteArray(64) { it.toByte() }   // 64 bytes
+            "mn_test" to ByteArray(20) { it.toByte() }, // 20 bytes
+            "mn_test" to ByteArray(32) { it.toByte() }, // 32 bytes (Midnight address length)
+            "mn_test" to ByteArray(64) { it.toByte() } // 64 bytes
         )
 
         testCases.forEach { (hrp, data) ->

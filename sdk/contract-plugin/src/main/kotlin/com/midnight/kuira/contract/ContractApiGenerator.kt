@@ -33,12 +33,12 @@ import com.squareup.kotlinpoet.UNIT
  *
  * ```kotlin
  * class VotingContract(private val handle: MidnightContract) {
- *     suspend fun createPoll(question: String, options: String, onProgress: ...) =
- *         handle.call("createPoll", question, options, onProgress = onProgress)
- *     suspend fun castVote(optionIdx: java.math.BigInteger, onProgress: ...) =
- *         handle.call("castVote", optionIdx, onProgress = onProgress)
- *     suspend fun closePoll(onProgress: ...) =
- *         handle.call("closePoll", onProgress = onProgress)
+ *  suspend fun createPoll(question: String, options: String, onProgress:...) =
+ *  handle.call("createPoll", question, options, onProgress = onProgress)
+ *  suspend fun castVote(optionIdx: java.math.BigInteger, onProgress:...) =
+ *  handle.call("castVote", optionIdx, onProgress = onProgress)
+ *  suspend fun closePoll(onProgress:...) =
+ *  handle.call("closePoll", onProgress = onProgress)
  * }
  * ```
  *
@@ -160,7 +160,7 @@ internal object ContractApiGenerator {
      * @param alias the managed-dir name (e.g. `voting`) — drives the class name.
      * @param contractInfoJson the raw `contract-info.json` text.
      * @param namespaced true for a `contracts { }` container entry — its circuit keys sync to a
-     *   per-alias asset dir (`<alias>-keys`), reflected in the generated `KEYS_ASSET_DIR` constant.
+     *  per-alias asset dir (`<alias>-keys`), reflected in the generated `KEYS_ASSET_DIR` constant.
      */
     fun generate(alias: String, contractInfoJson: String, namespaced: Boolean = false): FileSpec {
         val root = JsonValue.parse(contractInfoJson) as? JsonObject
@@ -221,7 +221,7 @@ internal object ContractApiGenerator {
             }
         }
 
-        // Typed ledger snapshot (#64): a `<Alias>Ledger` over the [MidnightLedger] with a `val` per
+        // Typed ledger snapshot: a `<Alias>Ledger` over the [MidnightLedger] with a `val` per
         // readable `ledger` field, plus `ledger()` / `observeLedger()` on the facade. Counter + Cell
         // fields are typed here; Map/Set/MerkleTree are skipped (Phase 2 needs native ADT queries) and
         // noted so a host knows to read them via `handle.ledger()` raw.
@@ -289,7 +289,7 @@ internal object ContractApiGenerator {
      * The shared `internal fun requireUintInRange(value, max): BigInteger` — validates that a Uint
      * argument fits its declared width `[0, maxval]` (u8/u64/u128/…) at the typed API boundary, then
      * returns it unchanged so it drops straight into the marshalled call. Rejecting here turns the
-     * #34 class (a Uint<128>-sized value silently decoded as u64) into a clear, immediate failure.
+     *  class (a Uint<128>-sized value silently decoded as u64) into a clear, immediate failure.
      */
     private fun requireUintInRangeHelper(): FunSpec =
         FunSpec.builder(REQUIRE_UINT)
@@ -568,10 +568,10 @@ internal object ContractApiGenerator {
      * Build the typed VIEW method for a value-returning circuit and register its reusable result
      * decoder. Two runtimes, chosen by the circuit's `pure` flag:
      *  - [local] = false → `read<Name>(args): <decoded>` running `handle.read(...)` — an on-chain
-     *    view against fetched contract state (a `pure: false` circuit).
-     *  - [local] = true  → `local<Name>(args): <decoded>` running `handle.readLocal(...)` — a PURE
-     *    circuit computed against `initialState()` with NO deployed instance (`pure: true` / no
-     *    proof), e.g. a commitment/hash circuit run before deploy.
+     *  view against fetched contract state (a `pure: false` circuit).
+     *  - [local] = true → `local<Name>(args): <decoded>` running `handle.readLocal(...)` — a PURE
+     *  circuit computed against `initialState()` with NO deployed instance (`pure: true` / no
+     *  proof), e.g. a commitment/hash circuit run before deploy.
      * Both decode the ABI `result-type` identically via the shared `decode<Circuit>Result`.
      *
      * Returns null when the result-type is Unit (empty Tuple, nothing to read), isn't decodable, or
@@ -629,7 +629,7 @@ internal object ContractApiGenerator {
     /**
      * Decode the whole read-result JSON string (the `json` variable in scope) into [returnType].
      *  - Struct -> `decode<Struct>(JSONObject(json))`
-     *  - Bytes  -> `decodeBytes(JSONTokener(json).nextValue())` (top-level Bytes is a hex string)
+     *  - Bytes -> `decodeBytes(JSONTokener(json).nextValue())` (top-level Bytes is a hex string)
      *  - scalar -> `decodeScalarValue(JSONTokener(json).nextValue())`
      */
     private fun decodeTopLevel(type: JsonObject, returnType: TypeName, supporting: SupportingTypes): CodeBlock {
@@ -873,8 +873,8 @@ internal object ContractApiGenerator {
      * generated `toCallArg()` (receiver = the field property).
      *
      * Caller guarantees [type] is marshallable (see [firstUnmarshallable]).
-     *  - Struct      -> `receiver.toCallArg()` (a `Map<String, Any?>`)
-     *  - Vector<S>   -> `receiver.map { it.toCallArg() }` when S is a Struct; else `receiver`
+     *  - Struct -> `receiver.toCallArg()` (a `Map<String, Any?>`)
+     *  - Vector<S> -> `receiver.map { it.toCallArg() }` when S is a Struct; else `receiver`
      *  - scalar/etc. -> `receiver` (ArgConverter already accepts these)
      */
     private fun marshalExpression(receiver: CodeBlock, type: JsonObject, supporting: SupportingTypes): CodeBlock {
@@ -887,7 +887,7 @@ internal object ContractApiGenerator {
             "Enum" -> CodeBlock.of("%T(%L.ordinal)", COMPACT_ENUM, receiver)
             // A bounded Uint is range-checked at the typed boundary so an out-of-range BigInteger is
             // rejected here (a clear require) rather than silently truncated/mis-decoded downstream —
-            // the #34 class, where a value that fits Uint<128> was fed to a u64 decode. The guard
+            // the class, where a value that fits Uint<128> was fed to a u64 decode. The guard
             // returns the same value, so it composes at any depth (see the Vector case) without
             // reshaping. Field (a prime-field element, no maxval) is unbounded → no guard.
             "Uint" -> {
@@ -984,15 +984,15 @@ internal object ContractApiGenerator {
      * it transitively references with [supporting].
      *
      * The closed ABI vocabulary (10 forms):
-     *  - `Uint` / `Field`        -> BigInteger
-     *  - `Boolean`               -> Boolean
-     *  - `Bytes`                 -> ByteArray
-     *  - `Vector`                -> List<inner>
-     *  - `Tuple` (empty)         -> Unit ; (non-empty) -> generated data class
-     *  - `Struct`                -> generated data class
-     *  - `Enum`                  -> generated enum class
-     *  - `Opaque` tsType=string  -> String ; else -> ByteArray (passthrough)
-     *  - `Alias`                 -> transparent (its inner type)
+     *  - `Uint` / `Field` -> BigInteger
+     *  - `Boolean` -> Boolean
+     *  - `Bytes` -> ByteArray
+     *  - `Vector` -> List<inner>
+     *  - `Tuple` (empty) -> Unit; (non-empty) -> generated data class
+     *  - `Struct` -> generated data class
+     *  - `Enum` -> generated enum class
+     *  - `Opaque` tsType=string -> String; else -> ByteArray (passthrough)
+     *  - `Alias` -> transparent (its inner type)
      */
     private fun mapType(type: JsonObject, supporting: SupportingTypes): TypeName {
         val name = (type["type-name"] as? JsonString)?.value
@@ -1118,7 +1118,7 @@ private class SupportingTypes(
             val builder = TypeSpec.classBuilder(name)
                 .apply { if (elements.isNotEmpty()) addModifiers(KModifier.DATA) }
 
-            // Body of the marshalling extension: mapOf("field" to <marshalled>, ...) and, when the
+            // Body of the marshalling extension: mapOf("field" to <marshalled>,...) and, when the
             // struct decodes, the read-decoder's constructor args: field = <decoded from JSONObject>.
             val mapEntries = mutableListOf<CodeBlock>()
             val decodeArgs = mutableListOf<CodeBlock>()
@@ -1140,7 +1140,7 @@ private class SupportingTypes(
             types[name] = builder.primaryConstructor(ctor.build()).build()
 
             // internal fun <Struct>.toCallArg(): Map<String, Any?> =
-            //     mapOf("bytes" to bytes, ...)  — the ArgConverter-safe (JS object) shape.
+            //  mapOf("bytes" to bytes,...) — the ArgConverter-safe (JS object) shape.
             val structClass = ClassName(pkg, name)
             val body = if (mapEntries.isEmpty()) {
                 CodeBlock.of("%M()", MAP_OF)
@@ -1160,7 +1160,7 @@ private class SupportingTypes(
                 .addStatement("return %L", body)
                 .build()
 
-            // internal fun decode<Struct>(o: JSONObject): <Struct> = <Struct>(field = <decoded>, ...)
+            // internal fun decode<Struct>(o: JSONObject): <Struct> = <Struct>(field = <decoded>,...)
             // The inverse of toCallArg — reads each field off the JSON `read` returns. Emitted ONLY
             // when the struct decodes (decodeField != null); an arg-only struct with an un-decodable
             // field gets no decoder (it can never appear in a result position anyway).
