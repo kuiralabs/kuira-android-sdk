@@ -38,3 +38,6 @@ gradle.properties
 
 # Scratch docs-preview screenshots from mkdocs review sessions.
 .preview-*.png
+
+# Internal docs live in the private kuira-android-docs repo
+/docs/
