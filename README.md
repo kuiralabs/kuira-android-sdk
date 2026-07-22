@@ -1,58 +1,93 @@
-# Kuira Android SDK — monorepo
+# Kuira Android — SDK, Wallet & Examples
 
-The source repository for the [Kuira Android SDK](https://kuiralabs.github.io/kuira-sdk-android/),
-the wallet app, and the example dApps. This repository is **private**; the
-SDK is consumed publicly via [Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs)
-and documented at [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/).
+Source repository for the **Kuira Android SDK**, the **Kuira wallet app**, and the
+**example dApps**. Kuira brings Midnight's zero-knowledge smart contracts to Android —
+deploy and call `.compact` contracts, generate ZK proofs on-device, and manage a
+self-custody wallet.
 
-If you're trying to **use** the SDK in your own dApp, go to the docs site
-instead — this README is for maintainers and authorized contributors
-working on the SDK itself.
+- **Using the SDK in your own dApp?** You don't need this repo — add the
+  [Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs) dependency
+  and follow the docs at
+  [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/).
+- **Want to build, run, or contribute to the SDK / wallet itself?** You're in the right
+  place — start with [Getting started](#getting-started) below.
 
 ---
 
-## Public face
+## Getting started
 
-The SDK ships to consumers via three permanent surfaces:
+### Prerequisites
 
-| Surface | Where |
+| Tool | Version / notes |
 |---|---|
-| Maven Central artifacts | `io.github.kuiralabs:*` |
-| Docs site | <https://kuiralabs.github.io/kuira-sdk-android> |
-| Docs repo (public) | <https://github.com/kuiralabs/kuira-sdk-android> |
+| JDK | 17 |
+| Android Studio | Ladybug or newer (or the command-line Android SDK) |
+| Android NDK | 26+ — required to build the Rust FFI |
+| Rust | via [rustup](https://rustup.rs); add the Android targets: `rustup target add aarch64-linux-android x86_64-linux-android` |
+| A localnet | node + indexer + proof server, to run anything on-chain — see the [localnet / integration guide](https://kuiralabs.github.io/kuira-sdk-android/) |
 
-The Maven coordinates and the docs URL are pinned in the POM at release
-time and never change between versions of the same line.
+### Clone (with the native submodule)
+
+The Rust FFI lives in the `kuira-crypto-ffi` git submodule, so clone recursively:
+
+```bash
+git clone --recurse-submodules https://github.com/nel349/kuira-android-wallet.git
+cd kuira-android-wallet
+# already cloned without submodules?
+git submodule update --init --recursive
+```
+
+### Build the native FFI
+
+Build the Rust static libraries once (and after any Rust change); CMake links them into
+the JNI `.so` during the Android build. `build-android.sh` auto-detects the NDK via
+`ANDROID_HOME` (or set `ANDROID_NDK`):
+
+```bash
+(cd kuira-crypto-ffi && ./build-android.sh)
+```
+
+### Build, test, run
+
+```bash
+./gradlew build            # compile every module
+./gradlew test             # JVM unit tests
+./gradlew apiCheck         # guard the published API surface
+./gradlew installDebug     # install the wallet app to a connected device/emulator
+```
+
+Instrumented tests and on-chain flows talk to a **localnet** (node `:9944`, indexer
+`:8088`, proof server `:6300`). An emulator reaches a host localnet at `10.0.2.2`. Stand
+one up with the localnet guide linked above, then fund a wallet before running on-chain.
+
+### Example dApps
+
+`examples/midnight-kicks` is a standalone Gradle project that consumes the SDK from Maven
+Local (or Central) — proof that the published surface is enough to build a working dApp.
+Build it from its own directory.
 
 ---
 
-## How this monorepo is laid out
+## Repository layout
 
-Conceptually, three concerns share the tree:
+Three concerns share the tree:
 
-- **The SDK** — the Kotlin code published to Maven Central. Lives in
-  the `sdk/*` and `core/*` module groups. `sdk:midnight-sdk`, `sdk:dapp-ui`,
-  and `sdk:contract-plugin` are the umbrella consumer entry points;
-  the `core/*` modules are SDK building blocks.
-- **The wallet app** — a reference dApp built on the SDK. Lives in
-  `app/` and `feature/*`. Not published; demonstrates the SDK end-to-end
-  on a real product.
-- **Example dApps** — `examples/bboard` and `examples/midnight-kicks`
-  (the latter as a submodule). Standalone Gradle projects that consume
-  the SDK from Maven Local or Central, proving the published surface
-  is enough to build a working dApp.
+- **The SDK** — the Kotlin published to Maven Central: the `sdk/*` and `core/*` module
+  groups. `sdk:midnight-sdk`, `sdk:dapp-ui`, and `sdk:contract-plugin` are the umbrella
+  entry points; `core/*` are the building blocks.
+- **The wallet app** — a reference dApp in `app/` + `feature/*`. Not published;
+  demonstrates the SDK end-to-end on a real product.
+- **Example dApps** — `examples/midnight-kicks` (+ others): standalone Gradle projects
+  that consume the published SDK.
+- **The native FFI** — `kuira-crypto-ffi` (git submodule): the Rust core, built into
+  per-ABI native libraries.
 
-The `sdk/*` + `core/*` modules are the published surface. `app/` +
-`feature/*` are intentionally NOT published; they're the wallet app's
-own internals. The publishing build script enforces this.
-
-Engineering plans, decision logs, research notes, and internal design
-docs live under `docs/`. That directory is internal — consumer-facing
-documentation lives in the kuira-sdk-android repository.
+Only `sdk/*` + `core/*` are published; `app/` + `feature/*` are intentionally not (the
+publish build enforces this).
 
 ---
 
-## Build, test, publish
+## Common tasks
 
 | Task | Command |
 |---|---|
@@ -60,17 +95,27 @@ documentation lives in the kuira-sdk-android repository.
 | Run all unit tests | `./gradlew test` |
 | Verify the public API surface hasn't drifted | `./gradlew apiCheck` |
 | Regenerate API baselines after intentional changes | `./gradlew apiDump` |
-| Generate aggregated Dokka HTML for the docs site | `./gradlew dokkaHtmlMultiModule` |
 | Install the wallet app to a device | `./gradlew installDebug` |
 | Publish all SDK modules to Maven Local | `./gradlew publishToMavenLocal` |
-| Publish to Maven Central staging | see [`RELEASE.md`](RELEASE.md) |
+| Build the native FFI | `(cd kuira-crypto-ffi && ./build-android.sh)` |
+| Cut a release | see [`RELEASE.md`](RELEASE.md) |
 
-The publish workflow runs `test`, `apiCheck`, the BBoard acceptance gate,
-and `publishToMavenCentral` in order; breaking changes block uploads.
+`group` and `version` come from `gradle.properties` — the single source of truth across
+every published module.
 
-`group` and `version` come from `gradle.properties` — single source of
-truth across every published module. A release is a one-line bump there
-plus a tag.
+---
+
+## Contributing
+
+Contributions are welcome.
+
+- Work on the **`development`** branch (the default working branch) and open PRs against
+  it.
+- Before a PR: `./gradlew test apiCheck`. If you intentionally changed the public API,
+  run `./gradlew apiDump` and commit the updated baselines.
+- Follow the engineering guidelines in [`guidelines/`](guidelines/) (architecture,
+  Kotlin, security, testing, Compose, Midnight).
+- Report security issues per the [security policy](SECURITY.md) — not via a public issue.
 
 ---
 
@@ -78,45 +123,36 @@ plus a tag.
 
 | Looking for | Read |
 |---|---|
-| What the SDK does and how to consume it | [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/) |
-| End-to-end integration recipe for the SDK | [`INTEGRATION.md`](INTEGRATION.md) |
-| Security policy, threat model, signature verification | [`SECURITY.md`](SECURITY.md) |
+| Using the SDK in a dApp | [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/) |
+| End-to-end integration recipe | [`INTEGRATION.md`](INTEGRATION.md) |
+| Security policy + threat model | [`SECURITY.md`](SECURITY.md) |
 | API stability + deprecation policy | [`STABILITY.md`](STABILITY.md) |
-| Per-release ritual (tag → CI → Central) | [`RELEASE.md`](RELEASE.md) |
-| What's landing in the next alpha cycle | the internal docs |
-| SDK-connector wishlist (open friction + design rationales) | the internal docs |
+| Release ritual | [`RELEASE.md`](RELEASE.md) |
+| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Engineering guidelines | [`guidelines/`](guidelines/) |
-| Day-to-day collaboration approach | [`LEARNING_STRATEGY.md`](LEARNING_STRATEGY.md) |
 
 ---
 
 ## Tooling
 
-- **Android Studio Ladybug** or newer for Android development.
-- **JDK 17** as `sourceCompatibility` and `jvmTarget`.
-- **Kotlin 2.3.x** and **AGP 8.13.x**.
-- **`compactc`** matching `@midnight-ntwrk/compact-runtime` pinned in each
-  example's `contract/package.json`. The version is sensitive — read
-  the internal docs § wishlist `#13` if you hit
-  a bytecode mismatch.
-
-For the Rust FFI submodule (`kuira-crypto-ffi`), the local build needs
-the Android NDK. The `build-android.sh` script auto-detects it through
-`ANDROID_HOME`; the publish workflow does the same with the runner's
-installed NDK.
+- **Android Studio Ladybug** or newer; **JDK 17** (`sourceCompatibility` + `jvmTarget`).
+- **Kotlin 2.3.x**, **AGP 8.13.x**.
+- **`compactc`** matching the `@midnight-ntwrk/compact-runtime` version pinned in each
+  example's `contract/package.json` — the versions must line up or the contract bytecode
+  won't load.
+- **Android NDK 26+** and a **Rust** toolchain with the Android targets, for the
+  `kuira-crypto-ffi` submodule.
 
 ---
 
 ## License
 
-[Apache License 2.0](LICENSE). The license declared in every POM
-matches this file; any change to the LICENSE must propagate to the
-POM block in the root `build.gradle.kts`.
+[Apache License 2.0](LICENSE). The license declared in every POM matches this file; any
+change must propagate to the POM block in the root `build.gradle.kts`.
 
 ---
 
 ## Contact
 
-Maintainer: [nel349](https://github.com/nel349) ·
-`kuiralabs@gmail.com` ·
+Maintainer: [nel349](https://github.com/nel349) · `kuiralabs@gmail.com` ·
 [security policy](SECURITY.md) for vulnerability reports.
