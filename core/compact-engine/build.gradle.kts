@@ -62,13 +62,11 @@ val bboardSetup by tasks.registering {
         }
 
         val network = "undeployed"
-        val home = System.getProperty("user.home")
-        val bboardDir = listOf(
-            file("$home/Development/midnight/midnight-libraries/example-bboard"),
-            file("${rootProject.projectDir}/../../midnight/midnight-libraries/example-bboard"),
-        ).firstOrNull { it.exists() }
+        val bboardDir = (System.getenv("BBOARD_DIR")?.let(::file)
+            ?: file("${rootProject.projectDir}/../../midnight/midnight-libraries/example-bboard"))
+            .takeIf { it.exists() }
             ?: throw GradleException(
-                "example-bboard not found. Set BBOARD_DIR env or clone to ~/Development/midnight/midnight-libraries/example-bboard"
+                "example-bboard not found. Set the BBOARD_DIR env var to your example-bboard checkout."
             )
 
         // 1. Check localnet

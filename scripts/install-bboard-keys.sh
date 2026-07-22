@@ -13,7 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-MIDNIGHT_LIBS="${PROJECT_DIR}/../../midnight/midnight-libraries"
+# Override with the MIDNIGHT_LIBS env var if your checkout lives elsewhere.
+MIDNIGHT_LIBS="${MIDNIGHT_LIBS:-${PROJECT_DIR}/../../midnight/midnight-libraries}"
 
 BBOARD_KEYS="${MIDNIGHT_LIBS}/example-bboard/contract/src/managed/bboard/keys"
 BBOARD_ZKIR="${MIDNIGHT_LIBS}/example-bboard/contract/src/managed/bboard/zkir"
