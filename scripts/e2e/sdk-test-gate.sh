@@ -23,38 +23,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
-INDEXER_URL="http://localhost:8088/api/v4/graphql"
 SERIAL="${1:-$(adb devices | awk '/\tdevice$/{print $1; exit}')}"
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mGATE ABORTED: %s\033[0m\n' "$1" >&2; exit 1; }
 
 # ── Pre-flight ────────────────────────────────────────────────────────────────
-step "Pre-flight 1/5 — localnet reachable"
-curl -sf -m 5 -X POST "$INDEXER_URL" -H 'Content-Type: application/json' \
-  -d '{"query":"query { block { height } }"}' >/dev/null \
-  || fail "localnet indexer not reachable at $INDEXER_URL — run 'mn localnet up' first"
-echo "  ok"
-
-step "Pre-flight 2/5 — kill stale 'mn serve' (bboardSetup starts its own)"
+# bboard-specific cleanup the deploy task can't do for itself, then the shared localnet
+# + device prep (health, funding, dust, proving keys) is delegated to the reusable
+# prepare-localnet-e2e.sh so there's ONE source of truth for what the e2e suite needs.
+step "Pre-flight 1/3 — kill stale 'mn serve' (bboardSetup starts its own)"
 STALE=$(pgrep -f "mn serve" || true)
 if [ -n "$STALE" ]; then echo "$STALE" | xargs kill -9 2>/dev/null || true; echo "  killed: $STALE"; else echo "  none"; fi
 
-step "Pre-flight 3/5 — clear the 'dev' CLI wallet cache (bboardSetup's wallet)"
+step "Pre-flight 2/3 — clear the 'dev' CLI wallet cache (bboardSetup's wallet)"
 mn cache clear --wallet dev 2>/dev/null | tail -1 || echo "  (no dev wallet yet — bboardSetup will create it)"
 
-step "Pre-flight 4/5 — fund the canonical e2e wallet + dust (RealDustFeePaymentTest et al.)"
-scripts/e2e/fund-localnet.sh >/tmp/gate-fund.log 2>&1 \
-  || fail "fund-localnet.sh failed — see /tmp/gate-fund.log"
-# Strip ANSI escapes before matching — mn colorizes its output, and a reset code sits
-# between "Dust Available: " and "yes" (e.g. `Dust Available: \e[0myes`).
-sed $'s/\033\\[[0-9;]*m//g' /tmp/gate-fund.log | grep -iE "Dust Available: *yes" >/dev/null \
-  || fail "canonical wallet has no available dust after funding — see /tmp/gate-fund.log"
-echo "  funded, dust available"
-
-step "Pre-flight 5/5 — emulator connected"
-[ -n "$SERIAL" ] || fail "no emulator/device connected (adb devices)"
-echo "  using $SERIAL"
+step "Pre-flight 3/3 — prepare localnet + device (health, funding, dust, proving keys)"
+scripts/e2e/prepare-localnet-e2e.sh "$SERIAL" || fail "localnet prep failed — see output above"
 
 # ── The gate ──────────────────────────────────────────────────────────────────
 step "Unit tests — ALL modules"
