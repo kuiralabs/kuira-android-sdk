@@ -766,8 +766,12 @@ private fun WalletSheetContent(
             // when ready, a retry card on error, a forge prompt when the sigil
             // is missing.
             when (status) {
-                is WalletStatus.None,
-                is WalletStatus.Loading -> WalletBalanceLoading(colors)
+                is WalletStatus.None -> WalletBalanceLoading(colors)   // idle → shimmer only, no runner
+                is WalletStatus.Loading -> WalletBalanceLoading(
+                    colors,
+                    syncProgress = syncProgress,
+                    stage = status.stage,   // actively loading → the runner + phase label + %
+                )
                 is WalletStatus.Ready -> ReadyBody(
                     status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust,
                     busy = busy,

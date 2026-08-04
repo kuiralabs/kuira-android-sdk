@@ -325,9 +325,21 @@ private fun QuickAction(
     }
 }
 
-/** First-load skeleton — shimmer placeholders shaped like the real cards. */
+/**
+ * First-load skeleton — shimmer placeholders shaped like the real cards. When actively loading
+ * ([stage] non-null, i.e. not idle), the balance card also carries the shared
+ * [WalletSyncIndicator] — the striding runner + phase label + % — so the empty state reads as
+ * syncing rather than stuck. The number areas stay shimmer; only the indicator is added, and it's
+ * the SAME component the ready card uses (never a divergent copy). [syncProgress] drives the
+ * fraction/label once a sync is publishing; before that it's the [stage] label, running in place.
+ */
 @Composable
-fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifier) {
+fun WalletBalanceLoading(
+    colors: WalletPanelColors,
+    modifier: Modifier = Modifier,
+    syncProgress: WalletSyncProgress? = null,
+    stage: String? = null,
+) {
     Column(modifier.fillMaxWidth()) {
         BalanceCard(colors) {
             Eyebrow("BALANCE", colors)
@@ -335,6 +347,14 @@ fun WalletBalanceLoading(colors: WalletPanelColors, modifier: Modifier = Modifie
             ShimmerBlock(height = 40.dp, widthFraction = 0.6f)
             Spacer(Modifier.height(10.dp))
             ShimmerBlock(height = 14.dp, widthFraction = 0.35f)
+            if (stage != null) {
+                Spacer(Modifier.height(12.dp))
+                WalletSyncIndicator(
+                    progress = syncProgress?.fraction,
+                    label = syncProgress?.label ?: stage,
+                    colors = colors,
+                )
+            }
         }
         Spacer(Modifier.height(10.dp))
         BalanceCard(colors) {

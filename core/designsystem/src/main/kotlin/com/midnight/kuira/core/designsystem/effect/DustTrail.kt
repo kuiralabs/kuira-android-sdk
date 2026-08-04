@@ -64,8 +64,11 @@ fun DustTrail(
 
     Canvas(modifier = modifier) {
         // Ground line = bottom of the composable (runner's floor).
-        // Particles spawn at ground level and puff upward + behind.
-        val startX = size.width * 0.35f  // behind the runner's feet
+        // Particles spawn at ground level and puff upward + behind. The trail band's RIGHT edge
+        // sits at the runner's centre/feet (see RunnerDustProgress), so spawn near that right
+        // edge — the plume kicks up right at the feet, then drifts left (driftX < 0) as it ages,
+        // rather than originating detached behind the runner.
+        val startX = size.width * 0.78f
         val groundY = size.height * 0.80f // near the very bottom — the floor
 
         particles.forEach { p ->

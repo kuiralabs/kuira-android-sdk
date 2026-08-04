@@ -482,11 +482,19 @@ class WalletPanelViewModel @Inject constructor(
 
                 // Phase 1 — addresses + cached balance, instant.
                 val initial = built.wallet.balance()
-                _status.value = WalletStatus.Ready(
-                    address = built.walletAddress,
-                    shieldedAddress = built.shieldedWalletAddress,
-                    balance = initial,
-                )
+                // A fresh wallet (first sight of it, nothing cached) keeps the LOADING skeleton —
+                // now carrying the live [syncProgress] runner + phase label + % — through the first
+                // heavy sync below, instead of flashing an empty Ready card. walletChanged guarantees
+                // that sync runs (Phase 2) and flips to Ready with the synced balance; any failure is
+                // caught below, so it never sticks in Loading. A wallet WITH a cached balance still
+                // flips to Ready now (shows what we have, with the in-card runner during a resync).
+                if (!(walletChanged && initial.totalNight.signum() == 0)) {
+                    _status.value = WalletStatus.Ready(
+                        address = built.walletAddress,
+                        shieldedAddress = built.shieldedWalletAddress,
+                        balance = initial,
+                    )
+                }
                 Log.i(TAG, "bootstrap: addresses ready (unshielded=${built.walletAddress.take(40)}…)")
 
                 // Live observer — balanceFlow pushes incoming funds (airdrop /

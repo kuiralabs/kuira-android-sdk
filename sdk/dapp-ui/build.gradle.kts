@@ -14,6 +14,7 @@ android {
         // SeedVault (core:auth) needs API 30 for setUserAuthenticationParameters
         // + CryptoObject with DEVICE_CREDENTIAL — match its floor.
         minSdk = 30
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
         // Dev-seed BuildConfig lives in :sdk:wallet-seed — the panel
         // consumes the seed via WalletSeedSource, so the override
@@ -147,4 +148,14 @@ dependencies {
     // Dispatchers.Main for a TestDispatcher so `init { viewModelScope.launch }`
     // runs inline.
     testImplementation(project(":core:testing"))
+
+    // ── Instrumented (Compose UI) test stack ──
+    // Renders panel states on a device/emulator to capture look-and-feel screenshots
+    // (the Android analog of the iOS `ui-shots` harness). `captureToImage()` needs a real
+    // device, so these are androidTest, not JVM/Robolectric.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
