@@ -303,6 +303,18 @@ public final class com/midnight/kuira/core/crypto/shielded/MemoryUtils {
 	public final fun wipeAll ([[B)V
 }
 
+public final class com/midnight/kuira/core/crypto/shielded/OfferFile {
+	public static final field HRP Ljava/lang/String;
+	public static final field INSTANCE Lcom/midnight/kuira/core/crypto/shielded/OfferFile;
+	public static final field PREFIX Ljava/lang/String;
+	public final fun decode (Ljava/lang/String;)[B
+	public final fun decodeToHex (Ljava/lang/String;)Ljava/lang/String;
+	public final fun encode ([B)Ljava/lang/String;
+	public final fun encodeHex (Ljava/lang/String;)Ljava/lang/String;
+	public final fun findAll (Ljava/lang/String;)Ljava/util/List;
+	public final fun isOfferFile (Ljava/lang/String;)Z
+}
+
 public final class com/midnight/kuira/core/crypto/shielded/OfferResult {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;

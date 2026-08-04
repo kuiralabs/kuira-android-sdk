@@ -234,26 +234,14 @@ class ZswapTransferBuilder private constructor() {
             return nativeBuildShieldedTransaction(offerHex, networkId, dustTxHex, ttlMs)
         }
 
-        /**
-         * Serialize a built offer into a shareable **Offer File**
-         * (`zswapoffer1…`, MIP-0005).
-         *
-         * This is the "make it shareable" step: it takes the opaque offer bytes
-         * and produces the checksummed, copy-pasteable text you can post to a
-         * chat, a link preview, or a marketplace. Only the compact bytes ever go
-         * on-chain — the file is purely the transport form.
-         *
-         * Requires native library (the canonical serialization is done in Rust);
-         * the Bech32m wrapping is done in [OfferFile].
-         *
-         * @param offerHex Offer hex from [OfferResult.offerHex].
-         * @return `zswapoffer1…` Offer File, or null if serialization fails.
-         */
-        fun serializeOfferToFile(offerHex: String): String? {
-            ensureNativeLoaded()
-            val serializedHex = nativeSerializeOffer(offerHex) ?: return null
-            return OfferFile.encodeHex(serializedHex)
-        }
+        // NOTE on Offer Files (MIP-0005): [OfferResult.offerHex] as produced by
+        // [buildTransfer]/[nativeBuildOffer] is an UNPROVEN offer — proving in
+        // this pipeline happens later, at transaction level (see LocalProver).
+        // MIP-0005 requires that "offer files MUST contain proven offers only",
+        // so offerHex must never be wrapped by [OfferFile]. Producing a real
+        // Offer File needs an FFI addition: extract the proven guaranteed offer
+        // from a proven transaction and return its canonical ledger
+        // serialization; those bytes are what [OfferFile.encode] wraps.
 
         /**
          * Build shielded Transaction with dust fee payment.

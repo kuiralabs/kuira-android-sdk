@@ -7,33 +7,46 @@ package com.midnight.kuira.core.crypto.shielded
 import com.midnight.kuira.core.crypto.address.Bech32m
 
 /**
- * Encodes and decodes **Offer Files** — the shareable, copy-pasteable form of a
- * proven Zswap offer.
+ * Encodes and decodes **Offer Files** (MIP-0005) — the shareable,
+ * copy-pasteable form of a proven Zswap offer.
  *
- * **Why this exists:**
- * A [ZswapTransferBuilder] offer lives on-chain as ~10 KB of opaque bytes. Those
- * bytes are useless to a human: you cannot paste them into a chat, host them at a
- * URL, or safely copy them without a typo corrupting the proof. The Offer File
- * format (MIP-0005) solves both problems by wrapping the serialized offer in
- * [Bech32m]:
+ * **What goes inside (MIP-0005, normative):**
+ * The payload MUST be "the canonical ledger serialization of a proven zswap
+ * offer" — `Offer<Proof>` via the ledger's `Serializable::serialize`, with no
+ * tag prefix, no version byte, and no network id. The spec is explicit that
+ * "offer files MUST contain proven offers only. Unproven and proof-erased
+ * offers MUST NOT be encoded as offer files."
  *
- * - **Human-transportable** — the result is plain ASCII (`zswapoffer1…`) that
- *   survives chat apps, Open Graph link previews, and clipboards.
- * - **Self-checking** — Bech32m carries a checksum, so a copy-paste error is
- *   detected on [decode] instead of silently producing a broken offer.
+ * ⚠️ In this codebase, [OfferResult.offerHex] is an *unproven* builder offer
+ * (proving happens later, at transaction level), so it must never be passed
+ * here. The canonical proven-offer bytes come from the ledger FFI — see the
+ * note in [ZswapTransferBuilder].
+ *
+ * **Why the wrapping exists:**
+ * A proven offer is ~10 KB of opaque bytes — impossible to paste into a chat
+ * or copy without risk of silent corruption. [Bech32m] fixes both:
+ *
+ * - **Human-transportable** — plain ASCII (`zswapoffer1…`) that survives chat
+ *   apps, Open Graph link previews, and clipboards.
+ * - **Self-checking** — the checksum makes [decode] reject a copy-paste error
+ *   instead of silently producing a broken offer.
  *
  * The wrapping is purely a transport concern: only the compact bytes are ever
- * posted on-chain. A proven offer is tamper-proof by construction, so sharing the
- * file is safe — the worst a stranger can do with it is discard it.
+ * posted on-chain. A proven offer is tamper-proof by construction, so sharing
+ * the file is safe — the worst a stranger can do with it is discard it.
  *
- * **Format:** `zswapoffer1<bech32m-data><checksum>`. A 1-input/1-output offer of
- * ~10 KB expands to roughly 16 KB of text (too large for a standard QR code, so
- * Offer Files are shared as text or behind a URL, never scanned).
+ * **Format:** `zswapoffer1<bech32m-data><checksum>`. Per MIP-0005, bech32's
+ * standard 90-character limit MUST NOT be enforced: a 1-input/1-output offer of
+ * ~10 KB expands to ~16 K characters (too large for a standard QR code, so
+ * Offer Files travel as text or behind a URL, never scanned).
  *
- * **Unit-testable** — this object performs no I/O and needs no native library;
- * [ZswapTransferBuilder.serializeOfferToFile] bridges it to the FFI.
+ * **Layering:** this codec enforces the envelope rules (HRP, checksum, size).
+ * The remaining MIP-0005 decode rule — "payloads that fail deserialization
+ * [as a proven zswap offer] MUST be rejected" — is a ledger concern and is
+ * enforced natively when the decoded bytes are handed to the FFI. MIP-0006
+ * then wraps the encoded string in its JSON `OfferPayload` for discovery.
  *
- * @see ZswapTransferBuilder for building the offer bytes this wraps.
+ * **Unit-testable** — this object performs no I/O and needs no native library.
  */
 object OfferFile {
 
@@ -60,7 +73,10 @@ object OfferFile {
     /**
      * Wrap raw serialized offer bytes into a shareable Offer File string.
      *
-     * @param offerBytes Canonical serialization of a proven Zswap offer.
+     * @param offerBytes Canonical ledger serialization of a **proven** Zswap
+     *   offer. Per MIP-0005, unproven or proof-erased offers MUST NOT be
+     *   encoded — this codec cannot verify proven-ness (that requires the
+     *   ledger FFI), so the caller owns that contract.
      * @return Bech32m Offer File, e.g. `zswapoffer1qpzry9x8g…`.
      * @throws IllegalArgumentException if [offerBytes] is empty.
      */
