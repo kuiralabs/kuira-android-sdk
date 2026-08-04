@@ -235,6 +235,27 @@ class ZswapTransferBuilder private constructor() {
         }
 
         /**
+         * Serialize a built offer into a shareable **Offer File**
+         * (`zswapoffer1…`, MIP-0005).
+         *
+         * This is the "make it shareable" step: it takes the opaque offer bytes
+         * and produces the checksummed, copy-pasteable text you can post to a
+         * chat, a link preview, or a marketplace. Only the compact bytes ever go
+         * on-chain — the file is purely the transport form.
+         *
+         * Requires native library (the canonical serialization is done in Rust);
+         * the Bech32m wrapping is done in [OfferFile].
+         *
+         * @param offerHex Offer hex from [OfferResult.offerHex].
+         * @return `zswapoffer1…` Offer File, or null if serialization fails.
+         */
+        fun serializeOfferToFile(offerHex: String): String? {
+            ensureNativeLoaded()
+            val serializedHex = nativeSerializeOffer(offerHex) ?: return null
+            return OfferFile.encodeHex(serializedHex)
+        }
+
+        /**
          * Build shielded Transaction with dust fee payment.
          * The dust spend is built internally from the DustLocalState.
          */
