@@ -61,4 +61,39 @@ class MidnightSdkSendValidationTest {
         val result = MidnightSdk.validateSendRequest(amount, shieldedRecipient, senderUndeployed)
         assertTrue("shielded HRP → InvalidAddress, got $result", result is SendResult.InvalidAddress)
     }
+
+    // ── Shielded send front door — [MidnightSdk.validateShieldedSendRequest] ──
+    // The mirror of the above for `sendShieldedNight`: it accepts ONLY a shielded recipient on the
+    // wallet's own shielded network, and rejects an unshielded / wrong-network / malformed one. The
+    // wallet's own shielded address is passed as the HRP anchor.
+
+    @Test
+    fun `valid same-network shielded request passes (null)`() {
+        assertNull(MidnightSdk.validateShieldedSendRequest(amount, shieldedRecipient, shieldedRecipient))
+    }
+
+    @Test
+    fun `shielded zero amount is rejected as Failed`() {
+        val result = MidnightSdk.validateShieldedSendRequest(BigInteger.ZERO, shieldedRecipient, shieldedRecipient)
+        assertTrue("zero → Failed, got $result", result is SendResult.Failed)
+    }
+
+    @Test
+    fun `shielded malformed recipient is InvalidAddress`() {
+        val result = MidnightSdk.validateShieldedSendRequest(amount, "not-a-bech32-address", shieldedRecipient)
+        assertTrue("malformed → InvalidAddress, got $result", result is SendResult.InvalidAddress)
+    }
+
+    @Test
+    fun `unshielded recipient is rejected by the shielded validator`() {
+        // An unshielded (mn_addr_) recipient has a different HRP than the wallet's shielded address.
+        val result = MidnightSdk.validateShieldedSendRequest(amount, sameNetworkRecipient, shieldedRecipient)
+        assertTrue("unshielded HRP → InvalidAddress, got $result", result is SendResult.InvalidAddress)
+    }
+
+    @Test
+    fun `wrong-network recipient is rejected by the shielded validator`() {
+        val result = MidnightSdk.validateShieldedSendRequest(amount, wrongNetworkRecipient, shieldedRecipient)
+        assertTrue("preprod recipient on an undeployed shielded wallet → InvalidAddress, got $result", result is SendResult.InvalidAddress)
+    }
 }
