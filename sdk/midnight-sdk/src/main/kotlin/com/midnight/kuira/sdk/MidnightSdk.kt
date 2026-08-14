@@ -784,6 +784,15 @@ class MidnightSdk private constructor(
             if (!dustRepository.syncFromBlockchain(walletAddress, dustSeed)) {
                 return SendResult.Failed("No dust registered — register dust first.")
             }
+
+            // 3 — bind the offer + dust into an unproven transaction. The NATIVE builder computes the
+            // correct dust fee from the ledger params (fees_with_margin on the pre-proof tx) and pays
+            // it — the fee CANNOT be priced Kotlin-side (FeeCalculator only accepts the sealed tx, and
+            // the fee depends on the proof), so this is done once, natively, exactly like the core does
+            // for iOS. A hardcoded/under-fee is rejected as node error 138 (BalanceCheckOverspend).
+            val ledgerParamsHex = runCatching { indexerClient.getCurrentBlockWithParams().ledgerParameters }.getOrNull()
+                ?: return SendResult.Failed("Couldn't read ledger params to price the shielded fee.")
+            val nowMs = System.currentTimeMillis()
             val dustState = dustRepository.loadState(walletAddress)
                 ?: return SendResult.Failed("Failed to load dust state.")
             val txHex: String
@@ -791,16 +800,16 @@ class MidnightSdk private constructor(
                 if (dustState.getUtxoCount() == 0) {
                     return SendResult.Failed("No dust UTXOs available for fees.")
                 }
-                // 3 — bind the offer + dust into a single unproven transaction.
                 txHex = ZswapTransferBuilder.buildTransactionWithDust(
                     offerHex = transfer.offerHex,
                     networkId = networkId,
                     dustStatePtr = dustState.getStatePointer(),
                     dustSeed = dustSeed,
-                    dustUtxosJson = DUST_FEE_UTXOS_JSON,
-                    currentTimeMs = System.currentTimeMillis(),
+                    dustUtxosJson = DUST_FEE_SELECTION_JSON,
+                    currentTimeMs = nowMs,
                     ttlMs = ttlMs,
-                ) ?: return SendResult.Failed("Failed to build shielded transaction with dust.")
+                    ledgerParamsHex = ledgerParamsHex,
+                ) ?: return SendResult.Failed("Failed to build shielded transaction with dust (insufficient dust for the fee?).")
             } finally {
                 dustState.close()
             }
@@ -833,6 +842,7 @@ class MidnightSdk private constructor(
             Log.d(TAG, "Proving key download: ${(progress * 100).toInt()}%")
         }
     }
+
 
     /** Coarse progress stages for [sendNight], for driving a UI spinner/status. */
     enum class SendProgress {
@@ -1495,8 +1505,8 @@ class MidnightSdk private constructor(
         /** TTL window for a shielded transfer (1h). */
         private const val SHIELDED_TTL_MS = 3_600_000L
 
-        /** Dust fee spec for the shielded binding: spend UTXO 0 for a 1-Star fee. */
-        private const val DUST_FEE_UTXOS_JSON = "[{\"utxo_index\":0,\"v_fee\":\"1\"}]"
+        /** Dust UTXO SELECTION for the shielded fee — index only; the native builder computes the fee. */
+        private const val DUST_FEE_SELECTION_JSON = "[{\"utxo_index\":0}]"
 
         /** Finalization budget for a shielded submit (local proving can take minutes). */
         private const val SHIELDED_SUBMIT_TIMEOUT_MS = 360_000L

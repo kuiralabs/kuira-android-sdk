@@ -89,12 +89,13 @@ while kill -0 "$TEST_PID" 2>/dev/null; do
         per=$(( night / small )); [ "$per" -lt 1 ] && per=1
         echo "  → airdrop $addr : ${per} NIGHT ×${small}  (dust=$dust registered ON-DEVICE, not here — it needs the wallet's keys)"
         for _ in $(seq 1 "$small"); do mn airdrop "$per" --wallet "$addr" >/dev/null 2>&1 || true; done
-        # Shielded pool (genesis shielded balance → the wallet's shielded address), for sendShieldedNight tests.
-        # Backgrounded: the shielded airdrop is a slow zswap+proof (~90s) and must NOT block the servicer
-        # loop from funding the NEXT wallet's unshielded coins. The device waits on balance().shieldedNight.
+        # Shielded pool (genesis shielded balance → the wallet's shielded address), for sendShieldedNight
+        # tests. Run SYNCHRONOUSLY: the airdrop is a ~90s zswap+proof and MUST actually land before we move
+        # on (a backgrounded one raced the harness teardown and never credited the wallet). Stale-marker
+        # starvation is already prevented by the `adb logcat -c` at launch, so blocking here is safe.
         if [ -n "$shaddr" ] && [ -n "$shielded" ] && [ "$shielded" -gt 0 ]; then
-            echo "  → airdrop $shaddr : ${shielded} shielded NIGHT (async)"
-            ( mn airdrop "$shielded" --shielded --wallet "$shaddr" >/dev/null 2>&1 || true ) &
+            echo "  → airdrop $shaddr : ${shielded} shielded NIGHT"
+            mn airdrop "$shielded" --shielded --wallet "$shaddr" >/dev/null 2>&1 || true
         fi
     done < /tmp/sdk-e2e-fund.log
     sleep 2

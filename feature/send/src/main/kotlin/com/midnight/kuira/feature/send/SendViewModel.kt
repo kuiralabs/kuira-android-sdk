@@ -739,21 +739,30 @@ class SendViewModel @Inject constructor(
                                 return@launch
                             }
 
+                            // Ledger params so the native builder can compute the CORRECT dust fee
+                            // (fees_with_margin) rather than a hardcoded v_fee — an under-fee is
+                            // rejected as node error 138 (BalanceCheckOverspend).
+                            val shieldedLedgerParamsHex = indexerClient.getCurrentBlockWithParams().ledgerParameters
+                                ?: run {
+                                    _state.value = SendUiState.Error("Couldn't read ledger params for the shielded fee")
+                                    return@launch
+                                }
                             val txHex = dustState.use { ds ->
                                 if (ds.getUtxoCount() == 0) {
                                     _state.value = SendUiState.Error("No dust UTXOs available for fees")
                                     return@launch
                                 }
 
-                                // Step 3: Build final transaction with offer + dust
+                                // Step 3: Build final transaction with offer + dust (native prices the fee)
                                 ZswapTransferBuilder.buildTransactionWithDust(
                                     offerHex = transferResult.offerHex,
                                     networkId = networkId,
                                     dustStatePtr = ds.getStatePointer(),
                                     dustSeed = dustSeed,
-                                    dustUtxosJson = "[{\"utxo_index\":0,\"v_fee\":\"1\"}]",
+                                    dustUtxosJson = "[{\"utxo_index\":0}]",
                                     currentTimeMs = System.currentTimeMillis(),
                                     ttlMs = ttlMs,
+                                    ledgerParamsHex = shieldedLedgerParamsHex,
                                 )
                             }
 

@@ -28,11 +28,10 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * SKIPs (never fails) when localnet/funding is absent — see [IsolatedWalletE2E].
  *
- * KNOWN LOCALNET LIMITATION: a genesis `mn airdrop --shielded` is NOT recipient-scannable on the
- * undeployed localnet — verified with the CLI ground-truth oracle itself (`mn balance --shielded`
- * reports 0 after the airdrop), so it's a localnet/indexer limitation, not the SDK. On localnet this
- * test therefore SKIPs at the shielded-funding gate. It PROVES the money path against a network where
- * shielded NIGHT is scannable (PreProd) — point [IsolatedWalletE2E] at that network to run it for real.
+ * Localnet shielded funding IS supported: `mn airdrop --shielded` credits recipient-scannable zswap
+ * coins (verified end-to-end — the SDK's ShieldedBalanceTracker scans them in seconds, see
+ * [SdkShieldedScanDiagnosticTest]). The airdrop is a ~90s zswap+proof, so the servicer runs it
+ * synchronously; the device then waits on `balance().shieldedNight` before sending.
  */
 @RunWith(AndroidJUnit4::class)
 class SdkSendShieldedIsolatedE2ETest {
