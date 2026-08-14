@@ -39,6 +39,8 @@ class IsolatedWalletE2E(private val context: Context) {
         private set
     lateinit var address: String
         private set
+    lateinit var shieldedAddress: String
+        private set
 
     /**
      * Build a fresh-wallet REMOTE-proving SDK, request host funding of [nightWhole] NIGHT spread
@@ -52,6 +54,7 @@ class IsolatedWalletE2E(private val context: Context) {
         nightWhole: Int,
         smallUtxos: Int,
         registerDust: Boolean = true,
+        shieldedWhole: Int = 0,
         fundingTimeoutMs: Long = FUNDING_TIMEOUT_MS,
     ): MidnightSdk {
         val seed = BIP39.mnemonicToSeed(BIP39.generateMnemonic(24), "")
@@ -63,9 +66,15 @@ class IsolatedWalletE2E(private val context: Context) {
             .build()
         seed.fill(0) // Builder copies the seed; wipe our handle.
         address = sdk.walletAddress
+        shieldedAddress = sdk.shieldedWalletAddress
 
-        // device → host funding request (one line per fresh wallet; serviced by run-sdk-e2e.sh).
-        Log.i(TAG, "$FUND_MARKER addr=$address night=$nightWhole small=$smallUtxos dust=$registerDust")
+        // device → host funding request (one line per fresh wallet; serviced by run-sdk-e2e.sh). Carries
+        // BOTH addresses so the host can `mn airdrop [--shielded]` to the right one.
+        Log.i(
+            TAG,
+            "$FUND_MARKER addr=$address shieldedAddr=$shieldedAddress " +
+                "night=$nightWhole small=$smallUtxos dust=$registerDust shielded=$shieldedWhole",
+        )
 
         // Confirm localnet reachability, then wait for the host to credit the coins.
         val reachable = withTimeoutOrNull(INITIAL_SETTLE_MS) { sdk.wallet.balance() }
@@ -100,6 +109,25 @@ class IsolatedWalletE2E(private val context: Context) {
                 sdk.wallet.balance().dustRegistered,
             )
         }
+
+        // Shielded funding: the host airdrops `mn airdrop <shielded> --shielded --wallet <shieldedAddr>`
+        // (genesis shielded balance → our shielded address). Wait until the SDK's ShieldedBalanceTracker
+        // has scanned it — that scan is the real proof the airdrop produced wallet-scannable zswap coins.
+        if (shieldedWhole > 0) {
+            val minShielded = BigInteger.valueOf(shieldedWhole.toLong()).multiply(NIGHT_UNIT)
+            var seen = BigInteger.ZERO
+            val deadline = System.currentTimeMillis() + fundingTimeoutMs
+            while (System.currentTimeMillis() < deadline && seen < minShielded) {
+                delay(SHIELDED_POLL_MS)
+                runCatching { sdk.wallet.refresh() }
+                seen = runCatching { sdk.wallet.balance().shieldedNight }.getOrNull() ?: BigInteger.ZERO
+            }
+            assumeTrue(
+                "Host harness must airdrop >= $shieldedWhole shielded NIGHT to $shieldedAddress " +
+                    "(mn airdrop $shieldedWhole --shielded --wallet <addr>) — run via run-sdk-e2e.sh.",
+                seen >= minShielded,
+            )
+        }
         return sdk
     }
 
@@ -120,5 +148,6 @@ class IsolatedWalletE2E(private val context: Context) {
         private const val FUNDING_TIMEOUT_MS = 5 * 60_000L
         private const val DUST_TIMEOUT_MS = 120_000L
         private const val DUST_POLL_MS = 3_000L
+        private const val SHIELDED_POLL_MS = 4_000L
     }
 }
