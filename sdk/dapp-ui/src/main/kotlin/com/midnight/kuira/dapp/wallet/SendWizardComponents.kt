@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -431,6 +432,46 @@ internal fun RecipientChip(
     }
 }
 
+// ── Token glyph (select-token rows) ──
+
+/**
+ * The token glyph for a select-token row — Midnight's symbol on a frosted disc, with a corner badge
+ * marking the privacy mode (an eye for unshielded/visible on chain, a lock for shielded/private).
+ * Monochrome so it sits in the palette. Mirrors the iOS `TokenAvatar`.
+ */
+@Composable
+internal fun TokenAvatar(
+    shielded: Boolean,
+    palette: SendPalette,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val tint = if (enabled) palette.textSoft else palette.textMuted
+    Box(modifier = modifier.size(SendDimens.TokenAvatar)) {
+        Box(
+            modifier = Modifier
+                .size(SendDimens.TokenAvatar)
+                .clip(CircleShape)
+                .background(palette.text.copy(alpha = GLASS_FILL_ALPHA))
+                .border(BorderStroke(SendDimens.BorderWidth, palette.hairline), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            MidnightSymbolGlyph(color = tint, size = SendDimens.Icon24)
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(SendDimens.TokenBadge)
+                .clip(CircleShape)
+                .background(palette.panel),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (shielded) LockGlyph(color = tint, size = SendDimens.TokenBadgeGlyph)
+            else EyeGlyph(color = tint, size = SendDimens.TokenBadgeGlyph)
+        }
+    }
+}
+
 // ── Token + mode sub-row (Token+Mode screen) ──
 
 @Composable
@@ -441,6 +482,7 @@ internal fun TokenModeRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
@@ -451,6 +493,10 @@ internal fun TokenModeRow(
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = SendDimens.Space16, vertical = SendDimens.FieldVerticalPadding),
     ) {
+        if (leading != null) {
+            leading()
+            Spacer(modifier = Modifier.width(SendDimens.Space12))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,

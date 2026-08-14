@@ -46,6 +46,10 @@ internal object SendDimens {
     val Icon24: Dp = 24.dp
     val Icon32: Dp = 32.dp
 
+    val TokenAvatar: Dp = 40.dp // token glyph disc on the select-token rows
+    val TokenBadge: Dp = 16.dp // privacy-mode badge over the token disc
+    val TokenBadgeGlyph: Dp = 9.dp // the eye/lock inside that badge
+
     val RadiusSm: Dp = 8.dp
     val RadiusMd: Dp = 12.dp
     val RadiusLg: Dp = 20.dp
@@ -255,5 +259,38 @@ internal fun CopyGlyph(color: Color, size: Dp = SendDimens.Icon16, modifier: Mod
         )
     }
 }
+
+/**
+ * Midnight brand symbol — the ring + three stacked squares — drawn as a Canvas glyph (no res/drawable,
+ * matching this file's convention). Geometry mirrors the official symbol (viewBox 789.37): a ring whose
+ * stroke spans the gap between the outer and inner circles, and three squares centred on x descending
+ * through the upper half. Monochrome — tint at the call site so it follows the palette, like iOS.
+ */
+@Composable
+internal fun MidnightSymbolGlyph(color: Color, size: Dp = SendDimens.Icon24, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.iconSize(size)) {
+        val w = this.size.width
+        // Ring: stroke centred between the outer (r=0.5) and inner (r≈0.408) circles of the mark.
+        drawCircle(color = color, radius = w * 0.454f, center = Offset(w / 2f, w / 2f), style = Stroke(w * 0.0922f))
+        // Three stacked squares, centred on x, descending through the upper half (the brand column).
+        val sq = w * 0.0939f
+        for (cy in listOf(0.2036f, 0.3518f, 0.5f)) {
+            drawRect(color, topLeft = Offset(w / 2f - sq / 2f, w * cy - sq / 2f), size = Size(sq, sq))
+        }
+    }
+}
+
+/** Eye (unshielded — visible on chain): an almond outline + a filled pupil. */
+@Composable
+internal fun EyeGlyph(color: Color, size: Dp = SendDimens.Icon16, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.iconSize(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        drawOval(color = color, topLeft = Offset(w * 0.10f, h * 0.30f), size = Size(w * 0.80f, h * 0.40f), style = Stroke(w * STROKE_FRACTION))
+        drawCircle(color = color, radius = w * 0.12f, center = Offset(w / 2f, h / 2f))
+    }
+}
+
+// The shielded badge reuses the padlock `LockGlyph` from SettingsDesign (same package) — one lock mark.
 
 private fun Modifier.iconSize(size: Dp): Modifier = this.size(size)

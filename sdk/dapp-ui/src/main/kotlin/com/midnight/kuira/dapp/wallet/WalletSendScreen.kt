@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -231,40 +233,79 @@ internal fun WalletSendScreen(
 
 // ── Screen 1 — Token + Mode ──
 
+/**
+ * The "select token" step. A generic list of token entries — each entry is a token, not "NIGHT with
+ * modes": NIGHT appears in its two privacy pools today, and other tokens would join as their own rows.
+ * Rendered in a [LazyColumn] so hundreds of tokens materialise on demand, centred when the list is short
+ * (`Arrangement.Center`) and scrolling when it's long.
+ *
+ * [debugExtraTokenRows] is a TEST-ONLY hook (default 0, never set in production) that appends synthetic
+ * token rows so the big-list layout can be exercised by an instrumented UI test. Mirrors iOS.
+ */
 @Composable
-private fun TokenModeStep(
+internal fun TokenModeStep(
     palette: SendPalette,
     availableNight: String,
     onBack: () -> Unit,
     onPickUnshielded: () -> Unit,
+    debugExtraTokenRows: Int = 0,
 ) {
     WizardTopBar(title = "Send", palette = palette, onBack = onBack)
-    ScrollColumn {
-        Spacer(modifier = Modifier.height(SendDimens.Space32))
-        SendSectionHeader(label = "SELECT TOKEN", palette = palette)
-        Spacer(modifier = Modifier.height(SendDimens.Space12))
-        SendPanel(palette = palette, contentPadding = 0.dp) {
-            SendDetailRow(label = "NIGHT", value = "$availableNight available", palette = palette)
-            SendDivider(palette)
-            TokenModeRow(
-                label = "Unshielded",
-                hint = "Visible on chain",
-                palette = palette,
-                onClick = onPickUnshielded,
-                trailing = { Text("›", color = palette.textMuted, fontSize = SendType.HeroDenom) },
-            )
-            SendDivider(palette)
-            TokenModeRow(
-                label = "Shielded",
-                hint = "Private · ZK proof",
-                palette = palette,
-                enabled = false,
-                onClick = {},
-                trailing = { SendBadge(text = "SOON", palette = palette) },
-            )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(TOKEN_LIST_TAG)
+            .padding(horizontal = SendDimens.Space16)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space24),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(SendDimens.Space24))
+            SendSectionHeader(label = "SELECT TOKEN", palette = palette)
+            Spacer(modifier = Modifier.height(SendDimens.Space12))
+            // NIGHT — its two privacy pools grouped in one card.
+            SendPanel(palette = palette, contentPadding = 0.dp) {
+                TokenModeRow(
+                    label = "NIGHT",
+                    hint = "Unshielded · Visible on chain",
+                    palette = palette,
+                    onClick = onPickUnshielded,
+                    leading = { TokenAvatar(shielded = false, palette = palette) },
+                    trailing = { Text(availableNight, color = palette.textSoft, fontSize = SendType.Body) },
+                )
+                SendDivider(palette)
+                TokenModeRow(
+                    label = "NIGHT",
+                    hint = "Shielded · Private · ZK proof",
+                    palette = palette,
+                    enabled = false,
+                    onClick = {},
+                    leading = { TokenAvatar(shielded = true, palette = palette, enabled = false) },
+                    trailing = { SendBadge(text = "SOON", palette = palette) },
+                )
+            }
+        }
+        // TEST-ONLY synthetic tokens — each its own card so a big list is genuinely lazy and scrolls.
+        items(debugExtraTokenRows) { index ->
+            Spacer(modifier = Modifier.height(SendDimens.Space8))
+            SendPanel(palette = palette, contentPadding = 0.dp) {
+                TokenModeRow(
+                    label = "TKN$index",
+                    hint = "Test token",
+                    palette = palette,
+                    onClick = {},
+                    modifier = Modifier.testTag("$SYNTHETIC_TOKEN_TAG_PREFIX$index"),
+                    leading = { TokenAvatar(shielded = false, palette = palette) },
+                    trailing = { Text("›", color = palette.textMuted, fontSize = SendType.HeroDenom) },
+                )
+            }
         }
     }
 }
+
+/** Semantics tags for the select-token list (shared with the instrumented UI test — no magic strings). */
+internal const val TOKEN_LIST_TAG = "sendTokenList"
+internal const val SYNTHETIC_TOKEN_TAG_PREFIX = "sendTokenSynthetic"
 
 // ── Screen 2 — Recipient ──
 
@@ -623,18 +664,6 @@ private fun WizardTopBar(
         }
     }
     HorizontalDivider(color = palette.hairline, thickness = SendDimens.DividerThickness)
-}
-
-/** A scrolling content column with full-screen padding (Token+Mode). */
-@Composable
-private fun ScrollColumn(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = SendDimens.Space16)
-            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + SendDimens.Space24),
-    ) { content() }
 }
 
 /** Content column that pins a footer (primary button / button row) to the bottom. */
