@@ -957,6 +957,29 @@ class MidnightSdk private constructor(
         onResult?.invoke(result)
     }
 
+    /**
+     * Fire-and-forget [sendShieldedNight] on the SDK's lifecycle scope — the shielded sibling of
+     * [launchSendNight]. Returns immediately; the durable lifecycle (foreground service +
+     * finalization notification) is owned by the operation registry, so the ZK proving + submit
+     * survive the caller leaving the app. [onProgress] is best-effort while the caller is around
+     * ([SendProgress.PROVING] can take minutes); [onResult] delivers the typed [SendResult] on the
+     * SDK scope, so a dead caller's callback is simply a no-op.
+     */
+    fun launchSendShieldedNight(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)? = null,
+        onResult: ((SendResult) -> Unit)? = null,
+    ): Job = subscriptionScope.launch {
+        val result = runCatching { sendShieldedNight(toAddress, amount, onProgress) }
+            .getOrElse { e ->
+                if (e is CancellationException) throw e
+                Log.w(TAG, "background shielded send failed: ${e.message}")
+                SendResult.Failed(e.message ?: "Shielded send failed")
+            }
+        onResult?.invoke(result)
+    }
+
     // ── Durable protocol orchestrator (#253 + ) ──
 
     private val protocolStore by lazy { ProtocolStore(config.context) }
