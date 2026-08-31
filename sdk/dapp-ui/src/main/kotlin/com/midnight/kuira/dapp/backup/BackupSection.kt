@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -324,7 +325,7 @@ private fun Trailing(
  */
 @Composable
 fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier = modifier.height(RunnerSize), contentAlignment = Alignment.CenterStart) {
+    BoxWithConstraints(modifier = modifier.height(RunnerSize).clipToBounds(), contentAlignment = Alignment.CenterStart) {
         // Faint full-width track.
         Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.Center).background(colors.onSheetSubtle))
 
@@ -344,7 +345,11 @@ fun RunnerDustProgress(progress: Float?, colors: WalletPanelColors, modifier: Mo
             )
         }
 
-        val trailX = (runnerX + RunnerSize / 2 - TrailLen).coerceAtLeast(0.dp)
+        // Pin the trail band's RIGHT edge to the runner's feet so dust always spawns AT the
+        // feet and drifts LEFT (behind). No coerce: near the start the band's left half hangs
+        // off-screen and is clipped — clamping trailX to 0 instead shoved the band (and its
+        // right-edge spawn point) to the RIGHT of the runner, so dust kicked up in FRONT.
+        val trailX = runnerX + RunnerSize / 2 - TrailLen
         DustTrail(
             modifier = Modifier.width(TrailLen).height(RunnerSize).align(Alignment.CenterStart).offset(x = trailX),
             color = colors.onSheet,
