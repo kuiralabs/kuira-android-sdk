@@ -5,10 +5,11 @@
 # funds EACH per-test isolated wallet on demand. The isolated tier ([IsolatedWalletE2E]) generates
 # a fresh wallet per @Test and logs a funding request:
 #
-#   KUIRA_FUND_REQ addr=<bech32m> night=<int> small=<int> dust=<true|false>
+#   KUIRA_FUND_REQ addr=<bech32m> shieldedAddr=<bech32m> night=<int> small=<int> dust=<true|false> shielded=<int>
 #
 # This script tails logcat for those lines and, for EACH (deduped by addr), runs
-# `mn airdrop <night/small> --wallet <addr>` × small. Dust registers ON-DEVICE (keyed; host can't sign).
+# `mn airdrop <night/small> --wallet <addr>` × small, plus (when shielded>0)
+# `mn airdrop <shielded> --shielded --wallet <shieldedAddr>`. Dust registers ON-DEVICE (keyed; host can't sign).
 # The device's waitForFunding observes the credit over the indexer subscription — no ACK channel.
 #
 # The isolated tier proves REMOTELY (localnet proof server at 10.0.2.2:6300), so it needs NO
@@ -80,12 +81,22 @@ while kill -0 "$TEST_PID" 2>/dev/null; do
         night=$(echo "$line" | grep -oE "night=[0-9]+"           | head -1 | cut -d= -f2)
         small=$(echo "$line" | grep -oE "small=[0-9]+"           | head -1 | cut -d= -f2)
         dust=$(echo "$line"  | grep -oE "dust=(true|false)"      | head -1 | cut -d= -f2)
+        shaddr=$(echo "$line"   | grep -oE "shieldedAddr=mn_shield-addr_[a-z0-9]+" | head -1 | cut -d= -f2)
+        shielded=$(echo "$line" | grep -oE "shielded=[0-9]+"                       | head -1 | cut -d= -f2)
         [ -n "$addr" ] && [ -n "$night" ] && [ -n "$small" ] || continue
         case "$SERVICED" in *" $addr "*) continue ;; esac   # already funded
         SERVICED="$SERVICED$addr "
         per=$(( night / small )); [ "$per" -lt 1 ] && per=1
         echo "  → airdrop $addr : ${per} NIGHT ×${small}  (dust=$dust registered ON-DEVICE, not here — it needs the wallet's keys)"
         for _ in $(seq 1 "$small"); do mn airdrop "$per" --wallet "$addr" >/dev/null 2>&1 || true; done
+        # Shielded pool (genesis shielded balance → the wallet's shielded address), for sendShieldedNight
+        # tests. Run SYNCHRONOUSLY: the airdrop is a ~90s zswap+proof and MUST actually land before we move
+        # on (a backgrounded one raced the harness teardown and never credited the wallet). Stale-marker
+        # starvation is already prevented by the `adb logcat -c` at launch, so blocking here is safe.
+        if [ -n "$shaddr" ] && [ -n "$shielded" ] && [ "$shielded" -gt 0 ]; then
+            echo "  → airdrop $shaddr : ${shielded} shielded NIGHT"
+            mn airdrop "$shielded" --shielded --wallet "$shaddr" >/dev/null 2>&1 || true
+        fi
     done < /tmp/sdk-e2e-fund.log
     sleep 2
 done

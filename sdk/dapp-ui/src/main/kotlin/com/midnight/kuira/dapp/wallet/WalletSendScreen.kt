@@ -61,26 +61,29 @@ import java.math.BigInteger
  * [sendState]:
  *  Token+Mode → Recipient → Amount → Review → (Confirm) → Pending → Success/Failure
  *
- * The SDK pill only sends unshielded NIGHT today, so the Token+Mode screen
- * offers NIGHT/Unshielded and shows Shielded as "soon". The screen stays
- * stateless w.r.t. the chain: it hands (recipient, base-unit amount) to
- * [onSubmit]; the host VM runs `MidnightSdk.sendNight` and pushes progress and
- * outcome back through [sendState].
+ * The Token+Mode screen offers NIGHT in both privacy pools — Unshielded (public)
+ * and Shielded (private, ZK-proved). The screen stays stateless w.r.t. the chain:
+ * it hands ([SendMode], recipient, base-unit amount) to [onSubmit]; the host VM
+ * runs `MidnightSdk.sendNight` / `sendShielded` for the chosen mode and pushes
+ * progress and outcome back through [sendState].
  *
  * @param spendableNightRaw unshielded NIGHT available, in base units
- *  (1 NIGHT = 1,000,000) — drives the Available hint + MAX shortcut.
+ *  (1 NIGHT = 1,000,000) — drives the Available hint + MAX shortcut in unshielded mode.
+ * @param shieldedNightRaw shielded NIGHT available, in base units — the pool used when
+ *  the user picks Shielded mode.
  * @param sendState live send-flow state (idle / sending / success / failure).
- * @param onSubmit (recipient, amount-in-base-units) — fired on Confirm.
+ * @param onSubmit ([SendMode], recipient, amount-in-base-units) — fired on Confirm.
  * @param onResetState clear the flow back to Idle.
  * @param onBack dismiss the whole wizard.
  */
 @Composable
 internal fun WalletSendScreen(
     spendableNightRaw: BigInteger,
+    shieldedNightRaw: BigInteger,
     network: MidnightNetwork,
     sendState: SendUiState,
     colors: WalletPanelColors = WalletPanelColors.Default,
-    onSubmit: (toAddress: String, amount: BigInteger) -> Unit,
+    onSubmit: (mode: SendMode, toAddress: String, amount: BigInteger) -> Unit,
     onResetState: () -> Unit,
     onBack: () -> Unit,
     registerBack: (() -> Boolean) -> Unit = {},
@@ -90,6 +93,7 @@ internal fun WalletSendScreen(
     val focusManager = LocalFocusManager.current
 
     var step by rememberSaveable { mutableStateOf(SendStep.TOKEN_MODE) }
+    var mode by rememberSaveable { mutableStateOf(SendMode.UNSHIELDED) }
     var recipient by rememberSaveable { mutableStateOf("") }
     var amountText by rememberSaveable { mutableStateOf("") }
     var scanning by rememberSaveable { mutableStateOf(false) }
@@ -97,9 +101,11 @@ internal fun WalletSendScreen(
     // then hides the keyboard instead of leaving the screen.
     var fieldFocused by remember { mutableStateOf(false) }
 
+    // The spendable pool + the expected recipient address family follow the chosen privacy mode.
+    val spendableRaw = if (mode == SendMode.SHIELDED) shieldedNightRaw else spendableNightRaw
     val amountRaw = remember(amountText) { parseNightToBaseUnits(amountText) }
-    val overBalance = amountRaw != null && amountRaw > spendableNightRaw
-    val recipientError = recipientErrorOrNull(recipient)
+    val overBalance = amountRaw != null && amountRaw > spendableRaw
+    val recipientError = recipientErrorOrNull(recipient, mode)
     val recipientReady = recipient.isNotBlank() && recipientError == null
     val amountReady = amountRaw != null && !overBalance
 
@@ -178,13 +184,16 @@ internal fun WalletSendScreen(
                     SendStep.TOKEN_MODE -> TokenModeStep(
                         palette = palette,
                         availableNight = baseUnitsToNight(spendableNightRaw),
+                        availableShieldedNight = baseUnitsToNight(shieldedNightRaw),
                         onBack = { onResetState(); onBack() },
-                        onPickUnshielded = { step = SendStep.RECIPIENT },
+                        onPickUnshielded = { mode = SendMode.UNSHIELDED; step = SendStep.RECIPIENT },
+                        onPickShielded = { mode = SendMode.SHIELDED; step = SendStep.RECIPIENT },
                     )
 
                     SendStep.RECIPIENT -> RecipientStep(
                         palette = palette,
                         network = network,
+                        mode = mode,
                         recipient = recipient,
                         error = recipientError,
                         canAdvance = recipientReady,
@@ -200,16 +209,16 @@ internal fun WalletSendScreen(
                         palette = palette,
                         recipient = recipient,
                         amountText = amountText,
-                        availableNight = baseUnitsToNight(spendableNightRaw),
+                        availableNight = baseUnitsToNight(spendableRaw),
                         overBalance = overBalance,
                         canReview = amountReady,
                         onBack = { step = SendStep.RECIPIENT },
                         onEditRecipient = { step = SendStep.RECIPIENT },
                         onChange = { amountText = sanitizeNightAmount(it); clearFailure() },
-                        onMax = { amountText = baseUnitsToNight(spendableNightRaw); clearFailure() },
+                        onMax = { amountText = baseUnitsToNight(spendableRaw); clearFailure() },
                         onPreset = { pct ->
                             // pct% of the spendable balance, in base units → formatted NIGHT.
-                            val part = spendableNightRaw.multiply(BigInteger.valueOf(pct.toLong())).divide(BigInteger.valueOf(100))
+                            val part = spendableRaw.multiply(BigInteger.valueOf(pct.toLong())).divide(BigInteger.valueOf(100))
                             amountText = baseUnitsToNight(part)
                             clearFailure()
                         },
@@ -219,11 +228,12 @@ internal fun WalletSendScreen(
 
                     SendStep.REVIEW -> ReviewStep(
                         palette = palette,
+                        mode = mode,
                         recipient = recipient,
                         amountText = amountText,
                         failure = sendState as? SendUiState.Failure,
                         onBack = { step = SendStep.AMOUNT },
-                        onConfirm = { amountRaw?.let { onSubmit(recipient.trim(), it) } },
+                        onConfirm = { amountRaw?.let { onSubmit(mode, recipient.trim(), it) } },
                     )
                 }
             }
@@ -248,6 +258,10 @@ internal fun TokenModeStep(
     availableNight: String,
     onBack: () -> Unit,
     onPickUnshielded: () -> Unit,
+    // Default so the token-list scroll test (which only exercises the layout) can omit the shielded
+    // wiring; the production caller always passes both.
+    availableShieldedNight: String = "0",
+    onPickShielded: () -> Unit = {},
     debugExtraTokenRows: Int = 0,
 ) {
     WizardTopBar(title = "Send", palette = palette, onBack = onBack)
@@ -278,10 +292,9 @@ internal fun TokenModeStep(
                     label = "NIGHT",
                     hint = "Shielded · Private · ZK proof",
                     palette = palette,
-                    enabled = false,
-                    onClick = {},
-                    leading = { TokenAvatar(shielded = true, palette = palette, enabled = false) },
-                    trailing = { SendBadge(text = "SOON", palette = palette) },
+                    onClick = onPickShielded,
+                    leading = { TokenAvatar(shielded = true, palette = palette) },
+                    trailing = { Text(availableShieldedNight, color = palette.textSoft, fontSize = SendType.Body) },
                 )
             }
         }
@@ -313,6 +326,7 @@ internal const val SYNTHETIC_TOKEN_TAG_PREFIX = "sendTokenSynthetic"
 private fun RecipientStep(
     palette: SendPalette,
     network: MidnightNetwork,
+    mode: SendMode,
     recipient: String,
     error: String?,
     canAdvance: Boolean,
@@ -330,7 +344,7 @@ private fun RecipientStep(
         },
     ) {
         Spacer(modifier = Modifier.height(SendDimens.Space32))
-        SendBadge(text = "UNSHIELDED", palette = palette)
+        SendBadge(text = mode.badge, palette = palette)
         Spacer(modifier = Modifier.height(SendDimens.Space24))
         SendSectionHeader(label = "TO", palette = palette)
         Spacer(modifier = Modifier.height(SendDimens.Space12))
@@ -338,7 +352,7 @@ private fun RecipientStep(
             value = recipient,
             onValueChange = onChange,
             palette = palette,
-            placeholder = "mn_addr_${network.rustNetworkId}1…",
+            placeholder = "${mode.addressPrefix}${network.rustNetworkId}1…",
             error = error,
             monospace = true,
             onFocusChanged = onFocusChanged,
@@ -460,6 +474,7 @@ private fun PresetChip(label: String, palette: SendPalette, modifier: Modifier =
 @Composable
 private fun ReviewStep(
     palette: SendPalette,
+    mode: SendMode,
     recipient: String,
     amountText: String,
     failure: SendUiState.Failure?,
@@ -501,7 +516,7 @@ private fun ReviewStep(
                     )
                 }
                 Spacer(modifier = Modifier.height(SendDimens.Space8))
-                SendBadge(text = "UNSHIELDED", palette = palette)
+                SendBadge(text = mode.badge, palette = palette)
             }
         }
 
@@ -699,6 +714,17 @@ private fun GlyphButton(palette: SendPalette, onClick: () -> Unit, glyph: @Compo
 
 private enum class SendStep { TOKEN_MODE, RECIPIENT, AMOUNT, REVIEW }
 
+/**
+ * Send privacy mode chosen on the token step — the wizard's single routing signal, mirroring the
+ * SDK's unshielded vs shielded send paths. It picks the spendable pool, the expected recipient
+ * address family ([addressPrefix]), and the [badge]. These are UI labels; the authoritative
+ * recipient/amount validation is the SDK's on submit.
+ */
+internal enum class SendMode(val badge: String, val addressPrefix: String) {
+    UNSHIELDED(badge = "UNSHIELDED", addressPrefix = UNSHIELDED_PREFIX),        // mn_addr_…
+    SHIELDED(badge = "SHIELDED", addressPrefix = "${SHIELDED_PREFIX}_"),        // mn_shield-addr_…
+}
+
 // ── Amount parsing (NIGHT decimal ↔ base units; 1 NIGHT = 1,000,000) ──
 
 /** Keep digits + a single decimal point, and cap fractional digits at the NIGHT scale. */
@@ -725,10 +751,18 @@ private fun baseUnitsToNight(base: BigInteger): String =
 
 // ── Address helpers ──
 
-/** Soft client-side recipient check (the VM does authoritative bech32m validation on submit). */
-private fun recipientErrorOrNull(recipient: String): String? = when {
+/**
+ * Soft client-side recipient check for the chosen [mode] (the SDK does authoritative bech32m
+ * validation on submit). Each mode expects its own address family; the cross-family mistake gets a
+ * pointed message instead of a generic "not an address".
+ */
+internal fun recipientErrorOrNull(recipient: String, mode: SendMode): String? = when {
     recipient.isBlank() -> null
-    recipient.startsWith(SHIELDED_PREFIX) -> "Shielded addresses can't receive an unshielded send"
+    mode == SendMode.SHIELDED ->
+        if (recipient.startsWith(SHIELDED_PREFIX)) null
+        else "Shielded send needs a shielded address (${SHIELDED_PREFIX}_…)"
+    // UNSHIELDED — a pasted shielded address is the common slip; name it.
+    recipient.startsWith(SHIELDED_PREFIX) -> "Unshielded send needs an unshielded address (${UNSHIELDED_PREFIX}…)"
     !recipient.startsWith(UNSHIELDED_PREFIX) -> "This doesn't look like a Midnight address"
     else -> null
 }

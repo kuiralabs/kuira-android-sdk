@@ -17,6 +17,7 @@ import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.dust.DustKeyDeriver
 import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.crypto.shielded.ShieldedKeyDeriver
+import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
 import com.midnight.kuira.core.identity.accesskey.AccessKeyManager
 import com.midnight.kuira.core.indexer.api.IndexerClientImpl
 import com.midnight.kuira.core.indexer.model.BlockInfo
@@ -144,6 +145,12 @@ class MidnightSdk private constructor(
     private val indexerClient: IndexerClientImpl,
     private val shieldedTracker: ShieldedBalanceTracker,
     private val dustTracker: DustBalanceTracker?,
+    // Held for the shielded send path ([sendShieldedNight]) — the same instances build() wires into
+    // the balance trackers, plus the zswap seed (also held by ShieldedBalanceTracker). Wiped with the
+    // SDK's other seeds on close().
+    private val shieldedRepository: ShieldedRepository,
+    private val dustRepository: DustRepository,
+    private val zswapSeed: ByteArray,
 ) {
     init {
         // Feed the wallet the live NIGHT-UTXO list so its `dustRegistered` signal
@@ -695,10 +702,155 @@ class MidnightSdk private constructor(
         is SubmissionResult.StaleUtxo -> OperationResult(OperationTerminalStatus.Failed)
     }
 
+    /**
+     * Send SHIELDED NIGHT from this wallet to [toAddress] (a `mn_shield-addr_<network>` address).
+     *
+     * The zswap coins are spent privately: the recipient's coin/enc public keys are decoded from the
+     * address, the offer is built + proved (locally or on the configured proof server), and a dust
+     * UTXO pays the fee. Like [sendNight] it runs as a tracked foreground operation (process-survival
+     * + notification) and reuses the SDK's held zswap/dust seeds — no biometric re-prompt (the seed
+     * was unlocked at build time).
+     *
+     * Shielded + dust caches stay keyed to the wallet's UNSHIELDED anchor address, matching the
+     * balance and unshielded-send paths — the invariant that keeps dust roots consistent and avoids
+     * node error 170 on the following send.
+     *
+     * @param toAddress recipient's shielded Bech32m address on THIS network.
+     * @param amount shielded NIGHT to send, in base units (Stars); must be positive.
+     * @param onProgress optional coarse stage callback ([SendProgress.PROVING] can take minutes).
+     * @return a typed [SendResult]; never throws for an expected failure.
+     */
+    suspend fun sendShieldedNight(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)? = null,
+    ): SendResult = operations.run(
+        OperationDescriptor(OperationKind.Send),
+        classify = { it.toOperationResult() },
+    ) {
+        sendShieldedNightInternal(toAddress, amount, onProgress)
+    }
+
+    private suspend fun sendShieldedNightInternal(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)?,
+    ): SendResult {
+        // Chain-independent request validation (positive amount, well-formed same-network shielded
+        // recipient) — pure + unit-tested in [validateShieldedSendRequest].
+        validateShieldedSendRequest(amount, toAddress, shieldedWalletAddress)?.let { return it }
+
+        // Decode the recipient payload = coin_pk(32) ‖ enc_pk(32); safe now that validation passed.
+        val payload = Bech32m.decode(toAddress).second
+        val coinPkHex = payload.copyOfRange(0, 32).joinToString("") { "%02x".format(it) }
+        val encPkHex = payload.copyOfRange(32, SHIELDED_PAYLOAD_BYTES).joinToString("") { "%02x".format(it) }
+
+        // Version pre-flight (a skew warns/maps, same policy as the unshielded send).
+        try {
+            versionCoherenceChecker.ensure()
+        } catch (e: VersionSkewException) {
+            return SendResult.Failed(e.message ?: "Ledger version skew with the node.")
+        }
+
+        // Local proving needs the ZK keys on device (also covers the dust-fee binding proof). No-op
+        // under remote proving and on subsequent calls.
+        ensureProvingKeysDownloaded()
+
+        // Fresh shielded sync before spend — stale nullifiers → error 193 (ReplayProtectionViolation).
+        if (!shieldedRepository.syncFromBlockchain(walletAddress, zswapSeed)) {
+            return SendResult.Failed("No shielded coins found. Receive shielded NIGHT first.")
+        }
+        val shieldedState = shieldedRepository.loadState(walletAddress)
+            ?: return SendResult.Failed("Failed to load shielded state after sync.")
+        try {
+            val ttlMs = System.currentTimeMillis() + SHIELDED_TTL_MS
+
+            // 1 — build the shielded offer (select coins → spend → outputs).
+            val transfer = ZswapTransferBuilder.buildTransfer(
+                state = shieldedState,
+                seed = zswapSeed,
+                recipientCoinPk = coinPkHex,
+                recipientEncPk = encPkHex,
+                tokenType = NIGHT_TOKEN_TYPE_HEX,
+                amount = amount,
+                networkId = networkId,
+                ttlMs = ttlMs,
+            ) ?: return SendResult.Failed("Insufficient shielded balance or transfer build failed.")
+
+            // 2 — fresh dust for the fee: delete + re-sync under the anchor address (mirrors the
+            // feature module's forceFreshDustSync — a stale dust root after a prior attempt is the
+            // classic error-170 feedback loop).
+            dustRepository.deleteState(walletAddress)
+            if (!dustRepository.syncFromBlockchain(walletAddress, dustSeed)) {
+                return SendResult.Failed("No dust registered — register dust first.")
+            }
+
+            // 3 — bind the offer + dust into an unproven transaction. The NATIVE builder computes the
+            // correct dust fee from the ledger params (fees_with_margin on the pre-proof tx) and pays
+            // it — the fee CANNOT be priced Kotlin-side (FeeCalculator only accepts the sealed tx, and
+            // the fee depends on the proof), so this is done once, natively, exactly like the core does
+            // for iOS. A hardcoded/under-fee is rejected as node error 138 (BalanceCheckOverspend).
+            val ledgerParamsHex = runCatching { indexerClient.getCurrentBlockWithParams().ledgerParameters }.getOrNull()
+                ?: return SendResult.Failed("Couldn't read ledger params to price the shielded fee.")
+            val nowMs = System.currentTimeMillis()
+            val dustState = dustRepository.loadState(walletAddress)
+                ?: return SendResult.Failed("Failed to load dust state.")
+            val txHex: String
+            try {
+                if (dustState.getUtxoCount() == 0) {
+                    return SendResult.Failed("No dust UTXOs available for fees.")
+                }
+                txHex = ZswapTransferBuilder.buildTransactionWithDust(
+                    offerHex = transfer.offerHex,
+                    networkId = networkId,
+                    dustStatePtr = dustState.getStatePointer(),
+                    dustSeed = dustSeed,
+                    dustUtxosJson = DUST_FEE_SELECTION_JSON,
+                    currentTimeMs = nowMs,
+                    ttlMs = ttlMs,
+                    ledgerParamsHex = ledgerParamsHex,
+                ) ?: return SendResult.Failed("Failed to build shielded transaction with dust (insufficient dust for the fee?).")
+            } finally {
+                dustState.close()
+            }
+
+            // 4 — prove + seal + submit + await finalization.
+            onProgress?.invoke(SendProgress.PROVING)
+            val result = transactionSubmitter.submitPrebuiltTransaction(txHex, SHIELDED_SUBMIT_TIMEOUT_MS)
+            if (result is SubmissionResult.Success) {
+                // The dust UTXO was consumed on-chain; drop the cache so the next send re-syncs fresh.
+                // Kept under the anchor address — else the next unshielded send hits error 170.
+                dustRepository.deleteState(walletAddress)
+            }
+            return result.toSendResult()
+        } finally {
+            shieldedState.close()
+        }
+    }
+
+    /**
+     * Download the ZK proving keys when local proving is selected and they aren't cached yet —
+     * needed even for the dust-fee binding proof. No-op under remote proving (keys live on the proof
+     * server) and on subsequent calls (keys are cached on device). Mirrors the feature module's
+     * `ensureProvingKeysDownloaded`.
+     */
+    private suspend fun ensureProvingKeysDownloaded() {
+        if (transactionSubmitter.provingMode != ProvingMode.LOCAL) return
+        if (provingKeyManager.hasWalletKeys()) return
+        Log.d(TAG, "Downloading proving keys for local proving…")
+        provingKeyManager.downloadWalletKeys { progress ->
+            Log.d(TAG, "Proving key download: ${(progress * 100).toInt()}%")
+        }
+    }
+
+
     /** Coarse progress stages for [sendNight], for driving a UI spinner/status. */
     enum class SendProgress {
         /** Merging coins so the transfer fits under the ledger's input ceiling. */
         CONSOLIDATING,
+
+        /** Building the zero-knowledge proof (shielded sends — can take minutes). */
+        PROVING,
 
         /** Signing inputs, paying dust fees, submitting, and awaiting finalization. */
         SUBMITTING,
@@ -801,6 +953,29 @@ class MidnightSdk private constructor(
                 if (e is CancellationException) throw e
                 Log.w(TAG, "background send failed: ${e.message}")
                 SendResult.Failed(e.message ?: "Send failed")
+            }
+        onResult?.invoke(result)
+    }
+
+    /**
+     * Fire-and-forget [sendShieldedNight] on the SDK's lifecycle scope — the shielded sibling of
+     * [launchSendNight]. Returns immediately; the durable lifecycle (foreground service +
+     * finalization notification) is owned by the operation registry, so the ZK proving + submit
+     * survive the caller leaving the app. [onProgress] is best-effort while the caller is around
+     * ([SendProgress.PROVING] can take minutes); [onResult] delivers the typed [SendResult] on the
+     * SDK scope, so a dead caller's callback is simply a no-op.
+     */
+    fun launchSendShieldedNight(
+        toAddress: String,
+        amount: BigInteger,
+        onProgress: ((SendProgress) -> Unit)? = null,
+        onResult: ((SendResult) -> Unit)? = null,
+    ): Job = subscriptionScope.launch {
+        val result = runCatching { sendShieldedNight(toAddress, amount, onProgress) }
+            .getOrElse { e ->
+                if (e is CancellationException) throw e
+                Log.w(TAG, "background shielded send failed: ${e.message}")
+                SendResult.Failed(e.message ?: "Shielded send failed")
             }
         onResult?.invoke(result)
     }
@@ -1317,6 +1492,9 @@ class MidnightSdk private constructor(
                 database = database,
                 indexerClient = indexerClient,
                 shieldedTracker = shieldedTracker,
+                shieldedRepository = shieldedRepository,
+                dustRepository = dustRepository,
+                zswapSeed = keys.zswapSeed,
             )
             // Wire the unshielded auto-fund path (kuira-sdk-android): the provider needs the
             // wallet, so it's set after construction. Explicit offers bypass it — it only fills an
@@ -1340,6 +1518,22 @@ class MidnightSdk private constructor(
          */
         private const val MAX_TRANSFER_INPUTS = 2
 
+        // ── Shielded-send constants ([sendShieldedNight]) ──
+        /** Bytes in a decoded shielded-address payload: coin_pk(32) ‖ enc_pk(32). */
+        private const val SHIELDED_PAYLOAD_BYTES = 64
+
+        /** All-zero token type = native NIGHT, for the shielded (zswap) transfer builder. */
+        private val NIGHT_TOKEN_TYPE_HEX = "0".repeat(64)
+
+        /** TTL window for a shielded transfer (1h). */
+        private const val SHIELDED_TTL_MS = 3_600_000L
+
+        /** Dust UTXO SELECTION for the shielded fee — index only; the native builder computes the fee. */
+        private const val DUST_FEE_SELECTION_JSON = "[{\"utxo_index\":0}]"
+
+        /** Finalization budget for a shielded submit (local proving can take minutes). */
+        private const val SHIELDED_SUBMIT_TIMEOUT_MS = 360_000L
+
         /**
          * Chain-independent validation for a [sendNight] request: a positive amount and
          * a recipient that's a well-formed Bech32m address on the SAME network (HRP) as
@@ -1362,6 +1556,39 @@ class MidnightSdk private constructor(
             if (senderHrp != null && recipientHrp != senderHrp) {
                 return SendResult.InvalidAddress(
                     "Recipient is a $recipientHrp address; this wallet sends $senderHrp NIGHT.",
+                )
+            }
+            return null
+        }
+
+        /**
+         * Chain-independent validation for a [sendShieldedNight] request: a positive amount and a
+         * recipient that's a well-formed Bech32m SHIELDED address on the SAME network as the wallet's
+         * own shielded address (compared by HRP — no hardcoded prefix, and it rejects unshielded /
+         * wrong-network recipients), carrying the expected [SHIELDED_PAYLOAD_BYTES]-byte
+         * coin_pk‖enc_pk payload. Returns the failing [SendResult], or null when valid. Pure (no
+         * I/O) so it's unit-testable; balance/dust checks stay in [sendShieldedNight].
+         */
+        internal fun validateShieldedSendRequest(
+            amount: BigInteger,
+            toAddress: String,
+            ownShieldedAddress: String,
+        ): SendResult? {
+            if (amount <= BigInteger.ZERO) {
+                return SendResult.Failed("Amount must be positive, got: $amount")
+            }
+            val decoded = runCatching { Bech32m.decode(toAddress) }.getOrNull()
+                ?: return SendResult.InvalidAddress("Recipient address is not a valid Bech32m address.")
+            val (recipientHrp, payload) = decoded
+            val ownHrp = runCatching { Bech32m.decode(ownShieldedAddress).first }.getOrNull()
+            if (ownHrp != null && recipientHrp != ownHrp) {
+                return SendResult.InvalidAddress(
+                    "Recipient is a $recipientHrp address; this wallet sends $ownHrp shielded NIGHT.",
+                )
+            }
+            if (payload.size != SHIELDED_PAYLOAD_BYTES) {
+                return SendResult.InvalidAddress(
+                    "Shielded address payload is ${payload.size} bytes, expected $SHIELDED_PAYLOAD_BYTES.",
                 )
             }
             return null

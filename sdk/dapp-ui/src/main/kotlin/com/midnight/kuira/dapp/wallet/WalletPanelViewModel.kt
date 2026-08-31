@@ -681,16 +681,64 @@ class WalletPanelViewModel @Inject constructor(
     }
 
     /**
-     * Send unshielded NIGHT to [toAddress]. Bootstraps/reuses the shared SDK,
-     * then calls [MidnightSdk.sendNight], which validates, selects fewest coins,
-     * auto-consolidates when needed, signs, pays dust fees, and submits. Surfaces
-     * coarse progress (consolidating / submitting) and the typed outcome through
-     * [sendState]; the live balance observer + a post-send refresh update the pill.
+     * Send unshielded NIGHT to [toAddress]. Bootstraps/reuses the shared SDK, then calls
+     * [MidnightSdk.launchSendNight], which validates, selects fewest coins, auto-consolidates when
+     * needed, signs, pays dust fees, and submits. Surfaces coarse progress (consolidating /
+     * submitting) and the typed outcome through [sendState]; the live balance observer + a post-send
+     * refresh update the pill.
      *
-     * @param amount NIGHT in the smallest unit (1 NIGHT = 1,000,000); the Send
-     *  screen parses the user's decimal NIGHT into this.
+     * @param amount NIGHT in the smallest unit (1 NIGHT = 1,000,000); the Send screen parses the
+     *  user's decimal NIGHT into this.
      */
-    fun sendNight(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) {
+    fun sendNight(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) =
+        launchSend(config, activity) { built ->
+            built.launchSendNight(
+                toAddress = toAddress,
+                amount = amount,
+                onProgress = { stage -> _sendState.value = SendUiState.Sending(stage.toStageLabel()) },
+                onResult = { result ->
+                    Log.i(TAG, "sendNight result: $result")
+                    _sendState.value = result.toSendUiState()
+                },
+            )
+        }
+
+    /**
+     * Send SHIELDED NIGHT to [toAddress] (a `mn_shield-addr_<network>` address) — the private sibling
+     * of [sendNight]. Delegates to [MidnightSdk.launchSendShieldedNight], which syncs the zswap state,
+     * builds + proves the offer, pays the native-computed dust fee, and submits. The extra
+     * [MidnightSdk.SendProgress.PROVING] stage (ZK proof — can take minutes) surfaces through
+     * [sendState] like the other stages.
+     *
+     * @param amount shielded NIGHT in the smallest unit; the Send screen parses the user's decimal
+     *  NIGHT into this.
+     */
+    fun sendShielded(config: WalletConfig, activity: FragmentActivity, toAddress: String, amount: BigInteger) =
+        launchSend(config, activity) { built ->
+            built.launchSendShieldedNight(
+                toAddress = toAddress,
+                amount = amount,
+                onProgress = { stage -> _sendState.value = SendUiState.Sending(stage.toStageLabel()) },
+                onResult = { result ->
+                    Log.i(TAG, "sendShielded result: $result")
+                    _sendState.value = result.toSendUiState()
+                },
+            )
+        }
+
+    /**
+     * Shared Send scaffolding for [sendNight] / [sendShielded]: holds the auto-lock across the
+     * (interactive) bootstrap, resolves the shared SDK (mapping the sigil/auth/cancellation failures
+     * onto [sendState]), fires the caller's fire-and-forget launcher, then waits for the durable op to
+     * enrol before releasing the bootstrap hold. [launch] runs the mode-specific launcher on the
+     * resolved [MidnightSdk]; the durable lifecycle (foreground service + finalization push) is owned
+     * by the operation registry, so a dead VM's callbacks are simply no-ops.
+     */
+    private fun launchSend(
+        config: WalletConfig,
+        activity: FragmentActivity,
+        launch: (MidnightSdk) -> Unit,
+    ) {
         lastRequestedConfig = config
         viewModelScope.launch {
             // Hold the auto-lock across the (interactive) bootstrap; the send itself is then
@@ -721,22 +769,7 @@ class WalletPanelViewModel @Inject constructor(
                 // the app. The registry / foreground service / finalization push own
                 // the durable lifecycle; this VM only projects progress + the result while the
                 // Send screen is open (callbacks land on the SDK scope, so a dead VM is a no-op).
-                built.launchSendNight(
-                    toAddress = toAddress,
-                    amount = amount,
-                    onProgress = { stage ->
-                        _sendState.value = SendUiState.Sending(
-                            when (stage) {
-                                MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
-                                MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
-                            },
-                        )
-                    },
-                    onResult = { result ->
-                        Log.i(TAG, "sendNight result: $result")
-                        _sendState.value = result.toSendUiState()
-                    },
-                )
+                launch(built)
                 // Don't release the bootstrap hold until the durable op is observably enrolled, so
                 // SessionLock.bindOperationHold has taken over: otherwise a hard auto-lock landing
                 // in the gap between launch and the (async) enrollment could close the SDK out from
@@ -748,6 +781,13 @@ class WalletPanelViewModel @Inject constructor(
                 hold.close()
             }
         }
+    }
+
+    /** Coarse [MidnightSdk.SendProgress] → the pill's in-flight status label (both send modes). */
+    private fun MidnightSdk.SendProgress.toStageLabel(): String = when (this) {
+        MidnightSdk.SendProgress.CONSOLIDATING -> "Consolidating coins…"
+        MidnightSdk.SendProgress.PROVING -> "Generating proof…"
+        MidnightSdk.SendProgress.SUBMITTING -> "Submitting transaction…"
     }
 
     /** Map a typed [MidnightSdk.SendResult] onto the pill's send UI state. */

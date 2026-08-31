@@ -5,7 +5,11 @@ biometric-gated wallet bootstrap, passkey-backed sigil identity, cloud
 backup/restore, dust registration, and the Problem A gate that
 prevents a fresh wallet from clobbering an existing cloud backup.
 
-> Coordinates (Maven Local): `com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT`
+> Coordinates (Maven Central): `io.github.kuiralabs:dapp-ui`
+>
+> The version is not repeated here — `gradle.properties` is the single
+> source of truth for the group and version every published module
+> shares, and a number copied into prose is a number that goes stale.
 
 ---
 
@@ -19,7 +23,7 @@ ViewModels under the hood. Single drop-in composable
 wires everything.
 
 **Is not:** the SDK itself. The on-chain operations (deploy / call /
-balance / submit) live in `com.midnight.kuira:midnight-sdk`. This
+balance / submit) live in `io.github.kuiralabs:midnight-sdk`. This
 module bootstraps that SDK from a biometric-unlocked seed and
 surfaces its state in the panel pill. Apps that want headless wallet
 access import `:sdk:midnight-sdk` directly and skip this.
@@ -28,9 +32,8 @@ access import `:sdk:midnight-sdk` directly and skip this.
 
 Every consuming app needs three things in addition to the Maven
 dependency: the Hilt plugin, a `@HiltAndroidApp` Application class,
-and `@AndroidEntryPoint` on the host Activity. BBoard is the
-reference consumer — see `examples/bboard` for the minimal complete
-setup.
+and `@AndroidEntryPoint` on the host Activity. `examples/midnight-kicks`
+is the reference consumer — the minimal complete setup.
 
 ```kotlin
 // 1. Top-level build.gradle.kts
@@ -44,17 +47,26 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
 }
+
+// Declared once so a release bump is one edit, not four.
+val kuiraVersion = "<latest release>"
+
 dependencies {
-    implementation("com.midnight.kuira:dapp-ui:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:midnight-sdk:0.1.0-SNAPSHOT")
-    // Hilt-processor needs these on the consumer compile classpath
-    // because dapp-ui declares them as `implementation` (runtime-only
-    // in the published POM):
-    implementation("com.midnight.kuira:identity:0.1.0-SNAPSHOT")
-    implementation("com.midnight.kuira:auth:0.1.0-SNAPSHOT")
+    // This one line brings the wallet. dapp-ui's POM scopes
+    // midnight-sdk, wallet-seed, wallet-runtime, auth, identity and
+    // hilt-navigation-compose at *compile*, so none of them needs a
+    // line of its own.
+    implementation("io.github.kuiralabs:dapp-ui:$kuiraVersion")
+
+    // Only if the app calls the SDK directly — deploy / call / balance
+    // / submit. Embedding the wallet UI alone does not require it.
+    implementation("io.github.kuiralabs:midnight-sdk:$kuiraVersion")
+
+    // hilt-android is the one exception worth stating: the POM scopes
+    // it to *runtime*, so without this line @HiltAndroidApp and
+    // @AndroidEntryPoint do not resolve.
     implementation("com.google.dagger:hilt-android:2.58")
     ksp("com.google.dagger:hilt-compiler:2.58")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 }
 
 // 3. MyApplication.kt
@@ -83,13 +95,38 @@ That's it. The panel handles seed creation on first launch, biometric
 prompts, cloud-backup detection, Restore-vs-Fresh choice, and dust
 registration.
 
-### Customizing the relying-party id
+### Declaring the relying-party id
 
-The default passkey rpId (`nel349.github.io`) is provided by
-`core:identity:IdentityModule`. To override (e.g. a third-party dApp
-on its own domain), replace `IdentityModule` in your Hilt graph and
-supply a custom `PasskeyConfig` provider. There is no `DappUiConfig`
-— `IdentityModule` is the single source of truth.
+There is **no default** `PasskeyConfig`, deliberately. `rpId` is the
+passkey relying-party domain and it must match the `assetlinks.json`
+your app hosts on its own domain. An SDK default would route every
+consumer through the maintainer's domain — and break PRF for anyone
+that maintainer had not added to their own `assetlinks.json`, which
+would make this SDK effectively permissioned.
+
+So every consuming app binds its own:
+
+```kotlin
+@Module
+@InstallIn(SingletonComponent::class)
+object MyAppIdentityModule {
+    @Provides
+    @Singleton
+    fun providePasskeyConfig() =
+        PasskeyConfig(rpId = "myapp.example.com", rpName = "My App")
+}
+```
+
+Omitting it is a Dagger missing-binding error at build time, which is
+the intended "declare your domain" signal rather than a papercut.
+There is no `DappUiConfig` — your own `PasskeyConfig` binding is the
+single source of truth.
+
+Apps that share one `rpId` share **one passkey credential**, and so
+one sigil: same relying party plus same salt derives the same seed in
+every one of them. That is a deliberate capability, not a collision —
+but it means the domain is an ecosystem-wide decision, which is why
+no specific one is named here.
 
 ## Components
 
@@ -141,8 +178,8 @@ seed write, init-probe state machine.
 
 ## API stability
 
-`0.1.0-SNAPSHOT` is the in-development version. Stability rules
-(applied once we tag `0.1.0` and beyond):
+Still pre-1.0 — see `gradle.properties` for the current version.
+Stability rules (applied once we tag `0.1.0` and beyond):
 
 - **Public symbols** — anything not `internal` is API. Breaking
   change = major bump.

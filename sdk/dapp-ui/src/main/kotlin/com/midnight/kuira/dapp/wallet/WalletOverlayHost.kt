@@ -144,12 +144,20 @@ private fun WalletOverlayContent(
             }
             if (ready != null) {
                 WalletSendScreen(
-                    // sendNight spends UNSHIELDED NIGHT, so cap the form at that pool.
+                    // Each privacy pool caps its own form; the SDK spends from the matching one.
                     spendableNightRaw = ready.balance.unshieldedNight,
+                    shieldedNightRaw = ready.balance.shieldedNight,
                     network = network,
                     sendState = sendState,
                     colors = colors,
-                    onSubmit = { to, amount -> activity?.let { viewModel.sendNight(viewModel.currentConfig(), it, to, amount) } },
+                    onSubmit = { mode, to, amount ->
+                        activity?.let {
+                            when (mode) {
+                                SendMode.UNSHIELDED -> viewModel.sendNight(viewModel.currentConfig(), it, to, amount)
+                                SendMode.SHIELDED -> viewModel.sendShielded(viewModel.currentConfig(), it, to, amount)
+                            }
+                        }
+                    },
                     onResetState = { viewModel.resetSendState() },
                     onBack = { controller.close() },
                     registerBack = { sendBack = it },

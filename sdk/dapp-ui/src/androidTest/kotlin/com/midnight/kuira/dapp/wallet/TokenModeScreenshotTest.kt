@@ -35,8 +35,10 @@ class TokenModeScreenshotTest {
                     TokenModeStep(
                         palette = palette,
                         availableNight = "1,234",
+                        availableShieldedNight = "34.5",
                         onBack = {},
                         onPickUnshielded = {},
+                        onPickShielded = {},
                     )
                 }
             }

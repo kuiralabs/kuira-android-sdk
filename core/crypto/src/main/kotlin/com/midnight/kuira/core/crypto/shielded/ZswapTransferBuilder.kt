@@ -246,10 +246,11 @@ class ZswapTransferBuilder private constructor() {
             dustUtxosJson: String,
             currentTimeMs: Long,
             ttlMs: Long,
+            ledgerParamsHex: String,
         ): String? {
             ensureNativeLoaded()
             return nativeBuildShieldedTransactionWithDust(
-                offerHex, networkId, dustStatePtr, dustSeed, dustUtxosJson, currentTimeMs, ttlMs
+                offerHex, networkId, dustStatePtr, dustSeed, dustUtxosJson, currentTimeMs, ttlMs, ledgerParamsHex
             )
         }
 
@@ -396,7 +397,7 @@ class ZswapTransferBuilder private constructor() {
         @JvmStatic private external fun nativeMergeOffers(offer1Hex: String, offer2Hex: String): String?
         @JvmStatic private external fun nativeSerializeOffer(offerHex: String): String?
         @JvmStatic private external fun nativeBuildShieldedTransaction(offerHex: String, networkId: String, dustTxHex: String?, ttlMs: Long): String?
-        @JvmStatic private external fun nativeBuildShieldedTransactionWithDust(offerHex: String, networkId: String, dustStatePtr: Long, dustSeed: ByteArray, dustUtxosJson: String, currentTimeMs: Long, ttlMs: Long): String?
+        @JvmStatic private external fun nativeBuildShieldedTransactionWithDust(offerHex: String, networkId: String, dustStatePtr: Long, dustSeed: ByteArray, dustUtxosJson: String, currentTimeMs: Long, ttlMs: Long, ledgerParamsHex: String): String?
 
         // ── Internal Helpers ──
 
