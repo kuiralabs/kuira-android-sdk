@@ -35,13 +35,18 @@ import javax.inject.Singleton
  *    [BlockStoreBackupStorage]. Same rationale: only consumed by
  *    the sigil panel today.
  *
- * **Consumer override pattern for `rpId`:** the default
- * `PasskeyConfig` lives in `IdentityModule` and points at
- * `nel349.github.io`. Apps that need a different relying party
- * (production Kuira, Kicks, etc.) replace `IdentityModule`'s
- * provider via Hilt's standard module-replacement pattern (e.g.
- * `@TestInstallIn` for tests, or by uninstalling `IdentityModule`
- * and supplying their own `PasskeyConfig` provider).
+ * **`rpId` belongs to the consumer, and there is no default.**
+ * `core:identity`'s `IdentityModule` deliberately binds no
+ * `PasskeyConfig`: the relying-party domain must match the
+ * `assetlinks.json` the consuming app hosts on its *own* domain, so
+ * an SDK default would route every consumer through the maintainer's
+ * domain and make this SDK effectively permissioned. Each app
+ * supplies its own `@Provides` for `PasskeyConfig`; omitting it is a
+ * fail-fast Dagger missing-binding error at build time, which is the
+ * intended "declare your domain" signal.
+ *
+ * No domain is named here on purpose — a documented example rpId
+ * becomes a wrong one the day the ecosystem moves.
  */
 @Module
 @InstallIn(SingletonComponent::class)
