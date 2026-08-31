@@ -121,6 +121,11 @@ object VersionCoherence {
         // PreProd/mainnet specVersions here once verified against a live node — an unverified
         // specVersion warns (the matrix lags reality), it does not fail.
         22000L,
+        // localnet node (specName "midnight", specVersion 1000000) verified KNOWN-GOOD on
+        // 2026-08-31 by the full instrumented E2E gate (295 tests / 0 failed): fresh dust
+        // registration (SdkRegistrationE2ETest), unshielded + shielded send, and contract
+        // deploy/call all validated the bundled 8.0.3 ledger against this node. (#87)
+        1000000L,
     )
 
     /**
