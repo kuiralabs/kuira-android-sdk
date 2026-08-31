@@ -22,15 +22,9 @@ plugins {
 }
 
 apiValidation {
-    // Don't validate non-published modules — the wallet app itself,
-    // its feature screens, and the example dApps are NOT part of the
-    // consumer SDK surface.
-    ignoredProjects.addAll(
-        listOf(
-            "app",
-            "balance", "dust", "onboarding", "send", "settings", // feature:*
-        ),
-    )
+    // The legacy wallet app + its feature:* screens are gone; the example dApps are separate
+    // Gradle projects. Only the published SDK modules (core:* + sdk:*) are validated here, so
+    // there's nothing left to ignore.
 }
 
 // ── adb reverse localnet (auto-wired before every installDebug) ──
