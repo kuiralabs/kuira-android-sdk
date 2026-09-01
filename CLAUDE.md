@@ -11,7 +11,7 @@ Build the Kuira Wallet (Midnight blockchain) for Android following elite enginee
 
 ## Project Structure
 
-**Current Repository:** `kuira-android-wallet/`
+**Current Repository:** `kuira-android-sdk/`
 - Production Midnight Wallet implementation
 - Multi-module architecture
 - Pure Compose UI

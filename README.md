@@ -31,8 +31,8 @@ self-custody wallet.
 The Rust FFI lives in the `kuira-crypto-ffi` git submodule, so clone recursively:
 
 ```bash
-git clone --recurse-submodules https://github.com/nel349/kuira-android-wallet.git
-cd kuira-android-wallet
+git clone --recurse-submodules https://github.com/nel349/kuira-android-sdk.git
+cd kuira-android-sdk
 # already cloned without submodules?
 git submodule update --init --recursive
 ```

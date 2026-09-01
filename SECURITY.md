@@ -15,7 +15,7 @@ wrong venue for unpatched vulnerabilities.
 ### How to reach us
 
 - **GitHub Security Advisories** (preferred):
-  <https://github.com/nel349/kuira-android-wallet/security/advisories/new>
+  <https://github.com/nel349/kuira-android-sdk/security/advisories/new>
   — Private channel that lets you and the maintainer collaborate on a fix
   before disclosure. Encrypted on GitHub's side.
 - **Email:** `norman.lopez.krypto@gmail.com`
