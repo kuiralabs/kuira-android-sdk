@@ -41,3 +41,18 @@ gradle.properties
 
 # Internal docs live in the private kuira-android-docs repo
 /docs/
+
+# Per-developer agent tooling. Everyone drives this repo with a different
+# assistant, so nobody's configuration is forced on anyone else.
+.agents/
+.codex/
+
+# Codex's context file. Deliberately NOT tracked: it is a near-verbatim twin of
+# the committed CLAUDE.md, so the repo keeps ONE canonical context document
+# rather than two that drift. Codex only auto-loads it from the repo root, so
+# it stays here locally for whoever wants it.
+AGENTS.md
+
+# Local run/CLI noise.
+logs/
+yaci-cli.history
