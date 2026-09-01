@@ -120,8 +120,8 @@ tag still exists but nothing is staged. Investigate, fix, re-tag.
 ### 3. Refresh the public API reference
 
 After the artifacts are live on Central, regenerate the multi-module
-Dokka HTML and push it to the public docs repo so
-`kuiralabs.github.io/kuira-sdk-android/api/` matches what's on Central:
+Dokka HTML and push it to the public docs repo so its published `/api/` reference
+matches what's on Central:
 
 ```bash
 # In the monorepo:

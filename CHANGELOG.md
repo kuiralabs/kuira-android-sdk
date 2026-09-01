@@ -112,6 +112,11 @@ Android from a single Gradle dependency (`io.github.kuiralabs:dapp-ui`).
 
 ---
 
-[Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs) ·
-[Documentation](https://kuiralabs.github.io/kuira-sdk-android/) ·
-[Roadmap](https://kuiralabs.github.io/kuira-sdk-android/roadmap/)
+[Maven Central][central] ·
+[Documentation][docs] ·
+[Roadmap][roadmap]
+
+<!-- link references — update on a rename, one place -->
+[central]: https://central.sonatype.com/namespace/io.github.kuiralabs
+[docs]: https://kuiralabs.github.io/kuira-sdk-android/
+[roadmap]: https://kuiralabs.github.io/kuira-sdk-android/roadmap/

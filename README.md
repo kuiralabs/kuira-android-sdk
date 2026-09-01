@@ -8,7 +8,7 @@ self-custody wallet.
 - **Using the SDK in your own dApp?** You don't need this repo — add the
   [Maven Central](https://central.sonatype.com/namespace/io.github.kuiralabs) dependency
   and follow the docs at
-  [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/).
+  [SDK documentation][docs].
 - **Want to build, run, or contribute to the SDK / wallet itself?** You're in the right
   place — start with [Getting started](#getting-started) below.
 
@@ -24,7 +24,7 @@ self-custody wallet.
 | Android Studio | Ladybug or newer (or the command-line Android SDK) |
 | Android NDK | 26+ — required to build the Rust FFI |
 | Rust | via [rustup](https://rustup.rs); add the Android targets: `rustup target add aarch64-linux-android x86_64-linux-android` |
-| A localnet | node + indexer + proof server, to run anything on-chain — see the [localnet / integration guide](https://kuiralabs.github.io/kuira-sdk-android/) |
+| A localnet | node + indexer + proof server, to run anything on-chain — see the [localnet / integration guide][docs] |
 
 ### Clone (with the native submodule)
 
@@ -123,7 +123,7 @@ Contributions are welcome.
 
 | Looking for | Read |
 |---|---|
-| Using the SDK in a dApp | [kuiralabs.github.io/kuira-sdk-android](https://kuiralabs.github.io/kuira-sdk-android/) |
+| Using the SDK in a dApp | [SDK documentation][docs] |
 | End-to-end integration recipe | [`INTEGRATION.md`](INTEGRATION.md) |
 | Security policy + threat model | [`SECURITY.md`](SECURITY.md) |
 | API stability + deprecation policy | [`STABILITY.md`](STABILITY.md) |
@@ -156,3 +156,6 @@ change must propagate to the POM block in the root `build.gradle.kts`.
 
 Maintainer: [nel349](https://github.com/nel349) · `kuiralabs@gmail.com` ·
 [security policy](SECURITY.md) for vulnerability reports.
+
+<!-- link references — update on a docs-site rename, one place -->
+[docs]: https://kuiralabs.github.io/kuira-sdk-android/
