@@ -200,6 +200,11 @@ public final class com/midnight/kuira/core/compact/ContractCallException$Submiss
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 }
 
+public final class com/midnight/kuira/core/compact/ContractCallException$UnshieldedValueUnfunded : com/midnight/kuira/core/compact/ContractCallException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
 public abstract class com/midnight/kuira/core/compact/ContractCallStage {
 }
 
@@ -369,6 +374,7 @@ public final class com/midnight/kuira/core/compact/MidnightConfig {
 	public static final field Companion Lcom/midnight/kuira/core/compact/MidnightConfig$Companion;
 	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/TransactionBalancer;Lcom/midnight/kuira/core/compact/ContractOperationListener;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
+	public final fun configureUnshieldedAutoFund (ZLkotlin/jvm/functions/Function3;)V
 	public final fun getContext ()Landroid/content/Context;
 	public final fun getIndexerUrl ()Ljava/lang/String;
 	public final fun getNetworkId ()Ljava/lang/String;

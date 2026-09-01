@@ -394,7 +394,7 @@ public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletBal
 	public fun <init> ()V
 	public final fun getLambda$-260084447$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-34680177$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$734261077$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$1237158245$dapp_ui_release ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSettingsScreenKt {
@@ -613,7 +613,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletAppShellKt {
 public final class com/midnight/kuira/dapp/wallet/WalletBalanceCompactKt {
 	public static final fun WalletBalanceCompact (Lcom/midnight/kuira/dapp/wallet/WalletBalanceUi;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
 	public static final fun WalletBalanceError (Ljava/lang/String;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
-	public static final fun WalletBalanceLoading (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletBalanceLoading (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Ljava/lang/String;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletBalanceUi {
@@ -816,6 +816,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletPanelViewModel : android
 	public final fun seedNetworkDefault (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
 	public final fun selectNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;)V
 	public final fun sendNight (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/math/BigInteger;)V
+	public final fun sendShielded (Lcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;Ljava/lang/String;Ljava/math/BigInteger;)V
 	public final fun setDustBackup (ZLcom/midnight/kuira/sdk/walletruntime/WalletConfig;Landroidx/fragment/app/FragmentActivity;)V
 	public final fun skipRestore ()V
 }

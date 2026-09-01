@@ -426,7 +426,7 @@ public final class com/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder 
 public final class com/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion {
 	public final fun buildTransaction (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;
 	public static synthetic fun buildTransaction$default (Lcom/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Ljava/lang/String;
-	public final fun buildTransactionWithDust (Ljava/lang/String;Ljava/lang/String;J[BLjava/lang/String;JJ)Ljava/lang/String;
+	public final fun buildTransactionWithDust (Ljava/lang/String;Ljava/lang/String;J[BLjava/lang/String;JJLjava/lang/String;)Ljava/lang/String;
 	public final fun buildTransfer (Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
 	public static synthetic fun buildTransfer$default (Lcom/midnight/kuira/core/crypto/shielded/ZswapTransferBuilder$Companion;Lcom/midnight/kuira/core/crypto/shielded/ZswapLocalState;[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;Ljava/lang/String;JLjava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/crypto/shielded/TransferResult;
 	public final fun createOutput (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/math/BigInteger;)Lcom/midnight/kuira/core/crypto/shielded/OutputResult;

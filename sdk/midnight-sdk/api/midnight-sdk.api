@@ -124,7 +124,7 @@ public final class com/midnight/kuira/sdk/InsufficientFundsException : java/lang
 
 public final class com/midnight/kuira/sdk/MidnightSdk {
 	public static final field Companion Lcom/midnight/kuira/sdk/MidnightSdk$Companion;
-	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/sdk/VersionCoherenceChecker;Lkotlinx/coroutines/CoroutineScope;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/compact/MidnightConfig;Lcom/midnight/kuira/sdk/MidnightWallet;[BLjava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;[BLjava/lang/String;Lcom/midnight/kuira/sdk/OperationRegistry;[B[BLjava/lang/String;Lcom/midnight/kuira/core/indexer/utxo/UtxoManager;Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter;Lcom/midnight/kuira/sdk/VersionCoherenceChecker;Lkotlinx/coroutines/CoroutineScope;Lcom/midnight/kuira/core/indexer/database/UtxoDatabase;Lcom/midnight/kuira/core/indexer/api/IndexerClientImpl;Lcom/midnight/kuira/sdk/ShieldedBalanceTracker;Lcom/midnight/kuira/sdk/DustBalanceTracker;Lcom/midnight/kuira/core/indexer/repository/ShieldedRepository;Lcom/midnight/kuira/core/indexer/repository/DustRepository;[BLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun buildUnshieldedFundingJson (Ljava/math/BigInteger;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun buildUnshieldedFundingJson$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/math/BigInteger;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun buildUnshieldedWithdrawalJson ([BLjava/math/BigInteger;Ljava/lang/String;)Ljava/lang/String;
@@ -146,6 +146,8 @@ public final class com/midnight/kuira/sdk/MidnightSdk {
 	public final fun launchProtocol (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/Job;
 	public final fun launchSendNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/Job;
 	public static synthetic fun launchSendNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
+	public final fun launchSendShieldedNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/Job;
+	public static synthetic fun launchSendShieldedNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
 	public final fun observeBlocks ()Lkotlinx/coroutines/flow/Flow;
 	public final fun registerForDustGeneration (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun requestAttention (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -155,6 +157,8 @@ public final class com/midnight/kuira/sdk/MidnightSdk {
 	public final fun runProtocol (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun sendNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun sendNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun sendShieldedNight (Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun sendShieldedNight$default (Lcom/midnight/kuira/sdk/MidnightSdk;Ljava/lang/String;Ljava/math/BigInteger;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun updateOperationStage (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -162,6 +166,8 @@ public final class com/midnight/kuira/sdk/MidnightSdk$Builder {
 	public fun <init> (Landroid/content/Context;)V
 	public final fun accountIndex (I)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun appStateBackupFactory (Lkotlin/jvm/functions/Function1;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public final fun autoFundUnshieldedDeposits (Z)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
+	public static synthetic fun autoFundUnshieldedDeposits$default (Lcom/midnight/kuira/sdk/MidnightSdk$Builder;ZILjava/lang/Object;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun build ()Lcom/midnight/kuira/sdk/MidnightSdk;
 	public final fun dustCloudBackupFactory (Lkotlin/jvm/functions/Function2;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
 	public final fun dustRestoreGate (Lkotlin/jvm/functions/Function2;)Lcom/midnight/kuira/sdk/MidnightSdk$Builder;
@@ -178,6 +184,7 @@ public final class com/midnight/kuira/sdk/MidnightSdk$Companion {
 
 public final class com/midnight/kuira/sdk/MidnightSdk$SendProgress : java/lang/Enum {
 	public static final field CONSOLIDATING Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
+	public static final field PROVING Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
 	public static final field SUBMITTING Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/sdk/MidnightSdk$SendProgress;
