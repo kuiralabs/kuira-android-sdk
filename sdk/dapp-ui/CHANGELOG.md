@@ -166,4 +166,4 @@ commit so a reader can trace the original investigation:
 - `core:testing:MainDispatcherRule` — shared JUnit rule for any
   ViewModel test that needs `viewModelScope.launch` to run inline.
 
-[Unreleased]: https://github.com/nel349/kuira-android-sdk/commits/main
+[Unreleased]: https://github.com/kuiralabs/kuira-android-sdk/commits/main
