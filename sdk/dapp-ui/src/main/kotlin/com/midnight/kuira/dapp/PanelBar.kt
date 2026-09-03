@@ -32,6 +32,7 @@ import com.midnight.kuira.dapp.wallet.SigilChipUi
 import com.midnight.kuira.dapp.wallet.ThemeStore
 import com.midnight.kuira.dapp.wallet.WalletChip
 import com.midnight.kuira.dapp.wallet.WalletChipUi
+import com.midnight.kuira.dapp.wallet.WalletBalanceLine
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.LocalWalletOverlay
 import com.midnight.kuira.dapp.wallet.SettingsLaunchSource
@@ -120,6 +121,17 @@ fun PanelBar(
      * existing `Column { PanelBar(); content }` call sites are unaffected.
      */
     floating: Boolean = false,
+    /**
+     * Other chains' holdings, shown in the wallet's balance card.
+     *
+     * Here rather than in a bar the host assembles itself. A host *can* compose
+     * `SigilStatusPanel` + `WalletStatusPanel` directly — and doing so to prove
+     * the two-chain design silently gave up everything this composable does
+     * beyond arranging two pills: floating mode, independent dragging, docking
+     * to an edge as a peek tab, and the chip tiers. A second chain is not worth
+     * losing those, so it comes here instead.
+     */
+    extraBalances: List<WalletBalanceLine> = emptyList(),
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -207,6 +219,7 @@ fun PanelBar(
     }
     val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit, () -> Unit, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         WalletStatusPanel(
+            extraBalances = extraBalances,
             viewModel = walletViewModel,
             initialNetwork = network,
             colors = themedWalletColors,
