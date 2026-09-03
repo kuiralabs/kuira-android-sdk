@@ -3,6 +3,8 @@ package com.midnight.kuira.dapp.wallet
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import com.midnight.kuira.dapp.backup.BackupSection
+import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -213,6 +215,19 @@ private fun WalletSettingsOverlayContent(
 
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
     val recoveryPhraseSaved by viewModel.recoveryPhraseSaved.collectAsStateWithLifecycle()
+    val backupSection by viewModel.backupSection.collectAsStateWithLifecycle()
+    val controller = LocalWalletOverlay.current
+
+    // The same WalletConfig the panel builds. Both surfaces now derive it from
+    // the same three values rather than one of them owning it privately.
+    val config =
+        remember(network, controller.provingMode, controller.proofServerUrl) {
+            WalletConfig(
+                network = network,
+                provingMode = controller.provingMode,
+                proofServerUrl = controller.proofServerUrl,
+            )
+        }
 
     // Back returns to Settings from the reveal; otherwise closes Settings entirely.
     BackHandler(enabled = true) {
@@ -248,6 +263,31 @@ private fun WalletSettingsOverlayContent(
             syncLabel = settingsSyncLabel(status, syncing = syncProgress != null),
             recoveryPhraseSaved = recoveryPhraseSaved,
             onViewRecoveryPhrase = { recoveryRevealOpen = true },
+            // Moved out of the wallet sheet. The sheet is about money; these are
+            // configuration, and with a second chain's balance in that sheet the
+            // room they were taking stopped being affordable.
+            config = {
+                ConfigRow(
+                    network = network,
+                    provingMode = controller.provingMode,
+                    proofServerUrl = controller.proofServerUrl,
+                    colors = colors,
+                    onNetworkChange = { viewModel.selectNetwork(it) },
+                    onProvingModeChange = { controller.provingMode = it },
+                    onProofServerUrlChange = { controller.proofServerUrl = it },
+                )
+            },
+            backup = {
+                BackupSection(
+                    state = backupSection,
+                    colors = colors,
+                    onDustToggle = { enabled -> activity?.let { viewModel.setDustBackup(enabled, config, it) } },
+                    onDisableBackup = { activity?.let { viewModel.disableBackup(config, it) } },
+                    // App-data backup is automatic; its only actionable state is
+                    // a failed save, whose retry re-runs a forced refresh.
+                    onAppDataAction = { activity?.let { viewModel.refreshBalance(config, it, force = true) } },
+                )
+            },
             onResyncBalance = {
                 // Rebuild the unshielded UTXO cache from genesis. Close back to the
                 // wallet so the user watches the balance self-correct via the live indicator.

@@ -132,22 +132,25 @@ fun WalletBalanceCompact(
                 )
             }
             Spacer(Modifier.height(6.dp))
-            Text(
-                ui.nightTotal,
-                color = colors.onSheet,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.W200,
-                letterSpacing = (-1).sp,
-                lineHeight = 36.sp,
-            )
-            Spacer(Modifier.height(2.dp))
+
             // "Synced" is the one sync-complete status → green; "Syncing…" and the
             // "NIGHT ·" prefix stay monochrome (progress is never green mid-flight).
             val synced = syncProgress == null
-            // Status line + the ⓘ pinned bottom-RIGHT on the SAME row, so the ⓘ adds NO vertical space
-            // to the card (it only grows for the sync indicator). The ⓘ explains the live-event NIGHT
-            // count can drift and points at Settings → Re-sync balance; gone once lands.
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+
+            // Amount and unit share a baseline instead of stacking. Stacked, each
+            // chain cost two lines and left the card's whole right-hand side
+            // empty — and a second chain doubled that into a tall box of mostly
+            // nothing. The ⓘ still pins right on the same row, adding no height.
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    ui.nightTotal,
+                    color = colors.onSheet,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.W200,
+                    letterSpacing = (-1).sp,
+                    lineHeight = 36.sp,
+                )
+                Spacer(Modifier.width(10.dp))
                 Text(
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
@@ -156,7 +159,9 @@ fun WalletBalanceCompact(
                         }
                     },
                     fontSize = 13.sp,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(bottom = 6.dp),
                 )
                 BalanceInfoDot(colors)
             }
@@ -167,30 +172,34 @@ fun WalletBalanceCompact(
             // number to be the hero, and making one of them small is what turns
             // the other into an appendix.
             extraBalances.forEach { line ->
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    line.amount,
-                    color = colors.onSheet,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.W200,
-                    letterSpacing = (-1).sp,
-                    lineHeight = 36.sp,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = colors.onSheetDim)) {
-                            append(if (line.status == null) line.unit else "${line.unit} · ")
-                        }
-                        line.status?.let {
-                            withStyle(
-                                SpanStyle(color = if (line.statusIsFault) colors.error else colors.onSheetDim),
-                            ) { append(it) }
-                        }
-                    },
-                    fontSize = 13.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        line.amount,
+                        color = colors.onSheet,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.W200,
+                        letterSpacing = (-1).sp,
+                        lineHeight = 36.sp,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = colors.onSheetDim)) {
+                                append(if (line.status == null) line.unit else "${line.unit} · ")
+                            }
+                            line.status?.let {
+                                withStyle(
+                                    SpanStyle(color = if (line.statusIsFault) colors.error else colors.onSheetDim),
+                                ) { append(it) }
+                            }
+                        },
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(bottom = 6.dp),
+                    )
+                }
             }
 
             if (ui.privateNight != null) {

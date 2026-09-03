@@ -283,8 +283,10 @@ fun WalletStatusPanel(
     // Seed the host's first-run default once; the persisted choice wins thereafter.
     LaunchedEffect(Unit) { viewModel.seedNetworkDefault(initialNetwork) }
     val network by viewModel.selectedNetwork.collectAsStateWithLifecycle()
-    var provingMode by rememberSaveable { mutableStateOf(ProvingMode.DEFAULT) }
-    var proofServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    // Read, not owned. The controls moved to Settings; the values still build
+    // this panel's WalletConfig, so both surfaces read one holder.
+    val provingMode = overlay.provingMode
+    val proofServerUrl = overlay.proofServerUrl
     val config = remember(network, provingMode, proofServerUrl) {
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
@@ -467,11 +469,8 @@ fun WalletStatusPanel(
                     viewModel.selectNetwork(it)
                     onNetworkChange(it)
                 },
-                onProvingModeChange = { provingMode = it },
-                onProofServerUrlChange = { proofServerUrl = it },
                 onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it, force = true) } },
                 onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
-                backupSection = backupSection,
                 onDustToggle = { enabled -> activity?.let { viewModel.setDustBackup(enabled, config, it) } },
                 onDisableBackup = { activity?.let { viewModel.disableBackup(config, it) } },
                 onReceive = {
@@ -701,11 +700,8 @@ private fun WalletSheetContent(
     lightMode: Boolean,
     onToggleLightMode: () -> Unit,
     onNetworkChange: (MidnightNetwork) -> Unit,
-    onProvingModeChange: (ProvingMode) -> Unit,
-    onProofServerUrlChange: (String?) -> Unit,
     onRefreshBalance: () -> Unit,
     onRegisterDust: () -> Unit,
-    backupSection: BackupSectionState,
     onDustToggle: (Boolean) -> Unit,
     onDisableBackup: () -> Unit,
     onReceive: () -> Unit,
@@ -804,33 +800,8 @@ private fun WalletSheetContent(
                 is WalletStatus.Locked -> WalletLocked(colors, onUnlock = onRefreshBalance)
             }
 
-            Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-
-            // Compact config — network + proving as dropdown selectors (one row
-            // instead of five chip-rows). Picking either rebuilds the SDK.
-            ConfigRow(
-                network = config.network,
-                provingMode = config.provingMode,
-                proofServerUrl = config.proofServerUrl,
-                colors = colors,
-                onNetworkChange = onNetworkChange,
-                onProvingModeChange = onProvingModeChange,
-                onProofServerUrlChange = onProofServerUrlChange,
-            )
 
             Spacer(modifier = Modifier.height(PanelDimens.SheetActionsTopGap))
-
-            // Branded backup & recovery — per-lane status (identity / dust /
-            // app-data) from the wallet's real backupStatus.
-            BackupSection(
-                state = backupSection,
-                colors = colors,
-                onDustToggle = onDustToggle,
-                onDisableBackup = onDisableBackup,
-                // App-data backup is automatic; its only actionable state is a
-                // failed save, whose "Retry" re-runs a forced refresh.
-                onAppDataAction = onRefreshBalance,
-            )
             Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
             // Manual session lock — only meaningful with a live (unlocked) wallet.
             // Understated so it's not confused with the primary actions.
@@ -960,7 +931,7 @@ private const val MESSAGE_ALPHA = 0.8f
  * panel's LaunchedEffect on `config`.
  */
 @Composable
-private fun ConfigRow(
+internal fun ConfigRow(
     network: MidnightNetwork,
     provingMode: ProvingMode,
     proofServerUrl: String?,

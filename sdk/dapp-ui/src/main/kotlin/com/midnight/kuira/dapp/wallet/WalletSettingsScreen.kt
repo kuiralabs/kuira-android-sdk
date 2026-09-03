@@ -44,6 +44,15 @@ internal fun WalletSettingsScreen(
     themes: List<WalletTheme> = WalletThemes.all,
     selectedThemeId: String = WalletThemes.Default.id,
     onSelectTheme: (String) -> Unit = {},
+    /**
+     * Network and proving controls, moved here from the wallet sheet.
+     *
+     * They are configuration, and the sheet they used to sit in is about money.
+     * With a second chain in that sheet the distinction stopped being cosmetic:
+     * the balances need the room, and one network selection governs both chains
+     * rather than belonging to either.
+     */
+    config: (@Composable () -> Unit)? = null,
     backup: (@Composable () -> Unit)? = null,
     onBack: () -> Unit,
 ) {
@@ -126,6 +135,11 @@ internal fun WalletSettingsScreen(
                     )
                 }
                 Spacer(Modifier.height(SendDimens.Space32))
+
+                if (config != null) {
+                    SettingsSection("NETWORK & PROVING", palette) { config() }
+                    Spacer(Modifier.height(SendDimens.Space32))
+                }
 
                 if (backup != null) {
                     backup()
