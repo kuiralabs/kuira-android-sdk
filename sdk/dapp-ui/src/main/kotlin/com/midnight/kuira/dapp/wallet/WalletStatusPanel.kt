@@ -211,22 +211,20 @@ fun WalletStatusPanel(
      */
     pill: (@Composable (WalletChipUi, onTap: () -> Unit, onSend: () -> Unit, onReceive: () -> Unit) -> Unit)? = null,
     /**
-     * Extra content for the sheet, rendered directly beneath the balance.
+     * Other chains' holdings, rendered **inside this wallet's balance card**.
      *
-     * For a host that has *another* chain to show in the same wallet. The
-     * alternative is a second sheet, which states that the user has two wallets
-     * — and a wallet reaching two ledgers is still one wallet.
+     * An earlier version of this parameter appended a composable *below* the
+     * sheet body instead. Two things were wrong with it, and a screenshot showed
+     * both: the content landed after the Send/Receive actions rather than under
+     * the balance, so it read as an appendix to this chain's wallet; and a
+     * host-drawn section could not match this card's type scale without copying
+     * it, which is a drift waiting to happen.
      *
-     * Placed after the balance and before the network row deliberately: the two
-     * chains' holdings read together, and the network selection governing both
-     * follows them.
-     *
-     * Content only. This panel keeps owning the sheet, its scroll, its padding
-     * and its dismissal, exactly as [pill] leaves it owning everything but the
-     * pill's visual. Null (the default) renders nothing and is byte-identical
-     * to before this parameter existed.
+     * Data rather than a slot for exactly that reason. The two chains read as
+     * one wallet only if one piece of code draws them, so the host supplies
+     * numbers and this panel renders them in its own scale.
      */
-    sheetSection: (@Composable () -> Unit)? = null,
+    extraBalances: List<WalletBalanceLine> = emptyList(),
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -512,7 +510,7 @@ fun WalletStatusPanel(
                         overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Wallet))
                     }
                 },
-                sheetSection = sheetSection,
+                extraBalances = extraBalances,
                 onClose = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -714,7 +712,7 @@ private fun WalletSheetContent(
     onSend: () -> Unit,
     onLockNow: () -> Unit,
     onSettings: () -> Unit,
-    sheetSection: (@Composable () -> Unit)?,
+    extraBalances: List<WalletBalanceLine>,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -797,20 +795,13 @@ private fun WalletSheetContent(
                     stage = status.stage,   // actively loading → the runner + phase label + %
                 )
                 is WalletStatus.Ready -> ReadyBody(
+                    extraBalances = extraBalances,
                     status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust,
                     busy = busy,
                 )
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
                 is WalletStatus.SigilRequired -> SigilPrompt(colors)
                 is WalletStatus.Locked -> WalletLocked(colors, onUnlock = onRefreshBalance)
-            }
-
-            // A second chain's holdings, if the host has one, directly beneath
-            // this one's — so the sheet reads as one wallet rather than as this
-            // wallet plus an appendix.
-            sheetSection?.let {
-                Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-                it()
             }
 
             Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
@@ -897,6 +888,7 @@ private fun WalletLocked(colors: WalletPanelColors, onUnlock: () -> Unit) {
 
 @Composable
 private fun ReadyBody(
+    extraBalances: List<WalletBalanceLine>,
     status: WalletStatus.Ready,
     syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
@@ -929,6 +921,7 @@ private fun ReadyBody(
     // like dust-registration polling → indeterminate with its own label).
     val working = syncProgress ?: status.busy?.let { WalletSyncProgress(null, it) }
     WalletBalanceCompact(
+        extraBalances = extraBalances,
         ui = balanceUi,
         syncProgress = working,
         colors = colors,

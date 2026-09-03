@@ -410,10 +410,10 @@ public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSet
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletStatusPanelKt {
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$WalletStatusPanelKt;
 	public fun <init> ()V
-	public final fun getLambda$-216596500$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-47344915$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$268040331$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$437291916$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1173143573$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1231125846$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1766632244$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1824614517$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 }
 
 public final class com/midnight/kuira/dapp/wallet/DustBackupStateStore {
@@ -611,9 +611,28 @@ public final class com/midnight/kuira/dapp/wallet/WalletAppShellKt {
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletBalanceCompactKt {
-	public static final fun WalletBalanceCompact (Lcom/midnight/kuira/dapp/wallet/WalletBalanceUi;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletBalanceCompact (Lcom/midnight/kuira/dapp/wallet/WalletBalanceUi;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function0;Ljava/util/List;Landroidx/compose/runtime/Composer;II)V
 	public static final fun WalletBalanceError (Ljava/lang/String;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 	public static final fun WalletBalanceLoading (Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletSyncProgress;Ljava/lang/String;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class com/midnight/kuira/dapp/wallet/WalletBalanceLine {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/midnight/kuira/dapp/wallet/WalletBalanceLine;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/dapp/wallet/WalletBalanceLine;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/midnight/kuira/dapp/wallet/WalletBalanceLine;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAmount ()Ljava/lang/String;
+	public final fun getStatus ()Ljava/lang/String;
+	public final fun getStatusIsFault ()Z
+	public final fun getUnit ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletBalanceUi {
@@ -934,7 +953,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : c
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
-	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZIZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function6;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;III)V
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZIZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function6;Ljava/util/List;Landroidx/compose/runtime/Composer;III)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletSyncIndicatorKt {

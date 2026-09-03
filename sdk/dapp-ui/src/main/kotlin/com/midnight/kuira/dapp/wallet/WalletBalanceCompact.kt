@@ -24,6 +24,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +77,32 @@ data class WalletBalanceUi(
  * @param busy disables the refresh / register / send affordances mid-operation.
  * @param onSend null → Send is shown but disabled with a "soon" hint (until #240).
  */
+/**
+ * One more chain's holdings, for the same wallet's balance card.
+ *
+ * **Data, not a composable slot.** The point of putting a second chain in this
+ * card is that the two read as one wallet, and that only holds if they are
+ * rendered by the same code in the same type scale. A slot would have the other
+ * chain's module reproduce this file's typography and drift from it the first
+ * time either changed. So the host supplies the numbers and this panel draws
+ * them.
+ */
+@Immutable
+data class WalletBalanceLine(
+    /** Formatted amount, already grouped and abbreviated as the host wants it. */
+    val amount: String,
+    /** The unit, e.g. `ADA`. Rendered where `NIGHT` is. */
+    val unit: String,
+    /**
+     * Trailing detail after the unit — an asset count, a sync state, a fault.
+     *
+     * Null renders the unit alone.
+     */
+    val status: String? = null,
+    /** Colours [status] as a fault rather than as ordinary detail. */
+    val statusIsFault: Boolean = false,
+)
+
 @Composable
 fun WalletBalanceCompact(
     ui: WalletBalanceUi,
@@ -87,6 +114,8 @@ fun WalletBalanceCompact(
     modifier: Modifier = Modifier,
     busy: Boolean = false,
     onSend: (() -> Unit)? = null,
+    /** Additional chains' holdings, rendered inside this card beneath NIGHT. */
+    extraBalances: List<WalletBalanceLine> = emptyList(),
 ) {
     Column(modifier.fillMaxWidth()) {
         BalanceCard(colors, contentPadding = 14.dp) {
@@ -133,6 +162,37 @@ fun WalletBalanceCompact(
             }
             // Equal-weight public / private split — both are real balances, both
             // rendered bright (private is NOT a dim afterthought).
+            // Other chains, in this card and in this type scale. Equal weight is
+            // the decision, not an oversight: with two chains there is no single
+            // number to be the hero, and making one of them small is what turns
+            // the other into an appendix.
+            extraBalances.forEach { line ->
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    line.amount,
+                    color = colors.onSheet,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.W200,
+                    letterSpacing = (-1).sp,
+                    lineHeight = 36.sp,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = colors.onSheetDim)) {
+                            append(if (line.status == null) line.unit else "${line.unit} · ")
+                        }
+                        line.status?.let {
+                            withStyle(
+                                SpanStyle(color = if (line.statusIsFault) colors.error else colors.onSheetDim),
+                            ) { append(it) }
+                        }
+                    },
+                    fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             if (ui.privateNight != null) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
