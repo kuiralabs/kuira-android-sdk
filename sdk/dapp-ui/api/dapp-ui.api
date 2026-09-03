@@ -410,10 +410,10 @@ public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletSet
 public final class com/midnight/kuira/dapp/wallet/ComposableSingletons$WalletStatusPanelKt {
 	public static final field INSTANCE Lcom/midnight/kuira/dapp/wallet/ComposableSingletons$WalletStatusPanelKt;
 	public fun <init> ()V
-	public final fun getLambda$-202113204$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-329310546$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-452214483$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-79209267$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-216596500$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-47344915$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$268040331$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$437291916$dapp_ui_release ()Lkotlin/jvm/functions/Function2;
 }
 
 public final class com/midnight/kuira/dapp/wallet/DustBackupStateStore {
@@ -934,7 +934,7 @@ public final class com/midnight/kuira/dapp/wallet/WalletStatus$SigilRequired : c
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletStatusPanelKt {
-	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZIZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function6;Landroidx/compose/runtime/Composer;II)V
+	public static final fun WalletStatusPanel (Lcom/midnight/kuira/core/network/MidnightNetwork;Landroidx/compose/ui/Modifier;Lcom/midnight/kuira/dapp/wallet/WalletPanelColors;Lcom/midnight/kuira/dapp/wallet/WalletPanelViewModel;Lkotlin/jvm/functions/Function1;ZIZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function6;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;III)V
 }
 
 public final class com/midnight/kuira/dapp/wallet/WalletSyncIndicatorKt {

@@ -199,12 +199,34 @@ fun WalletStatusPanel(
     lightMode: Boolean = false,
     onToggleLightMode: (() -> Unit)? = null,
     /**
-     * Custom pill slot (floating mode): when non-null it replaces the default pill with the host's
+     * Custom pill slot: when non-null it replaces the default pill with the host's
      * own surface (e.g. the resizable floating widget), receiving the live [WalletChipUi] and an
      * `onTap` that opens the sheet. The panel keeps owning the sheet, bootstrap, and lock — only the
      * pill's visual is delegated. Null → the classic built-in pill.
+     *
+     * Applies in **both** docked and floating layouts — this panel does not know
+     * which it is in. The floating widget was the first caller, not the only
+     * permitted one: a host composing its own bar, e.g. to put a second chain's
+     * numbers in the same pill, passes this too.
      */
     pill: (@Composable (WalletChipUi, onTap: () -> Unit, onSend: () -> Unit, onReceive: () -> Unit) -> Unit)? = null,
+    /**
+     * Extra content for the sheet, rendered directly beneath the balance.
+     *
+     * For a host that has *another* chain to show in the same wallet. The
+     * alternative is a second sheet, which states that the user has two wallets
+     * — and a wallet reaching two ledgers is still one wallet.
+     *
+     * Placed after the balance and before the network row deliberately: the two
+     * chains' holdings read together, and the network selection governing both
+     * follows them.
+     *
+     * Content only. This panel keeps owning the sheet, its scroll, its padding
+     * and its dismissal, exactly as [pill] leaves it owning everything but the
+     * pill's visual. Null (the default) renders nothing and is byte-identical
+     * to before this parameter existed.
+     */
+    sheetSection: (@Composable () -> Unit)? = null,
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -490,6 +512,7 @@ fun WalletStatusPanel(
                         overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Wallet))
                     }
                 },
+                sheetSection = sheetSection,
                 onClose = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -691,6 +714,7 @@ private fun WalletSheetContent(
     onSend: () -> Unit,
     onLockNow: () -> Unit,
     onSettings: () -> Unit,
+    sheetSection: (@Composable () -> Unit)?,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -779,6 +803,14 @@ private fun WalletSheetContent(
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
                 is WalletStatus.SigilRequired -> SigilPrompt(colors)
                 is WalletStatus.Locked -> WalletLocked(colors, onUnlock = onRefreshBalance)
+            }
+
+            // A second chain's holdings, if the host has one, directly beneath
+            // this one's — so the sheet reads as one wallet rather than as this
+            // wallet plus an appendix.
+            sheetSection?.let {
+                Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
+                it()
             }
 
             Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
