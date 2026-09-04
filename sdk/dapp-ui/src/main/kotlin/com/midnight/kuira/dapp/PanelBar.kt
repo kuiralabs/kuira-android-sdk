@@ -140,7 +140,7 @@ fun PanelBar(
      * the two panels drops floating mode, dragging, edge-docking and the chip
      * tiers, and a second chain is not worth losing those.
      */
-    balanceContent: (@Composable () -> Unit)? = null,
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)? = null,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 

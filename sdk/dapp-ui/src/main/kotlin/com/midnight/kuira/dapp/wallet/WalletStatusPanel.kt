@@ -223,7 +223,7 @@ fun WalletStatusPanel(
      * holding. The panel keeps the sheet, the actions, the lock and the
      * bootstrap; only what a balance looks like becomes the host's.
      */
-    balanceContent: (@Composable () -> Unit)? = null,
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)? = null,
     /** Reports the chip model whenever it changes. See [PanelBar]. */
     onChipChange: (WalletChipUi) -> Unit = {},
 ) {
@@ -715,7 +715,7 @@ private fun WalletSheetContent(
     onSend: () -> Unit,
     onLockNow: () -> Unit,
     onSettings: () -> Unit,
-    balanceContent: (@Composable () -> Unit)?,
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)?,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -866,7 +866,7 @@ private fun WalletLocked(colors: WalletPanelColors, onUnlock: () -> Unit) {
 
 @Composable
 private fun ReadyBody(
-    balanceContent: (@Composable () -> Unit)?,
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)?,
     status: WalletStatus.Ready,
     syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
@@ -898,12 +898,8 @@ private fun ReadyBody(
     // Any busy state drives the branded runner (sync → real digits; other work
     // like dust-registration polling → indeterminate with its own label).
     val working = syncProgress ?: status.busy?.let { WalletSyncProgress(null, it) }
-    if (balanceContent != null) {
-        balanceContent()
-        return
-    }
-
     WalletBalanceCompact(
+        balanceContent = balanceContent,
         ui = balanceUi,
         syncProgress = working,
         colors = colors,
