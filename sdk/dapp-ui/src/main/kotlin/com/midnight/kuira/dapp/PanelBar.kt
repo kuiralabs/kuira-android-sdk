@@ -32,7 +32,6 @@ import com.midnight.kuira.dapp.wallet.SigilChipUi
 import com.midnight.kuira.dapp.wallet.ThemeStore
 import com.midnight.kuira.dapp.wallet.WalletChip
 import com.midnight.kuira.dapp.wallet.WalletChipUi
-import com.midnight.kuira.dapp.wallet.WalletBalanceLine
 import com.midnight.kuira.dapp.wallet.WalletPanelColors
 import com.midnight.kuira.dapp.wallet.LocalWalletOverlay
 import com.midnight.kuira.dapp.wallet.SettingsLaunchSource
@@ -133,16 +132,15 @@ fun PanelBar(
      */
     floating: Boolean = false,
     /**
-     * Other chains' holdings, shown in the wallet's balance card.
+     * Replaces the wallet's balance area — for an app whose wallet reaches more
+     * than one chain and wants one set of holdings rather than this chain's plus
+     * a guest.
      *
-     * Here rather than in a bar the host assembles itself. A host *can* compose
-     * `SigilStatusPanel` + `WalletStatusPanel` directly — and doing so to prove
-     * the two-chain design silently gave up everything this composable does
-     * beyond arranging two pills: floating mode, independent dragging, docking
-     * to an edge as a peek tab, and the chip tiers. A second chain is not worth
-     * losing those, so it comes here instead.
+     * Here rather than in a bar the host assembles itself: composing one from
+     * the two panels drops floating mode, dragging, edge-docking and the chip
+     * tiers, and a second chain is not worth losing those.
      */
-    extraBalances: List<WalletBalanceLine> = emptyList(),
+    balanceContent: (@Composable () -> Unit)? = null,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -230,7 +228,7 @@ fun PanelBar(
     }
     val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit, () -> Unit, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         WalletStatusPanel(
-            extraBalances = extraBalances,
+            balanceContent = balanceContent,
             onChipChange = onWalletChipChange,
             viewModel = walletViewModel,
             initialNetwork = network,
