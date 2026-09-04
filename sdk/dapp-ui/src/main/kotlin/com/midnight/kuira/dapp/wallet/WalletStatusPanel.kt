@@ -225,6 +225,8 @@ fun WalletStatusPanel(
      * numbers and this panel renders them in its own scale.
      */
     extraBalances: List<WalletBalanceLine> = emptyList(),
+    /** Reports the chip model whenever it changes. See [PanelBar]. */
+    onChipChange: (WalletChipUi) -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -318,8 +320,14 @@ fun WalletStatusPanel(
 
     // The pill. A floating host can swap its visual via [pill] (e.g. the resizable widget), fed the
     // live balance; otherwise the built-in WalletPill. Either way, a tap opens the sheet.
+    // Computed either way. It used to be derived only inside the custom-pill
+    // branch, so a host that wanted the numbers but not the drawing had to take
+    // over the pill to get them — which is how the last attempt at a two-chain
+    // bar ended up reimplementing this composable badly.
+    val chipUi = walletChipUi(status, syncProgress, formatter, network)
+    LaunchedEffect(chipUi) { onChipChange(chipUi) }
+
     if (pill != null) {
-        val chipUi = walletChipUi(status, syncProgress, formatter, network)
         pill(
             chipUi,
             { sheetOpen = true },
