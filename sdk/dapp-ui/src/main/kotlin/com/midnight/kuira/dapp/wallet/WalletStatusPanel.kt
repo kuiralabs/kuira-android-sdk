@@ -778,13 +778,21 @@ private fun WalletSheetContent(
                     contentDescription = if (lightMode) "Switch to dark theme" else "Switch to light theme",
                 ) {
                     Text(
-                        if (lightMode) "☾" else "☀",
-                        color = colors.onSheetDim,
+                        // U+FE0E forces text presentation. Without it Android
+                        // paints `☀` from the colour-emoji font, which ignores
+                        // `color` entirely — so the toggle rendered yellow while
+                        // being told to be the sheet's own tint, and no change
+                        // to the colour could have fixed it.
+                        if (lightMode) "☾\uFE0E" else "☀\uFE0E",
+                        color = colors.onSheet,
                         fontSize = 18.sp,
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            // The balance is the first thing read; it should not begin directly
+            // under the controls. Eight points left the hero crowding the
+            // settings button.
+            Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
 
             // Every wallet state gets a branded treatment, never bare text:
             // a shimmer skeleton while bootstrapping/loading, the compact balance
