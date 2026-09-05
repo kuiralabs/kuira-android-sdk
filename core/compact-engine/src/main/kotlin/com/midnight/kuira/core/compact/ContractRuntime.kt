@@ -27,6 +27,20 @@ object ContractRuntime {
         return nativePersistentHashAligned(alignedValueJson)
     }
 
+    /**
+     * Transient (Poseidon) hash over the value's field atoms.
+     *
+     * Not a hasher swap on [persistentHashAligned]: that one is SHA-256 over the
+     * value's `binary_repr` bytes, this one is Poseidon over field elements
+     * (`transientHash<Vector<N, Field>>([fields...]) -> Field`). Circuits use it for
+     * values that never reach the ledger — Merkle path nodes above all — where it
+     * costs ~297 rows against persistentHash's ~4167.
+     */
+    fun transientHashAligned(alignedValueJson: String): String? {
+        ensureLoaded()
+        return nativeTransientHashAligned(alignedValueJson)
+    }
+
     /** Compute persistent commit: SHA-256(opening || binary_repr(value)). */
     fun persistentCommitAligned(inputJson: String): String? {
         ensureLoaded()
@@ -178,6 +192,7 @@ object ContractRuntime {
     }
 
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
+    @JvmStatic private external fun nativeTransientHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativePersistentCommitAligned(inputJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?

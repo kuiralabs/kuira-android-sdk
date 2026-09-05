@@ -492,9 +492,24 @@ export function persistentCommit(value, opening) {
   throw new Error('persistentCommit: native function not bound');
 }
 
-export function transientHash(input) {
+export function transientHash(alignment, value) {
+  // transientHash2 calls this with TWO args — (alignment, toValue(value)) —
+  // exactly like persistentHash. The old 1-param signature dropped the value,
+  // so the native side would have hashed the alignment alone and returned a
+  // plausible-looking field element for the wrong preimage.
   if (typeof globalThis.__native_transientHash === 'function') {
-    return globalThis.__native_transientHash(input);
+    try {
+      const aligned = {
+        value: value.map(v => v instanceof Uint8Array ? Array.from(v) : v),
+        alignment: alignment,
+      };
+      const resultJson = globalThis.__native_transientHash(JSON.stringify(aligned));
+      const parsed = JSON.parse(resultJson);
+      if (parsed.error) throw new Error(parsed.error);
+      return parsed.map(arr => new Uint8Array(arr));
+    } catch(e) {
+      throw new Error('transientHash native call failed: ' + e.toString());
+    }
   }
   throw new Error('transientHash: native function not bound');
 }

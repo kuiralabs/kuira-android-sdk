@@ -719,6 +719,9 @@ class CircuitExecutor(
             js.function("__nativePersistentHashAligned") { args: Array<Any?> ->
                 ContractRuntime.persistentHashAligned(args[0] as String) ?: ""
             }
+            js.function("__nativeTransientHashAligned") { args: Array<Any?> ->
+                ContractRuntime.transientHashAligned(args[0] as String) ?: ""
+            }
             js.function("__nativePersistentCommitAligned") { args: Array<Any?> ->
                 ContractRuntime.persistentCommitAligned(args[0] as String) ?: ""
             }
@@ -758,6 +761,9 @@ class CircuitExecutor(
             }
             js.evaluate<Any?>("""
                 globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
+                // transientHash builds the same {alignment, value} JSON in JS, so the
+                // native entry point takes it verbatim — no argument reshaping here.
+                globalThis.__native_transientHash = __nativeTransientHashAligned;
                 globalThis.__native_persistentCommit = function() {
                     try {
                         // Called as persistentCommit(alignment, value, [opening])

@@ -278,6 +278,7 @@ public final class com/midnight/kuira/core/compact/ContractRuntime {
 	public final fun statePoolLen ()J
 	public final fun stateReadFields (J)Ljava/lang/String;
 	public final fun stateSetOperation (JLjava/lang/String;)V
+	public final fun transientHashAligned (Ljava/lang/String;)Ljava/lang/String;
 	public final fun valueToBigInt (Ljava/lang/String;)Ljava/lang/String;
 }
 
