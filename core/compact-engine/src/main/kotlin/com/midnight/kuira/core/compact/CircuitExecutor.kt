@@ -354,8 +354,11 @@ class CircuitExecutor(
             evaluate<Any?>(constructorJs)
         }
 
-        if (jsError != null) {
-            throw CircuitExecutionException("Constructor execution failed: $jsError")
+        val constructorError = jsError
+        if (constructorError != null) {
+            throw CircuitExecutionException(
+                "Constructor execution failed: ${explainWitnessGap(constructorError, witnesses.keys)}"
+            )
         }
 
         val handle = stateHandle?.toLongOrNull()
@@ -437,8 +440,11 @@ class CircuitExecutor(
             evaluate<Any?>(circuitJs)
         }
 
-        if (jsError != null) {
-            throw CircuitExecutionException("Circuit execution failed: $jsError")
+        val circuitError = jsError
+        if (circuitError != null) {
+            throw CircuitExecutionException(
+                "Circuit execution failed: ${explainWitnessGap(circuitError, witnesses.keys)}"
+            )
         }
 
         return txParamsJson
@@ -506,10 +512,7 @@ class CircuitExecutor(
     private suspend fun registerWitnesses(js: QuickJs, witnesses: Map<String, WitnessProvider>) {
         for ((name, provider) in witnesses) {
             js.function("__witness_$name") { args: Array<Any?> ->
-                val result = provider.provide(args.getOrNull(0))
-                val jsString = result.toJsArrayString()
-                result.zeroize()
-                jsString
+                serializeWitness(provider.provide(args.getOrNull(0)))
             }
         }
     }
@@ -714,6 +717,48 @@ class CircuitExecutor(
         private val IDENTIFIER_REGEX = Regex("^[a-zA-Z_][a-zA-Z0-9_]*$")
         private val HEX_REGEX = Regex("^[0-9a-fA-F]+$")
 
+        private val MISSING_WITNESS_REGEX =
+            Regex("does not contain a function-valued field named ([A-Za-z_][A-Za-z0-9_]*)")
+
+        /**
+         * Append actionable guidance when the Compact runtime rejects the witness handle.
+         *
+         * The runtime names the witness it could not find, but not the rule that explains
+         * it: the generated constructor looks up EVERY witness the contract declares when
+         * it is built, so omitting one the circuit under call never invokes still fails —
+         * and it fails at construction, far from the call the developer was making
+         * (kuira-android-sdk#4). Any other error is passed through untouched.
+         */
+        internal fun explainWitnessGap(jsError: String, provided: Set<String>): String {
+            val missing = MISSING_WITNESS_REGEX.find(jsError)?.groupValues?.get(1)
+                ?: return jsError
+            val supplied = if (provided.isEmpty()) {
+                "the witnesses map is empty"
+            } else {
+                "supplied: ${provided.sorted().joinToString(", ")}"
+            }
+            return "$jsError\n\nThe contract declares a witness named '$missing' and the " +
+                "witnesses map has no entry for it ($supplied). Every witness a contract " +
+                "declares must be present, including ones the circuit you are calling never " +
+                "invokes — the generated constructor resolves all of them when it is built."
+        }
+
+        /**
+         * Serialize a provider's witness result into the QuickJS wire form, wiping only
+         * the SDK's own copy of the bytes.
+         *
+         * Copying first is the whole point. Kotlin's `ByteArray` is a reference, so
+         * zeroizing the result a provider handed back reached memory the caller was still
+         * using: a provider returning sibling nodes straight out of a Merkle tree had that
+         * tree zeroed by the first proof, and the second failed deep inside the circuit
+         * with "not on the roll" — nowhere near the witness layer. A provider owns its
+         * buffer's lifetime; the SDK owns its copy's.
+         */
+        internal fun serializeWitness(provided: WitnessResult): String {
+            val owned = provided.copy(data = provided.data.copyOf())
+            return owned.toJsArrayString().also { owned.zeroize() }
+        }
+
         internal suspend fun registerNativeFfi(js: QuickJs) {
             ContractRuntime.ensureLoaded()
             js.function("__nativePersistentHashAligned") { args: Array<Any?> ->
@@ -865,6 +910,27 @@ class CircuitExecutor(
  *
  * A witness callback receives the current private state (as a JSON string or null)
  * and returns a [WitnessResult] containing the updated private state and witness bytes.
+ *
+ * Four things about witnesses are not obvious from this signature:
+ *
+ * **Your buffer stays yours.** The SDK copies the bytes out of the [WitnessResult] you
+ * return, so returning an array you keep using — sibling nodes held inside a Merkle tree,
+ * for instance — is safe across repeated proofs. Zeroing your own copy afterwards is still
+ * worth doing; the SDK cannot do it for you, because it does not know when you are done.
+ *
+ * **Bytes are the only carrier.** [WitnessResult.data] is a `ByteArray` whatever the
+ * Compact type is, so a `Uint<64>` witness is packed by hand into its byte encoding rather
+ * than passed as a number.
+ *
+ * **Declare every witness the contract does.** The map handed to [CircuitExecutor] must
+ * contain an entry for each witness the contract declares, including ones the circuit you
+ * are calling never invokes — the generated constructor looks all of them up when it is
+ * built, and a missing entry fails there rather than at the call.
+ *
+ * **Constructors cannot read witnesses.** A contract's constructor runs before any witness
+ * is available, and `deploy()` passes it no arguments, so the usual
+ * deployer-becomes-owner pattern has to become a separate circuit the deployer calls after
+ * deploying.
  */
 fun interface WitnessProvider {
     fun provide(privateStateJson: Any?): WitnessResult
@@ -989,7 +1055,13 @@ data class WitnessResult(
         return "$stateStr|$kindStr|$dataStr"
     }
 
-    /** Securely zero the witness data after use. */
+    /**
+     * Zero this instance's [data] after use.
+     *
+     * Fills the array this instance holds, which is a reference, not a copy — so this
+     * must only ever be called on an instance the SDK owns. [CircuitExecutor] copies a
+     * provider's result before calling it for exactly that reason.
+     */
     internal fun zeroize() {
         data.fill(0)
     }

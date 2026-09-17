@@ -1,6 +1,8 @@
 package com.midnight.kuira.core.compact
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -83,5 +85,94 @@ class WitnessResultTest {
         // should still round-trip.
         val w = WitnessResult(privateState = null, data = ByteArray(0))
         assertEquals("null|BYTES|", w.toJsArrayString())
+    }
+}
+
+/**
+ * A witness provider's buffer must survive being used for a proof.
+ *
+ * kuira-sdk-android#6: the SDK zeroized the [WitnessResult] a provider returned, and
+ * because a Kotlin `ByteArray` is a reference that reached the provider's own memory. A
+ * provider handing back sibling nodes out of a live Merkle tree had the tree wiped by the
+ * first proof; the second failed with "not on the roll", with nothing pointing at the
+ * witness layer.
+ */
+class WitnessBufferOwnershipTest {
+
+    @Test
+    fun `serializing a witness leaves the provider's array intact`() {
+        val callerOwned = byteArrayOf(1, 2, 3, 4)
+        val provided = WitnessResult(null, callerOwned, WitnessKind.BYTES)
+
+        CircuitExecutor.serializeWitness(provided)
+
+        assertArrayEquals(
+            "the provider still owns this array; the SDK must wipe only its own copy",
+            byteArrayOf(1, 2, 3, 4),
+            callerOwned,
+        )
+    }
+
+    @Test
+    fun `a reused buffer serializes identically across repeated proofs`() {
+        // The actual reported symptom: the second proof saw zeros.
+        val treeNode = byteArrayOf(9, 8, 7)
+        val provider = WitnessProvider { WitnessResult(null, treeNode, WitnessKind.BYTES) }
+
+        val first = CircuitExecutor.serializeWitness(provider.provide(null))
+        val second = CircuitExecutor.serializeWitness(provider.provide(null))
+
+        assertEquals("null|BYTES|9,8,7", first)
+        assertEquals("the second proof must see the same bytes as the first", first, second)
+    }
+
+    @Test
+    fun `the serialized form carries the bytes before the copy is wiped`() {
+        val data = byteArrayOf(42, 0, 255.toByte())
+        assertEquals(
+            "null|BYTES|42,0,255",
+            CircuitExecutor.serializeWitness(WitnessResult(null, data, WitnessKind.BYTES)),
+        )
+    }
+}
+
+/**
+ * kuira-android-sdk#4, constraint 1: a contract's generated constructor resolves every
+ * declared witness when it is built, so omitting one the called circuit never invokes
+ * still fails — and it fails at construction, nowhere near the call being made. The
+ * runtime names the witness; these tests pin the guidance that explains the rule.
+ */
+class WitnessGapExplanationTest {
+
+    private val runtimeError =
+        "CompactError: first (witnesses) argument to Contract constructor " +
+            "does not contain a function-valued field named enrolmentPath"
+
+    @Test
+    fun `names the missing witness and states the all-witnesses rule`() {
+        val explained = CircuitExecutor.explainWitnessGap(
+            runtimeError,
+            setOf("localSecretKey", "birthYear"),
+        )
+
+        assertTrue("keeps the original runtime text", explained.contains(runtimeError))
+        assertTrue("names the missing witness", explained.contains("'enrolmentPath'"))
+        assertTrue("lists what was supplied", explained.contains("birthYear, localSecretKey"))
+        assertTrue(
+            "explains that unused witnesses still have to be declared",
+            explained.contains("never") && explained.contains("invokes"),
+        )
+    }
+
+    @Test
+    fun `says so plainly when no witnesses were supplied at all`() {
+        val explained = CircuitExecutor.explainWitnessGap(runtimeError, emptySet())
+        assertTrue(explained.contains("the witnesses map is empty"))
+    }
+
+    @Test
+    fun `passes unrelated errors through untouched`() {
+        val other = "CompactError: failed assert: not on the roll"
+        assertEquals(other, CircuitExecutor.explainWitnessGap(other, setOf("sib0")))
     }
 }
