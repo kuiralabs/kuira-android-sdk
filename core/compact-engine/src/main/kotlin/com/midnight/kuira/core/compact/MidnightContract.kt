@@ -209,7 +209,7 @@ class MidnightContract private constructor(
         val onChainStateHex: String
         val chainTip: MidnightConfig.ChainTip
         try {
-            onChainStateHex = config.fetchContractState(contractAddress)
+            onChainStateHex = fetchStateRetryingIndexerLag(INDEXER_LAG_TIMEOUT_MS)
             chainTip = config.fetchChainTip()
         } catch (e: ContractCallException) {
             throw e
@@ -360,7 +360,7 @@ class MidnightContract private constructor(
      */
     suspend fun ledger(): MidnightLedger {
         requireAddress("ledger")
-        val stateHex = config.fetchContractState(contractAddress)
+        val stateHex = fetchStateRetryingIndexerLag(INDEXER_LAG_TIMEOUT_MS)
         val fields = ledgerEvaluator.readAll(contractJsContent, stateHex)
         return MidnightLedger(fields)
     }
@@ -398,7 +398,7 @@ class MidnightContract private constructor(
      */
     suspend fun read(circuitName: String, vararg args: Any?): String {
         requireAddress("read")
-        val onChainStateHex = config.fetchContractState(contractAddress)
+        val onChainStateHex = fetchStateRetryingIndexerLag(INDEXER_LAG_TIMEOUT_MS)
         return config.executor.readCircuit(
             contractJs = contractJsContent,
             contractAddress = contractAddress,
@@ -463,7 +463,7 @@ class MidnightContract private constructor(
      */
     suspend fun readMany(
         requests: List<ReadRequest>,
-        notIndexedTimeoutMs: Long = 0,
+        notIndexedTimeoutMs: Long = INDEXER_LAG_TIMEOUT_MS,
     ): Map<String, ReadOutcome> {
         requireAddress("readMany")
         val onChainStateHex = fetchStateRetryingIndexerLag(notIndexedTimeoutMs)
@@ -489,19 +489,10 @@ class MidnightContract private constructor(
     // fetch throws StateFetchFailed. Retry up to the deadline — CancellationException is not
     // caught (kotlinx CancellationException does not extend the caught type's branch here
     // because we rethrow it explicitly), so a cancelled caller cancels cleanly.
-    private suspend fun fetchStateRetryingIndexerLag(timeoutMs: Long): String {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (true) {
-            try {
-                return config.fetchContractState(contractAddress)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: ContractCallException.StateFetchFailed) {
-                if (System.currentTimeMillis() >= deadline) throw e
-                kotlinx.coroutines.delay(NOT_INDEXED_POLL_MS)
-            }
+    private suspend fun fetchStateRetryingIndexerLag(timeoutMs: Long): String =
+        retryWhileNotIndexed(timeoutMs, NOT_INDEXED_POLL_MS) {
+            config.fetchContractState(contractAddress)
         }
-    }
 
     /**
      * Deploy a new contract instance to the blockchain.
@@ -721,6 +712,11 @@ class MidnightContract private constructor(
         private const val STATE_INDEX_POLL_MS = 1_000L
 
         /** Poll cadence while a not-yet-indexed contract's state fetch retries (readMany). */
+        // A freshly deployed contract, or one whose last call is still settling, is not in
+        // the indexer yet. PreProd needs longer than the few seconds a fixed sleep assumes,
+        // so reads and calls wait this long for it to appear rather than failing outright.
+        // Pass 0 to any of them to fail fast instead.
+        private const val INDEXER_LAG_TIMEOUT_MS = 30_000L
         private const val NOT_INDEXED_POLL_MS = 2_000L
 
         /** Attempts [call] makes when the node rejects the intent as a stale-state duplicate. */
@@ -809,6 +805,47 @@ internal fun ledgerStateHexSignals(
  * as "no change yet" (keep polling); cancellation propagates. Independent of [MidnightContract]
  * state so it's unit-testable under virtual time (coroutine-time [withTimeoutOrNull], not wall-clock).
  */
+/**
+ * Fetch contract state, retrying while the indexer has not caught up.
+ *
+ * A contract the node has finalized is not in the indexer the same instant, so a read or a
+ * call issued right after a deploy asks for something that does not exist yet and gets
+ * [ContractCallException.StateFetchFailed]. The window is not a fixed length — PreProd runs
+ * longer than the few seconds a hard-coded sleep assumes — so this polls until the state
+ * appears or [timeoutMs] runs out, and surfaces the last failure if it never does.
+ *
+ * [timeoutMs] of 0 or less fetches exactly once, for callers that would rather fail fast.
+ * A cancelled caller cancels: [CancellationException] is rethrown rather than retried.
+ */
+internal suspend fun retryWhileNotIndexed(
+    timeoutMs: Long,
+    pollMs: Long,
+    fetch: suspend () -> String,
+): String {
+    if (timeoutMs <= 0) return fetch()
+    var lastFailure: ContractCallException.StateFetchFailed? = null
+    val state = withTimeoutOrNull(timeoutMs) {
+        var fetched: String? = null
+        while (fetched == null) {
+            fetched = try {
+                fetch()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ContractCallException.StateFetchFailed) {
+                lastFailure = e
+                delay(pollMs)
+                null
+            }
+        }
+        fetched
+    }
+    return state
+        ?: lastFailure?.let { throw it }
+        ?: throw ContractCallException.StateFetchFailed(
+            "contract state was not available within ${timeoutMs}ms"
+        )
+}
+
 internal suspend fun pollUntilChanged(
     before: String,
     timeoutMs: Long,
