@@ -767,6 +767,12 @@ class CircuitExecutor(
             js.function("__nativeTransientHashAligned") { args: Array<Any?> ->
                 ContractRuntime.transientHashAligned(args[0] as String) ?: ""
             }
+            js.function("__nativeDegradeToTransient") { args: Array<Any?> ->
+                ContractRuntime.degradeToTransient(args[0] as String) ?: ""
+            }
+            js.function("__nativeUpgradeFromTransient") { args: Array<Any?> ->
+                ContractRuntime.upgradeFromTransient(args[0] as String) ?: ""
+            }
             js.function("__nativePersistentCommitAligned") { args: Array<Any?> ->
                 ContractRuntime.persistentCommitAligned(args[0] as String) ?: ""
             }
@@ -809,6 +815,8 @@ class CircuitExecutor(
                 // transientHash builds the same {alignment, value} JSON in JS, so the
                 // native entry point takes it verbatim — no argument reshaping here.
                 globalThis.__native_transientHash = __nativeTransientHashAligned;
+                globalThis.__native_degradeToTransient = __nativeDegradeToTransient;
+                globalThis.__native_upgradeFromTransient = __nativeUpgradeFromTransient;
                 globalThis.__native_persistentCommit = function() {
                     try {
                         // Called as persistentCommit(alignment, value, [opening])

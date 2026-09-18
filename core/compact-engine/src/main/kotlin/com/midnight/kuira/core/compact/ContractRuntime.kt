@@ -41,6 +41,28 @@ object ContractRuntime {
         return nativeTransientHashAligned(alignedValueJson)
     }
 
+    /**
+     * Map a persistent-hash output into the transient field.
+     *
+     * Not the identity. The library op keeps the low 31 bytes and drops the top one, so
+     * passing a value straight through disagrees with the on-chain circuit whenever that
+     * byte is set — which for a hash output is very nearly always.
+     */
+    fun degradeToTransient(valueJson: String): String? {
+        ensureLoaded()
+        return nativeDegradeToTransient(valueJson)
+    }
+
+    /**
+     * Map a transient field element back to a persistent-hash-shaped 32-byte value.
+     *
+     * The direction a Merkle root or a nullifier takes crossing back out to `Bytes<32>`.
+     */
+    fun upgradeFromTransient(valueJson: String): String? {
+        ensureLoaded()
+        return nativeUpgradeFromTransient(valueJson)
+    }
+
     /** Compute persistent commit: SHA-256(opening || binary_repr(value)). */
     fun persistentCommitAligned(inputJson: String): String? {
         ensureLoaded()
@@ -193,6 +215,8 @@ object ContractRuntime {
 
     @JvmStatic private external fun nativePersistentHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativeTransientHashAligned(alignedValueJson: String): String?
+    @JvmStatic private external fun nativeDegradeToTransient(valueJson: String): String?
+    @JvmStatic private external fun nativeUpgradeFromTransient(valueJson: String): String?
     @JvmStatic private external fun nativePersistentCommitAligned(inputJson: String): String?
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?

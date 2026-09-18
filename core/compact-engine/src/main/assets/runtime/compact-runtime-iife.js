@@ -1109,10 +1109,28 @@ var __compactRuntime = (() => {
     throw new Error("transientCommit: not yet implemented");
   }
   function degradeToTransient(x) {
-    return x;
+    // Not the identity this used to be: the library op keeps the low 31 bytes and
+    // drops the top one, so returning x disagreed with the on-chain circuit whenever
+    // that byte was set — silently, which is worse than not being implemented.
+    return callNativeValueConversion(
+      globalThis.__native_degradeToTransient, x, "degradeToTransient");
   }
   function upgradeFromTransient(x) {
-    return x;
+    return callNativeValueConversion(
+      globalThis.__native_upgradeFromTransient, x, "upgradeFromTransient");
+  }
+  function callNativeValueConversion(native, value, name) {
+    if (typeof native !== "function") {
+      throw new Error(name + ": native function not bound");
+    }
+    try {
+      const payload = value.map((v) => v instanceof Uint8Array ? Array.from(v) : v);
+      const parsed = JSON.parse(native(JSON.stringify(payload)));
+      if (parsed.error) throw new Error(parsed.error);
+      return parsed.map((arr) => new Uint8Array(arr));
+    } catch (e) {
+      throw new Error(name + " native call failed: " + e.toString());
+    }
   }
   function dummyContractAddress() {
     return "0".repeat(64);
