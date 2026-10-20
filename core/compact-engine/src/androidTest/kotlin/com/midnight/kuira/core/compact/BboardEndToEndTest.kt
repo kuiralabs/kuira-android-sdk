@@ -199,7 +199,7 @@ class BboardEndToEndTest {
         assertTrue("ProvenTx should be pure hex", provenTxHex.all { it in '0'..'9' || it in 'a'..'f' })
 
         // Step 4: Connect to DApp Connector (mn serve on host)
-        // Android emulator reaches host at 10.0.2.2
+        // host reached via `adb reverse` (works on emulator and real hardware)
         val connector = DAppConnectorClient(DAPP_CONNECTOR_URL)
         try {
             connector.connect()
@@ -290,9 +290,9 @@ class BboardEndToEndTest {
     companion object {
         private const val TAG = "BboardE2E"
 
-        /** Default URLs — Android emulator reaches host at 10.0.2.2 */
+        /** Default URLs — host reached via `adb reverse` (works on emulator and real hardware) */
         private val DEFAULT_INDEXER_URL = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl
-        private const val DAPP_CONNECTOR_URL = "ws://10.0.2.2:9932"
+        private const val DAPP_CONNECTOR_URL = "ws://127.0.0.1:9932"
 
         /** Fallback contract address — update after each `mn contract deploy` */
         private const val FALLBACK_CONTRACT_ADDRESS =

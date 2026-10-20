@@ -31,6 +31,10 @@ android {
 // Automatically prepares localnet infrastructure before connected tests.
 // Requires: mn CLI installed, Docker running, Android emulator connected.
 
+// Node, indexer, proof server and the dApp connector. Forwarded to the device so the e2e
+// fixture can address the host as 127.0.0.1 from an emulator or real hardware alike.
+val LOCALNET_PORTS = listOf(9944, 8088, 6300, 9932)
+
 val bboardSetup by tasks.registering {
     group = "verification"
     description = "Set up localnet + deploy bboard contract for e2e tests"
@@ -169,7 +173,14 @@ val bboardSetup by tasks.registering {
             ?.groupValues
             ?.get(1)
             ?: throw GradleException("Couldn't extract INDEXER_API_PATH from ${networkConfigSrc.absolutePath}")
-        pushConfig("indexer_url.txt", "http://10.0.2.2:8088$apiPath")
+        // 10.0.2.2 is the EMULATOR's alias for the host and means nothing on a real phone,
+        // which is why these tests could only ever run on an emulator. Forward the localnet
+        // ports instead and address them as 127.0.0.1: `adb reverse` is an adb feature, not
+        // an emulator one, so the same URL works on both.
+        LOCALNET_PORTS.forEach { port -> adb("reverse", "tcp:$port", "tcp:$port") }
+        logger.lifecycle("Forwarded localnet ports ${LOCALNET_PORTS.joinToString(", ")} to the device")
+
+        pushConfig("indexer_url.txt", "http://127.0.0.1:8088$apiPath")
         pushConfig("network_id.txt", network)
 
         logger.lifecycle("BBoard e2e setup complete!")
