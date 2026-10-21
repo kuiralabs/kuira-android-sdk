@@ -30,7 +30,17 @@ BBOARD_ZKIR="${MIDNIGHT_LIBS}/example-bboard/contract/src/managed/bboard/zkir"
 
 # App's internal storage on device (test app package)
 APP_PKG="com.midnight.kuira.core.compact.test"
-DEVICE_KEYS_DIR="/data/data/${APP_PKG}/files/proving_keys"
+# Durable staging dir, NOT the app's private files/proving_keys.
+#
+# The keys used to be copied straight into /data/data/<pkg>/files/proving_keys, and the
+# /data/local/tmp copy was deleted afterwards. AGP uninstalls the test APK when
+# connectedAndroidTest finishes, which deletes that private directory — so the keys survived
+# exactly one run and every later Gradle run failed "Bboard proving keys not installed".
+#
+# Both test classes already install from here in @Before, via the SDK's own content-aware
+# provisioner (installCircuitKeysForProving). Staging here and leaving the files in place is
+# what those tests were written to expect, and it survives any number of reinstalls.
+DEVICE_STAGING_DIR="/data/local/tmp/bboard_keys"
 
 echo "=== BBoard Proving Key Installer ==="
 echo ""
@@ -51,12 +61,11 @@ fi
 
 echo "Source keys: $BBOARD_KEYS"
 echo "Source zkir: $BBOARD_ZKIR"
-echo "Device dir:  $DEVICE_KEYS_DIR"
+echo "Staging dir: $DEVICE_STAGING_DIR"
 echo ""
 
-# Create directory on device
-adb shell "run-as $APP_PKG mkdir -p files/proving_keys" 2>/dev/null || \
-    adb shell "mkdir -p $DEVICE_KEYS_DIR" 2>/dev/null || true
+# Create the staging directory on device
+adb shell "mkdir -p $DEVICE_STAGING_DIR"
 
 # Push bboard circuit keys
 for circuit in post takeDown; do
@@ -64,27 +73,20 @@ for circuit in post takeDown; do
         src="${BBOARD_KEYS}/${circuit}.${ext}"
         if [ -f "$src" ]; then
             echo "  Pushing ${circuit}.${ext} ($(du -h "$src" | cut -f1))"
-            adb push "$src" "/data/local/tmp/${circuit}.${ext}" > /dev/null
-            adb shell "run-as $APP_PKG cp /data/local/tmp/${circuit}.${ext} files/proving_keys/${circuit}.${ext}" 2>/dev/null || \
-                adb shell "cp /data/local/tmp/${circuit}.${ext} $DEVICE_KEYS_DIR/${circuit}.${ext}" 2>/dev/null
-            adb shell "rm /data/local/tmp/${circuit}.${ext}"
+            adb push "$src" "$DEVICE_STAGING_DIR/${circuit}.${ext}" > /dev/null
         fi
     done
     # BZKIR files
     src="${BBOARD_ZKIR}/${circuit}.bzkir"
     if [ -f "$src" ]; then
         echo "  Pushing ${circuit}.bzkir ($(du -h "$src" | cut -f1))"
-        adb push "$src" "/data/local/tmp/${circuit}.bzkir" > /dev/null
-        adb shell "run-as $APP_PKG cp /data/local/tmp/${circuit}.bzkir files/proving_keys/${circuit}.bzkir" 2>/dev/null || \
-            adb shell "cp /data/local/tmp/${circuit}.bzkir $DEVICE_KEYS_DIR/${circuit}.bzkir" 2>/dev/null
-        adb shell "rm /data/local/tmp/${circuit}.bzkir"
+        adb push "$src" "$DEVICE_STAGING_DIR/${circuit}.bzkir" > /dev/null
     fi
 done
 
 echo ""
 echo "=== Verifying installation ==="
-adb shell "run-as $APP_PKG ls -la files/proving_keys/" 2>/dev/null || \
-    adb shell "ls -la $DEVICE_KEYS_DIR/" 2>/dev/null || echo "(could not verify — run-as may not work for test package)"
+adb shell "ls -la $DEVICE_STAGING_DIR/"
 
 echo ""
 echo "Done! Run the e2e test:"

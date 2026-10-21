@@ -149,21 +149,35 @@ val bboardSetup by tasks.registering {
             mn("dust", "register", "--network", network)
         }
 
-        // 5. Start mn serve if not running
-        logger.lifecycle("Checking mn serve...")
-        try {
-            val lsof = ProcessBuilder("lsof", "-ti", ":9932")
-                .redirectErrorStream(true).start()
-            val pid = lsof.inputStream.bufferedReader().readText().trim()
-            lsof.waitFor()
-            if (pid.isEmpty()) throw Exception("not running")
-        } catch (_: Exception) {
+        // 5. Start the mn-serve DApp connector, and CONFIRM it is actually listening.
+        //
+        // This used to start the process, sleep 10s, and continue — never checking the result.
+        // `mn serve` prints "Server ready — listening on ws://localhost:9932" BEFORE it binds,
+        // so when a stale instance still holds the port it reports success and then dies with
+        // "EADDRINUSE: address already in use". The contract-call tests then meet no connector,
+        // and the only clue is several steps later. Probing the port is the only honest check:
+        // the process's own output is not evidence that it bound.
+        logger.lifecycle("Probing the DApp connector (9932)...")
+        if (!portOpen(9932)) {
             logger.lifecycle("Starting mn serve...")
             ProcessBuilder("mn", "serve", "--approve-all", "--port", "9932", "--network", network)
                 .redirectErrorStream(true)
                 .start()
-            Thread.sleep(10_000) // Wait for sync
+            // Poll rather than sleeping a fixed amount: it has a wallet to sync first, and a
+            // fixed wait is either too short on a cold cache or wasted on a warm one.
+            val connectorDeadline = System.currentTimeMillis() + 120_000
+            while (System.currentTimeMillis() < connectorDeadline && !portOpen(9932)) {
+                Thread.sleep(2_000)
+            }
+            if (!portOpen(9932)) {
+                throw GradleException(
+                    "mn serve did not start listening on 9932 within 120s. If a stale instance " +
+                        "holds the port, the new one exits with EADDRINUSE after printing " +
+                        "\"Server ready\" — check for an existing `mn serve` and stop it."
+                )
+            }
         }
+        logger.lifecycle("DApp connector listening on 9932")
 
         // 6. Deploy fresh bboard contracts — one per board-touching test.
         //    The bboard `post` circuit requires a VACANT board, so two posts to

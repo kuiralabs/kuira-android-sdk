@@ -29,8 +29,8 @@ import java.net.URL
  * ./scripts/install-bboard-keys.sh
  * ```
  *
- * Tests that don't need proving keys run unconditionally.
- * Proving tests are skipped (not failed) when keys are missing.
+ * Tests that don't need proving keys run unconditionally. Proving tests FAIL when the keys
+ * are missing — a skip there is indistinguishable from a pass in the gate.
  */
 @RunWith(AndroidJUnit4::class)
 class BboardEndToEndTest {
