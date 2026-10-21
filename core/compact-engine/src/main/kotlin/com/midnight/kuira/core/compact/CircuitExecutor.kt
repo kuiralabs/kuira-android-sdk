@@ -767,6 +767,9 @@ class CircuitExecutor(
             js.function("__nativeTransientHashAligned") { args: Array<Any?> ->
                 ContractRuntime.transientHashAligned(args[0] as String) ?: ""
             }
+            js.function("__nativeLeafHashAligned") { args: Array<Any?> ->
+                ContractRuntime.leafHashAligned(args[0] as String) ?: ""
+            }
             js.function("__nativeDegradeToTransient") { args: Array<Any?> ->
                 ContractRuntime.degradeToTransient(args[0] as String) ?: ""
             }
@@ -812,6 +815,10 @@ class CircuitExecutor(
             }
             js.evaluate<Any?>("""
                 globalThis.__native_persistentHash_aligned = __nativePersistentHashAligned;
+                // A Merkle leaf is hashed with its own domain separator, so it cannot reuse
+                // the persistentHash hook above; a contract with a HistoricMerkleTree field
+                // calls this on every insert.
+                globalThis.__native_leafHash = __nativeLeafHashAligned;
                 // transientHash builds the same {alignment, value} JSON in JS, so the
                 // native entry point takes it verbatim — no argument reshaping here.
                 globalThis.__native_transientHash = __nativeTransientHashAligned;

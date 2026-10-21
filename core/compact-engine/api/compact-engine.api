@@ -266,6 +266,7 @@ public final class com/midnight/kuira/core/compact/ContractRuntime {
 	public final fun contractQuery (JLjava/lang/String;)Ljava/lang/String;
 	public final fun degradeToTransient (Ljava/lang/String;)Ljava/lang/String;
 	public final fun ensureLoaded ()V
+	public final fun leafHashAligned (Ljava/lang/String;)Ljava/lang/String;
 	public final fun ledgerGlobalTtlSeconds (Ljava/lang/String;)Ljava/lang/Long;
 	public final fun ledgerVersion ()Ljava/lang/String;
 	public final fun persistentCommitAligned (Ljava/lang/String;)Ljava/lang/String;

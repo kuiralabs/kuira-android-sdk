@@ -722,6 +722,20 @@ var __compactRuntime = (() => {
     static newMap(stateMap) {
       return new _StateValue({ type: "map", map: stateMap || new StateMap() });
     }
+    // A HistoricMerkleTree ledger field. Like newMap, this only ever produces an EMPTY
+    // tree: a constructor cannot carry leaves, and post-deploy inserts mutate the native
+    // state through the VM's idx/ins ops rather than coming back through this factory.
+    // The height is kept rather than collapsed to a Null the way other leaves are,
+    // because it is fixed at creation and `ins` has nowhere to learn it from later.
+    static newBoundedMerkleTree(tree) {
+      const height = tree && typeof tree.height === "number" ? tree.height : 0;
+      if (!(height > 0 && height <= 32)) {
+        throw new Error(
+          "newBoundedMerkleTree: height must be 1..=32, got " + height + " (the ledger cannot serialize a tree outside that range)"
+        );
+      }
+      return new _StateValue({ type: "boundedMerkleTree", height });
+    }
     arrayPush(item) {
       if (this._data.type !== "array") throw new Error("Not an array");
       const copy = new _StateValue({
@@ -761,6 +775,13 @@ var __compactRuntime = (() => {
     // recursively, everything else → null. Cells/nulls become null skeletons —
     // constructors fill leaf values via subsequent `ins` ops; only the nested
     // container shape must exist natively for those inserts to land.
+    // A tree is the one leaf that cannot be a null skeleton: its height is fixed when it
+    // is created and `ins` has nowhere to learn it from afterwards, so a tree field left
+    // Null is a contract that cannot deploy at all. Everything else still starts Null,
+    // Map fields included — widening that would change every shipping contract's state.
+    if (svData && svData.type === "boundedMerkleTree") {
+      return { merkleTree: { height: svData.height } };
+    }
     if (!svData || svData.type !== "array") return null;
     return { array: svData.items.map((item) => stateValueDescriptor(item && item._data)) };
   }
@@ -893,6 +914,15 @@ var __compactRuntime = (() => {
         content[key] = transformStateValue(value);
       }
       return { tag: "map", content };
+    }
+    if (obj.type === "boundedMerkleTree") {
+      // A pushed tree, which is how a HistoricMerkleTree field actually arrives: the
+      // compiler emits it as an opcode value inside an array of [tree, counter, historic
+      // roots], NOT through the initial-state descriptor. Content is [height, leaves],
+      // and a constructor's tree is always blank, so the leaves are {}. The shape is
+      // pinned natively by bmt_wire_format in contract_ffi.rs — a drift here is a failure
+      // to deploy, not a degraded result.
+      return { tag: "boundedMerkleTree", content: [obj.height, {}] };
     }
     return obj;
   }
@@ -1050,6 +1080,35 @@ var __compactRuntime = (() => {
   var VmStack = class {
   };
   var StateBoundedMerkleTree = class {
+    // Only the height lives here. The tree itself is held natively — created by
+    // __native_stateCreateWithNulls from the descriptor this height ends up in, and
+    // mutated by the VM thereafter — so there is nothing for JS to keep in step. That is
+    // deliberate: a tree tracked in JS as well would be a second source of truth for a
+    // consensus-critical root.
+    constructor(height) {
+      this.height = height;
+    }
+    // The real runtime marks these @internal and generated contract code does not call
+    // them; it reaches the tree through VM opcodes. They throw rather than return a
+    // plausible wrong answer, which is what the previous empty stub effectively did.
+    root() {
+      throw new Error("StateBoundedMerkleTree.root: the tree lives natively; read it through the VM");
+    }
+    update() {
+      throw new Error("StateBoundedMerkleTree.update: insert through the VM, not here");
+    }
+    rehash() {
+      throw new Error("StateBoundedMerkleTree.rehash: the VM rehashes natively");
+    }
+    findPathForLeaf() {
+      throw new Error("StateBoundedMerkleTree.findPathForLeaf: not available in the shim");
+    }
+    pathForLeaf() {
+      throw new Error("StateBoundedMerkleTree.pathForLeaf: not available in the shim");
+    }
+    collapse() {
+      throw new Error("StateBoundedMerkleTree.collapse: not available in the shim");
+    }
   };
   var StateMap = class {
     constructor() {
@@ -1266,8 +1325,29 @@ var __compactRuntime = (() => {
   function runtimeCoinCommitment() {
     return new Uint8Array(32);
   }
-  function leafHash() {
-    return new Uint8Array(32);
+  function leafHash(value) {
+    // The domain-separated hash a Merkle tree leaf is stored under:
+    // leaf_hash(v) = persistent_hash("mdn:lh" || binary_repr(v)). The compiler emits a
+    // call to this wherever a value is inserted into a HistoricMerkleTree — the generated
+    // insert pushes StateValue.newCell(leafHash(value)) — so it has to agree with the
+    // node exactly. It used to return 32 zero bytes, which hashed every leaf alike and
+    // quietly made every root wrong; that is why it delegates instead of hashing here.
+    // Takes an AlignedValue and returns one, because the result goes straight to newCell.
+    if (typeof globalThis.__native_leafHash !== "function") {
+      throw new Error("leafHash: native FFI not available");
+    }
+    const resultJson = globalThis.__native_leafHash(JSON.stringify(transformAlignedValue(value)));
+    let parsed;
+    try {
+      parsed = JSON.parse(resultJson);
+    } catch (e) {
+      throw new Error("leafHash: native call returned unparseable JSON: " + resultJson);
+    }
+    if (parsed.error) throw new Error("leafHash: " + parsed.error);
+    return {
+      value: (parsed.value || []).map((arr) => new Uint8Array(arr)),
+      alignment: parsed.alignment
+    };
   }
   function runProgram(initial, program, gasLimit, costModel) {
     throw new Error("runProgram: not yet implemented \u2014 will delegate to Rust FFI");

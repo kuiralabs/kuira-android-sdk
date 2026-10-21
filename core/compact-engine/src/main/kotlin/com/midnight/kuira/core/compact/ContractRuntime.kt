@@ -81,6 +81,20 @@ object ContractRuntime {
         return nativeValueToBigInt(valueJson)
     }
 
+    /**
+     * Hash an AlignedValue the way a Merkle tree leaf is hashed.
+     *
+     * Domain-separated (`"mdn:lh"`), which is what distinguishes it from
+     * [persistentHashAligned] over the same bytes — a leaf hashed without the separator
+     * is not merely a different number, it is one the chain disagrees with. Needed by any
+     * contract with a `HistoricMerkleTree` field: the generated insert pushes
+     * `StateValue.newCell(leafHash(value))` into the tree.
+     */
+    fun leafHashAligned(alignedValueJson: String): String? {
+        ensureLoaded()
+        return nativeLeafHashAligned(alignedValueJson)
+    }
+
     /** Raw persistent hash (SHA-256) of hex bytes. */
     fun persistentHash(inputHex: String): String? {
         ensureLoaded()
@@ -221,6 +235,7 @@ object ContractRuntime {
     @JvmStatic private external fun nativeBigIntToValue(bigintStr: String): String?
     @JvmStatic private external fun nativeValueToBigInt(valueJson: String): String?
     @JvmStatic private external fun nativePersistentHash(inputHex: String): String?
+    @JvmStatic private external fun nativeLeafHashAligned(alignedValueJson: String): String?
     @JvmStatic private external fun nativeStateCreate(stateHex: String): Long
     @JvmStatic private external fun nativeStateCreateWithNulls(structureJson: String): Long
     @JvmStatic private external fun nativeStateSetOperation(handle: Long, operationName: String)
