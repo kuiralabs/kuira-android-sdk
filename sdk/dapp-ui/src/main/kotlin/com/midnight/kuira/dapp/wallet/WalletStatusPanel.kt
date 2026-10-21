@@ -199,12 +199,33 @@ fun WalletStatusPanel(
     lightMode: Boolean = false,
     onToggleLightMode: (() -> Unit)? = null,
     /**
-     * Custom pill slot (floating mode): when non-null it replaces the default pill with the host's
+     * Custom pill slot: when non-null it replaces the default pill with the host's
      * own surface (e.g. the resizable floating widget), receiving the live [WalletChipUi] and an
      * `onTap` that opens the sheet. The panel keeps owning the sheet, bootstrap, and lock — only the
      * pill's visual is delegated. Null → the classic built-in pill.
+     *
+     * Applies in **both** docked and floating layouts — this panel does not know
+     * which it is in. The floating widget was the first caller, not the only
+     * permitted one: a host composing its own bar, e.g. to put a second chain's
+     * numbers in the same pill, passes this too.
      */
     pill: (@Composable (WalletChipUi, onTap: () -> Unit, onSend: () -> Unit, onReceive: () -> Unit) -> Unit)? = null,
+    /**
+     * Replaces this panel's balance area entirely.
+     *
+     * `extraBalances` came before it and was the wrong shape: it let another
+     * chain add a row to *this chain's* balance card, which still framed the
+     * wallet as Midnight's with a guest. A wallet that reaches two ledgers has
+     * one set of holdings, and whoever owns that view should draw all of it.
+     *
+     * A slot rather than data, unlike the attempt before: there is no longer a
+     * split rendering to keep consistent, because one composable draws every
+     * holding. The panel keeps the sheet, the actions, the lock and the
+     * bootstrap; only what a balance looks like becomes the host's.
+     */
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)? = null,
+    /** Reports the chip model whenever it changes. See [PanelBar]. */
+    onChipChange: (WalletChipUi) -> Unit = {},
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
@@ -263,8 +284,10 @@ fun WalletStatusPanel(
     // Seed the host's first-run default once; the persisted choice wins thereafter.
     LaunchedEffect(Unit) { viewModel.seedNetworkDefault(initialNetwork) }
     val network by viewModel.selectedNetwork.collectAsStateWithLifecycle()
-    var provingMode by rememberSaveable { mutableStateOf(ProvingMode.DEFAULT) }
-    var proofServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    // Read, not owned. The controls moved to Settings; the values still build
+    // this panel's WalletConfig, so both surfaces read one holder.
+    val provingMode = overlay.provingMode
+    val proofServerUrl = overlay.proofServerUrl
     val config = remember(network, provingMode, proofServerUrl) {
         WalletConfig(network = network, provingMode = provingMode, proofServerUrl = proofServerUrl)
     }
@@ -296,8 +319,14 @@ fun WalletStatusPanel(
 
     // The pill. A floating host can swap its visual via [pill] (e.g. the resizable widget), fed the
     // live balance; otherwise the built-in WalletPill. Either way, a tap opens the sheet.
+    // Computed either way. It used to be derived only inside the custom-pill
+    // branch, so a host that wanted the numbers but not the drawing had to take
+    // over the pill to get them — which is how the last attempt at a two-chain
+    // bar ended up reimplementing this composable badly.
+    val chipUi = walletChipUi(status, syncProgress, formatter, network)
+    LaunchedEffect(chipUi) { onChipChange(chipUi) }
+
     if (pill != null) {
-        val chipUi = walletChipUi(status, syncProgress, formatter, network)
         pill(
             chipUi,
             { sheetOpen = true },
@@ -447,11 +476,8 @@ fun WalletStatusPanel(
                     viewModel.selectNetwork(it)
                     onNetworkChange(it)
                 },
-                onProvingModeChange = { provingMode = it },
-                onProofServerUrlChange = { proofServerUrl = it },
                 onRefreshBalance = { activity?.let { viewModel.refreshBalance(config, it, force = true) } },
                 onRegisterDust = { activity?.let { viewModel.registerDust(config, it) } },
-                backupSection = backupSection,
                 onDustToggle = { enabled -> activity?.let { viewModel.setDustBackup(enabled, config, it) } },
                 onDisableBackup = { activity?.let { viewModel.disableBackup(config, it) } },
                 onReceive = {
@@ -490,6 +516,7 @@ fun WalletStatusPanel(
                         overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Wallet))
                     }
                 },
+                balanceContent = balanceContent,
                 onClose = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -680,17 +707,15 @@ private fun WalletSheetContent(
     lightMode: Boolean,
     onToggleLightMode: () -> Unit,
     onNetworkChange: (MidnightNetwork) -> Unit,
-    onProvingModeChange: (ProvingMode) -> Unit,
-    onProofServerUrlChange: (String?) -> Unit,
     onRefreshBalance: () -> Unit,
     onRegisterDust: () -> Unit,
-    backupSection: BackupSectionState,
     onDustToggle: (Boolean) -> Unit,
     onDisableBackup: () -> Unit,
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onLockNow: () -> Unit,
     onSettings: () -> Unit,
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)?,
     onClose: () -> Unit,
 ) {
     val busy = status is WalletStatus.Loading ||
@@ -753,13 +778,21 @@ private fun WalletSheetContent(
                     contentDescription = if (lightMode) "Switch to dark theme" else "Switch to light theme",
                 ) {
                     Text(
-                        if (lightMode) "☾" else "☀",
-                        color = colors.onSheetDim,
+                        // U+FE0E forces text presentation. Without it Android
+                        // paints `☀` from the colour-emoji font, which ignores
+                        // `color` entirely — so the toggle rendered yellow while
+                        // being told to be the sheet's own tint, and no change
+                        // to the colour could have fixed it.
+                        if (lightMode) "☾\uFE0E" else "☀\uFE0E",
+                        color = colors.onSheet,
                         fontSize = 18.sp,
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            // The balance is the first thing read; it should not begin directly
+            // under the controls. Eight points left the hero crowding the
+            // settings button.
+            Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
 
             // Every wallet state gets a branded treatment, never bare text:
             // a shimmer skeleton while bootstrapping/loading, the compact balance
@@ -773,6 +806,7 @@ private fun WalletSheetContent(
                     stage = status.stage,   // actively loading → the runner + phase label + %
                 )
                 is WalletStatus.Ready -> ReadyBody(
+                    balanceContent = balanceContent,
                     status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust,
                     busy = busy,
                 )
@@ -781,33 +815,8 @@ private fun WalletSheetContent(
                 is WalletStatus.Locked -> WalletLocked(colors, onUnlock = onRefreshBalance)
             }
 
-            Spacer(modifier = Modifier.height(PanelDimens.SheetSectionGap))
-
-            // Compact config — network + proving as dropdown selectors (one row
-            // instead of five chip-rows). Picking either rebuilds the SDK.
-            ConfigRow(
-                network = config.network,
-                provingMode = config.provingMode,
-                proofServerUrl = config.proofServerUrl,
-                colors = colors,
-                onNetworkChange = onNetworkChange,
-                onProvingModeChange = onProvingModeChange,
-                onProofServerUrlChange = onProofServerUrlChange,
-            )
 
             Spacer(modifier = Modifier.height(PanelDimens.SheetActionsTopGap))
-
-            // Branded backup & recovery — per-lane status (identity / dust /
-            // app-data) from the wallet's real backupStatus.
-            BackupSection(
-                state = backupSection,
-                colors = colors,
-                onDustToggle = onDustToggle,
-                onDisableBackup = onDisableBackup,
-                // App-data backup is automatic; its only actionable state is a
-                // failed save, whose "Retry" re-runs a forced refresh.
-                onAppDataAction = onRefreshBalance,
-            )
             Spacer(modifier = Modifier.height(PanelDimens.SheetButtonRowGap))
             // Manual session lock — only meaningful with a live (unlocked) wallet.
             // Understated so it's not confused with the primary actions.
@@ -865,6 +874,7 @@ private fun WalletLocked(colors: WalletPanelColors, onUnlock: () -> Unit) {
 
 @Composable
 private fun ReadyBody(
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)?,
     status: WalletStatus.Ready,
     syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
@@ -897,6 +907,7 @@ private fun ReadyBody(
     // like dust-registration polling → indeterminate with its own label).
     val working = syncProgress ?: status.busy?.let { WalletSyncProgress(null, it) }
     WalletBalanceCompact(
+        balanceContent = balanceContent,
         ui = balanceUi,
         syncProgress = working,
         colors = colors,
@@ -935,7 +946,7 @@ private const val MESSAGE_ALPHA = 0.8f
  * panel's LaunchedEffect on `config`.
  */
 @Composable
-private fun ConfigRow(
+internal fun ConfigRow(
     network: MidnightNetwork,
     provingMode: ProvingMode,
     proofServerUrl: String?,

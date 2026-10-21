@@ -343,6 +343,72 @@ public final class com/midnight/kuira/core/identity/did/DidKeyGenerator {
 	public final fun toCompressedP256 (Ljava/lang/String;)[B
 }
 
+public final class com/midnight/kuira/core/identity/link/DeviceLink {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/DeviceLink;
+	public final fun makeRequest ()Lkotlin/Pair;
+	public final fun open (Lcom/midnight/kuira/core/identity/link/LinkResponse;Lcom/midnight/kuira/core/identity/link/LinkSecret;)[B
+	public final fun seal ([BLcom/midnight/kuira/core/identity/link/LinkRequest;)Lcom/midnight/kuira/core/identity/link/LinkResponse;
+	public final fun verificationCode (Lcom/midnight/kuira/core/identity/link/LinkRequest;Lcom/midnight/kuira/core/identity/link/LinkResponse;)Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/identity/link/LinkException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkException$Malformed : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkException$SealFailed : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkException$UnsupportedEntropySize : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (I)V
+	public final fun getSize ()I
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkException$UnsupportedVersion : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (B)V
+	public final fun getVersion ()B
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkQrText {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/LinkQrText;
+	public final fun decode (Ljava/lang/String;)[B
+	public final fun encode ([B)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkQrTextKt {
+	public static final fun qrText (Lcom/midnight/kuira/core/identity/link/LinkRequest;)Ljava/lang/String;
+	public static final fun qrText (Lcom/midnight/kuira/core/identity/link/LinkResponse;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkRequest {
+	public static final field Companion Lcom/midnight/kuira/core/identity/link/LinkRequest$Companion;
+	public synthetic fun <init> ([BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun encode ()[B
+	public final fun getPublicKey ()[B
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkRequest$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/identity/link/LinkRequest;
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkResponse {
+	public static final field Companion Lcom/midnight/kuira/core/identity/link/LinkResponse$Companion;
+	public final fun encode ()[B
+	public final fun getCiphertext ()[B
+	public final fun getEncapsulatedKey ()[B
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkResponse$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/identity/link/LinkResponse;
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkSecret {
+}
+
 public final class com/midnight/kuira/core/identity/passkey/AttestationParseException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V

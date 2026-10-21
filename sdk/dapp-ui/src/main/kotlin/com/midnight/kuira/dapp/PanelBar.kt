@@ -97,6 +97,17 @@ fun PanelBar(
     network: MidnightNetwork = MidnightNetwork.UNDEPLOYED,
     onNetworkChange: (MidnightNetwork) -> Unit = {},
     onSigilStatusChange: (SigilStatus) -> Unit = {},
+    /**
+     * The wallet's live numbers, for a host that has something to do with them.
+     *
+     * The read-only counterpart to [onSigilStatusChange], which has always
+     * existed — a host could learn the identity's state and not the wallet's,
+     * and that asymmetry only became awkward when an app had a second chain and
+     * wanted to present both together. `pill` already hands these over, but only
+     * to a host willing to draw the pill itself, which is a high price for
+     * wanting to read a balance.
+     */
+    onWalletChipChange: (WalletChipUi) -> Unit = {},
     modifier: Modifier = Modifier,
     walletColors: WalletPanelColors = WalletPanelColors.Default,
     sigilColors: SigilPanelColors = SigilPanelColors.Default,
@@ -120,6 +131,16 @@ fun PanelBar(
      * existing `Column { PanelBar(); content }` call sites are unaffected.
      */
     floating: Boolean = false,
+    /**
+     * Replaces the wallet's balance area — for an app whose wallet reaches more
+     * than one chain and wants one set of holdings rather than this chain's plus
+     * a guest.
+     *
+     * Here rather than in a bar the host assembles itself: composing one from
+     * the two panels drops floating mode, dragging, edge-docking and the chip
+     * tiers, and a second chain is not worth losing those.
+     */
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)? = null,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -207,6 +228,8 @@ fun PanelBar(
     }
     val walletPanel: @Composable (pill: (@Composable (WalletChipUi, () -> Unit, () -> Unit, () -> Unit) -> Unit)?) -> Unit = { pillSlot ->
         WalletStatusPanel(
+            balanceContent = balanceContent,
+            onChipChange = onWalletChipChange,
             viewModel = walletViewModel,
             initialNetwork = network,
             colors = themedWalletColors,

@@ -24,6 +24,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +77,7 @@ data class WalletBalanceUi(
  * @param busy disables the refresh / register / send affordances mid-operation.
  * @param onSend null → Send is shown but disabled with a "soon" hint (until #240).
  */
+
 @Composable
 fun WalletBalanceCompact(
     ui: WalletBalanceUi,
@@ -87,9 +89,22 @@ fun WalletBalanceCompact(
     modifier: Modifier = Modifier,
     busy: Boolean = false,
     onSend: (() -> Unit)? = null,
+    /**
+     * Replaces the balance card — and **only** the balance card.
+     *
+     * Everything else here still draws: DUST with its Register action, and Send
+     * and Receive. An earlier version of this seam let a host replace the whole
+     * area, which silently removed both, because a slot that substitutes a body
+     * deletes whatever happens to sit after it. A slot swaps one component out;
+     * it does not truncate.
+     */
+    balanceContent: (@Composable (WalletPanelColors) -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
-        BalanceCard(colors, contentPadding = 14.dp) {
+        if (balanceContent != null) {
+            balanceContent(colors)
+        } else {
+            BalanceCard(colors, contentPadding = 14.dp) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Eyebrow("BALANCE", colors, modifier = Modifier.weight(1f))
                 // Elegant refresh — bare glyph, no container; bright + sized to read.
@@ -103,22 +118,25 @@ fun WalletBalanceCompact(
                 )
             }
             Spacer(Modifier.height(6.dp))
-            Text(
-                ui.nightTotal,
-                color = colors.onSheet,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.W200,
-                letterSpacing = (-1).sp,
-                lineHeight = 36.sp,
-            )
-            Spacer(Modifier.height(2.dp))
+
             // "Synced" is the one sync-complete status → green; "Syncing…" and the
             // "NIGHT ·" prefix stay monochrome (progress is never green mid-flight).
             val synced = syncProgress == null
-            // Status line + the ⓘ pinned bottom-RIGHT on the SAME row, so the ⓘ adds NO vertical space
-            // to the card (it only grows for the sync indicator). The ⓘ explains the live-event NIGHT
-            // count can drift and points at Settings → Re-sync balance; gone once lands.
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+
+            // Amount and unit share a baseline instead of stacking. Stacked, each
+            // chain cost two lines and left the card's whole right-hand side
+            // empty — and a second chain doubled that into a tall box of mostly
+            // nothing. The ⓘ still pins right on the same row, adding no height.
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    ui.nightTotal,
+                    color = colors.onSheet,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.W200,
+                    letterSpacing = (-1).sp,
+                    lineHeight = 36.sp,
+                )
+                Spacer(Modifier.width(10.dp))
                 Text(
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
@@ -127,12 +145,15 @@ fun WalletBalanceCompact(
                         }
                     },
                     fontSize = 13.sp,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(bottom = 6.dp),
                 )
                 BalanceInfoDot(colors)
             }
             // Equal-weight public / private split — both are real balances, both
             // rendered bright (private is NOT a dim afterthought).
+
             if (ui.privateNight != null) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -154,40 +175,9 @@ fun WalletBalanceCompact(
 
         Spacer(Modifier.height(10.dp))
 
-        BalanceCard(colors) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
-            ) {
-                Text("•", color = colors.onSheetSubtle, fontSize = 14.sp)
-                Spacer(Modifier.width(8.dp))
-                Text("DUST", color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300, letterSpacing = 1.sp)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    ui.dust ?: "—",
-                    color = colors.onSheet,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.W300,
-                    fontFamily = FontFamily.Monospace,
-                )
-                if (ui.dust != null) {
-                    when {
-                        // Mid-sync the figure is still provisional — don't assert a
-                        // settled ✓ while the hero card reads "Syncing dust…" (the two
-                        // contradict). The ✓ returns once the sync settles.
-                        ui.dustRegistered && syncProgress == null -> {
-                            Spacer(Modifier.width(10.dp))
-                            // Settled confirmation → the reserved success green.
-                            Text("✓", color = colors.positive, fontSize = 14.sp)
-                        }
-                        !ui.dustRegistered -> {
-                            Spacer(Modifier.width(10.dp))
-                            TextChip("Register", colors = colors, enabled = !busy, onClick = onRegister)
-                        }
-                    }
-                }
-            }
         }
+
+        WalletDustCard(ui, syncProgress, colors, onRegister, busy = busy)
 
         Spacer(Modifier.height(14.dp))
 
@@ -424,3 +414,58 @@ private fun PreviewBalanceSyncing() =
             onRegister = {},
         )
     }
+
+/**
+ * DUST, which is not a token and must not be rendered as one.
+ *
+ * It is fee capacity, and its row carries an action — Register — that nothing
+ * else in a balance list has. A host replacing the balance area with its own
+ * portfolio still needs this: putting DUST in a list of holdings loses the
+ * button, and losing the button means a user cannot register.
+ */
+@Composable
+public fun WalletDustCard(
+    ui: WalletBalanceUi,
+    syncProgress: WalletSyncProgress?,
+    colors: WalletPanelColors,
+    onRegister: () -> Unit,
+    modifier: Modifier = Modifier,
+    busy: Boolean = false,
+) {
+    Column(modifier.fillMaxWidth()) {
+        BalanceCard(colors) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+            ) {
+                Text("•", color = colors.onSheetSubtle, fontSize = 14.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("DUST", color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300, letterSpacing = 1.sp)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    ui.dust ?: "—",
+                    color = colors.onSheet,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.W300,
+                    fontFamily = FontFamily.Monospace,
+                )
+                if (ui.dust != null) {
+                    when {
+                        // Mid-sync the figure is still provisional — don't assert a
+                        // settled ✓ while the hero card reads "Syncing dust…" (the two
+                        // contradict). The ✓ returns once the sync settles.
+                        ui.dustRegistered && syncProgress == null -> {
+                            Spacer(Modifier.width(10.dp))
+                            // Settled confirmation → the reserved success green.
+                            Text("✓", color = colors.positive, fontSize = 14.sp)
+                        }
+                        !ui.dustRegistered -> {
+                            Spacer(Modifier.width(10.dp))
+                            TextChip("Register", colors = colors, enabled = !busy, onClick = onRegister)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -66,6 +67,20 @@ class WalletOverlayController {
      * source of truth remains `ThemeStore`; this is the in-memory mirror that drives recomposition.
      */
     var selectedThemeId: String? by mutableStateOf(null)
+
+    /**
+     * Proving configuration, held here because two surfaces need it.
+     *
+     * It used to be `rememberSaveable` inside the wallet panel, which was right
+     * while the only control lived in that panel's sheet. The controls now live
+     * in Settings — configuration belongs with configuration, not in a sheet
+     * about money — while the panel still needs the values to build its
+     * `WalletConfig`. This controller is the surface both already share.
+     */
+    var provingMode: ProvingMode by mutableStateOf(ProvingMode.DEFAULT)
+
+    /** Only meaningful when [provingMode] is `REMOTE`. */
+    var proofServerUrl: String? by mutableStateOf(null)
 
     /**
      * One-shot "re-open the WALLET pill's sheet" counter. Bumped by [close] when the closed

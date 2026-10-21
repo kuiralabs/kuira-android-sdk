@@ -71,6 +71,9 @@ class KuiraContractPlugin : Plugin<Project> {
         extension.bundleWalletKeys.convention(false)
         extension.walletKeysVersion.convention(DEFAULT_WALLET_KEYS_VERSION)
         extension.walletKeysBaseUrl.convention(DEFAULT_WALLET_KEYS_BASE_URL)
+        // Universal parameters stop at the wallet's own sizes unless a consumer's contract
+        // needs more; each step past the baseline doubles the file it adds to the APK.
+        extension.maxCircuitK.convention(ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K)
 
         // Resolve source lazily so it picks up the consumer's
         // configuration even if it's set after these register calls.
@@ -120,6 +123,7 @@ class KuiraContractPlugin : Plugin<Project> {
                 "Download + stage protocol wallet proving keys into assets (offline bundle, #256)."
             task.version.set(extension.walletKeysVersion)
             task.baseUrl.set(extension.walletKeysBaseUrl)
+            task.maxCircuitK.set(extension.maxCircuitK)
             task.cacheRoot.fileValue(gradleUserHome.resolve(WALLET_KEYS_CACHE_SUBPATH))
             task.assetsDir.set(
                 project.layout.projectDirectory.dir("$ASSETS_DEST/$ASSETS_WALLET_KEYS_SUBDIR"),
@@ -160,6 +164,23 @@ class KuiraContractPlugin : Plugin<Project> {
                     "kuiraContract needs a contract: set `source.set(\"contract/src/managed/<name>\")` " +
                         "for one, or a `contracts { register(\"<Name>\") { source.set(...) } }` block for " +
                         "many. Paths are relative to the project directory.",
+                )
+            }
+            // maxCircuitK only has an effect through the bundle — the extra parameter sizes are never
+            // fetched by the device at runtime, deliberately, since that would reintroduce the
+            // first-launch network dependency the bundle exists to remove. So the combination that
+            // asks for large circuits without bundling would silently produce an APK that fails at
+            // prove time with "BLS params file not found" on every device. Say so at configuration.
+            val requestedMaxK = extension.maxCircuitK.get()
+            if (requestedMaxK > ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K &&
+                !extension.bundleWalletKeys.get()
+            ) {
+                throw GradleException(
+                    "kuiraContract.maxCircuitK is $requestedMaxK, which needs the proving-key " +
+                        "bundle: the parameters for circuits above " +
+                        "k=${ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K} ship in the APK and " +
+                        "are never downloaded on device. Add `bundleWalletKeys.set(true)`, or drop " +
+                        "maxCircuitK back to ${ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K}.",
                 )
             }
             // A container entry is never optional — unlike the shorthand it can't silently skip. Fail
