@@ -47,6 +47,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -99,6 +104,15 @@ private object PanelDimens {
     val ButtonHeight = 54.dp // prominent CTA — above the 48dp HIG floor
     val ButtonCornerRadius = 12.dp
     val ButtonHorizontalPadding = 8.dp
+
+    /**
+     * Inside a dropdown selector.
+     *
+     * Was a bare `14.dp`, which is not on this scale — the paddings here are
+     * 8, 12, 16, 18 and 24. 16 both joins the scale and lines the selector's
+     * text up with the settings rows it now sits among.
+     */
+    val SelectorHorizontalPadding = 16.dp
 }
 
 private object PanelType {
@@ -1043,7 +1057,16 @@ private fun <T> PanelSelector(
                     .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA)) // frosted selector
                     .border(1.dp, colors.pillBorder, shape)
                     .dappPressable(shape = shape) { expanded = true }
-                    .padding(horizontal = 14.dp),
+                    // The label is a sibling Text, so without merging these the
+                    // control announces "localnet" alone — a value with no field
+                    // attached, which is not enough to act on. The role matters
+                    // for the same reason: `dappPressable` sets none, so this
+                    // read as plain text rather than something openable.
+                    .semantics(mergeDescendants = true) {
+                        role = Role.DropdownList
+                        contentDescription = "$label, ${optionLabel(selected)}"
+                    }
+                    .padding(horizontal = PanelDimens.SelectorHorizontalPadding),
             ) {
                 Text(
                     optionLabel(selected),
@@ -1054,7 +1077,12 @@ private fun <T> PanelSelector(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text("▾", color = colors.onSheetDim, fontSize = PanelType.ButtonText)
+                Text(
+                    "▾",
+                    color = colors.onSheetDim,
+                    fontSize = PanelType.ButtonText,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
             }
             DropdownMenu(
                 expanded = expanded,

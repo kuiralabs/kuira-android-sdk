@@ -34,6 +34,7 @@ internal fun WalletSettingsScreen(
     syncLabel: String,
     recoveryPhraseSaved: Boolean,
     onViewRecoveryPhrase: () -> Unit,
+    onLinkDevice: () -> Unit,
     onResyncBalance: () -> Unit,
     onLockNow: () -> Unit,
     onSignOut: () -> Unit,
@@ -119,6 +120,16 @@ internal fun WalletSettingsScreen(
                         onClick = onViewRecoveryPhrase,
                     )
                     SettingsDivider(palette)
+                    // Sits under the recovery phrase because the two get confused, and the link
+                    // screen's own copy is what separates them: linking needs BOTH phones working,
+                    // so it is useless in exactly the moment people reach for recovery.
+                    SettingsRow(
+                        label = "Link a device",
+                        palette = palette,
+                        leadingGlyph = { KeyGlyph(it) },
+                        onClick = onLinkDevice,
+                    )
+                    SettingsDivider(palette)
                     SettingsRow(
                         label = "Lock now",
                         palette = palette,
@@ -137,7 +148,9 @@ internal fun WalletSettingsScreen(
                 Spacer(Modifier.height(SendDimens.Space32))
 
                 if (config != null) {
-                    SettingsSection("NETWORK & PROVING", palette) { config() }
+                    // Wrapped rather than trusted: the slot takes arbitrary host
+                    // content, which cannot know the panel's grid.
+                    SettingsSection("NETWORK & PROVING", palette) { SettingsSlot { config() } }
                     Spacer(Modifier.height(SendDimens.Space32))
                 }
 

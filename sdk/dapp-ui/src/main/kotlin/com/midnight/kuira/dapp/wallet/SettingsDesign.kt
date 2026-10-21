@@ -106,6 +106,44 @@ internal fun SettingsSection(
 }
 
 /**
+ * The inset every occupant of a settings [GlassPanel] sits at.
+ *
+ * The panel itself insets by only [SendDimens.Space4]; the rest is applied by
+ * [SettingsRow]. That looks backwards until you look at [SettingsDivider], which
+ * has to run wider than the rows it separates — a panel that padded its children
+ * could not produce that, so the padding had to move down into the row.
+ *
+ * The cost is that any occupant which is *not* a [SettingsRow] has to opt in, and
+ * content arriving through a slot has no way to know the grid it landed in. That
+ * is what put the network and proving selectors 4dp from the card edge with no
+ * breathing room above or below them while every row around them sat at 20dp.
+ * [SettingsSlot] is the opt-in, and these two values are the single definition
+ * both paths read.
+ */
+private val SettingsRowPaddingHorizontal = SendDimens.Space16
+private val SettingsRowPaddingVertical = SendDimens.Space12
+
+/**
+ * Wraps host-supplied panel content onto the settings grid — see [SettingsRowPaddingHorizontal].
+ *
+ * Deliberately not applied inside [SettingsSection]: a section whose content is
+ * rows must leave the padding to the rows, or every divider inherits it.
+ */
+@Composable
+internal fun SettingsSlot(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = SettingsRowPaddingHorizontal,
+                vertical = SettingsRowPaddingVertical,
+            ),
+    ) {
+        content()
+    }
+}
+
+/**
  * A row inside a settings [GlassPanel]. [readOnly] dims the value + drops the chevron;
  * [leadingGlyph] is a theme glyph drawer (takes the tint). Tappable when [onClick] is non-null.
  */
@@ -132,7 +170,7 @@ internal fun SettingsRow(
             .fillMaxWidth()
             .heightIn(min = SendDimens.RowMinHeight)
             .then(clickable)
-            .padding(horizontal = SendDimens.Space16, vertical = SendDimens.Space12),
+            .padding(horizontal = SettingsRowPaddingHorizontal, vertical = SettingsRowPaddingVertical),
     ) {
         if (leadingGlyph != null) {
             leadingGlyph(if (danger) palette.error else palette.text)
@@ -167,7 +205,7 @@ internal fun SettingsDivider(palette: SendPalette) {
     HorizontalDivider(
         color = palette.hairline,
         thickness = SendDimens.DividerThickness,
-        modifier = Modifier.padding(horizontal = SendDimens.Space16),
+        modifier = Modifier.padding(horizontal = SettingsRowPaddingHorizontal),
     )
 }
 

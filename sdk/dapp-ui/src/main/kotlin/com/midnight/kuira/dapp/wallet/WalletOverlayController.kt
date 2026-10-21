@@ -28,6 +28,16 @@ sealed interface WalletOverlay {
     data class Settings(
         val launchSource: SettingsLaunchSource = SettingsLaunchSource.Wallet,
     ) : WalletOverlay
+
+    /**
+     * The link-a-device ceremony as its own destination, rather than a step inside Settings.
+     *
+     * It needs one because the sigil gate opens it, and at the gate there is no wallet — so
+     * Settings, which acts on a live wallet, is not somewhere the person can be sent. Leaving it
+     * reachable only from Settings is what made the receiving half unreachable on iOS: the one
+     * device that needs to receive a wallet is the one that cannot get to Settings.
+     */
+    data object LinkDevice : WalletOverlay
 }
 
 /** Which pill's gear opened the shared Settings overlay. */
@@ -144,6 +154,9 @@ class WalletOverlayController {
                 SettingsLaunchSource.Wallet -> walletSheetReopen++
                 SettingsLaunchSource.Sigil -> sigilSheetReopen++
             }
+            // Launched from the sigil gate, so it returns there — and a link that succeeded has
+            // changed what that sheet says, from "no sigil" to a wallet this device now holds.
+            is WalletOverlay.LinkDevice -> sigilSheetReopen++
             null -> {}
         }
     }

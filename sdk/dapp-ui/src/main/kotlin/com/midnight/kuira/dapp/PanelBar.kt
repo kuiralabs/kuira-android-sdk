@@ -223,6 +223,7 @@ fun PanelBar(
                 onSigilStatusChange(it)
             },
             onOpenSettings = { overlay.open(WalletOverlay.Settings(SettingsLaunchSource.Sigil)) },
+            onLinkDevice = { overlay.open(WalletOverlay.LinkDevice) },
             pill = pillSlot,
         )
     }
