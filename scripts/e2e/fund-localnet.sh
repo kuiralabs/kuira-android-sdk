@@ -42,7 +42,15 @@ for _ in $(seq 1 "$AIRDROP_COUNT"); do
 done
 
 echo "==> Registering dust (idempotent — only registers NIGHT not already generating)"
-mn dust register --wallet "$WALLET" || true
+# NOT `|| true`. An already-registered wallet exits 0 ("dust already available"), so a
+# non-zero exit here is a real failure — and swallowing it meant funding "succeeded" with
+# no dust, which surfaces much later as dust-dependent e2e tests failing on a precondition
+# with no hint that provisioning was the cause.
+if ! mn dust register --wallet "$WALLET"; then
+  echo "ERROR: dust registration failed for '$WALLET'. Dust-dependent e2e tests cannot pass" >&2
+  echo "       until this succeeds; re-run once the localnet is healthy." >&2
+  exit 1
+fi
 
 echo "==> Resulting state"
 mn balance --wallet "$WALLET" || true

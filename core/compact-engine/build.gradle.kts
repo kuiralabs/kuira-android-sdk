@@ -64,8 +64,18 @@ val bboardSetup by tasks.registering {
             val proc = ProcessBuilder("adb", *args)
                 .redirectErrorStream(true)
                 .start()
-            return proc.inputStream.bufferedReader().readText().trim()
-                .also { proc.waitFor() }
+            val output = proc.inputStream.bufferedReader().readText().trim()
+            // The exit code used to be discarded. Every call here changes device state that the
+            // tests then read — mkdir, push of the contract/indexer config, reverse of the
+            // localnet ports — so a failure meant the task logged "BBoard e2e setup complete!"
+            // while the device kept whatever stale config it already had. That is how a
+            // contract address and an indexer URL from a previous, emulator-era run survived
+            // on the device and sent the tests at 10.0.2.2 and a contract that no longer existed.
+            val exit = proc.waitFor()
+            if (exit != 0) {
+                throw GradleException("adb ${args.joinToString(" ")} failed (exit $exit): $output")
+            }
+            return output
         }
 
         fun jsonField(json: String, field: String): String? {
