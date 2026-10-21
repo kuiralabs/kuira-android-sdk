@@ -12,7 +12,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,7 +46,7 @@ import java.math.BigInteger
  *    [FUNDING_TIMEOUT_MS] waiting for the subscription to see the credit.
  *
  * **Skip behavior:** if either localnet or proving keys aren't reachable, the
- * test uses [assumeTrue] to skip rather than fail — matches the convention in
+ * test FAILS rather than skips when the environment is absent — matches the convention in
  * `BboardEndToEndTest.onlinePipeline_executeProveBalanceSubmit`.
  *
  * **Driver script:** `sdk/midnight-sdk/run-sdk-e2e.sh` tails logcat for the
@@ -85,12 +84,12 @@ class SdkRegistrationE2ETest {
             Log.i(TAG, "  mn transfer ${sdk.walletAddress} 100")
             Log.i(TAG, "")
 
-            // Registration proves locally — SKIP (don't fail) when the wallet proving keys
-            // aren't installed on the device (adb-push them to /data/local/tmp/wallet_keys
-            // first, per the class docs; the @Before installer is a no-op without them).
-            // Fulfils the "skip if proving keys aren't reachable" promise in the class header.
-            assumeTrue(
-                "Wallet proving keys not installed on device — skipping (see class docs for the adb push).",
+            // Registration proves locally, so without the wallet proving keys there is nothing
+            // to prove and nothing to assert. That is a provisioning failure, not a skip:
+            // scripts/e2e/prepare-localnet-e2e.sh adb-pushes them to /data/local/tmp/wallet_keys.
+            assertTrue(
+                "Wallet proving keys not installed on device — run " +
+                    "scripts/e2e/prepare-localnet-e2e.sh (see class docs for the adb push).",
                 provingKeyManager.hasWalletKeys(),
             )
 
@@ -100,9 +99,10 @@ class SdkRegistrationE2ETest {
             // connect + pull the unshielded UTXO state for this address. Give
             // it 10s before reading.
             val initial = withTimeoutOrNull(INITIAL_SETTLE_MS) { sdk.wallet.balance() }
-            assumeTrue(
-                "Localnet appears unreachable — sdk.wallet.balance() timed out. " +
-                    "Is docker running and indexer at http://10.0.2.2:8088 healthy?",
+            assertTrue(
+                "Localnet appears unreachable — sdk.wallet.balance() timed out. Is docker " +
+                    "running, the indexer healthy, and (on a physical device) the tunnel up " +
+                    "via `./gradlew adbReverseLocalnet`?",
                 initial != null,
             )
             Log.i(TAG, "Initial balance: night=${initial!!.unshieldedNight}  dust=${initial.dust}  dustRegistered=${initial.dustRegistered}")
@@ -118,15 +118,17 @@ class SdkRegistrationE2ETest {
                 initial
             } else {
                 Log.i(TAG, "Waiting up to ${FUNDING_TIMEOUT_MS / 1000}s for NIGHT >= $MIN_NIGHT...")
-                // runCatching so a funding timeout SKIPS (assumeTrue below) instead of hard-failing.
+                // runCatching so a funding timeout reaches the assertion below with a clear
+                // message, rather than surfacing as an opaque exception here.
                 runCatching {
                     sdk.wallet.waitForFunding(minNight = MIN_NIGHT, timeoutMs = FUNDING_TIMEOUT_MS)
                 }.getOrNull()
             }
-            // SKIP (don't fail) when the localnet test wallet isn't funded — matches the
-            // IsolatedWalletE2E convention so the gate stays green without a manual `mn transfer`.
-            assumeTrue(
-                "Wallet not funded on this localnet — pre-fund via `mn transfer ${sdk.walletAddress} 100`. Skipping.",
+            // Fails rather than skips, matching IsolatedWalletE2E: an unfunded wallet means the
+            // registration flow below never ran, which must not report as a pass.
+            assertTrue(
+                "Wallet not funded on this localnet — pre-fund via " +
+                    "`mn transfer ${sdk.walletAddress} 100`, or run scripts/e2e/prepare-localnet-e2e.sh.",
                 probe != null && probe.unshieldedNight >= MIN_NIGHT,
             )
             val funded = probe!!

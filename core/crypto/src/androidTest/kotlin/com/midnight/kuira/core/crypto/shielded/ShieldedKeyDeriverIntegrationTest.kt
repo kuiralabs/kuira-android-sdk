@@ -6,7 +6,6 @@ package com.midnight.kuira.core.crypto.shielded
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,9 +32,10 @@ class ShieldedKeyDeriverIntegrationTest {
     @Before
     fun setUp() {
         // Skip tests if native library not loaded
-        assumeTrue(
-            "Native library not loaded - skipping integration tests. " +
-                    "Error: ${ShieldedKeyDeriver.getLoadError()}",
+        // Not a skip: in an instrumented run the JNI library is part of the APK, so a
+        // load failure means the build or the ABI is broken — exactly what must go red.
+        assertTrue(
+            "Native library not loaded. Error: ${ShieldedKeyDeriver.getLoadError()}",
             ShieldedKeyDeriver.isLibraryLoaded()
         )
     }

@@ -8,7 +8,6 @@ import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,9 +101,11 @@ class BboardEndToEndTest {
 
     @Test
     fun offlinePipeline_executeAssembleAndProve() = runBlocking {
-        // Skip if proving keys not installed
-        assumeTrue(
-            "Bboard proving keys not installed — run ./scripts/install-bboard-keys.sh",
+        // Not a skip: without the keys there is no proof to check, and a green skip would
+        // report this pipeline as verified when nothing ran.
+        assertTrue(
+            "Bboard proving keys not installed — run ./scripts/install-bboard-keys.sh (or " +
+                "scripts/e2e/prepare-localnet-e2e.sh, which stages them).",
             provingKeyManager.hasProvableCircuitKeys(bboardCircuits),
         )
 
@@ -156,9 +157,9 @@ class BboardEndToEndTest {
 
     @Test
     fun onlinePipeline_executeProveBalanceSubmit(): Unit = runBlocking {
-        // Skip if proving keys not installed
-        assumeTrue(
-            "Bboard proving keys not installed",
+        // Fails rather than skips — see the offline pipeline above.
+        assertTrue(
+            "Bboard proving keys not installed — run ./scripts/install-bboard-keys.sh.",
             provingKeyManager.hasProvableCircuitKeys(bboardCircuits),
         )
 

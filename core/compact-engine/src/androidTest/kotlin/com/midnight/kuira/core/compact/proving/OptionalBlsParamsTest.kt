@@ -1,10 +1,13 @@
 package com.midnight.kuira.core.compact.proving
 
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,13 +29,39 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class OptionalBlsParamsTest {
 
-    private val context = InstrumentationRegistry.getInstrumentation().context
+    private val assetContext = InstrumentationRegistry.getInstrumentation().context
+    private lateinit var isolatedFilesDir: File
     private lateinit var manager: ProvingKeyManager
+
+    /**
+     * A context whose `filesDir` is a scratch directory, so [ProvingKeyManager.keysDir]
+     * lands somewhere this test owns outright.
+     *
+     * [ProvingKeyManager.clearCache] in setUp deletes that whole directory. Pointed at the
+     * app's real `filesDir`, it wiped the SHARED on-device proving-key install — including
+     * the multi-megabyte bboard circuit keys that BboardEndToEndTest and MidnightContractTest
+     * depend on. Those tests then failed or passed purely on class ORDER: run after this one,
+     * their keys were gone. Isolating the directory keeps the file IO real (nothing here is
+     * mocked; assets still come from the test APK via the wrapped context) while confining
+     * the blast radius to this test.
+     */
+    private fun isolatedContext(filesDir: File): Context = object : ContextWrapper(assetContext) {
+        override fun getFilesDir(): File = filesDir
+    }
 
     @Before
     fun setUp() {
-        manager = ProvingKeyManager(context)
+        isolatedFilesDir = File(assetContext.cacheDir, "optional-bls-params-test").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        manager = ProvingKeyManager(isolatedContext(isolatedFilesDir))
         manager.clearCache()
+    }
+
+    @After
+    fun tearDown() {
+        isolatedFilesDir.deleteRecursively()
     }
 
     @Test

@@ -15,12 +15,12 @@ import com.midnight.kuira.core.ledger.model.UnshieldedOffer
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.ledger.signer.TransactionSigner
+import com.midnight.kuira.core.network.DeviceType
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,7 +33,7 @@ import java.util.Arrays
  * Real dust fee payment test with local Midnight node.
  *
  * **PREREQUISITES:**
- * 1. Local Midnight node running at http://10.0.2.2:9944
+ * 1. Local Midnight node running on the host (:9944)
  * 2. Funded address with NIGHT UTXOs (1 NIGHT available)
  * 3. **DUST REGISTERED** via Lace wallet (for dust fee payment)
  *
@@ -68,8 +68,18 @@ class RealDustFeePaymentTest {
         // This wallet has 1 NIGHT funded at index 0
         private const val TEST_MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
 
-        // Local node (emulator uses 10.0.2.2 to access host's localhost)
-        private const val NODE_URL = "http://10.0.2.2:9944"
+        /**
+         * Local node RPC, resolved per device type rather than pinned to the emulator.
+         *
+         * This was `http://10.0.2.2:9944`, which only works on an emulator: 10.0.2.2 is the
+         * emulator's magic alias for the host, and means nothing on a phone. On a physical
+         * device the host is reached at 127.0.0.1 through `adb reverse` (./gradlew
+         * adbReverseLocalnet), so the host must come from [DeviceType.localhostHost] and the
+         * port from [NetworkConfig.LOCALNET_NODE_RPC_PORT] — the same two sources the
+         * production config uses, so there is no second place to keep in sync.
+         */
+        private val NODE_URL =
+            "http://${DeviceType.localhostHost}:${NetworkConfig.LOCALNET_NODE_RPC_PORT}"
 
         // Dust will be registered at index 0 (standard first address)
         // This address will be derived from the mnemonic at m/44'/2400'/0'/0/0
@@ -216,12 +226,11 @@ class RealDustFeePaymentTest {
         // A failed/unreachable indexer query is itself an "unavailable" signal → skip below.
         val eventsHex = runCatching { queryDustEventsWithCache(indexerClient) }.getOrDefault("")
 
-        // SKIP (don't fail) when this localnet wallet has no registered dust (or the indexer
-        // is unreachable) — matches the assumeTrue skip-when-unavailable convention so the gate
-        // stays green without a manual `mn dust register`. Once events exist, the assertions
-        // below run for real.
-        assumeTrue(
-            "No dust events on this localnet — register dust first (`mn dust register`). Skipping.",
+        // Not a skip: dust registration is part of the gate's provisioning, so its absence is a
+        // setup failure to fix, not a reason to report green on assertions that never ran.
+        assertTrue(
+            "No dust events on this localnet. Provision the chain first (scripts/e2e/prepare-localnet-e2e.sh, which funds the\n" +
+                "canonical wallet and runs `mn dust register`) — this must RUN, not be skipped.",
             eventsHex.isNotEmpty(),
         )
 
@@ -241,11 +250,12 @@ class RealDustFeePaymentTest {
         val balance = dustState!!.getBalance(System.currentTimeMillis())
         println("Dust balance: $balance Specks")
 
-        // SKIP (don't fail) when this wallet has no usable dust — `queryDustEvents` returns
-        // chain-wide events, so replaying them for an unregistered wallet's seed nets 0. That
-        // is the true "dust unavailable" signal (register via `mn dust register`). When the
-        // wallet IS registered, balance > 0 and the test proceeds to verify the real flow.
-        assumeTrue("No usable dust for this wallet (balance 0) — register dust first. Skipping.", balance > BigInteger.ZERO)
+        // `queryDustEvents` returns chain-wide events, so replaying them for an unregistered
+        // seed nets 0 — a provisioning gap, which must fail rather than quietly withdraw.
+        assertTrue(
+            "No usable dust for this wallet (balance 0). Run scripts/e2e/prepare-localnet-e2e.sh to fund and register dust.",
+            balance > BigInteger.ZERO,
+        )
 
         indexerClient.close()
     }
@@ -281,9 +291,9 @@ class RealDustFeePaymentTest {
 
         // A failed/unreachable indexer query is itself an "unavailable" signal → skip below.
         val eventsHex = runCatching { queryDustEventsWithCache(indexerClient) }.getOrDefault("")
-        // SKIP (don't fail) when this localnet wallet has no registered dust — see test1.
-        assumeTrue(
-            "No dust events on this localnet — register dust first (`mn dust register`). Skipping.",
+        // Fails rather than skips — see test1.
+        assertTrue(
+            "No dust events on this localnet. Provision the chain first (scripts/e2e/prepare-localnet-e2e.sh).",
             eventsHex.isNotEmpty(),
         )
 
@@ -296,8 +306,11 @@ class RealDustFeePaymentTest {
         dustState = restoredState
 
         val balance = dustState!!.getBalance(System.currentTimeMillis())
-        // SKIP (don't fail) when this wallet has no usable dust — see test1.
-        assumeTrue("No usable dust for this wallet (balance: $balance) — register dust first. Skipping.", balance > BigInteger.ZERO)
+        // Fails rather than skips — see test1.
+        assertTrue(
+            "No usable dust for this wallet (balance: $balance). Run scripts/e2e/prepare-localnet-e2e.sh.",
+            balance > BigInteger.ZERO,
+        )
 
         // Build transaction (1 NIGHT to self)
         val recipientKey = wallet

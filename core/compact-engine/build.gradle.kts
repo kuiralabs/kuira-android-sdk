@@ -1,3 +1,6 @@
+import java.net.InetSocketAddress
+import java.net.Socket
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -46,7 +49,12 @@ val bboardSetup by tasks.registering {
                 .start()
             val output = proc.inputStream.bufferedReader().readText().trim()
             val exit = proc.waitFor()
-            if (exit != 0 && !output.contains("\"error\"")) {
+            // An error response used to be SWALLOWED: the guard skipped the throw whenever the
+            // body contained "error", so a refused airdrop or dust registration returned quietly
+            // and the task logged "Airdropping…" / "Registering dust…" and carried on as if they
+            // had worked. The first real symptom then appeared several steps later, somewhere
+            // unrelated. A non-zero exit is a failure whatever the body says.
+            if (exit != 0) {
                 throw GradleException("mn ${args.joinToString(" ")} failed (exit $exit): $output")
             }
             return output
@@ -66,18 +74,42 @@ val bboardSetup by tasks.registering {
         }
 
         val network = "undeployed"
-        val bboardDir = (System.getenv("BBOARD_DIR")?.let(::file)
-            ?: file("${rootProject.projectDir}/../../midnight/midnight-libraries/example-bboard"))
-            .takeIf { it.exists() }
+        // The default was "${rootProject.projectDir}/../../midnight/…", which is one level too
+        // shallow: the repo sits at <dev>/android/projects/kuira-android-wallet, so ../.. lands on
+        // <dev>/android, not <dev>. The checkout was never found and bboardSetup always failed with
+        // "set BBOARD_DIR" even on machines that had it. Search the plausible roots instead of
+        // pinning one relative depth, and say which ones were tried when none match.
+        val bboardCandidates = listOfNotNull(
+            System.getenv("BBOARD_DIR")?.let(::file),
+            file("${rootProject.projectDir}/../../../midnight/midnight-libraries/example-bboard"),
+            file("${System.getProperty("user.home")}/Development/midnight/midnight-libraries/example-bboard"),
+        )
+        val bboardDir = bboardCandidates.firstOrNull { it.exists() }
             ?: throw GradleException(
-                "example-bboard not found. Set the BBOARD_DIR env var to your example-bboard checkout."
+                "example-bboard not found. Set the BBOARD_DIR env var to your example-bboard " +
+                    "checkout. Tried:\n" + bboardCandidates.joinToString("\n") { "  - $it" }
             )
 
-        // 1. Check localnet
-        logger.lifecycle("Checking localnet status...")
-        val status = mn("localnet", "status")
-        if (!status.contains("running")) {
-            throw GradleException("Localnet not running. Start with: mn localnet up")
+        // 1. Check localnet — by PROBING the ports, not by asking `mn localnet status`.
+        //
+        // `mn localnet status` reports a stale "running" when the containers are gone, and
+        // reports nothing useful for a stack it did not start itself (a plain docker compose
+        // one, say). Either way it answers a different question than "can I reach the chain",
+        // which is the only thing this task needs. scripts/e2e/prepare-localnet-e2e.sh already
+        // probes for exactly this reason; this now matches it.
+        logger.lifecycle("Probing localnet (node 9944, indexer 8088)...")
+        fun portOpen(port: Int): Boolean = try {
+            Socket().use { sock -> sock.connect(InetSocketAddress("127.0.0.1", port), 2000) }
+            true
+        } catch (_: Exception) {
+            false
+        }
+        val closedPorts = listOf(9944, 8088).filterNot(::portOpen)
+        if (closedPorts.isNotEmpty()) {
+            throw GradleException(
+                "Localnet not reachable on ${closedPorts.joinToString(", ")}. " +
+                    "Start it (scripts/e2e/prepare-localnet-e2e.sh) before running the e2e suite."
+            )
         }
 
         // 2. Ensure wallet exists

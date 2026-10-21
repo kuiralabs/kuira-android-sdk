@@ -10,7 +10,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -44,9 +43,9 @@ class ZswapCheckpointResumeTest {
 
     @Test
     fun checkpointPlusDeltaEqualsGenesisReplay() {
-        val events = loadFixtureEvents() ?: return skip("events fixture")
-        val seed = loadFixtureSeed() ?: return skip("seed fixture")
-        assumeTrue("fixture needs at least 2 events to split", events.size >= 2)
+        val events = loadFixtureEvents() ?: return missingFixture("events fixture")
+        val seed = loadFixtureSeed() ?: return missingFixture("seed fixture")
+        assertTrue("fixture needs at least 2 events to split", events.size >= 2)
 
         // (A) Genesis-equivalent: replay every event in one pass.
         val genesis = replayAll(seed, events)
@@ -81,8 +80,8 @@ class ZswapCheckpointResumeTest {
 
     @Test
     fun serializeDeserializeIsLossless() {
-        val events = loadFixtureEvents() ?: return skip("events fixture")
-        val seed = loadFixtureSeed() ?: return skip("seed fixture")
+        val events = loadFixtureEvents() ?: return missingFixture("events fixture")
+        val seed = loadFixtureSeed() ?: return missingFixture("seed fixture")
 
         val state = replayAll(seed, events)
         val firstFree = state.getFirstFree()
@@ -104,8 +103,8 @@ class ZswapCheckpointResumeTest {
 
     @Test
     fun genesisReplayIsDeterministic() {
-        val events = loadFixtureEvents() ?: return skip("events fixture")
-        val seed = loadFixtureSeed() ?: return skip("seed fixture")
+        val events = loadFixtureEvents() ?: return missingFixture("events fixture")
+        val seed = loadFixtureSeed() ?: return missingFixture("seed fixture")
 
         val a = replayAll(seed, events)
         val b = replayAll(seed, events)
@@ -118,9 +117,9 @@ class ZswapCheckpointResumeTest {
 
     @Test
     fun tornCheckpointResumeIsRejectedNotSilentlyWrong() {
-        val events = loadFixtureEvents() ?: return skip("events fixture")
-        val seed = loadFixtureSeed() ?: return skip("seed fixture")
-        assumeTrue("fixture needs at least 1 event", events.isNotEmpty())
+        val events = loadFixtureEvents() ?: return missingFixture("events fixture")
+        val seed = loadFixtureSeed() ?: return missingFixture("seed fixture")
+        assertTrue("fixture needs at least 1 event", events.isNotEmpty())
 
         // Fully sync, then serialize→deserialize (the real checkpoint path).
         val full = replayAll(seed, events)
@@ -152,8 +151,8 @@ class ZswapCheckpointResumeTest {
      */
     @Test
     fun replayFromFileEqualsGenesisReplay() {
-        val events = loadFixtureEvents() ?: return skip("events fixture")
-        val seed = loadFixtureSeed() ?: return skip("seed fixture")
+        val events = loadFixtureEvents() ?: return missingFixture("events fixture")
+        val seed = loadFixtureSeed() ?: return missingFixture("seed fixture")
 
         // Reference: in-memory genesis replay (concatenated hex → single replayEvents).
         val genesis = replayAll(seed, events)
@@ -230,9 +229,18 @@ class ZswapCheckpointResumeTest {
     private fun String.hexToBytes(): ByteArray =
         chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
-    private fun skip(what: String) {
-        assumeTrue("zswap $what not bundled (drop it under androidTest/assets/$FIXTURE_DIR/) — skipping", false)
-    }
+    /**
+     * A missing fixture is a packaging regression, not a reason to stand down.
+     *
+     * These assets ARE committed under `androidTest/assets/$FIXTURE_DIR/`, so the only way
+     * to reach here is that they stopped being packaged — and skipping would report that
+     * as a pass, retiring the checkpoint-resume coverage silently.
+     */
+    private fun missingFixture(what: String): Nothing =
+        throw AssertionError(
+            "zswap $what missing from androidTest/assets/$FIXTURE_DIR/ — it is committed there, " +
+                "so this is a packaging regression, not a reason to skip."
+        )
 
     companion object {
         private const val FIXTURE_DIR = "zswap_fixture"

@@ -53,9 +53,10 @@ apiValidation {
 //   - 8088: indexer GraphQL
 //   - 9944: node RPC
 //   - 6300: proof server
+//   - 9932: mn serve DApp connector
 val adbReverseLocalnet by tasks.registering {
     group = "kuira"
-    description = "Forward localnet ports (8088, 9944, 6300) from each connected physical device to host via adb reverse."
+    description = "Forward localnet ports (8088, 9944, 6300, 9932) from each connected physical device to host via adb reverse."
 
     doLast {
         // Resolve adb via ANDROID_HOME / ANDROID_SDK_ROOT (root build script
@@ -65,7 +66,9 @@ val adbReverseLocalnet by tasks.registering {
             ?: System.getenv("ANDROID_SDK_ROOT")
             ?: error("adbReverseLocalnet: set ANDROID_HOME (or ANDROID_SDK_ROOT)")
         val adb = "$sdkRoot/platform-tools/adb"
-        val ports = listOf(8088, 9944, 6300)
+        // 9932 is the mn-serve DApp connector, which the compact-engine contract-call
+        // tests submit through; without it they fail with ECONNREFUSED on a physical device.
+        val ports = listOf(8088, 9944, 6300, 9932)
 
         // Enumerate connected devices. `adb devices` lines look like:
         //   List of devices attached
@@ -103,12 +106,24 @@ val adbReverseLocalnet by tasks.registering {
     }
 }
 
-// Wire adbReverseLocalnet ahead of every `installDebug` task across the
-// project. `projectsEvaluated` because some subprojects define their
-// installDebug lazily during their own evaluation.
+// Wire adbReverseLocalnet ahead of every `installDebug` AND every
+// `connected*AndroidTest` task across the project. `projectsEvaluated` because
+// some subprojects define these lazily during their own evaluation.
+//
+// The connected-test half matters as much as the install half: instrumented
+// tests do NOT go through `installDebug` (AGP installs the app + test APKs
+// itself), so wiring only `installDebug` left every localnet-backed
+// instrumented test unable to reach the host on a physical device — the
+// device's own `127.0.0.1`, with no tunnel behind it. That failed silently in
+// the worst way: tests written to skip when the indexer looks unreachable
+// reported a clean green "skipped" while the indexer was up the whole time,
+// so the gate passed without those assertions ever running.
 gradle.projectsEvaluated {
     rootProject.allprojects.forEach { p ->
-        p.tasks.matching { it.name == "installDebug" }.configureEach {
+        p.tasks.matching {
+            it.name == "installDebug" ||
+                (it.name.startsWith("connected") && it.name.endsWith("AndroidTest"))
+        }.configureEach {
             dependsOn(adbReverseLocalnet)
         }
     }

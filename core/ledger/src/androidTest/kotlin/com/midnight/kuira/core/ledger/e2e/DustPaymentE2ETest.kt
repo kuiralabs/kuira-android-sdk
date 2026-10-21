@@ -10,6 +10,8 @@ import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import com.midnight.kuira.core.crypto.dust.DustLocalState
+import com.midnight.kuira.core.network.DeviceType
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
 import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 import com.midnight.kuira.core.ledger.fee.FeeCalculator
@@ -21,7 +23,6 @@ import com.midnight.kuira.core.ledger.signer.TransactionSigner
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,7 +42,7 @@ import java.util.Arrays
  * 6. Submit to local Midnight node
  *
  * **Requirements:**
- * - Local Midnight node running at http://10.0.2.2:9944
+ * - Local Midnight node running on the host (:9944)
  * - Native library libkuira_crypto_ffi.so bundled
  * - Android device or emulator
  * - Run with: ./gradlew :core:ledger:connectedAndroidTest
@@ -68,9 +69,19 @@ class DustPaymentE2ETest {
 
         /**
          * Local node URL.
-         * Android emulator uses 10.0.2.2 to access host machine's localhost.
          */
-        private const val NODE_URL = "http://10.0.2.2:9944"
+        /**
+         * Local node RPC, resolved per device type rather than pinned to the emulator.
+         *
+         * This was `http://10.0.2.2:9944`, which only works on an emulator: 10.0.2.2 is the
+         * emulator's magic alias for the host, and means nothing on a phone. On a physical
+         * device the host is reached at 127.0.0.1 through `adb reverse` (./gradlew
+         * adbReverseLocalnet), so the host must come from [DeviceType.localhostHost] and the
+         * port from [NetworkConfig.LOCALNET_NODE_RPC_PORT] — the same two sources the
+         * production config uses, so there is no second place to keep in sync.
+         */
+        private val NODE_URL =
+            "http://${DeviceType.localhostHost}:${NetworkConfig.LOCALNET_NODE_RPC_PORT}"
 
         /**
          * Test recipient address (all zeros encoded as valid Bech32m).
@@ -202,9 +213,9 @@ class DustPaymentE2ETest {
             ttl = System.currentTimeMillis() + 30 * 60 * 1000
         )
 
-        // Verify we can connect to node. Compute health safely (an unreachable node throws),
-        // then SKIP (don't fail) when the node is down — a localnet e2e can't run without it,
-        // and the gate should stay green. Matches the sibling e2e tests' convention.
+        // Verify we can connect to the node. Compute health safely (an unreachable node throws),
+        // then FAIL when it is down: this e2e has nothing to assert without a chain, and
+        // reporting that as a skip would let the gate pass while covering nothing.
         val nodeClient = NodeRpcClientImpl(nodeUrl = NODE_URL)
         val isHealthy = try {
             nodeClient.isHealthy()
@@ -214,7 +225,14 @@ class DustPaymentE2ETest {
         } finally {
             nodeClient.close()
         }
-        assumeTrue("Node at $NODE_URL not reachable/healthy — localnet down? Skipping.", isHealthy)
+        // Not a skip. A green "skipped" is indistinguishable from a verified pass, which is
+        // exactly how this suite sat unverified; bring the chain up instead (scripts/e2e/prepare-localnet-e2e.sh).
+        assertTrue(
+            "Node at $NODE_URL not reachable/healthy. This e2e must RUN, not be skipped: start\n" +
+                "the localnet and, on a physical device, establish the tunnel (`./gradlew\n" +
+                "adbReverseLocalnet`). See scripts/e2e/prepare-localnet-e2e.sh.",
+            isHealthy,
+        )
     }
 
     @Test

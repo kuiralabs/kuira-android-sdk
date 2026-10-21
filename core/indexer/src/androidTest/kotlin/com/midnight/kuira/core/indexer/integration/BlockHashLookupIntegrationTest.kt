@@ -8,7 +8,6 @@ import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -25,8 +24,8 @@ import org.junit.runner.RunWith
  * does: if the transport mistypes the height again, `Found` never comes back and the first
  * assertion fails.
  *
- * Requires a running localnet (`mn localnet up`) — skipped (assumption) when unreachable, matching
- * the suite's convention for indexer-backed integration tests.
+ * Requires a running localnet. When the indexer is unreachable this FAILS with that reason
+ * rather than skipping — a skipped assertion is indistinguishable from a verified one in the gate.
  */
 @RunWith(AndroidJUnit4::class)
 class BlockHashLookupIntegrationTest {
@@ -36,19 +35,32 @@ class BlockHashLookupIntegrationTest {
         developmentMode = true,
     )
 
-    private fun tipOrSkip(): Long = runBlocking {
+    /**
+     * The chain tip, or a failure that says what to fix.
+     *
+     * This used to skip on an unreachable indexer. It must not: a skip reads as a pass in the
+     * gate, and that masked the real problem for as long as it existed — instrumented tests
+     * never got the adb reverse tunnel (it was wired to `installDebug` only), so on a physical
+     * device a perfectly healthy indexer looked unreachable and this test quietly opted out of
+     * the regression it exists to pin.
+     */
+    private fun requireTip(): Long = runBlocking {
         val tip = try {
             client.getCurrentBlockWithParams()
         } catch (e: Exception) {
-            null
+            throw AssertionError(
+                "localnet indexer unreachable at ${NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl}. " +
+                    "This assertion must RUN, not be skipped: start the localnet, and on a physical " +
+                    "device establish the tunnel (`./gradlew adbReverseLocalnet`).",
+                e,
+            )
         }
-        assumeTrue("localnet indexer not reachable — skipping", tip != null)
-        tip!!.height
+        tip.height
     }
 
     @Test
     fun existingHeight_returnsFound_withTheBlocksRealHash() = runBlocking<Unit> {
-        val tip = tipOrSkip()
+        val tip = requireTip()
         // Height 1 exists on any live chain. THE regression case: a mistyped height variable
         // yields a GraphQL error → Unavailable, and this assertion names it.
         val lookup = client.getBlockHashAtHeight(1L)
@@ -65,7 +77,7 @@ class BlockHashLookupIntegrationTest {
 
     @Test
     fun heightBeyondTip_returnsNotOnChain_notUnavailable() = runBlocking<Unit> {
-        val tip = tipOrSkip()
+        val tip = requireTip()
         // The reset signal: a valid response with no block. Must be NotOnChain — collapsing it
         // into Unavailable would turn every real reset into a silent skip.
         val lookup = client.getBlockHashAtHeight(tip + 1_000_000L)

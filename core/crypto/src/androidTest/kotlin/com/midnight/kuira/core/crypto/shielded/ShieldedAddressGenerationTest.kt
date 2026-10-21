@@ -10,7 +10,6 @@ import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,8 +40,10 @@ class ShieldedAddressGenerationTest {
     @Before
     fun setUp() {
         // Skip tests if native library not loaded
-        assumeTrue(
-            "Native library not loaded - skipping shielded address generation tests",
+        // Not a skip: address generation is core behaviour, so an unloadable JNI library
+        // must fail rather than quietly withdraw the check.
+        assertTrue(
+            "Native library not loaded: ${ShieldedKeyDeriver.getLoadError()}",
             ShieldedKeyDeriver.isLibraryLoaded()
         )
     }

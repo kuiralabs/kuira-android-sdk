@@ -10,7 +10,6 @@ import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,12 +49,16 @@ class MidnightContractTest {
         val networkId = readConfig("network_id.txt") ?: "undeployed"
         val baseAddress = readConfig("contract_address.txt")
 
-        assumeTrue(
-            "No contract address — Gradle bboardSetup task should deploy automatically",
+        // Neither is a skip. Both are provisioning the gate owns (the Gradle bboardSetup
+        // task deploys the contract; the key install stages the circuits), so a gap is a
+        // setup failure — reporting it as a skip would pass the gate on nothing.
+        assertTrue(
+            "No contract address — the Gradle bboardSetup task should have deployed one; " +
+                "it needs a running localnet (scripts/e2e/prepare-localnet-e2e.sh).",
             baseAddress != null && baseAddress.length == 64,
         )
-        assumeTrue(
-            "Proving keys not installed — run ./scripts/install-bboard-keys.sh",
+        assertTrue(
+            "Proving keys not installed — run ./scripts/install-bboard-keys.sh.",
             provingKeyManager.hasProvableCircuitKeys(BBOARD_CIRCUITS),
         )
 

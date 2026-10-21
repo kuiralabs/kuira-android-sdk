@@ -112,7 +112,11 @@ object TestDataLoader {
         syncStateManager: SyncStateManager,
         address: String,
         database: UtxoDatabase,
-        timeoutMs: Long = 90_000  // 90s to account for indexer Progress heartbeat (every ~30s)
+        // 90s to account for indexer Progress heartbeat (every ~30s). A caller's own
+        // runTest timeout must be strictly LARGER than this, or the two race and
+        // runTest wins: the failure then reads `UncompletedCoroutinesError` instead of
+        // this loader's "Failed to load UTXOs from indexer" plus the real cause.
+        timeoutMs: Long = 90_000
     ): Int = withContext(Dispatchers.IO) {
         Log.d(TAG, "Loading UTXOs from indexer for address: $address")
 

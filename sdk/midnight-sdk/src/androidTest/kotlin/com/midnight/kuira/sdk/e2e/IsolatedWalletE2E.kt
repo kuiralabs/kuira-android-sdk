@@ -8,7 +8,7 @@ import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.MidnightSdk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
-import org.junit.Assume.assumeTrue
+import org.junit.Assert.assertTrue
 import java.math.BigInteger
 
 /**
@@ -27,7 +27,8 @@ import java.math.BigInteger
  * tx the host can't sign). REMOTE proving uses the localnet proof server (`10.0.2.2:6300`), so no
  * on-device proving-key bundle is needed.
  *
- * Tests SKIP (`assumeTrue`), never fail, when localnet/funding is absent — matching the convention
+ * Tests FAIL, never skip, when localnet/funding is absent: a skip is indistinguishable from a
+ * verified pass in the gate. Provision the environment instead — matching the convention
  * in [com.midnight.kuira.sdk.SdkRegistrationE2ETest].
  *
  * Instantiate ONE per `@Test` (in the test body or a `@Before`) so each test gets a distinct
@@ -78,15 +79,21 @@ class IsolatedWalletE2E(private val context: Context) {
 
         // Confirm localnet reachability, then wait for the host to credit the coins.
         val reachable = withTimeoutOrNull(INITIAL_SETTLE_MS) { sdk.wallet.balance() }
-        assumeTrue("Localnet unreachable (indexer http://10.0.2.2:8088 healthy?)", reachable != null)
+        // Not a skip: an unreachable localnet means nothing below was exercised, and a green
+        // skip would report the isolated tier as verified on no assertions at all.
+        assertTrue(
+            "Localnet unreachable. On an emulator the indexer is http://10.0.2.2:8088; on a\n" +
+                "physical device it is 127.0.0.1:8088 via `./gradlew adbReverseLocalnet`.",
+            reachable != null,
+        )
 
         val minNight = BigInteger.valueOf(nightWhole.toLong()).multiply(NIGHT_UNIT)
         val funded = runCatching {
             sdk.wallet.waitForFunding(minNight = minNight, timeoutMs = fundingTimeoutMs)
         }.getOrNull()
-        assumeTrue(
+        assertTrue(
             "Host harness must fund $address (>= $nightWhole NIGHT across $smallUtxos coins) — " +
-                "run the suite via sdk/midnight-sdk/run-sdk-e2e.sh.",
+                "run the suite via sdk/midnight-sdk/run-sdk-e2e.sh. Unfunded is a provisioning failure, not a skip.",
             funded != null,
         )
 
@@ -104,8 +111,9 @@ class IsolatedWalletE2E(private val context: Context) {
                 delay(DUST_POLL_MS)
                 runCatching { sdk.wallet.refresh() }
             }
-            assumeTrue(
-                "Dust never registered (SDK self-pay maturity wait exhausted) for $address",
+            assertTrue(
+                "Dust never registered (SDK self-pay maturity wait exhausted) for $address — " +
+                    "this is the behaviour under test, so it fails rather than skips.",
                 sdk.wallet.balance().dustRegistered,
             )
         }
@@ -122,9 +130,9 @@ class IsolatedWalletE2E(private val context: Context) {
                 runCatching { sdk.wallet.refresh() }
                 seen = runCatching { sdk.wallet.balance().shieldedNight }.getOrNull() ?: BigInteger.ZERO
             }
-            assumeTrue(
+            assertTrue(
                 "Host harness must airdrop >= $shieldedWhole shielded NIGHT to $shieldedAddress " +
-                    "(mn airdrop $shieldedWhole --shielded --wallet <addr>) — run via run-sdk-e2e.sh.",
+                    "(mn airdrop $shieldedWhole --shielded --wallet <addr>) — run via sdk/midnight-sdk/run-sdk-e2e.sh.",
                 seen >= minShielded,
             )
         }

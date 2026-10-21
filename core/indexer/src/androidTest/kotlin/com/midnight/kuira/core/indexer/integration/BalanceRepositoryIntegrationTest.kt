@@ -131,6 +131,36 @@ class BalanceRepositoryIntegrationTest {
         indexerClient.close()
     }
 
+    /**
+     * Fail fast, with the reason, unless the localnet indexer actually answers.
+     *
+     * This deliberately does NOT skip. A skip here is indistinguishable from a pass in the
+     * gate, and that is exactly how these assertions went unverified: the adb reverse tunnel
+     * was never established for instrumented tests, so a live indexer looked unreachable and
+     * the suite reported a tidy green "skipped".
+     *
+     * Failing fast also beats letting the subscription run: nothing downstream reports a dead
+     * indexer as an error. SubscriptionManager retries a refused connection forever by design
+     * (no retry cap, so a backgrounded app auto-recovers), and emits SyncState.Error only from
+     * the `catch` that runs once retries are exhausted — which never happens. The flow just
+     * re-emits SyncState.Connecting, TestDataLoader's `takeWhile` keeps collecting, and the
+     * test dies on its timeout with `UncompletedCoroutinesError`, naming neither the indexer
+     * nor the localnet. One probe, bounded at 3 attempts by the client's RetryPolicy, replaces
+     * that with an actionable message.
+     */
+    private suspend fun requireIndexerReachable() {
+        try {
+            indexerClient.getCurrentBlockWithParams()
+        } catch (e: Exception) {
+            throw AssertionError(
+                "localnet indexer unreachable at $INDEXER_BASE_URL. These assertions must RUN, not be\n" +
+                    "skipped: start the localnet, and on a physical device establish the tunnel\n" +
+                    "(`./gradlew adbReverseLocalnet`) — the device's own 127.0.0.1 reaches nothing.",
+                e,
+            )
+        }
+    }
+
     // ==================== Basic Scenarios ====================
 
     /**
@@ -150,7 +180,8 @@ class BalanceRepositoryIntegrationTest {
      * - Test address must have UTXOs (genesis wallet always has funds)
      */
     @Test
-    fun basicScenario_loadUtxosFromIndexer_thenDatabasePopulated() = runTest(timeout = 90.seconds) {
+    fun basicScenario_loadUtxosFromIndexer_thenDatabasePopulated() = runTest(timeout = 120.seconds) {
+        requireIndexerReachable()
         // Load real data via subscription (production code path)
         val utxoCount = TestDataLoader.loadFromIndexer(
             context = context,
@@ -185,7 +216,8 @@ class BalanceRepositoryIntegrationTest {
      * - Multiple UTXOs with different amounts
      */
     @Test
-    fun basicScenario_observeBalances_thenMatchesIndexerData() = runTest(timeout = 90.seconds) {
+    fun basicScenario_observeBalances_thenMatchesIndexerData() = runTest(timeout = 120.seconds) {
+        requireIndexerReachable()
         // Load real data via subscription
         val utxoCount = TestDataLoader.loadFromIndexer(
             context = context,
@@ -236,7 +268,8 @@ class BalanceRepositoryIntegrationTest {
      * - Used for UI display only, not financial calculations
      */
     @Test
-    fun basicScenario_observeTotalBalance_thenSumsAllTokens() = runTest(timeout = 90.seconds) {
+    fun basicScenario_observeTotalBalance_thenSumsAllTokens() = runTest(timeout = 120.seconds) {
+        requireIndexerReachable()
         // Load real data via subscription
         val utxoCount = TestDataLoader.loadFromIndexer(
             context = context,

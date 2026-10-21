@@ -10,7 +10,6 @@ import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,8 +51,10 @@ class LaceCompatibilityTest {
 
     @Before
     fun setUp() {
-        assumeTrue(
-            "Native library not loaded - skipping Lace compatibility tests",
+        // Not a skip: Lace cross-compatibility is a shipped guarantee, so an unloadable
+        // JNI library must fail rather than quietly withdraw the check.
+        assertTrue(
+            "Native library not loaded: ${ShieldedKeyDeriver.getLoadError()}",
             ShieldedKeyDeriver.isLibraryLoaded()
         )
     }

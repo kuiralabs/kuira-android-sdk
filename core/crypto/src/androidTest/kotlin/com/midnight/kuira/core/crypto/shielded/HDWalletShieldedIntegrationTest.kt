@@ -9,7 +9,6 @@ import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,8 +33,10 @@ class HDWalletShieldedIntegrationTest {
     @Before
     fun setUp() {
         // Skip tests if native library not loaded
-        assumeTrue(
-            "Native library not loaded - skipping integration tests",
+        // Not a skip: in an instrumented run the JNI library is part of the APK, so a
+        // load failure means the build or the ABI is broken — exactly what must go red.
+        assertTrue(
+            "Native library not loaded: ${ShieldedKeyDeriver.getLoadError()}",
             ShieldedKeyDeriver.isLibraryLoaded()
         )
     }

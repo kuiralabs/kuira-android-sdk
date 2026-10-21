@@ -50,8 +50,19 @@ class KuiraLocalnetPlugin : Plugin<Project> {
         // Make"). Hooking assembleDebug means the tunnel is (re)established on every
         // AS deploy too, not just CLI installs. The task is a no-op without a
         // connected physical device, so it's cheap on ordinary builds.
-        project.tasks.matching { it.name == "installDebug" || it.name == "assembleDebug" }
-            .configureEach { it.dependsOn(reverse) }
+        //
+        // Instrumented tests need the same tunnel and reach it by neither task:
+        // AGP's `connected*AndroidTest` installs the app + test APKs itself
+        // rather than depending on `installDebug`. Without this, a localnet-backed
+        // instrumented test on a physical device talks to the DEVICE's own
+        // 127.0.0.1 and never reaches the host — and a test written to skip on an
+        // unreachable indexer then reports a green skip while the localnet is up,
+        // hiding that its assertions never ran.
+        project.tasks.matching {
+            it.name == "installDebug" ||
+                it.name == "assembleDebug" ||
+                (it.name.startsWith("connected") && it.name.endsWith("AndroidTest"))
+        }.configureEach { it.dependsOn(reverse) }
     }
 }
 

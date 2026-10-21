@@ -5,7 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
-import org.junit.Assume.assumeTrue
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,8 +15,8 @@ class InvestigateShieldedAddressStructure {
 
     @Before
     fun setUp() {
-        assumeTrue(
-            "Native library not loaded",
+        assertTrue(
+            "Native library not loaded: ${ShieldedKeyDeriver.getLoadError()}",
             ShieldedKeyDeriver.isLibraryLoaded()
         )
     }

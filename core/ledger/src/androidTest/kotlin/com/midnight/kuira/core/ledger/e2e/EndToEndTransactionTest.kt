@@ -5,6 +5,8 @@ import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.bip32.HDWallet
 import com.midnight.kuira.core.crypto.bip32.MidnightKeyRole
 import com.midnight.kuira.core.crypto.bip39.BIP39
+import com.midnight.kuira.core.network.DeviceType
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.core.ledger.api.FfiTransactionSerializer
 import com.midnight.kuira.core.ledger.api.NodeRpcClientImpl
 import com.midnight.kuira.core.ledger.model.Intent
@@ -15,7 +17,6 @@ import com.midnight.kuira.core.ledger.signer.TransactionSigner
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,10 +63,20 @@ class EndToEndTransactionTest {
         /**
          * Local node URL.
          *
-         * Android emulator uses 10.0.2.2 to access host machine's localhost.
          * See: https://developer.android.com/studio/run/emulator-networking
          */
-        private const val NODE_URL = "http://10.0.2.2:9944"
+        /**
+         * Local node RPC, resolved per device type rather than pinned to the emulator.
+         *
+         * This was `http://10.0.2.2:9944`, which only works on an emulator: 10.0.2.2 is the
+         * emulator's magic alias for the host, and means nothing on a phone. On a physical
+         * device the host is reached at 127.0.0.1 through `adb reverse` (./gradlew
+         * adbReverseLocalnet), so the host must come from [DeviceType.localhostHost] and the
+         * port from [NetworkConfig.LOCALNET_NODE_RPC_PORT] — the same two sources the
+         * production config uses, so there is no second place to keep in sync.
+         */
+        private val NODE_URL =
+            "http://${DeviceType.localhostHost}:${NetworkConfig.LOCALNET_NODE_RPC_PORT}"
 
         /**
          * Test recipient address (all zeros encoded as valid Bech32m for undeployed network).
@@ -199,8 +210,13 @@ class EndToEndTransactionTest {
                 }
                 errorMessage.contains("Connection refused", ignoreCase = true) ||
                 errorMessage.contains("DNS resolution failed", ignoreCase = true) -> {
-                    // SKIP (don't fail) when the node is unreachable — localnet down.
-                    assumeTrue("Cannot connect to node at $NODE_URL — localnet down? Skipping.", false)
+                    // Unreachable node = nothing was exercised. Fail, so a down localnet can't
+                    // masquerade as a passing SCALE-format check.
+                    fail(
+                        "Cannot connect to node at $NODE_URL. This e2e must RUN, not be skipped: " +
+                            "start the localnet (scripts/e2e/prepare-localnet-e2e.sh) and, on a physical device, run " +
+                            "`./gradlew adbReverseLocalnet`."
+                    )
                 }
                 errorMessage.contains("Operation not permitted", ignoreCase = true) -> {
                     // Android network security blocked connection - crypto stack still verified
@@ -271,6 +287,13 @@ class EndToEndTransactionTest {
         } finally {
             nodeClient.close()
         }
-        assumeTrue("Node at $NODE_URL not reachable/healthy — localnet down? Skipping.", isHealthy)
+        // Not a skip. A green "skipped" is indistinguishable from a verified pass, which is
+        // exactly how this suite sat unverified; bring the chain up instead (scripts/e2e/prepare-localnet-e2e.sh).
+        assertTrue(
+            "Node at $NODE_URL not reachable/healthy. This e2e must RUN, not be skipped: start\n" +
+                "the localnet and, on a physical device, establish the tunnel (`./gradlew\n" +
+                "adbReverseLocalnet`). See scripts/e2e/prepare-localnet-e2e.sh.",
+            isHealthy,
+        )
     }
 }

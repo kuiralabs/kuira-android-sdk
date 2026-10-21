@@ -14,7 +14,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Override with the MIDNIGHT_LIBS env var if your checkout lives elsewhere.
-MIDNIGHT_LIBS="${MIDNIGHT_LIBS:-${PROJECT_DIR}/../../midnight/midnight-libraries}"
+# The default used to be ${PROJECT_DIR}/../../midnight/... — one level too shallow, since
+# PROJECT_DIR is <dev>/android/projects/kuira-android-wallet, so ../.. lands on
+# <dev>/android. Try the plausible roots instead of pinning one relative depth.
+for _cand in \
+  "${MIDNIGHT_LIBS:-}" \
+  "${PROJECT_DIR}/../../../midnight/midnight-libraries" \
+  "${HOME}/Development/midnight/midnight-libraries"; do
+  if [ -n "$_cand" ] && [ -d "$_cand/example-bboard" ]; then MIDNIGHT_LIBS="$_cand"; break; fi
+done
+MIDNIGHT_LIBS="${MIDNIGHT_LIBS:-${PROJECT_DIR}/../../../midnight/midnight-libraries}"
 
 BBOARD_KEYS="${MIDNIGHT_LIBS}/example-bboard/contract/src/managed/bboard/keys"
 BBOARD_ZKIR="${MIDNIGHT_LIBS}/example-bboard/contract/src/managed/bboard/zkir"
