@@ -39,6 +39,14 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
     abstract val baseUrl: Property<String>
 
     /**
+     * Largest circuit size (`k`) to provision universal parameters for. Defaults to
+     * [BASELINE_MAX_CIRCUIT_K], which covers the wallet's own circuits and every contract
+     * circuit that fits in 2^15 rows.
+     */
+    @get:Input
+    abstract val maxCircuitK: Property<Int>
+
+    /**
      * Machine-shared download cache root (under the Gradle user home). Not an
      * output — it is reused across projects/builds. The action resolves a
      * per-version subdir so different ledger versions never collide.
@@ -57,7 +65,15 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
         val cache = File(cacheRoot.get().asFile, "v$v").apply { mkdirs() }
         val out = assetsDir.get().asFile
 
-        val files = walletKeyFiles(v)
+        val maxK = maxCircuitK.get()
+        require(maxK in BASELINE_MAX_CIRCUIT_K..ABSOLUTE_MAX_CIRCUIT_K) {
+            "kuiraContract.maxCircuitK must be between $BASELINE_MAX_CIRCUIT_K and " +
+                "$ABSOLUTE_MAX_CIRCUIT_K, got $maxK. Below $BASELINE_MAX_CIRCUIT_K would drop " +
+                "parameters the wallet's own circuits need; above $ABSOLUTE_MAX_CIRCUIT_K is a " +
+                "size no device has been measured to prove."
+        }
+
+        val files = walletKeyFiles(v, maxK)
 
         // 1. Ensure each key is in the machine cache (download with retry only
         //  when missing/empty — the keys are immutable per version).
@@ -86,7 +102,7 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
 
         logger.lifecycle(
             "Kuira: wallet proving keys v$v ready (${files.size} files, " +
-                "$downloaded downloaded) → ${out.absolutePath}",
+                "$downloaded downloaded, circuits up to k=$maxK) → ${out.absolutePath}",
         )
     }
 
@@ -172,9 +188,32 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
         private const val HTTP_OK = 200
         private const val COPY_BUFFER_BYTES = 64 * 1024
 
+        /**
+         * Smallest universal-parameter size published. A contract circuit is proved with
+         * the parameter sized to it exactly, and a trivial one really does need only 2^5
+         * rows, so the whole ladder ships rather than just the wallet's own sizes.
+         */
+        internal const val MIN_CIRCUIT_K = 5
+
+        /**
+         * Largest size provisioned unless a consumer asks for more. Covers the wallet's
+         * zswap/dust circuits (k=13..15) and any contract circuit under 2^15 rows, which
+         * is every circuit the SDK's own examples compile to.
+         */
+        internal const val BASELINE_MAX_CIRCUIT_K = 15
+
+        /**
+         * Largest size a consumer may ask for: the biggest circuit measured to prove on
+         * real hardware (~18 s and 2.3 GB peak on a 2025 flagship). It matches the native
+         * prover's own ceiling, so provisioning past it would stage parameters the prover
+         * refuses to use anyway. Each step up doubles the parameter file — 12 MB at k=16,
+         * 24 MB at k=17, 48 MB at k=18 — which is why this is opt-in.
+         */
+        internal const val ABSOLUTE_MAX_CIRCUIT_K = 18
+
         // BLS params are version-independent (universal SRS); zswap/dust keys are
         // versioned. Mirrors the SDK's ProvingKeyManager file set.
-        private val BLS_PARAMS = (5..15).map { "bls_midnight_2p$it" }
+        private fun blsParams(maxK: Int) = (MIN_CIRCUIT_K..maxK).map { "bls_midnight_2p$it" }
         private val ZSWAP_DUST = listOf(
             "zswap/spend.prover", "zswap/spend.verifier", "zswap/spend.bzkir",
             "zswap/output.prover", "zswap/output.verifier", "zswap/output.bzkir",
@@ -182,15 +221,21 @@ abstract class ProvisionWalletKeysTask : DefaultTask() {
             "dust/spend.prover", "dust/spend.verifier", "dust/spend.bzkir",
         )
 
-        /** (remote path, local relative path) for every wallet key at [version]. */
-        internal fun walletKeyFiles(version: Int): List<Pair<String, String>> {
+        /**
+         * (remote path, local relative path) for every wallet key at [version], with
+         * universal parameters up to [maxCircuitK].
+         */
+        internal fun walletKeyFiles(
+            version: Int,
+            maxCircuitK: Int = BASELINE_MAX_CIRCUIT_K,
+        ): List<Pair<String, String>> {
             // zswap/dust live under a version dir remotely, flat locally.
             val versioned = ZSWAP_DUST.map { local ->
                 val (group, file) = local.split("/", limit = 2)
                 "$group/$version/$file" to local
             }
             // BLS params are top-level and version-independent.
-            val bls = BLS_PARAMS.map { it to it }
+            val bls = blsParams(maxCircuitK).map { it to it }
             return versioned + bls
         }
     }

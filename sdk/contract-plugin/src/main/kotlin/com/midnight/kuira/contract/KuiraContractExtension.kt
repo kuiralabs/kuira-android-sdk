@@ -158,4 +158,32 @@ abstract class KuiraContractExtension {
      * Override to point at a mirror / your own CDN.
      */
     abstract val walletKeysBaseUrl: Property<String>
+
+    /**
+     * Largest circuit size (`k`) this app provisions universal proving parameters for.
+     * Defaults to 15; raise it only for a contract whose circuits exceed 2^15 rows.
+     *
+     * A circuit is proved with the parameter file sized to it exactly, so a circuit at
+     * k=17 needs `bls_midnight_2p17` present on the device or proving fails with
+     * "BLS params file not found" — no matter how capable the hardware is. Raising this
+     * stages the extra sizes alongside the rest of the bundle, so the device still never
+     * downloads anything at runtime.
+     *
+     * Where the numbers come from: a depth-20 Merkle path over `persistentHash` compiles
+     * to ~83,600 rows, which is k=17 — so a contract doing that kind of hashing is the
+     * case this exists for. `compactc` prints each circuit's `k` and row count when it
+     * compiles, which is the figure to set this from.
+     *
+     * Trade-off, and why it is opt-in: the parameter files double in size with each step
+     * (12 MB at k=16, 24 MB at k=17, 48 MB at k=18), so going to the maximum adds ~84 MB
+     * to the APK. Proving cost doubles with each step too — around 4 s at k=16 and 18 s
+     * at k=18 on a 2025 flagship — and the native prover refuses a proof at runtime when
+     * the device's free memory cannot carry it, falling back to remote proving. So a
+     * large circuit stays usable on a capable phone without the SDK promising it works
+     * everywhere.
+     *
+     * Requires [bundleWalletKeys] to be `true`: the extra sizes are only staged into the
+     * APK bundle, never fetched by the device at runtime.
+     */
+    abstract val maxCircuitK: Property<Int>
 }

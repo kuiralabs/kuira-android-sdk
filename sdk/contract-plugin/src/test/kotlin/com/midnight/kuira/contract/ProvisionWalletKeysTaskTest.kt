@@ -49,6 +49,21 @@ class ProvisionWalletKeysTaskTest {
         // BLS params are universal SRS — version-independent + top-level.
         assertTrue(files.contains("bls_midnight_2p5" to "bls_midnight_2p5"))
         assertTrue(files.contains("bls_midnight_2p15" to "bls_midnight_2p15"))
+        // The large sizes are opt-in — absent unless asked for by name.
+        assertFalse(files.any { it.first == "bls_midnight_2p16" })
+    }
+
+    @Test
+    fun `walletKeyFiles extends the bls ladder to the requested size`() {
+        val files = ProvisionWalletKeysTask.walletKeyFiles(9, maxCircuitK = 17)
+
+        assertEquals("12 zswap/dust keys + 13 BLS params", 25, files.size)
+        assertTrue(files.contains("bls_midnight_2p16" to "bls_midnight_2p16"))
+        assertTrue(files.contains("bls_midnight_2p17" to "bls_midnight_2p17"))
+        // Only up to what was asked for: the next size is 48MB nobody requested.
+        assertFalse(files.any { it.first == "bls_midnight_2p18" })
+        // The baseline ladder is still complete underneath it.
+        assertTrue(files.contains("bls_midnight_2p5" to "bls_midnight_2p5"))
     }
 
     @Test
@@ -79,6 +94,74 @@ class ProvisionWalletKeysTaskTest {
         assertFalse(projectDir.resolve("src/main/assets/wallet-keys").exists())
     }
 
+    @Test
+    fun `stages the large-circuit params when a consumer opts in`() {
+        val port = startKeyServer()
+        writeBuildScript(
+            bundleWalletKeys = true,
+            baseUrl = "http://127.0.0.1:$port",
+            version = 9,
+            maxCircuitK = 17,
+        )
+
+        val result = run("provisionWalletKeys")
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":provisionWalletKeys")?.outcome)
+        val bundle = projectDir.resolve("src/main/assets/wallet-keys")
+        assertTrue("k=16 param staged", bundle.resolve("bls_midnight_2p16").exists())
+        assertTrue("k=17 param staged", bundle.resolve("bls_midnight_2p17").exists())
+        assertFalse("k=18 was not asked for", bundle.resolve("bls_midnight_2p18").exists())
+        assertTrue("baseline still staged", bundle.resolve("bls_midnight_2p13").exists())
+    }
+
+    /**
+     * The large sizes only ever reach a device through the APK bundle, so asking for them
+     * without bundling produces an app that fails at prove time on every device. That has
+     * to be a build failure, not a silently ignored property.
+     */
+    @Test
+    fun `asking for large circuits without the bundle fails the build`() {
+        writeBuildScript(
+            bundleWalletKeys = false,
+            baseUrl = "http://127.0.0.1:1",
+            version = 9,
+            maxCircuitK = 17,
+        )
+
+        val failure = runAndFail("provisionWalletKeys")
+
+        assertTrue(
+            "the error must name the setting that fixes it, got: ${failure.output}",
+            failure.output.contains("bundleWalletKeys"),
+        )
+    }
+
+    /**
+     * Past k=18 the native prover refuses the proof before it opens the parameter file, so
+     * provisioning further would add tens of megabytes toward a proof that cannot run.
+     */
+    @Test
+    fun `refuses a size beyond what the prover accepts`() {
+        val port = startKeyServer()
+        writeBuildScript(
+            bundleWalletKeys = true,
+            baseUrl = "http://127.0.0.1:$port",
+            version = 9,
+            maxCircuitK = 19,
+        )
+
+        val failure = runAndFail("provisionWalletKeys")
+
+        assertTrue(
+            "the error must state the permitted range, got: ${failure.output}",
+            failure.output.contains("maxCircuitK must be between"),
+        )
+        assertFalse(
+            "nothing may be staged for a size the prover refuses",
+            projectDir.resolve("src/main/assets/wallet-keys/bls_midnight_2p19").exists(),
+        )
+    }
+
     // ── fixtures ──
 
     /** Serves any GET with a body equal to its path, so each key has distinct, non-empty bytes. */
@@ -93,7 +176,15 @@ class ProvisionWalletKeysTaskTest {
         return srv.address.port
     }
 
-    private fun writeBuildScript(bundleWalletKeys: Boolean, baseUrl: String, version: Int) {
+    private fun writeBuildScript(
+        bundleWalletKeys: Boolean,
+        baseUrl: String,
+        version: Int,
+        maxCircuitK: Int? = null,
+    ) {
+        // Omitted entirely when null, so the default-behaviour tests exercise the
+        // plugin's own convention rather than a value the test restated.
+        val maxCircuitKLine = maxCircuitK?.let { "maxCircuitK.set($it)" } ?: ""
         projectDir.resolve("build.gradle.kts").writeText(
             """
             plugins {
@@ -109,6 +200,7 @@ class ProvisionWalletKeysTaskTest {
                 bundleWalletKeys.set($bundleWalletKeys)
                 walletKeysVersion.set($version)
                 walletKeysBaseUrl.set("$baseUrl")
+                $maxCircuitKLine
             }
             """.trimIndent(),
         )
@@ -117,10 +209,13 @@ class ProvisionWalletKeysTaskTest {
         )
     }
 
-    private fun run(vararg args: String) =
+    private fun run(vararg args: String) = runner(*args).build()
+
+    private fun runAndFail(vararg args: String) = runner(*args).buildAndFail()
+
+    private fun runner(vararg args: String) =
         GradleRunner.create()
             .withProjectDir(projectDir)
             .withArguments(*args, "--stacktrace")
             .withPluginClasspath()
-            .build()
 }

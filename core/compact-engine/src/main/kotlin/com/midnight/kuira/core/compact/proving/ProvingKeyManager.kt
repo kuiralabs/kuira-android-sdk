@@ -131,6 +131,10 @@ class ProvingKeyManager(
             downloadWalletKeys(onDownloadProgress)
             logger("Wallet keys download complete (hasWalletKeys=${hasWalletKeys()})")
         }
+        // 4. Large-circuit parameters, if this app's build asked for them. Outside the
+        //    checks above on purpose: those short-circuit on a complete install, and these
+        //    are not part of what "complete" means — see installOptionalBlsParamsFromAssets.
+        withContext(Dispatchers.IO) { installOptionalBlsParamsFromAssets() }
     }
 
     /**
@@ -604,6 +608,42 @@ class ProvingKeyManager(
     }
 
     /**
+     * Install any bundled [OPTIONAL_BLS_PARAM_FILES] the device is missing.
+     *
+     * Separate from [installWalletKeysFromAssets], and called unconditionally, because the
+     * two answer different questions. That one runs only when the install is incomplete —
+     * which is right for keys a complete install must have, and wrong for these: a device
+     * already holding a complete k≤15 install would never pick up the larger sizes after
+     * the app was updated to bundle them, and would then fail at prove time with a missing
+     * parameter file it had been shipped.
+     *
+     * Cheap when there is nothing to do: it stats the destinations first and only reaches
+     * for the APK's assets when one is actually absent.
+     *
+     * `internal` rather than private so the instrumented test can exercise it without
+     * [ensureWalletKeysAvailable]'s S3 fallback, and rather than public because nothing
+     * outside this module should be choosing when large parameters get installed.
+     *
+     * @return how many parameter files were installed.
+     */
+    internal fun installOptionalBlsParamsFromAssets(assetDir: String = WALLET_ASSET_DIR): Int {
+        val missing = OPTIONAL_BLS_PARAM_FILES.filterNot { File(keysDir, it).isPopulated() }
+        if (missing.isEmpty()) return 0
+
+        keysDir.mkdirs()
+        var installed = 0
+        for (name in missing) {
+            // Absent from the bundle is the normal case — this app didn't ask for that size.
+            runCatching { copyAssetAtomically("$assetDir/$name", File(keysDir, name)) }
+                .onSuccess { installed++ }
+        }
+        if (installed > 0) {
+            Log.i(TAG, "Installed $installed large-circuit parameter file(s) from APK bundle")
+        }
+        return installed
+    }
+
+    /**
      * Dev-only convenience: install proving keys from a local-tmp staging area
      * pushed via `adb push` (the convention used by Kicks's build script, the
      * SDK e2e test, and BBoard's canary). Looks at two well-known directories
@@ -636,7 +676,10 @@ class ProvingKeyManager(
         // BLS params live under bboard_keys/ by convention.
         val blsSrc = File(localTmp, "bboard_keys")
         if (blsSrc.exists()) {
-            for (name in BLS_PARAM_FILES) {
+            // The optional large sizes come along when staged — "copy what is there" is
+            // already the semantic of this loop, and a dev measuring a big circuit on a
+            // device pushes the parameter here rather than rebuilding the APK.
+            for (name in BLS_PARAM_FILES + OPTIONAL_BLS_PARAM_FILES) {
                 val src = File(blsSrc, name)
                 val dst = File(keysDir, name)
                 if (src.isPopulated() && !dst.isPopulated()) copyAtomically(src, dst)
@@ -714,6 +757,27 @@ class ProvingKeyManager(
             "bls_midnight_2p13",
             "bls_midnight_2p14",
             "bls_midnight_2p15",
+        )
+
+        /**
+         * Universal parameters for circuits larger than the wallet's own — **optional by
+         * construction.** A circuit is proved with the parameter sized to it exactly, so a
+         * contract at k=17 needs `bls_midnight_2p17` present or proving fails regardless of
+         * how capable the device is. These sizes are deliberately absent from
+         * [WALLET_KEY_FILES] and [WALLET_DOWNLOADS]: they are installed when a dApp's build
+         * bundled them (`kuiraContract { maxCircuitK = … }`) and ignored otherwise, so a
+         * complete install is never judged incomplete for lacking a size the app never
+         * asked for.
+         *
+         * Bundle-only, never downloaded: at 12/24/48 MB they would triple the first-launch
+         * download for a capability declared at build time, and the bundle exists precisely
+         * so the device touches no network. The ceiling matches the native prover's own
+         * (`MAX_LOCAL_PROOF_K`) — the largest size measured to prove on real hardware.
+         */
+        private val OPTIONAL_BLS_PARAM_FILES = listOf(
+            "bls_midnight_2p16",
+            "bls_midnight_2p17",
+            "bls_midnight_2p18",
         )
 
         /** File extensions required per circuit. */
