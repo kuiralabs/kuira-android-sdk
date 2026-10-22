@@ -288,8 +288,92 @@ class BboardEndToEndTest {
         return if (file.exists()) file.readText().trim() else DEFAULT_INDEXER_URL
     }
 
+    /**
+     * The contract-path proving envelope, measured instead of inferred.
+     *
+     * All that existed before was the wall-clock gap between two JUnit tests (~0.93 s), which
+     * folds in asset loading and circuit execution and cannot separate the first proof in a
+     * process from the rest. Proving pays a one-off warm-up -- the zswap path measured ~0.8 s of
+     * it -- so one sample describes neither the cold nor the steady-state cost. Every sample here
+     * runs in ONE process, so the first is genuinely cold and the rest genuinely warm, and only
+     * the prove call is inside the timed region.
+     *
+     * This asserts rather than merely reporting, because a test that only prints is a measurement
+     * harness wearing a @Test annotation: it cannot fail, so it cannot protect anything.
+     *
+     * The size invariant is a BAND, not equality. Asserting a fixed proof size looked obviously
+     * right and failed on about half of six runs: the same circuit proved with the same keys
+     * measured 5061 B and sometimes 5059 B, a 2-byte swing from variable-length encoding inside
+     * the serialized proof. So the property that actually holds is "stable to within a few
+     * bytes", and the band is set wide enough to absorb that while staying far tighter than any
+     * real bloat or nondeterminism would be.
+     */
+    @Test
+    fun contractProvingEnvelope_coldThenWarm(): Unit = runBlocking {
+        assertTrue(
+            "Bboard proving keys not installed -- bboardSetup stages them, or run " +
+                "./scripts/install-bboard-keys.sh.",
+            provingKeyManager.hasProvableCircuitKeys(bboardCircuits),
+        )
+        val contractJs = loadAsset("runtime/bboard-contract-iife.js")
+        val proofProvider: ProofProvider = LocalProofProvider(provingKeyManager)
+
+        val elapsed = mutableListOf<Long>()
+        val provenSizes = mutableListOf<Int>()
+        var unprovenSize = 0
+
+        repeat(PROOF_SAMPLES) { sample ->
+            val result = executor.executeCircuit(
+                contractJs = contractJs,
+                contractAddress = "0".repeat(64),
+                circuitName = "post",
+                circuitArgs = listOf("'Envelope sample $sample'"),
+                witnesses = bboardWitnesses(),
+                initialPrivateState = "{ secretKey: new Uint8Array(32) }",
+                coinPublicKey = ByteArray(32),
+            )
+            unprovenSize = result.unprovenTxHex.length / 2
+            val start = System.currentTimeMillis()
+            val provenTxHex = proofProvider.prove(result.unprovenTxHex)
+            elapsed += System.currentTimeMillis() - start
+            assertNotEquals(
+                "Sample $sample returned the unproven tx -- nothing was proved",
+                result.unprovenTxHex,
+                provenTxHex,
+            )
+            provenSizes += provenTxHex.length / 2
+        }
+
+        val cold = elapsed.first()
+        val warm = elapsed.drop(1)
+        Log.i(TAG, "=== bboard post proving envelope (circuit k=13, rows=4569) ===")
+        Log.i(TAG, "  cold (first proof in process): ${cold}ms")
+        Log.i(
+            TAG,
+            "  warm: ${warm.joinToString(" / ") { "${it}ms" }} (mean ${warm.average().toInt()}ms)",
+        )
+        Log.i(TAG, "  tx: ${unprovenSize}B unproven -> ${provenSizes.first()}B proven")
+
+        val sizeSpread = provenSizes.max() - provenSizes.min()
+        assertTrue(
+            "Proof size for one circuit spread $sizeSpread B across samples " +
+                "(> $PROOF_SIZE_TOLERANCE_B): $provenSizes",
+            sizeSpread <= PROOF_SIZE_TOLERANCE_B,
+        )
+        assertTrue("Every sample must be timed: $elapsed", elapsed.all { it > 0 })
+    }
+
     companion object {
         private const val TAG = "BboardE2E"
+
+        /** One cold proof plus three warm ones -- the shape the zswap envelope was measured in. */
+        private const val PROOF_SAMPLES = 4
+
+        /**
+         * How far one circuit's proof size may legitimately move between samples. Measured
+         * variance is 2 B; this leaves room for it without tolerating real growth.
+         */
+        private const val PROOF_SIZE_TOLERANCE_B = 64
 
         /** Default URLs — host reached via `adb reverse` (works on emulator and real hardware) */
         private val DEFAULT_INDEXER_URL = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl
