@@ -176,7 +176,38 @@ val bboardSetup by tasks.registering {
             )
         }
 
-        // 2. Ensure wallet exists
+        // 2. Stage the bboard circuit keys on the device.
+        //
+        // The chain tests read these in @Before, through the SDK's own provisioner, from
+        // /data/local/tmp/bboard_keys -- and nothing in the gate used to put them there. This
+        // task pushes the contract addresses and indexer config into that SAME directory, which
+        // is exactly what made it look already covered. In practice the keys had last been staged
+        // by hand seven weeks earlier, so a green chain run depended on leftover device state: a
+        // fresh phone, a wiped /data/local/tmp, or a recompiled contract would fail as "Bboard
+        // proving keys not installed" -- or, worse, prove against stale keys, which is Error 115
+        // (InvalidProof) and reads as a code bug rather than a provisioning one.
+        //
+        // First, before the chain work: this costs seconds, while dust registration and four
+        // deploys below cost minutes. The script checks the complete prover/verifier/bzkir set
+        // and compares byte sizes ON the device, so it is the verification as well as the copy.
+        // It resolves the device through ANDROID_SERIAL, like this task's own adb calls.
+        logger.lifecycle("Staging bboard circuit keys...")
+        val keyInstaller = File(rootProject.projectDir, "scripts/install-bboard-keys.sh")
+        if (!keyInstaller.canExecute()) {
+            throw GradleException("not executable: $keyInstaller")
+        }
+        val keyProc = ProcessBuilder(keyInstaller.absolutePath)
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val keyOutput = keyProc.inputStream.bufferedReader().readText().trim()
+        val keyExit = keyProc.waitFor()
+        if (keyExit != 0) {
+            throw GradleException("install-bboard-keys.sh failed (exit $keyExit):\n$keyOutput")
+        }
+        logger.lifecycle("Bboard circuit keys staged + byte-verified on device")
+
+        // 3. Ensure wallet exists
         logger.lifecycle("Checking wallet...")
         try {
             mn("wallet", "use", "dev")
@@ -185,7 +216,7 @@ val bboardSetup by tasks.registering {
             mn("wallet", "generate", "dev", "--network", network)
         }
 
-        // 3. Check balance, airdrop if needed
+        // 4. Check balance, airdrop if needed
         logger.lifecycle("Checking balance...")
         val balance = mn("balance", "--network", network, *MN_EP)
         val nightBalance = jsonField(balance, "NIGHT")?.toDoubleOrNull() ?: 0.0
@@ -194,7 +225,7 @@ val bboardSetup by tasks.registering {
             mn("airdrop", "10000", "--network", network, *MN_EP)
         }
 
-        // 4. Check dust, register if needed
+        // 5. Check dust, register if needed
         logger.lifecycle("Checking dust...")
         val dust = mn("dust", "status", "--network", network, *MN_EP)
         val dustAvailable = dust.contains("\"dustAvailable\":true")
@@ -203,7 +234,7 @@ val bboardSetup by tasks.registering {
             mn("dust", "register", "--network", network, *MN_EP)
         }
 
-        // 5. Start the mn-serve DApp connector, and CONFIRM it is actually listening.
+        // 6. Start the mn-serve DApp connector, and CONFIRM it is actually listening.
         //
         // This used to start the process, sleep 10s, and continue — never checking the result.
         // `mn serve` prints "Server ready — listening on ws://localhost:9932" BEFORE it binds,
@@ -250,7 +281,7 @@ val bboardSetup by tasks.registering {
         }
         logger.lifecycle("DApp connector listening on 9932")
 
-        // 6. Deploy fresh bboard contracts — one per board-touching test.
+        // 7. Deploy fresh bboard contracts — one per board-touching test.
         //    The bboard `post` circuit requires a VACANT board, so two posts to
         //    the same contract conflict. A dedicated contract per test also keeps
         //    every test to exactly ONE mn-serve connector submit (the connector
@@ -275,7 +306,7 @@ val bboardSetup by tasks.registering {
 
         val deployedContracts = CHAIN_CONTRACTS.map { it.deviceFile to deployFreshContract(it.testMethod) }
 
-        // 7. Push config to device via temp files (avoids shell quoting issues)
+        // 8. Push config to device via temp files (avoids shell quoting issues)
         logger.lifecycle("Pushing config to device...")
         adb("shell", "mkdir", "-p", "/data/local/tmp/bboard_keys")
 
