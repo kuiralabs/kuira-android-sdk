@@ -188,9 +188,23 @@ val bboardSetup by tasks.registering {
         // the process's own output is not evidence that it bound.
         logger.lifecycle("Probing the DApp connector (9932)...")
         if (!portOpen(9932)) {
-            logger.lifecycle("Starting mn serve...")
+            // Give it a FILE, never a pipe. Every other ProcessBuilder here reads its child to
+            // EOF; this one is a daemon deliberately left running, and nobody reads it. With
+            // redirectErrorStream(true) and no reader, `mn serve` writes into a ~64KB OS pipe
+            // buffer and then BLOCKS on the write that fills it -- frozen mid-write, no longer
+            // servicing the WebSocket, while the port stays bound so portOpen(9932) below still
+            // reports it healthy. A submit then waits on a reply that never comes.
+            //
+            // The pipe is also owned by the Gradle JVM, so when the build exits the daemon we
+            // meant to leave running takes an EPIPE on its next write -- which is one way the
+            // stale instance the error message below warns about comes to exist. A file redirect
+            // removes the pipe entirely and keeps the log for diagnosing what the connector did.
+            val serveLog = File(layout.buildDirectory.get().asFile, "mn-serve.log")
+            serveLog.parentFile.mkdirs()
+            logger.lifecycle("Starting mn serve (log: $serveLog)...")
             ProcessBuilder("mn", "serve", "--approve-all", "--port", "9932", "--network", network)
                 .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(serveLog))
                 .start()
             // Poll rather than sleeping a fixed amount: it has a wallet to sync first, and a
             // fixed wait is either too short on a cold cache or wasted on a warm one.
