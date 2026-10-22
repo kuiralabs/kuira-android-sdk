@@ -2,7 +2,6 @@ package com.midnight.kuira.core.identity.backup
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Ignore
 import org.junit.Test
 
 /**
@@ -64,11 +63,19 @@ class CrossPlatformBackupVectorTest {
     }
 
     /**
-     * Prints blobs from the real encryptors for pinning in the iOS suite. Asserts nothing by
-     * design — run it only when regenerating the vectors on both sides.
+     * Prints blobs from the real encryptors for pinning in the iOS suite.
+     *
+     * Deliberately NOT a `@Test`. It asserts nothing, and it cannot: the IVs are random, so the
+     * blobs differ every run. Everything about them that IS assertable already is -- by
+     * [derivedKeysAreStableAcrossPlatforms], [appStateBlobsCarryTheFramingPrefixAndDustDoesNot] and
+     * [opensBlobsSwiftWrote] here, plus the round trips in `DustBackupTest` and
+     * `AppStateBackupEncryptorTest`. Carrying it as an ignored test only kept the unit suite's skip
+     * count off zero, which costs the signal: a genuinely masked test added later hides inside a
+     * number that already looks normal.
+     *
+     * To regenerate: annotate it with `@Test`, run it, paste the output into the iOS
+     * `AndroidWrittenBlobTests`, then remove the annotation again.
      */
-    @Test
-    @Ignore("Regeneration helper — un-ignore to emit fresh vectors for the iOS suite")
     fun printVectors() {
         val seed = ByteArray(32) { 0xA1.toByte() }
         val payload = "kuira backup vector".toByteArray(Charsets.UTF_8)

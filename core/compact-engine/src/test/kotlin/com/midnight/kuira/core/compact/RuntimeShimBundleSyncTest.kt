@@ -31,13 +31,28 @@ class RuntimeShimBundleSyncTest {
     private val shim: String by lazy { runtimeAsset("onchain-runtime-shim.js") }
     private val bundle: String by lazy { runtimeAsset("compact-runtime-iife.js") }
 
+    /**
+     * The shim with comments removed, which is what every extraction below reads.
+     *
+     * esbuild drops comments, so anything named only in one is absent from the bundle by design
+     * and demanding it would fail the build for a sentence. Two ways that bites: prose apostrophes
+     * ("the tree's height") read as string delimiters and invent literals, and a comment such as
+     * the one citing `__native_stateCreateWithNulls` names a hook that then has to exist in the
+     * bundle to satisfy a check it was never part of.
+     */
+    private val shimCode: String by lazy {
+        shim.replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("""(?m)^[ \t]*//.*$"""), "")
+            .replace(Regex("""(?m)[ \t]{2,}//.*$"""), "")
+    }
+
     @Test
     fun everyExportedClassReachedTheBundle() =
-        assertMirrored("exported class", Regex("""export class (\w+)""").findAll(shim).symbols())
+        assertMirrored("exported class", Regex("""export class (\w+)""").findAll(shimCode).symbols())
 
     @Test
     fun everyExportedFunctionReachedTheBundle() =
-        assertMirrored("exported function", Regex("""export function (\w+)""").findAll(shim).symbols())
+        assertMirrored("exported function", Regex("""export function (\w+)""").findAll(shimCode).symbols())
 
     /**
      * The `__native_*` hooks are the Kotlin/Rust boundary. A hook named in the shim but absent from
@@ -46,7 +61,7 @@ class RuntimeShimBundleSyncTest {
      */
     @Test
     fun everyNativeHookReachedTheBundle() =
-        assertMirrored("__native_ hook", Regex("""(__native_\w+)""").findAll(shim).symbols())
+        assertMirrored("__native_ hook", Regex("""(__native_\w+)""").findAll(shimCode).symbols())
 
     /**
      * Error and guard messages are the most useful tripwire available: they are long, unique, and a
@@ -55,16 +70,11 @@ class RuntimeShimBundleSyncTest {
      * "runProgram: not yet implemented — ..." as an escape, not as the character.
      */
     @Test
-    fun everyLongStringLiteralReachedTheBundle() {
-        // Comments are stripped first: esbuild drops them, and prose apostrophes in them ("the
-        // tree's height") otherwise read as string delimiters and produce phantom literals.
-        val code = shim
-            .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
-            .replace(Regex("""(?m)^[ \t]*//.*$"""), "")
-            .replace(Regex("""(?m)[ \t]{2,}//.*$"""), "")
-        val literals = Regex("""'((?:[^'\\\n]|\\.){14,})'""").findAll(code).symbols()
-        assertMirrored("string literal", literals)
-    }
+    fun everyLongStringLiteralReachedTheBundle() =
+        assertMirrored(
+            "string literal",
+            Regex("""'((?:[^'\\\n]|\\.){14,})'""").findAll(shimCode).symbols(),
+        )
 
     @Test
     fun theShimIsNotEmptyAndTheBundleContainsIt() {
