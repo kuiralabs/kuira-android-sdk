@@ -929,6 +929,72 @@ class KuiraContractPluginTest {
         }
     """.trimIndent()
 
+    @Test
+    fun `reportCircuitSizes is wired into the preBuild lifecycle`() {
+        writeCanonicalContractTree("penalty")
+        writeBuildScript(source = "contract/src/managed/penalty")
+
+        val result = run("preBuild")
+
+        // A circuit-size warning nobody runs is no warning, so it has to be in the default graph.
+        assertNotNull(
+            "reportCircuitSizes should be in the preBuild graph",
+            result.task(":reportCircuitSizes"),
+        )
+    }
+
+    @Test
+    fun `reportCircuitSizes reports each circuit and flags one above the ceiling`() {
+        writeCanonicalContractTree("penalty")
+        writeBuildScript(source = "contract/src/managed/penalty")
+        val compact = writeFakeToolchain(
+            version = "0.35.0",
+            output = """
+                Mock compiling 2 circuits:
+                  circuit "post" (k=13, rows=4569)
+                  circuit "heavyHash" (k=17, rows=83600)
+            """.trimIndent(),
+        )
+
+        val result = runWithEnv(
+            mapOf(COMPACT_DIRECTORY_ENV to compact.absolutePath),
+            "reportCircuitSizes",
+        )
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":reportCircuitSizes")?.outcome)
+        val report = projectDir.resolve("build/kuira/reportCircuitSizes.txt").readText()
+        assertTrue(report, report.contains("post k=13 rows=4569"))
+        assertTrue(report, report.contains("heavyHash k=17 rows=83600"))
+        assertTrue(report, report.contains("ABOVE maxCircuitK=15"))
+        // The ceiling breach has to reach the console, not just the report file.
+        assertTrue(result.output, result.output.contains("exceed kuiraContract.maxCircuitK=15"))
+        assertTrue(result.output, result.output.contains("bls_midnight_2p17"))
+    }
+
+    /**
+     * A stand-in Compact toolchain, mirroring the real layout the lookup walks:
+     * `versions/<version>/<platform>/zkir`. Pointed at via the toolchain's own
+     * `COMPACT_DIRECTORY` override, so the test never depends on the machine's install.
+     */
+    private fun writeFakeToolchain(version: String, output: String): File {
+        val platform = projectDir.resolve("fake-compact/versions/$version/aarch64-darwin")
+        platform.mkdirs()
+        val zkir = platform.resolve("zkir")
+        zkir.writeText("#!/bin/sh\ncat <<'ZKIREOF'\n$output\nZKIREOF\n")
+        zkir.setExecutable(true)
+        return projectDir.resolve("fake-compact")
+    }
+
+    private fun runWithEnv(env: Map<String, String>, vararg args: String) =
+        GradleRunner.create()
+            .withProjectDir(projectDir)
+            .withArguments(*args, "--stacktrace")
+            .withPluginClasspath()
+            // withEnvironment needs a non-debug runner; it forks, which is required to set env.
+            .withDebug(false)
+            .withEnvironment(System.getenv() + env)
+            .build()
+
     private fun run(vararg args: String) =
         GradleRunner.create()
             .withProjectDir(projectDir)
@@ -951,6 +1017,7 @@ class KuiraContractPluginTest {
             .build()
 
     companion object {
+        private val COMPACT_DIRECTORY_ENV = KuiraContractPlugin.COMPACT_DIRECTORY_ENV
         private const val CONTRACT_JS_STUB = "// stub contract\nexports.foo = 42;\n"
         private const val STUB_PROVER = "stub-prover-bytes"
         private const val STUB_VERIFIER = "stub-verifier-bytes"

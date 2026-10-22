@@ -91,6 +91,7 @@ class KuiraContractPlugin : Plugin<Project> {
         syncTasks += registerContract(
             project, "", extension.source, extension.alias,
             extension.expectedRuntimeVersion, extension.requireRuntimeMatch,
+            extension.maxCircuitK,
         )
 
         // Multi-contract container. `.all` fires per entry as the consumer's `contracts { }` block
@@ -101,6 +102,7 @@ class KuiraContractPlugin : Plugin<Project> {
             syncTasks += registerContract(
                 project, spec.name, spec.source, spec.alias,
                 spec.expectedRuntimeVersion, spec.requireRuntimeMatch,
+                extension.maxCircuitK,
             )
         }
 
@@ -245,6 +247,7 @@ class KuiraContractPlugin : Plugin<Project> {
         alias: Provider<String>,
         expectedRuntimeVersion: Provider<String>,
         requireRuntimeMatch: Provider<Boolean>,
+        maxCircuitK: Provider<Int>,
     ): TaskProvider<Copy> {
         val sourceDir = source.map { rel -> project.layout.projectDirectory.dir(rel) }
         // Present iff this contract's source is set; read at task time (after the consumer's
@@ -278,10 +281,41 @@ class KuiraContractPlugin : Plugin<Project> {
         val keysAssetDest = Callable {
             if (discriminator.isEmpty()) ASSETS_KEYS_SUBDIR else "${alias.getOrElse(discriminator)}-keys"
         }
+        // Circuit sizes, reported from the consumer's own Compact toolchain. Wired ahead of the
+        // asset sync (and so into preBuild) because the point is to warn BEFORE an APK ships with
+        // a circuit the device cannot prove — a diagnostic that only runs when asked for is one
+        // nobody runs. It is cheap and properly up-to-date, and never fails the build.
+        val reportName = if (discriminator.isEmpty()) ReportCircuitSizesTask.TASK_NAME
+        else "report${suffix}CircuitSizes"
+        val reportTask = project.tasks.register(
+            reportName,
+            ReportCircuitSizesTask::class.java,
+        ) { task ->
+            task.sourceDirectory.set(safeSourceDir)
+            // asFileTree over the zkir dir: a not-yet-compiled contract has no such directory, and
+            // this resolves to an EMPTY input rather than failing dependency resolution.
+            task.circuitIr.from(
+                safeSourceDir.map { dir ->
+                    dir.dir(ZKIR_SUBDIR).asFileTree.matching { it.include("*.$BZKIR_EXTENSION") }
+                },
+            )
+            task.maxCircuitK.set(maxCircuitK)
+            task.compactDirectory.set(
+                project.providers.environmentVariable(COMPACT_DIRECTORY_ENV).orElse(
+                    project.providers.systemProperty("user.home")
+                        .map { "$it/$COMPACT_DIRECTORY_DEFAULT" },
+                ),
+            )
+            task.reportFile.set(
+                project.layout.buildDirectory.file("$REPORT_SUBDIR/$reportName.txt"),
+            )
+            task.onlyIf { enabled.get() }
+        }
+
         val syncTask = project.tasks.register(syncName, Copy::class.java) { task ->
             task.group = "build"
             task.description = "Sync compiled Compact contract artifacts into Android assets."
-            task.dependsOn(validateTask)
+            task.dependsOn(validateTask, reportTask)
             task.from(safeSourceDir.map { it.dir(CONTRACT_SUBDIR) }) { spec ->
                 spec.include("index.js")
                 spec.rename { _ -> "${alias.getOrElse("contract")}-contract.js" }
@@ -326,6 +360,13 @@ class KuiraContractPlugin : Plugin<Project> {
         internal const val CONTRACT_SUBDIR = "contract"
         internal const val KEYS_SUBDIR = "keys"
         internal const val ZKIR_SUBDIR = "zkir"
+        internal const val BZKIR_EXTENSION = "bzkir"
+
+        // Where the Compact toolchain installs itself, and so where its `zkir` is found. The env
+        // var is the toolchain's own documented override, not one this plugin invents.
+        internal const val COMPACT_DIRECTORY_ENV = "COMPACT_DIRECTORY"
+        internal const val COMPACT_DIRECTORY_DEFAULT = ".compact"
+        internal const val REPORT_SUBDIR = "kuira"
 
         // Shared contract-source path names — read by both
         // ValidateKuiraContractSourceTask and KuiraDoctorTask when
