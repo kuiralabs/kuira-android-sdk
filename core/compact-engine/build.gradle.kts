@@ -38,6 +38,24 @@ android {
 // fixture can address the host as 127.0.0.1 from an emulator or real hardware alike.
 val LOCALNET_PORTS = listOf(9944, 8088, 6300, 9932)
 
+// Every contract this task deploys, the instrumented class that consumes it, and the test method
+// it belongs to — in ONE place, because two separate things read it: the deploy step below, and
+// the decision about whether a given instrumented run needs a chain at all.
+//
+// A chain-dependent test cannot exist without an entry here: the bboard `post` circuit asserts a
+// VACANT board, so each board-touching test needs its own freshly deployed contract. That is what
+// keeps this list and the set of chain-dependent classes in step as tests are added.
+class ChainContract(val deviceFile: String, val testClass: String, val testMethod: String)
+
+val COMPACT_TEST_PKG = "com.midnight.kuira.core.compact"
+val CHAIN_CONTRACTS = listOf(
+    ChainContract("contract_address.txt", "$COMPACT_TEST_PKG.BboardEndToEndTest", "onlinePipeline"),
+    ChainContract("contract_address_post1.txt", "$COMPACT_TEST_PKG.MidnightContractTest", "callPost_oneLiner"),
+    ChainContract("contract_address_post2.txt", "$COMPACT_TEST_PKG.MidnightContractTest", "callPost_withProgress"),
+    ChainContract("contract_address_prepare.txt", "$COMPACT_TEST_PKG.MidnightContractTest", "prepare_offlineMode"),
+)
+val CHAIN_TEST_CLASSES = CHAIN_CONTRACTS.map { it.testClass }.toSet()
+
 val bboardSetup by tasks.registering {
     group = "verification"
     description = "Set up localnet + deploy bboard contract for e2e tests"
@@ -200,14 +218,7 @@ val bboardSetup by tasks.registering {
             return address
         }
 
-        // device filename  ->  the test that consumes it
-        val contractFiles = listOf(
-            "contract_address.txt" to "onlinePipeline",            // BboardEndToEndTest
-            "contract_address_post1.txt" to "callPost_oneLiner",   // MidnightContractTest
-            "contract_address_post2.txt" to "callPost_withProgress",
-            "contract_address_prepare.txt" to "prepare_offlineMode",
-        )
-        val deployedContracts = contractFiles.map { (file, label) -> file to deployFreshContract(label) }
+        val deployedContracts = CHAIN_CONTRACTS.map { it.deviceFile to deployFreshContract(it.testMethod) }
 
         // 7. Push config to device via temp files (avoids shell quoting issues)
         logger.lifecycle("Pushing config to device...")
@@ -243,9 +254,55 @@ val bboardSetup by tasks.registering {
     }
 }
 
-// Wire setup to run before connected tests
+// ── Wire setup to run before connected tests, but only when the run actually needs a chain ──
+//
+// Only the CHAIN_CONTRACTS classes submit through the connector. The other eighteen instrumented
+// classes drive QuickJS, circuit execution and local proving with no node, indexer, proof server or
+// deployed contract anywhere in sight — yet every one of them inherited `bboardSetup`, so editing a
+// runtime-shim test meant standing up a localnet and deploying four contracts first.
+// `-x :core:compact-engine:bboardSetup` worked, but a workaround you have to already know about is
+// not a fix. Read the instrumentation filter the developer has typed anyway, and decide from it.
+//
+// The unfiltered run — what the full gate runs — still provisions everything, so nothing is traded
+// away here. Where a filter is ambiguous this provisions as well: that way round costs setup time,
+// whereas guessing the other way would fail a chain test on a missing precondition.
+val needsChainProvisioning: Boolean = run {
+    fun runnerArg(key: String): String? =
+        (project.findProperty("android.testInstrumentationRunnerArguments.$key") as? String)
+            ?.takeIf { it.isNotBlank() }
+
+    // "Class", "Class#method" and comma-separated lists are all valid AGP filter syntax.
+    fun filterEntries(arg: String): List<String> =
+        arg.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    val classFilter = runnerArg("class")
+    val notClassFilter = runnerArg("notClass")
+    val packageFilter = runnerArg("package")
+    when {
+        classFilter != null ->
+            filterEntries(classFilter).any { it.substringBefore('#') in CHAIN_TEST_CLASSES }
+        // A `Class#method` exclusion still runs the rest of that class, so only a bare class name
+        // takes the whole class out of the run.
+        notClassFilter != null &&
+            filterEntries(notClassFilter).filterNot { it.contains('#') }.toSet()
+                .containsAll(CHAIN_TEST_CLASSES) -> false
+        packageFilter != null -> CHAIN_TEST_CLASSES.any { it.startsWith("$packageFilter.") }
+        else -> true
+    }
+}
+
 tasks.matching { it.name.startsWith("connected") && it.name.contains("AndroidTest") }.configureEach {
-    dependsOn(bboardSetup)
+    if (needsChainProvisioning) {
+        dependsOn(bboardSetup)
+    } else {
+        doFirst {
+            logger.lifecycle(
+                "bboardSetup not required: this run's filter excludes every class that needs a " +
+                    "chain (${CHAIN_TEST_CLASSES.joinToString(", ") { it.substringAfterLast('.') }}). " +
+                    "Run the module unfiltered for the full gate."
+            )
+        }
+    }
 }
 
 dependencies {
