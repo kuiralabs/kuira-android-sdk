@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.crypto.proving
 
+import android.os.Debug
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -66,6 +67,7 @@ class ZswapSpendProvingEnvelopeTest {
         val (coinPk, encPk) = recipientKeys()
         val elapsed = mutableListOf<Long>()
         val provenSizes = mutableListOf<Int>()
+        val memUse = mutableListOf<MemUse>()
         var unprovenSize = 0
 
         repeat(PROOF_SAMPLES) { sample ->
@@ -83,12 +85,14 @@ class ZswapSpendProvingEnvelopeTest {
             val txHex = transfer!!.transactionHex
             unprovenSize = txHex.length / 2
 
+            val sampler = MemSampler().also { it.start() }
             val start = System.currentTimeMillis()
             val provenTxHex = LocalProver.proveTransaction(
                 unprovenTxHex = txHex,
                 keysDir = keyManager.keysDir.absolutePath,
             )
             elapsed += System.currentTimeMillis() - start
+            memUse += sampler.stopAndRead()
 
             assertNotNull("sample $sample must produce a proof", provenTxHex)
             assertTrue(
@@ -112,6 +116,20 @@ class ZswapSpendProvingEnvelopeTest {
             "  warm: ${warm.joinToString(" / ") { "${it}ms" }} (mean ${warm.average().toInt()}ms)",
         )
         Log.i(TAG, "  tx: ${unprovenSize}B unproven -> ${provenSizes.first()}B proven")
+        fun mb(kb: Long) = "%.0fMB".format(kb / 1024.0)
+        Log.i(
+            TAG,
+            "  native heap: base ${mb(memUse.first().baseNativeKb)} -> peak " +
+                memUse.joinToString(" / ") { mb(it.peakNativeKb) } +
+                "  (delta " + memUse.joinToString(" / ") { mb(it.nativeDeltaKb) } + ")",
+        )
+        Log.i(
+            TAG,
+            "  total PSS:   base ${mb(memUse.first().basePssKb)} -> peak " +
+                memUse.joinToString(" / ") { mb(it.peakPssKb) } +
+                "  (delta " + memUse.joinToString(" / ") { mb(it.pssDeltaKb) } + ")",
+        )
+        Log.i(TAG, "  worst-case peak PSS observed: ${mb(memUse.maxOf { it.peakPssKb })}")
 
         val spread = provenSizes.max() - provenSizes.min()
         assertTrue(
@@ -121,6 +139,25 @@ class ZswapSpendProvingEnvelopeTest {
         )
         assertTrue("every sample must be timed: $elapsed", elapsed.all { it > 0 })
         assertEquals("every sample must be measured", PROOF_SAMPLES, elapsed.size)
+        // Sanity on the sampler, not on the prover: a proof of the largest circuit cannot run
+        // without allocating, so a zero peak would mean the sampler never observed anything and
+        // the number above is meaningless.
+        assertTrue(
+            "the sampler must observe native allocation during a k=15 proof: $memUse",
+            memUse.all { it.nativeDeltaKb > 0 },
+        )
+        // The number that decides whether a k=15 proof fits on a smaller device is the ABSOLUTE
+        // peak, not the per-proof delta: the first proof allocates most of it and the allocator
+        // keeps it, so later deltas look small against an already-raised baseline. Measured
+        // ~650MB on this device; the ceiling is set to catch a doubling rather than to pin a
+        // device-specific figure, since PSS varies with OS and hardware.
+        val worstPssKb = memUse.maxOf { it.peakPssKb }
+        assertTrue(
+            "peak PSS during a k=15 proof was ${worstPssKb / 1024}MB, over the " +
+                "${PEAK_PSS_CEILING_KB / 1024}MB ceiling — proving this circuit may no longer " +
+                "fit on a mid-range device",
+            worstPssKb <= PEAK_PSS_CEILING_KB,
+        )
         state.close()
     }
 
@@ -154,6 +191,96 @@ class ZswapSpendProvingEnvelopeTest {
     private fun String.hexToBytes() =
         ByteArray(length / 2) { ((this[it * 2].digitToInt(16) shl 4) or this[it * 2 + 1].digitToInt(16)).toByte() }
 
+    /**
+     * Peak native-heap usage observed while a proof runs.
+     *
+     * Native heap, not the JVM heap: the prover is Rust, so `Runtime.totalMemory` sees almost
+     * none of it. Sampled from a thread because the proof is one blocking call, so there is no
+     * point inside it to read a high-water mark from, and
+     * [android.os.Debug.getNativeHeapAllocatedSize] reports the instantaneous figure rather than
+     * a peak.
+     *
+     * This is a floor on real usage, not a ceiling: a sampler can miss a spike between polls, and
+     * it does not see memory the allocator has returned to its pools. Good enough to answer "does
+     * this fit on a smaller device", which is what the figure is for.
+     */
+    /** What one proof cost in memory: a baseline, and the peak observed while it ran. */
+    private data class MemUse(
+        val baseNativeKb: Long,
+        val peakNativeKb: Long,
+        val basePssKb: Long,
+        val peakPssKb: Long,
+    ) {
+        val nativeDeltaKb get() = peakNativeKb - baseNativeKb
+        val pssDeltaKb get() = peakPssKb - basePssKb
+    }
+
+    /**
+     * Peak memory observed while a proof runs.
+     *
+     * Two figures, because one is not enough. Native heap
+     * ([android.os.Debug.getNativeHeapAllocatedSize]) is what the Rust prover mallocs, and the
+     * JVM heap sees almost none of it — but it is malloc only, so it misses mapped regions such
+     * as the proving keys. Total PSS is what decides whether the OS kills the process, so it is
+     * the figure that answers "does this fit on a smaller device". PSS is the expensive read, so
+     * it is sampled an order of magnitude less often than the cheap one.
+     *
+     * Sampled from a thread because the proof is one blocking call, with no point inside it to
+     * read a high-water mark from, and both APIs report instantaneous values rather than peaks.
+     * That makes these a FLOOR on real usage: a sampler can miss a spike between polls.
+     */
+    private class MemSampler(
+        private val nativeIntervalMs: Long = 20L,
+        private val pssEveryNthSample: Int = 10,
+    ) {
+        @Volatile private var running = false
+        @Volatile private var peakNative = 0L
+        @Volatile private var peakPss = 0L
+        private var baseNative = 0L
+        private var basePss = 0L
+        private var thread: Thread? = null
+
+        fun start() {
+            running = true
+            baseNative = Debug.getNativeHeapAllocatedSize()
+            basePss = readPssKb()
+            peakNative = baseNative
+            peakPss = basePss
+            thread = Thread {
+                var i = 0
+                while (running) {
+                    val now = Debug.getNativeHeapAllocatedSize()
+                    if (now > peakNative) peakNative = now
+                    if (i % pssEveryNthSample == 0) {
+                        val pss = readPssKb()
+                        if (pss > peakPss) peakPss = pss
+                    }
+                    i++
+                    try {
+                        Thread.sleep(nativeIntervalMs)
+                    } catch (_: InterruptedException) {
+                        return@Thread
+                    }
+                }
+            }.also { it.isDaemon = true; it.start() }
+        }
+
+        fun stopAndRead(): MemUse {
+            running = false
+            thread?.interrupt()
+            thread?.join(2_000)
+            val pss = readPssKb()
+            if (pss > peakPss) peakPss = pss
+            return MemUse(baseNative / 1024, peakNative / 1024, basePss, peakPss)
+        }
+
+        private fun readPssKb(): Long {
+            val info = Debug.MemoryInfo()
+            Debug.getMemoryInfo(info)
+            return info.totalPss.toLong()
+        }
+    }
+
     private companion object {
         private const val TAG = "ZswapSpendEnvelope"
 
@@ -180,5 +307,12 @@ class ZswapSpendProvingEnvelopeTest {
          * this leaves room for that without tolerating real growth.
          */
         private const val PROOF_SIZE_TOLERANCE_B = 64
+
+        /**
+         * Ceiling on peak total PSS for one k=15 proof. Measured ~650 MB on a Galaxy Z Fold 7, so
+         * this is roughly 2x headroom: it catches a regression that would double the footprint
+         * without failing on ordinary variation between devices and OS versions.
+         */
+        private const val PEAK_PSS_CEILING_KB = 1_500L * 1024
     }
 }
