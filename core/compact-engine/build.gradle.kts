@@ -30,6 +30,17 @@ android {
     }
 }
 
+// RuntimeShimBundleSyncTest compares the two runtime assets by reading them straight off disk,
+// which Gradle cannot see: the task declared no dependency on those files, so after an
+// asset-only edit it reported UP-TO-DATE and the check never ran -- exactly the change it exists
+// to catch, passing green. A negative control caught it; the guard needed a guard. Declaring the
+// directory as an input is what makes an asset edit re-run the test.
+tasks.withType<Test>().configureEach {
+    inputs.dir(layout.projectDirectory.dir("src/main/assets/runtime"))
+        .withPropertyName("runtimeAssets")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 // ── BBoard E2E test setup ──
 // Automatically prepares localnet infrastructure before connected tests.
 // Requires: mn CLI installed, Docker running, Android emulator connected.
