@@ -36,14 +36,28 @@ class ZswapLocalState private constructor(
             return if (ptr != 0L) ZswapLocalState(ptr) else null
         }
 
-        /** Free a native state pointer directly (for ZswapTransferBuilder cleanup). */
+        /**
+         * Free a native state pointer directly (for [ZswapTransferBuilder] cleanup).
+         *
+         * Routed through an instance [close], NOT a static native. This was a
+         * `@JvmStatic external fun nativeFreeStatic`, which compiled and read correctly but has
+         * no implementation in the shipped library, so every call threw
+         * `UnsatisfiedLinkError` — a cleanup that crashed, masked whatever error it was cleaning
+         * up after, and leaked the state anyway. The INSTANCE natives on this class bind fine, so
+         * the one missing piece was that static export; going through [close] needs nothing from
+         * the native side that is not already there.
+         *
+         * It survived because its only callers are [ZswapTransferBuilder]'s cleanup paths, which
+         * a single-coin shielded spend never reaches — the free loop's body does not execute and
+         * the pointer list is cleared on success — and because the multi-input send that IS
+         * covered is unshielded, going through a different builder entirely.
+         */
         fun freeNativePtr(ptr: Long) {
-            if (ptr != 0L) nativeFreeStatic(ptr)
+            if (ptr != 0L) ZswapLocalState(ptr).close()
         }
 
         @JvmStatic private external fun nativeCreate(): Long
         @JvmStatic private external fun nativeDeserialize(hexStr: String): Long
-        @JvmStatic private external fun nativeFreeStatic(statePtr: Long)
     }
 
     /** Expose native pointer for ZswapTransferBuilder (package-private). */

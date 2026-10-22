@@ -97,13 +97,10 @@ class ZswapSpendProvingEnvelopeTest {
                 provenTxHex.length > txHex.length,
             )
             provenSizes += provenTxHex.length / 2
-            // The spend leaves a new native state behind, which this test cannot release:
-            // ZswapLocalState.freeNativePtr -> nativeFreeStatic has NO implementation in the
-            // shipped .so, so calling it throws UnsatisfiedLinkError (the instance natives on the
-            // same class bind fine, so this is a missing static export, not an unloaded library).
-            // PROOF_SAMPLES states therefore outlive the loop and are reclaimed when the test
-            // process exits. Bounded and harmless here; the same call on
-            // ZswapTransferBuilder's cleanup paths is NOT, and is filed separately.
+            // The spend leaves a new native state behind; release it, or the loop leaks one per
+            // sample. This is also the second caller of freeNativePtr, which used to throw
+            // UnsatisfiedLinkError on every call -- see ZswapLocalStateFreePtrTest.
+            ZswapLocalState.freeNativePtr(transfer.updatedStatePtr)
         }
 
         val cold = elapsed.first()
