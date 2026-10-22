@@ -36,6 +36,8 @@ cd "$(dirname "$0")/../.."   # repo root
 SERIAL="${1:-$(adb devices | awk '/\tdevice$/{print $1; exit}')}"
 # The wallet proving keys are vendored in the Kicks example (the offline bundle, ~33MB).
 WALLET_KEYS_DIR="${WALLET_KEYS_DIR:-examples/midnight-kicks/app/src/main/assets/wallet-keys}"
+# Must match WALLET in fund-localnet.sh — that script creates it, this one checks its dust.
+E2E_WALLET="kuiratest"
 
 # Host ports map 1:1 to what the emulator reaches at 10.0.2.2:<port>.
 NODE_URL="http://localhost:9944"
@@ -57,7 +59,15 @@ probe_node()    { curl -sf -m 5 -X POST "$NODE_URL"    -H 'Content-Type: applica
                     -d '{"jsonrpc":"2.0","id":1,"method":"system_health","params":[]}' >/dev/null 2>&1; }
 probe_indexer() { curl -sf -m 5 -X POST "$INDEXER_URL" -H 'Content-Type: application/json' \
                     -d '{"query":"query { block { height } }"}' >/dev/null 2>&1; }
-probe_proof()   { curl -s  -m 5 -o /dev/null -w '%{http_code}' "$PROOF_SERVER_URL" 2>/dev/null | grep -qE '^[0-9]'; }
+probe_proof()   {
+  # This used to be `... -w '%{http_code}' | grep -qE '^[0-9]'`, which 000 satisfies -- and 000
+  # is exactly what curl reports when nothing answers at all. So the probe returned success for
+  # a dead proof server and the warning below could never fire. Verified against a closed port.
+  local code
+  code="$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$PROOF_SERVER_URL" 2>/dev/null || true)"
+  case "$code" in ""|000) return 1 ;; esac
+  return 0
+}
 
 # node + indexer are the hard requirements for the on-chain suite.
 localnet_up() { probe_node && probe_indexer; }
@@ -79,8 +89,12 @@ else
   ok "localnet deployed + healthy"
 fi
 
-# Proof-server is only needed by the REMOTE-proving isolated tier — warn, don't abort.
-probe_proof && ok "proof-server reachable" || warn "proof-server not reachable — REMOTE-proving tests will skip."
+# The proof server is required, not optional. It used to be a warning because the
+# REMOTE-proving tier would assumeTrue-skip without it; nothing skips any more, so an absent
+# proof server means that tier FAILS, and letting prep report success guarantees a red run
+# ~30 minutes later with the cause this far behind it.
+probe_proof && ok "proof-server reachable" \
+  || die "proof-server not answering at $PROOF_SERVER_URL. The REMOTE-proving tier will FAIL without it (it no longer skips). Start it, or point PROOF_SERVER_URL at a live one."
 
 # ── 2. Emulator connected ─────────────────────────────────────────────────────
 step "2/4 — emulator/device connected"
@@ -92,10 +106,21 @@ step "3/4 — fund the canonical e2e wallet + register dust"
 scripts/e2e/fund-localnet.sh >/tmp/prep-fund.log 2>&1 \
   || die "fund-localnet.sh failed — see /tmp/prep-fund.log"
 # mn colorizes output; strip ANSI before matching the dust line.
-if sed $'s/\033\\[[0-9;]*m//g' /tmp/prep-fund.log | grep -iE "Dust Available: *yes" >/dev/null; then
+dust_available() {
+  mn dust status --wallet "$E2E_WALLET" 2>/dev/null \
+    | sed $'s/\033\\[[0-9;]*m//g' | grep -iqE "Dust Available: *yes"
+}
+# Dust registration takes a few blocks to become spendable, so this polls rather than checking
+# once. It used to warn and carry on, on the reasoning that dust-dependent tests would skip --
+# they now FAIL, so an unmet precondition here is a guaranteed red run and belongs as an abort.
+if dust_available; then
   ok "canonical wallet funded, dust available"
 else
-  warn "wallet funded but dust not yet available — dust-dependent tests may skip (see /tmp/prep-fund.log)"
+  echo "  dust registered but not spendable yet — waiting (up to 180s)…"
+  for _ in $(seq 1 60); do dust_available && break; sleep 3; done
+  dust_available \
+    || die "dust still not available for '$E2E_WALLET' after 180s. Dust-dependent e2e tests will FAIL (they no longer skip) — see /tmp/prep-fund.log and 'mn dust status --wallet $E2E_WALLET'."
+  ok "canonical wallet funded, dust available"
 fi
 
 # ── 4. Wallet proving keys on device (LOCAL-proving SdkRegistrationE2ETest) ────
@@ -114,10 +139,19 @@ else
   adb -s "$SERIAL" push "$WALLET_KEYS_DIR/dust"  /data/local/tmp/wallet_keys/ >/dev/null
   [ -f "$WALLET_KEYS_DIR/version.txt" ] && \
     adb -s "$SERIAL" push "$WALLET_KEYS_DIR/version.txt" /data/local/tmp/wallet_keys/ >/dev/null
+  bls_pushed=0
   for bls in "$WALLET_KEYS_DIR"/bls_*; do
-    [ -f "$bls" ] && adb -s "$SERIAL" push "$bls" /data/local/tmp/bboard_keys/ >/dev/null
+    if [ -f "$bls" ]; then
+      adb -s "$SERIAL" push "$bls" /data/local/tmp/bboard_keys/ >/dev/null
+      bls_pushed=$((bls_pushed + 1))
+    fi
   done
-  ok "wallet proving keys staged"
+  # An unmatched glob leaves the literal pattern, so this loop could push NOTHING and still
+  # report "staged". installFromLocalTmp reads these, so local proving would fail later with
+  # nothing pointing back here.
+  [ "$bls_pushed" -gt 0 ] \
+    || die "no bls_* params found in $WALLET_KEYS_DIR. installFromLocalTmp needs them for LOCAL proving."
+  ok "wallet proving keys staged ($bls_pushed BLS param files)"
 fi
 
 printf '\n\033[32m════ localnet e2e prep complete — dependent tests will RUN, not skip ════\033[0m\n'
