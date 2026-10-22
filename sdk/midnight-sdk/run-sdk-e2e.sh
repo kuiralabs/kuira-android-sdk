@@ -40,6 +40,13 @@ MN_INDEXER_WS="${MN_INDEXER_WS:-ws://127.0.0.1:8088/api/v4/graphql/ws}"
 MN_PROOF_SERVER="${MN_PROOF_SERVER:-http://127.0.0.1:6300}"
 MN_EP=(--node "$MN_NODE" --indexer-ws "$MN_INDEXER_WS" --proof-server "$MN_PROOF_SERVER")
 
+# WHICH mn, not just which endpoints. mn is ledger-versioned: a 0.5.x build drives ledger 8, a
+# 0.6.x build drives ledger 9, and it refuses a mismatched chain rather than mis-signing -- so on
+# a ledger-8 localnet a bare `mn` fails every airdrop below, and the tests then fail their funding
+# precondition. Same seam as scripts/e2e/*.sh, so one value steers the whole gate.
+#   MN_CLI="npx -y midnight-wallet-cli@0.5.8" TEST_CLASS=... ./run-sdk-e2e.sh
+IFS=' ' read -r -a MN <<< "${MN_CLI:-mn}"
+
 # How many airdrops the servicer could not land. Reported at the end: an unfunded wallet is a
 # harness failure, and silence used to be indistinguishable from success.
 FUND_FAILURES=0
@@ -109,7 +116,7 @@ while kill -0 "$TEST_PID" 2>/dev/null; do
         per=$(( night / small )); [ "$per" -lt 1 ] && per=1
         echo "  → airdrop $addr : ${per} NIGHT ×${small}  (dust=$dust registered ON-DEVICE, not here — it needs the wallet's keys)"
         for _ in $(seq 1 "$small"); do
-            if ! fund_out=$(mn airdrop "$per" --wallet "$addr" "${MN_EP[@]}" 2>&1); then
+            if ! fund_out=$("${MN[@]}" airdrop "$per" --wallet "$addr" "${MN_EP[@]}" 2>&1); then
                 FUND_FAILURES=$((FUND_FAILURES + 1))
                 echo "    ✗ airdrop FAILED for $addr: $(printf '%s' "$fund_out" | tr -d '\r' | tail -1 | cut -c1-200)" >&2
             fi
@@ -120,7 +127,7 @@ while kill -0 "$TEST_PID" 2>/dev/null; do
         # starvation is already prevented by the `adb logcat -c` at launch, so blocking here is safe.
         if [ -n "$shaddr" ] && [ -n "$shielded" ] && [ "$shielded" -gt 0 ]; then
             echo "  → airdrop $shaddr : ${shielded} shielded NIGHT"
-            if ! fund_out=$(mn airdrop "$shielded" --shielded --wallet "$shaddr" "${MN_EP[@]}" 2>&1); then
+            if ! fund_out=$("${MN[@]}" airdrop "$shielded" --shielded --wallet "$shaddr" "${MN_EP[@]}" 2>&1); then
                 FUND_FAILURES=$((FUND_FAILURES + 1))
                 echo "    ✗ shielded airdrop FAILED for $shaddr: $(printf '%s' "$fund_out" | tr -d '\r' | tail -1 | cut -c1-200)" >&2
             fi

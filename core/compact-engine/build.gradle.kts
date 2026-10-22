@@ -67,13 +67,34 @@ val CHAIN_CONTRACTS = listOf(
 )
 val CHAIN_TEST_CLASSES = CHAIN_CONTRACTS.map { it.testClass }.toSet()
 
+// `mn` is ledger-VERSIONED: a 0.5.x build drives ledger 8, a 0.6.x build drives ledger 9, and it
+// refuses a mismatched chain rather than mis-signing. So the CLI is configurable instead of
+// hardcoded -- the same MN_CLI seam scripts/e2e/*.sh use, so one value steers the whole gate:
+//   MN_CLI="npx -y midnight-wallet-cli@0.5.8" ./gradlew :core:compact-engine:connectedDebugAndroidTest
+// It may carry arguments, hence the whitespace split. Unset, this is exactly `mn` as before.
+val MN_CLI: List<String> = (providers.gradleProperty("mnCli").orNull
+    ?: providers.environmentVariable("MN_CLI").orNull
+    ?: "mn").trim().split(Regex("\\s+"))
+
+// Every on-chain call PINS its endpoints. With more than one local stack up mn refuses to guess
+// ("Several local Midnight stacks are running … and mn won't guess which one to use"), and with a
+// single stack it can still resolve a DIFFERENT chain than the device reads -- which "succeeds"
+// here and fails later in the suite. Offline calls (wallet use/generate) take no endpoints.
+val MN_EP: Array<String> = arrayOf(
+    "--node", providers.environmentVariable("MN_NODE").orNull ?: "ws://127.0.0.1:9944",
+    "--indexer-ws", providers.environmentVariable("MN_INDEXER_WS").orNull
+        ?: "ws://127.0.0.1:8088/api/v4/graphql/ws",
+    "--proof-server", providers.environmentVariable("MN_PROOF_SERVER").orNull
+        ?: "http://127.0.0.1:6300",
+)
+
 val bboardSetup by tasks.registering {
     group = "verification"
     description = "Set up localnet + deploy bboard contract for e2e tests"
 
     doLast {
         fun mn(vararg args: String): String {
-            val proc = ProcessBuilder("mn", *args, "--json")
+            val proc = ProcessBuilder(MN_CLI + args.toList() + "--json")
                 .redirectErrorStream(true)
                 .start()
             val output = proc.inputStream.bufferedReader().readText().trim()
@@ -84,7 +105,11 @@ val bboardSetup by tasks.registering {
             // had worked. The first real symptom then appeared several steps later, somewhere
             // unrelated. A non-zero exit is a failure whatever the body says.
             if (exit != 0) {
-                throw GradleException("mn ${args.joinToString(" ")} failed (exit $exit): $output")
+                throw GradleException(
+                    "${MN_CLI.joinToString(" ")} ${args.joinToString(" ")} failed (exit $exit): " +
+                        "$output. If this names a ledger mismatch, set MN_CLI to a matching " +
+                        "build (0.5.x drives ledger 8, 0.6.x drives ledger 9)."
+                )
             }
             return output
         }
@@ -162,20 +187,20 @@ val bboardSetup by tasks.registering {
 
         // 3. Check balance, airdrop if needed
         logger.lifecycle("Checking balance...")
-        val balance = mn("balance", "--network", network)
+        val balance = mn("balance", "--network", network, *MN_EP)
         val nightBalance = jsonField(balance, "NIGHT")?.toDoubleOrNull() ?: 0.0
         if (nightBalance < 1.0) {
             logger.lifecycle("Airdropping 10000 NIGHT...")
-            mn("airdrop", "10000", "--network", network)
+            mn("airdrop", "10000", "--network", network, *MN_EP)
         }
 
         // 4. Check dust, register if needed
         logger.lifecycle("Checking dust...")
-        val dust = mn("dust", "status", "--network", network)
+        val dust = mn("dust", "status", "--network", network, *MN_EP)
         val dustAvailable = dust.contains("\"dustAvailable\":true")
         if (!dustAvailable) {
             logger.lifecycle("Registering dust (this takes a few minutes)...")
-            mn("dust", "register", "--network", network)
+            mn("dust", "register", "--network", network, *MN_EP)
         }
 
         // 5. Start the mn-serve DApp connector, and CONFIRM it is actually listening.
@@ -202,7 +227,10 @@ val bboardSetup by tasks.registering {
             val serveLog = File(layout.buildDirectory.get().asFile, "mn-serve.log")
             serveLog.parentFile.mkdirs()
             logger.lifecycle("Starting mn serve (log: $serveLog)...")
-            ProcessBuilder("mn", "serve", "--approve-all", "--port", "9932", "--network", network)
+            ProcessBuilder(
+                MN_CLI + listOf("serve", "--approve-all", "--port", "9932", "--network", network) +
+                    MN_EP.toList()
+            )
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(serveLog))
                 .start()
@@ -231,7 +259,9 @@ val bboardSetup by tasks.registering {
         //    contend with each other.
         fun deployFreshContract(label: String): String {
             logger.lifecycle("Deploying bboard contract ($label)...")
-            val deploy = ProcessBuilder("mn", "contract", "deploy", "--network", network, "--json")
+            val deploy = ProcessBuilder(
+                MN_CLI + listOf("contract", "deploy", "--network", network, "--json") + MN_EP.toList()
+            )
                 .directory(bboardDir)
                 .redirectErrorStream(true)
                 .start()

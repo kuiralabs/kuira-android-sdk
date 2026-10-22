@@ -38,6 +38,13 @@ if [ -z "$SERIAL" ]; then
     exit 1
 fi
 
+# `mn` is ledger-versioned (0.5.x drives ledger 8, 0.6.x ledger 9) and refuses a mismatched
+# chain. Exported here so ONE value steers every leg: this script, prepare-localnet-e2e.sh,
+# fund-localnet.sh and the bboardSetup Gradle task all read it.
+#   MN_CLI="npx -y midnight-wallet-cli@0.5.8" scripts/e2e/sdk-test-gate.sh
+export MN_CLI="${MN_CLI:-mn}"
+IFS=' ' read -r -a MN <<< "$MN_CLI"
+
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mGATE ABORTED: %s\033[0m\n' "$1" >&2; exit 1; }
 
@@ -68,17 +75,25 @@ clear_results() {   # $1 = result dir path under each module's build/
     find . -path "*/build/$1" -type d -not -path './.claude/*' -exec rm -rf {} + 2>/dev/null || true
 }
 
-assert_results() {   # $1 label  $2 test-source dir that marks a module as in scope  $3 result glob  $4 epoch
-    python3 - "$1" "$2" "$3" "$4" <<'PYEOF'
+assert_results() {   # $1 label  $2 src dir marking scope  $3 result glob  $4 epoch  [$5 one module]
+    python3 - "$1" "$2" "$3" "$4" "${5:-}" <<'PYEOF'
 import glob, io, os, re, sys
 
 label, srcdir, pattern, since = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4]) - 5
+only = sys.argv[5] if len(sys.argv) > 5 else ""
 active = [l.split('"')[1].lstrip(":").replace(":", "/")
           for l in io.open("settings.gradle.kts", encoding="utf-8") if l.startswith("include(")]
 expected = [m for m in active if os.path.isdir(os.path.join(m, srcdir))]
+if only:
+    # Scope the assertion to one module: the isolated-tier leg runs only that module, so
+    # demanding fresh results from every other one would fail on results it never touched.
+    expected = [m for m in expected if m == only]
+    if not expected:
+        print(f"GATE-ASSERT-FAILED: {only} is not an active module with a {srcdir} directory")
+        sys.exit(1)
 
 tot = skipped = failures = errors = 0
-ran, missing = [], []
+ran, missing, unparsed = [], [], []
 for mod in expected:
     fresh = [f for f in glob.glob(os.path.join(mod, pattern), recursive=True)
              if os.path.getmtime(f) >= since]
@@ -86,10 +101,24 @@ for mod in expected:
         missing.append(mod); continue
     t = sk = fl = er = 0
     for f in fresh:
-        m = re.search(r'tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"',
-                      io.open(f, encoding="utf-8", errors="replace").read(4000))
-        if m:
-            a, b, c, e = (int(x) for x in m.groups()); t += a; sk += b; fl += c; er += e
+        head = io.open(f, encoding="utf-8", errors="replace").read(4000)
+        # Parse each attribute on its own. A single ordered pattern does NOT work: unit results
+        # are written tests/skipped/failures/errors, instrumented results tests/failures/errors/
+        # skipped. The ordered regex matched only the unit leg, so the instrumented leg summed
+        # zeros for every module and reported "wrote results containing zero tests" while
+        # sdk/midnight-sdk had in fact run 4 tests and failed 3. It failed closed, never green,
+        # but it named the wrong cause and hid the real counts.
+        vals = {k: re.search(r'\b%s="(\d+)"' % k, head) for k in
+                ("tests", "skipped", "failures", "errors")}
+        if vals["tests"] is None:
+            # Never score an unreadable file as a clean zero -- that is how a silent miss looks
+            # exactly like a passing module.
+            unparsed.append(f)
+            continue
+        t += int(vals["tests"].group(1))
+        sk += int(vals["skipped"].group(1)) if vals["skipped"] else 0
+        fl += int(vals["failures"].group(1)) if vals["failures"] else 0
+        er += int(vals["errors"].group(1)) if vals["errors"] else 0
     ran.append((mod, t, sk, fl, er))
     tot += t; skipped += sk; failures += fl; errors += er
 
@@ -104,6 +133,8 @@ if not expected:
     problems.append(f"no module has a {srcdir} directory -- the scope derivation is broken")
 if missing:
     problems.append(f"no fresh results from: {', '.join(missing)}")
+if unparsed:
+    problems.append(f"result file(s) with no parseable testsuite counts: {', '.join(unparsed)}")
 empty = [m for m, t, _, _, _ in ran if t == 0]
 if empty:
     # A test source dir that yields no tests is dead weight or a discovery problem; either way
@@ -129,7 +160,8 @@ STALE=$(pgrep -f "mn serve" || true)
 if [ -n "$STALE" ]; then echo "$STALE" | xargs kill -9 2>/dev/null || true; echo "  killed: $STALE"; else echo "  none"; fi
 
 step "Pre-flight 2/3 — clear the 'dev' CLI wallet cache (bboardSetup's wallet)"
-mn cache clear --wallet dev 2>/dev/null | tail -1 || echo "  (no dev wallet yet — bboardSetup will create it)"
+# Through MN_CLI, not a bare `mn`: this must clear the cache that bboardSetup's CLI will read.
+"${MN[@]}" cache clear --wallet dev 2>/dev/null | tail -1 || echo "  (no dev wallet yet — bboardSetup will create it)"
 
 step "Pre-flight 3/3 — prepare localnet + device (health, funding, dust, proving keys)"
 scripts/e2e/prepare-localnet-e2e.sh "$SERIAL" || fail "localnet prep failed — see output above"
@@ -148,12 +180,34 @@ UNIT_START=$(date +%s)
 assert_results "unit" "src/test" "build/test-results/*/TEST-*.xml" "$UNIT_START" \
   || fail "unit tests did not pass clean — see /tmp/gate-unit.log and the counts above"
 
-step "Instrumented tests — ALL modules on $SERIAL (this is the ~30-min leg)"
+# The isolated send tier cannot pass under a plain connected run, BY DESIGN. Each of its tests
+# needs a fresh wallet funded per @Test by a host-side servicer, and asserts so rather than
+# skipping: "Host harness must fund … run the suite via run-sdk-e2e.sh". Only that script
+# provides it (it tails logcat for KUIRA_FUND_REQ and airdrops on demand). Running it as an
+# ordinary connected test produced 3 guaranteed failures, so the gate runs it where it works and
+# keeps it IN the sign-off rather than dropping it.
+ISOLATED_TIER="com.midnight.kuira.sdk.e2e.SdkSendNightIsolatedE2ETest,com.midnight.kuira.sdk.e2e.SdkSendShieldedIsolatedE2ETest"
+
+step "Instrumented 1/2 — ALL modules on $SERIAL, except the host-funded tier (the ~30-min leg)"
 clear_results "outputs/androidTest-results"
 INSTR_START=$(date +%s)
-ANDROID_SERIAL="$SERIAL" ./gradlew connectedDebugAndroidTest --continue --console=plain 2>&1 \
+ANDROID_SERIAL="$SERIAL" ./gradlew connectedDebugAndroidTest --continue --console=plain \
+  -Pandroid.testInstrumentationRunnerArguments.notClass="$ISOLATED_TIER" 2>&1 \
   | tee /tmp/gate-instr.log | tail -5 || true
 assert_results "instrumented" "src/androidTest" "build/outputs/androidTest-results/**/TEST-*.xml" "$INSTR_START" \
   || fail "instrumented tests did not pass clean — see /tmp/gate-instr.log and the counts above"
+
+step "Instrumented 2/2 — host-funded isolated send tier (per-test funding servicer)"
+# Only this module's results are replaced, and the leg above has already been asserted, so
+# overwriting them here loses no signal.
+rm -rf sdk/midnight-sdk/build/outputs/androidTest-results
+TIER_START=$(date +%s)
+# It takes no positional args and cd's to the repo root itself; the device comes from
+# ANDROID_SERIAL, which both its adb calls and gradle honour.
+TEST_CLASS="$ISOLATED_TIER" ANDROID_SERIAL="$SERIAL" sdk/midnight-sdk/run-sdk-e2e.sh 2>&1 \
+  | tee /tmp/gate-tier.log | tail -5 || true
+assert_results "isolated-tier" "src/androidTest" "build/outputs/androidTest-results/**/TEST-*.xml" \
+  "$TIER_START" "sdk/midnight-sdk" \
+  || fail "the isolated send tier did not pass clean — see /tmp/gate-tier.log and /tmp/sdk-e2e-fund.log"
 
 printf '\n\033[32m════ SDK TEST GATE GREEN — unit + instrumented, all modules ════\033[0m\n'
