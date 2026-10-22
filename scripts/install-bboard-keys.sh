@@ -52,10 +52,48 @@ if [ ! -d "$BBOARD_KEYS" ]; then
     exit 1
 fi
 
-# Verify emulator
-if ! adb devices | grep -q "device$"; then
-    echo "ERROR: No Android device connected"
-    echo "Start the emulator first: emulator -avd <name>"
+# The required set is not a matter of taste: ProvingKeyManager's CIRCUIT_KEY_EXTENSIONS is
+# prover/verifier/bzkir, so a circuit missing any one of the three cannot prove. This loop used
+# to push whichever of them happened to exist and report success either way, which is how a
+# device ended up with a partial key set and failed much later as "Bboard proving keys not
+# installed" -- a symptom with nothing pointing back to here.
+CIRCUITS="post takeDown"
+# ext:source-dir, since bzkir lives in a different directory from the keys.
+SPECS="prover:$BBOARD_KEYS verifier:$BBOARD_KEYS bzkir:$BBOARD_ZKIR"
+
+MISSING=""
+for circuit in $CIRCUITS; do
+    for spec in $SPECS; do
+        [ -f "${spec#*:}/${circuit}.${spec%%:*}" ] || MISSING="$MISSING ${circuit}.${spec%%:*}"
+    done
+done
+if [ -n "$MISSING" ]; then
+    echo "ERROR: the bboard key set is incomplete under $MIDNIGHT_LIBS" >&2
+    echo "       missing:$MISSING" >&2
+    echo "       Recompile the contract with compactc before installing." >&2
+    exit 1
+fi
+
+# Verify a device is not just present but USABLE. `adb devices` distinguishes states that need
+# different fixes, and collapsing them into "No Android device connected / start the emulator"
+# sent you after the wrong one -- an unauthorized phone is attached and needs a tap on it.
+DEV_STATES="$(adb devices | tail -n +2 | awk 'NF {print $2}' | sort -u | tr '\n' ' ')"
+if ! printf '%s' "$DEV_STATES" | grep -qw device; then
+    case "$DEV_STATES" in
+        *unauthorized*)
+            echo "ERROR: the attached device is UNAUTHORIZED, not missing." >&2
+            echo "       Unlock it and tap Allow on the USB debugging prompt, then re-run." >&2
+            ;;
+        *offline*)
+            echo "ERROR: the attached device is OFFLINE. Re-plug it, or run adb kill-server." >&2
+            ;;
+        "")
+            echo "ERROR: no Android device attached. Connect a phone or start an emulator." >&2
+            ;;
+        *)
+            echo "ERROR: no usable device; adb reports state(s): $DEV_STATES" >&2
+            ;;
+    esac
     exit 1
 fi
 
@@ -67,26 +105,43 @@ echo ""
 # Create the staging directory on device
 adb shell "mkdir -p $DEVICE_STAGING_DIR"
 
-# Push bboard circuit keys
-for circuit in post takeDown; do
-    for ext in prover verifier; do
-        src="${BBOARD_KEYS}/${circuit}.${ext}"
-        if [ -f "$src" ]; then
-            echo "  Pushing ${circuit}.${ext} ($(du -h "$src" | cut -f1))"
-            adb push "$src" "$DEVICE_STAGING_DIR/${circuit}.${ext}" > /dev/null
-        fi
+local_size() { wc -c < "$1" | tr -d ' '; }
+device_size() {
+    # A probe, so absence is a legitimate answer and is reported by the assertion below rather
+    # than by this measurement -- which is why the `|| true` here is not a swallowed failure.
+    adb shell "stat -c %s '$1' 2>/dev/null || wc -c < '$1' 2>/dev/null" 2>/dev/null \
+        | tr -d ' \r' | head -1 || true
+}
+
+for circuit in $CIRCUITS; do
+    for spec in $SPECS; do
+        ext="${spec%%:*}"; src="${spec#*:}/${circuit}.${ext}"
+        echo "  Pushing ${circuit}.${ext} ($(du -h "$src" | cut -f1))"
+        adb push "$src" "$DEVICE_STAGING_DIR/${circuit}.${ext}" > /dev/null
     done
-    # BZKIR files
-    src="${BBOARD_ZKIR}/${circuit}.bzkir"
-    if [ -f "$src" ]; then
-        echo "  Pushing ${circuit}.bzkir ($(du -h "$src" | cut -f1))"
-        adb push "$src" "$DEVICE_STAGING_DIR/${circuit}.bzkir" > /dev/null
-    fi
 done
 
 echo ""
-echo "=== Verifying installation ==="
-adb shell "ls -la $DEVICE_STAGING_DIR/"
+echo "=== Verifying installation (byte sizes on device, not just a listing) ==="
+# This step used to print `ls -la` and then claim success regardless. A listing is not a check:
+# a failed or truncated push looked exactly like a good one.
+BAD=""
+for circuit in $CIRCUITS; do
+    for spec in $SPECS; do
+        ext="${spec%%:*}"
+        want="$(local_size "${spec#*:}/${circuit}.${ext}")"
+        got="$(device_size "$DEVICE_STAGING_DIR/${circuit}.${ext}")"
+        if [ "$got" = "$want" ]; then
+            echo "  ok  ${circuit}.${ext}  ${want} bytes"
+        else
+            BAD="$BAD ${circuit}.${ext}(want ${want}, got ${got:-nothing})"
+        fi
+    done
+done
+if [ -n "$BAD" ]; then
+    echo "ERROR: keys did not land on the device intact:$BAD" >&2
+    exit 1
+fi
 
 echo ""
 echo "Done! Run the e2e test:"
