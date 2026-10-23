@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
+import com.midnight.kuira.core.testing.ProofMemorySampler
+import com.midnight.kuira.core.testing.ProofMemoryUse
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -320,6 +322,7 @@ class BboardEndToEndTest {
 
         val elapsed = mutableListOf<Long>()
         val provenSizes = mutableListOf<Int>()
+        val memUse = mutableListOf<ProofMemoryUse>()
         var unprovenSize = 0
 
         repeat(PROOF_SAMPLES) { sample ->
@@ -333,9 +336,11 @@ class BboardEndToEndTest {
                 coinPublicKey = ByteArray(32),
             )
             unprovenSize = result.unprovenTxHex.length / 2
+            val sampler = ProofMemorySampler().also { it.start() }
             val start = System.currentTimeMillis()
             val provenTxHex = proofProvider.prove(result.unprovenTxHex)
             elapsed += System.currentTimeMillis() - start
+            memUse += sampler.stopAndRead()
             assertNotEquals(
                 "Sample $sample returned the unproven tx -- nothing was proved",
                 result.unprovenTxHex,
@@ -353,6 +358,11 @@ class BboardEndToEndTest {
             "  warm: ${warm.joinToString(" / ") { "${it}ms" }} (mean ${warm.average().toInt()}ms)",
         )
         Log.i(TAG, "  tx: ${unprovenSize}B unproven -> ${provenSizes.first()}B proven")
+        Log.i(TAG, "  native heap: ${memUse.joinToString(" | ") { it.nativeSummary() }}")
+        Log.i(TAG, "  total PSS:   ${memUse.joinToString(" | ") { it.pssSummary() }}")
+        // Cold only when this is the first proof in the process. A full module run puts the
+        // offline-prove test ahead of it, so the logged baseline is already warm and the delta
+        // reads far smaller than the real cold cost -- compare circuits from single-test runs.
 
         val sizeSpread = provenSizes.max() - provenSizes.min()
         assertTrue(
@@ -361,6 +371,10 @@ class BboardEndToEndTest {
             sizeSpread <= PROOF_SIZE_TOLERANCE_B,
         )
         assertTrue("Every sample must be timed: $elapsed", elapsed.all { it > 0 })
+        assertTrue(
+            "the sampler must observe native allocation during a k=13 proof: $memUse",
+            memUse.all { it.nativeDeltaKb > 0 },
+        )
     }
 
     companion object {

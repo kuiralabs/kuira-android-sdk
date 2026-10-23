@@ -1,12 +1,13 @@
 package com.midnight.kuira.core.crypto.proving
 
-import android.os.Debug
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.shielded.ZswapLocalState
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
+import com.midnight.kuira.core.testing.ProofMemorySampler
+import com.midnight.kuira.core.testing.ProofMemoryUse
 import java.math.BigInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -67,7 +68,7 @@ class ZswapSpendProvingEnvelopeTest {
         val (coinPk, encPk) = recipientKeys()
         val elapsed = mutableListOf<Long>()
         val provenSizes = mutableListOf<Int>()
-        val memUse = mutableListOf<MemUse>()
+        val memUse = mutableListOf<ProofMemoryUse>()
         var unprovenSize = 0
 
         repeat(PROOF_SAMPLES) { sample ->
@@ -85,7 +86,7 @@ class ZswapSpendProvingEnvelopeTest {
             val txHex = transfer!!.transactionHex
             unprovenSize = txHex.length / 2
 
-            val sampler = MemSampler().also { it.start() }
+            val sampler = ProofMemorySampler().also { it.start() }
             val start = System.currentTimeMillis()
             val provenTxHex = LocalProver.proveTransaction(
                 unprovenTxHex = txHex,
@@ -116,20 +117,13 @@ class ZswapSpendProvingEnvelopeTest {
             "  warm: ${warm.joinToString(" / ") { "${it}ms" }} (mean ${warm.average().toInt()}ms)",
         )
         Log.i(TAG, "  tx: ${unprovenSize}B unproven -> ${provenSizes.first()}B proven")
-        fun mb(kb: Long) = "%.0fMB".format(kb / 1024.0)
+        Log.i(TAG, "  native heap: ${memUse.joinToString(" | ") { it.nativeSummary() }}")
+        Log.i(TAG, "  total PSS:   ${memUse.joinToString(" | ") { it.pssSummary() }}")
         Log.i(
             TAG,
-            "  native heap: base ${mb(memUse.first().baseNativeKb)} -> peak " +
-                memUse.joinToString(" / ") { mb(it.peakNativeKb) } +
-                "  (delta " + memUse.joinToString(" / ") { mb(it.nativeDeltaKb) } + ")",
+            "  worst-case peak PSS observed: " +
+                "%.0fMB".format(memUse.maxOf { it.peakPssKb } / 1024.0),
         )
-        Log.i(
-            TAG,
-            "  total PSS:   base ${mb(memUse.first().basePssKb)} -> peak " +
-                memUse.joinToString(" / ") { mb(it.peakPssKb) } +
-                "  (delta " + memUse.joinToString(" / ") { mb(it.pssDeltaKb) } + ")",
-        )
-        Log.i(TAG, "  worst-case peak PSS observed: ${mb(memUse.maxOf { it.peakPssKb })}")
 
         val spread = provenSizes.max() - provenSizes.min()
         assertTrue(
@@ -204,83 +198,6 @@ class ZswapSpendProvingEnvelopeTest {
      * it does not see memory the allocator has returned to its pools. Good enough to answer "does
      * this fit on a smaller device", which is what the figure is for.
      */
-    /** What one proof cost in memory: a baseline, and the peak observed while it ran. */
-    private data class MemUse(
-        val baseNativeKb: Long,
-        val peakNativeKb: Long,
-        val basePssKb: Long,
-        val peakPssKb: Long,
-    ) {
-        val nativeDeltaKb get() = peakNativeKb - baseNativeKb
-        val pssDeltaKb get() = peakPssKb - basePssKb
-    }
-
-    /**
-     * Peak memory observed while a proof runs.
-     *
-     * Two figures, because one is not enough. Native heap
-     * ([android.os.Debug.getNativeHeapAllocatedSize]) is what the Rust prover mallocs, and the
-     * JVM heap sees almost none of it — but it is malloc only, so it misses mapped regions such
-     * as the proving keys. Total PSS is what decides whether the OS kills the process, so it is
-     * the figure that answers "does this fit on a smaller device". PSS is the expensive read, so
-     * it is sampled an order of magnitude less often than the cheap one.
-     *
-     * Sampled from a thread because the proof is one blocking call, with no point inside it to
-     * read a high-water mark from, and both APIs report instantaneous values rather than peaks.
-     * That makes these a FLOOR on real usage: a sampler can miss a spike between polls.
-     */
-    private class MemSampler(
-        private val nativeIntervalMs: Long = 20L,
-        private val pssEveryNthSample: Int = 10,
-    ) {
-        @Volatile private var running = false
-        @Volatile private var peakNative = 0L
-        @Volatile private var peakPss = 0L
-        private var baseNative = 0L
-        private var basePss = 0L
-        private var thread: Thread? = null
-
-        fun start() {
-            running = true
-            baseNative = Debug.getNativeHeapAllocatedSize()
-            basePss = readPssKb()
-            peakNative = baseNative
-            peakPss = basePss
-            thread = Thread {
-                var i = 0
-                while (running) {
-                    val now = Debug.getNativeHeapAllocatedSize()
-                    if (now > peakNative) peakNative = now
-                    if (i % pssEveryNthSample == 0) {
-                        val pss = readPssKb()
-                        if (pss > peakPss) peakPss = pss
-                    }
-                    i++
-                    try {
-                        Thread.sleep(nativeIntervalMs)
-                    } catch (_: InterruptedException) {
-                        return@Thread
-                    }
-                }
-            }.also { it.isDaemon = true; it.start() }
-        }
-
-        fun stopAndRead(): MemUse {
-            running = false
-            thread?.interrupt()
-            thread?.join(2_000)
-            val pss = readPssKb()
-            if (pss > peakPss) peakPss = pss
-            return MemUse(baseNative / 1024, peakNative / 1024, basePss, peakPss)
-        }
-
-        private fun readPssKb(): Long {
-            val info = Debug.MemoryInfo()
-            Debug.getMemoryInfo(info)
-            return info.totalPss.toLong()
-        }
-    }
-
     private companion object {
         private const val TAG = "ZswapSpendEnvelope"
 

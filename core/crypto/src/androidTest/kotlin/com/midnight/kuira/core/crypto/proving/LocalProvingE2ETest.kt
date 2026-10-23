@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.midnight.kuira.core.crypto.address.Bech32m
 import com.midnight.kuira.core.crypto.shielded.ZswapTransferBuilder
+import com.midnight.kuira.core.testing.ProofMemorySampler
 import kotlinx.coroutines.runBlocking
 import java.math.BigInteger
 import org.junit.Assert.*
@@ -82,6 +83,10 @@ class LocalProvingE2ETest {
 
         // Step 5: PROVE LOCALLY
         Log.d(TAG, "Starting local proof generation...")
+        // Peak memory alongside the timing: time says how long the circuit takes, memory says
+        // whether it fits, and the figures are only comparable across circuits when gathered the
+        // same way — so this uses the same sampler as the k=15 spend envelope.
+        val sampler = ProofMemorySampler().also { it.start() }
         val start = System.currentTimeMillis()
 
         val provenTxHex = LocalProver.proveTransaction(
@@ -90,6 +95,7 @@ class LocalProvingE2ETest {
         )
 
         val elapsed = System.currentTimeMillis() - start
+        val memUse = sampler.stopAndRead()
 
         // Step 6: Verify
         assertNotNull("LOCAL PROVING SHOULD PRODUCE OUTPUT", provenTxHex)
@@ -103,5 +109,18 @@ class LocalProvingE2ETest {
         Log.d(TAG, "  Unproven: ${txHex.length / 2} bytes")
         Log.d(TAG, "  Proven:   ${provenTxHex.length / 2} bytes")
         Log.d(TAG, "  Overhead: +${(provenTxHex.length - txHex.length) / 2} bytes")
+        Log.i(TAG, "  native heap: ${memUse.nativeSummary()}")
+        Log.i(TAG, "  total PSS:   ${memUse.pssSummary()}")
+        // READ THE LOGGED FIGURE WITH CARE. It is only the cold cost when this test is the first
+        // proof in the process — run it alone and k=14 measures base 54MB -> peak 282MB PSS.
+        // Run after the k=15 spend envelope, as a full module run does, and it inherits that
+        // test's warm ~519MB arena and reports a delta of ~55MB: a quarter of the real cold cost,
+        // because the allocator already holds what it needs. So cross-circuit comparisons must
+        // come from single-test runs, never from a gate log. The assertion below holds either
+        // way; only the number needs the caveat.
+        assertTrue(
+            "the sampler must observe native allocation during a k=14 proof: $memUse",
+            memUse.nativeDeltaKb > 0,
+        )
     }
 }

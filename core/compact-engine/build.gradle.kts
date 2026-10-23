@@ -423,4 +423,6 @@ dependencies {
     // from kuira-crypto-ffi's CMake) into the test APK only. Test-scoped, so the
     // core:crypto → core:compact-engine api edge doesn't form a main-variant cycle.
     androidTestImplementation(project(":core:crypto"))
+    // Shared ProofMemorySampler, so every circuit's peak memory is measured the same way.
+    androidTestImplementation(project(":core:testing"))
 }
