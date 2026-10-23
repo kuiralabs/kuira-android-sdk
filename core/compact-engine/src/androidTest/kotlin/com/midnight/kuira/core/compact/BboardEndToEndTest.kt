@@ -106,8 +106,11 @@ class BboardEndToEndTest {
         // Not a skip: without the keys there is no proof to check, and a green skip would
         // report this pipeline as verified when nothing ran.
         assertTrue(
-            "Bboard proving keys not installed — run ./scripts/install-bboard-keys.sh (or " +
-                "scripts/e2e/prepare-localnet-e2e.sh, which stages them).",
+            // Name what actually stages these. prepare-localnet-e2e.sh does NOT: it pushes
+            // wallet_keys/{zswap,dust} and the bls_* params, not the bboard circuit keys, so
+            // following that advice left the keys missing and the message looking like a lie.
+            "Bboard proving keys not installed — the bboardSetup Gradle task stages them " +
+                "(it runs ./scripts/install-bboard-keys.sh), or run that script directly.",
             provingKeyManager.hasProvableCircuitKeys(bboardCircuits),
         )
 
