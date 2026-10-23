@@ -171,8 +171,9 @@ abstract class KuiraContractExtension {
      *
      * Where the numbers come from: a depth-20 Merkle path over `persistentHash` compiles
      * to ~83,600 rows, which is k=17 — so a contract doing that kind of hashing is the
-     * case this exists for. `compactc` prints each circuit's `k` and row count when it
-     * compiles, which is the figure to set this from.
+     * case this exists for. The figure to set this from is in the build's own output:
+     * `reportCircuitSizes` prints every circuit's `k` and row count, and flags the ones
+     * above whatever this is set to.
      *
      * Trade-off, and why it is opt-in: the parameter files double in size with each step
      * (12 MB at k=16, 24 MB at k=17, 48 MB at k=18), so going to the maximum adds ~84 MB

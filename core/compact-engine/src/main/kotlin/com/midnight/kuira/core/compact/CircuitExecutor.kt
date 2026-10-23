@@ -943,9 +943,10 @@ class CircuitExecutor(
  * built, and a missing entry fails there rather than at the call.
  *
  * **Constructors cannot read witnesses.** A contract's constructor runs before any witness
- * is available, and `deploy()` passes it no arguments, so the usual
- * deployer-becomes-owner pattern has to become a separate circuit the deployer calls after
- * deploying.
+ * is available, so the usual deployer-becomes-owner pattern has to become a separate
+ * circuit the deployer calls after deploying. Constructor *arguments* are a separate
+ * mechanism and are supported — set `constructorArgs` on the builder, which `deploy()`
+ * passes to the constructor.
  */
 fun interface WitnessProvider {
     fun provide(privateStateJson: Any?): WitnessResult
