@@ -112,11 +112,64 @@ val adbReverseLocalnet by tasks.registering {
             return@doLast
         }
 
+        // Does the device actually reach the host on this port? `curl` exit 7 is "connection
+        // refused", anything else means the TCP connect succeeded (an HTTP error still proves the
+        // tunnel carries traffic). Returns null when curl is missing, so an unusual device never
+        // turns an inconclusive probe into a failure.
+        fun tunnelCarriesTraffic(serial: String, port: Int): Boolean? {
+            val out = ByteArrayOutputStream()
+            val rc = exec {
+                commandLine(
+                    adb, "-s", serial, "shell",
+                    "command -v curl >/dev/null 2>&1 && " +
+                        "{ curl -s -o /dev/null --max-time 5 http://127.0.0.1:$port/ ; echo rc=\$? ; } " +
+                        "|| echo nocurl",
+                )
+                standardOutput = out
+                isIgnoreExitValue = true
+            }
+            if (rc.exitValue != 0) return null
+            val text = out.toString().trim()
+            if (text.contains("nocurl")) return null
+            val code = Regex("rc=(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+            return code != 7
+        }
+
         physicalDevices.forEach { serial ->
             println("adbReverseLocalnet: forwarding ${ports.joinToString(",")} on $serial")
             ports.forEach { port ->
-                exec {
+                val bind = exec {
                     commandLine(adb, "-s", serial, "reverse", "tcp:$port", "tcp:$port")
+                    isIgnoreExitValue = true
+                }
+                if (bind.exitValue == 0) return@forEach
+
+                // A bind failure is ambiguous on its own, and "cannot bind listener: Address
+                // already in use" is actively misleading: it reads like a race or a double-bind
+                // when the real cause may be a listener the adb server no longer tracks. Probing
+                // the tunnel tells the two apart, so the message names the device's real state
+                // instead of sending the next person to re-derive it. Learned the hard way — the
+                // raw adb message cost a wrong fix and a long detour.
+                when (tunnelCarriesTraffic(serial, port)) {
+                    true -> println(
+                        "adbReverseLocalnet: tcp:$port already forwarded on $serial and carrying " +
+                            "traffic — keeping it (the bind refused because the adb server no " +
+                            "longer tracks the listener it created)",
+                    )
+                    false -> error(
+                        "adbReverseLocalnet: tcp:$port on $serial is held by a DEAD listener — it " +
+                            "blocks the bind and carries no traffic to the host. `adb reverse " +
+                            "--remove-all`, `adb reconnect` and a USB replug do NOT clear it; " +
+                            "REBOOT the device. (Verify with: adb -s $serial shell curl -s -o " +
+                            "/dev/null -w '%{http_code}' http://127.0.0.1:$port/ )",
+                    )
+                    null -> error(
+                        "adbReverseLocalnet: could not bind tcp:$port on $serial, and could not " +
+                            "probe whether the port already works (no curl on device). Check " +
+                            "`adb -s $serial reverse --list`; if tcp:$port is absent yet the bind " +
+                            "says the address is in use, a dead listener is holding it and the " +
+                            "device needs a reboot.",
+                    )
                 }
             }
         }
