@@ -19,9 +19,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,7 +103,7 @@ internal fun SettingsSection(
         color = palette.textMuted,
         fontSize = SendType.SectionLabel,
         fontWeight = FontWeight.Normal,
-        letterSpacing = 3.sp,
+        letterSpacing = SendType.TrackLabel,
     )
     Spacer(Modifier.size(SendDimens.Space12))
     GlassPanel(tint = palette.text.copy(alpha = GLASS_FILL_ALPHA), border = palette.hairline, contentPadding = SendDimens.Space4) {
@@ -157,6 +163,56 @@ internal fun SettingsRow(
         if (onClick != null && !readOnly) {
             Spacer(Modifier.width(SendDimens.Space8))
             ChevronGlyph(palette.textMuted)
+        }
+    }
+}
+
+/**
+ * A [SettingsRow] whose value is chosen from [options] via a dropdown.
+ *
+ * A ROW, not a boxed control: a bordered selector inside the section's own [GlassPanel] reads as
+ * a card within a card.
+ */
+@Composable
+internal fun <T> SettingsPickerRow(
+    label: String,
+    palette: SendPalette,
+    selected: T,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    leadingGlyph: (@Composable (Color) -> Unit)? = null,
+    onSelect: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsRow(
+            label = label,
+            palette = palette,
+            leadingGlyph = leadingGlyph,
+            rightValue = optionLabel(selected),
+            onClick = { expanded = true },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = palette.panel,
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = optionLabel(option),
+                            color = if (option == selected) palette.text else palette.textSoft,
+                            fontSize = SendType.Body,
+                            fontWeight = FontWeight.Light,
+                        )
+                    },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }

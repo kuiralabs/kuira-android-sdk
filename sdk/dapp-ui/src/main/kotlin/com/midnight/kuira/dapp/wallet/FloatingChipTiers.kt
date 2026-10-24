@@ -82,11 +82,9 @@ data class WalletChipUi(
     val shielded: String,
     val dust: String,
     val dustRegistered: Boolean,
-    val synced: Boolean,
+    /** null = nothing to report yet (the non-Ready placeholder chip). */
+    val syncLabel: WalletSyncLabel?,
     val network: String,
-    /** True whenever a sync is in flight — determinate OR indeterminate. Drives the status
-     *  indicator; [syncProgress] only carries a fraction when one is measurable. */
-    val syncing: Boolean = false,
     /** Live sync fraction (0..1) when a determinate sync is in flight; null = idle/indeterminate →
      *  the Panel tier hides the progress bar rather than showing a frozen mock. */
     val syncProgress: Float? = null,
@@ -94,7 +92,7 @@ data class WalletChipUi(
     companion object {
         val Sample = WalletChipUi(
             night = "1,234.5", unshielded = "1,200.0", shielded = "34.5",
-            dust = "167.3", dustRegistered = true, synced = true, network = "PreProd",
+            dust = "167.3", dustRegistered = true, syncLabel = WalletSyncLabel.SYNCED, network = "PreProd",
         )
     }
 }
@@ -140,25 +138,22 @@ internal fun WalletChip(
     when (tier) {
         ChipTier.Peek -> PeekTab(colors, modifier)
         ChipTier.Pill -> FrostPill(colors, modifier) {
-            if (ui.syncing) {
+            if (ui.syncLabel == WalletSyncLabel.SYNCING) {
                 SyncPulseDot(colors.accent)
                 Spacer(Modifier.width(8.dp))
             }
             Text(ui.night, color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300)
             Spacer(Modifier.width(4.dp))
             Text("NIGHT", color = colors.onSheetDim, fontSize = 11.sp, letterSpacing = 1.sp)
-            if (ui.synced) {
+            ui.syncLabel?.glyph?.let {
                 Spacer(Modifier.width(8.dp))
-                Text("✓", color = colors.positive, fontSize = 13.sp)
+                Text(it, color = ui.syncLabel.color(colors), fontSize = 13.sp)
             }
         }
         ChipTier.Card -> GlassCard(colors, modifier.width(width)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Label("NIGHT", colors)
-                when {
-                    ui.syncing -> Text("Syncing", color = colors.accent, fontSize = 12.sp)
-                    ui.synced -> Text("Synced", color = colors.positive, fontSize = 12.sp)
-                }
+                ui.syncLabel?.let { Text(it.text, color = it.color(colors), fontSize = 12.sp) }
             }
             Spacer(Modifier.height(6.dp))
             Text(ui.night, color = colors.onSheet, fontSize = 30.sp, fontWeight = FontWeight.W200, letterSpacing = (-0.5).sp)
@@ -176,13 +171,12 @@ internal fun WalletChip(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Label("NIGHT · ", colors)
-                    when {
-                        ui.syncing -> Text("Syncing", color = colors.accent, fontSize = 11.sp, letterSpacing = 1.sp)
-                        ui.synced -> Text("Synced", color = colors.positive, fontSize = 11.sp, letterSpacing = 1.sp)
+                    ui.syncLabel?.let {
+                        Text(it.text, color = it.color(colors), fontSize = 11.sp, letterSpacing = 1.sp)
                     }
                 }
-                if (ui.syncing) SyncPulseDot(colors.accent)
-                else if (ui.synced) Text("✓", color = colors.positive, fontSize = 13.sp)
+                if (ui.syncLabel == WalletSyncLabel.SYNCING) SyncPulseDot(colors.accent)
+                else ui.syncLabel?.glyph?.let { Text(it, color = ui.syncLabel.color(colors), fontSize = 13.sp) }
             }
             Text(ui.night, color = colors.onSheet, fontSize = 40.sp, fontWeight = FontWeight.W200, letterSpacing = (-1).sp)
             Spacer(Modifier.height(12.dp))

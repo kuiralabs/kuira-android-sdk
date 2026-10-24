@@ -148,6 +148,17 @@ class WalletPanelViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SYNC_SUBSCRIBE_TIMEOUT_MS), null)
 
     /**
+     * Why the last sync did not complete, or null when it did. Without this the panel cannot tell
+     * "you have no money" from "I could not reach the chain" — both render as 0, and the status
+     * line reads "Synced" because it only ever meant "not currently syncing".
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val syncFailure: StateFlow<String?> = sdkProvider.sdk
+        .flatMapLatest { it?.wallet?.syncStatus ?: flowOf(SyncStatus.Idle) }
+        .map { (it as? SyncStatus.Failed)?.message }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SYNC_SUBSCRIBE_TIMEOUT_MS), null)
+
+    /**
      * Optimistic "turning dust backup on" flag. Flipped true the instant the user
      * taps the switch, BEFORE the Drive consent + sync round-trip (which is slow
      * and network-bound) reports any status. Without it the controlled Switch

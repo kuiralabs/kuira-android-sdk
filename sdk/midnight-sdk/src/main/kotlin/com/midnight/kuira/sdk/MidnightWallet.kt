@@ -21,6 +21,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import com.midnight.kuira.core.identity.backup.DriveConsentRequiredException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -413,6 +415,16 @@ class MidnightWallet internal constructor(
      * single [syncStatus] observer (the background notification) reflects all of
      * them, not just dust.
      */
+    /**
+     * Rethrows only OUR OWN cancellation, so a best-effort leg can swallow everything else.
+     *
+     * A downstream channel reporting cancelled while this coroutine is still active is a failure
+     * wearing a [CancellationException]; rethrowing it blindly files an outage as "cancelled".
+     */
+    private suspend fun rethrowIfCancelled(e: Exception) {
+        if (e is CancellationException && !currentCoroutineContext().isActive) throw e
+    }
+
     private suspend fun runTrackedSync(
         phase: SyncPhase,
         block: suspend (publish: suspend (Int, Int) -> Unit) -> Unit,
@@ -696,27 +708,21 @@ class MidnightWallet internal constructor(
      *  fresh (waitForFunding only refreshes dust).
      *
      * Errors in shielded resync don't abort the dust resync (and vice versa) —
-     * partial freshness is better than no freshness.
+     * partial freshness is better than no freshness — but a failed leg leaves
+     * [syncStatus] on [SyncStatus.Failed] so a caller can tell a stale balance from a real one.
      */
     suspend fun refresh() = withContext(Dispatchers.IO) {
-        // Shielded resync + dust delta are the user-visible ShieldedRefresh work —
-        // track them on syncStatus so the background notification covers this phase
-        // too (not just the dust sync above it). Each leg keeps its own best-effort
-        // try/catch (partial freshness beats none); the tracked block doesn't
-        // rethrow, so syncStatus settles on UpToDate either way.
-        // The WHOLE refresh — shielded resync, dust delta, AND the cloud backups —
-        // is one tracked span. The backups are the tail of a refresh, so keeping
-        // them inside keeps syncStatus on Syncing until refresh() truly finishes:
-        // otherwise the notification/chip vanished the instant the sync legs
-        // completed while the UI still showed "Refreshing balances…" through the
-        // (network-bound) backup tail. Each leg keeps its own best-effort try/catch
-        // (partial freshness beats none); the tracked block never rethrows, so
-        // syncStatus settles on UpToDate either way.
+        // The whole refresh — shielded resync, dust delta AND the cloud backups — is one tracked
+        // span, so syncStatus stays on Syncing until refresh() truly finishes. Legs stay
+        // best-effort but REPORT, so a swallowed failure cannot settle on UpToDate.
+        val syncFailures = mutableListOf<String>()
         runTrackedSync(SyncPhase.ShieldedRefresh) { publish ->
             try {
                 shieldedTracker.resync()
             } catch (e: Exception) {
+                rethrowIfCancelled(e)
                 Log.w(TAG, "Shielded resync failed during refresh(): ${e.message}")
+                syncFailures += "shielded: ${e.message ?: e::class.simpleName}"
             }
             try {
                 // Routine refresh = incremental delta on the persisted checkpoint,
@@ -730,18 +736,17 @@ class MidnightWallet internal constructor(
                 balanceMutex.withLock {
                     dustSyncManager.refreshIncremental(onSyncProgress = publish)
                 }
-            } catch (e: CancellationException) {
-                throw e // refresh cancelled (superseded / scope closed) — propagate, not a failure
             } catch (e: Exception) {
+                rethrowIfCancelled(e)
                 Log.w(TAG, "Dust resync failed during refresh(): ${e.message}")
+                syncFailures += "dust: ${e.message ?: e::class.simpleName}"
             }
             // Best-effort cloud backup of the freshly-synced checkpoint (no-op when
             // unconfigured; the coordinator's hash guard skips an unchanged blob).
             try {
                 backupDustToCloud()
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
+                rethrowIfCancelled(e)
                 Log.w(TAG, "Dust cloud backup failed during refresh(): ${e.message}")
             }
             // Best-effort silent app-state backup of the host's CURRENT snapshot
@@ -751,12 +756,16 @@ class MidnightWallet internal constructor(
             appStateProvider?.let { provider ->
                 try {
                     backupAppStateToCloud(provider.invoke())
-                } catch (e: CancellationException) {
-                    throw e
                 } catch (e: Exception) {
+                    rethrowIfCancelled(e)
                     Log.w(TAG, "App-state cloud backup failed during refresh(): ${e.message}")
                 }
             }
+        }
+        // Backups failing does not make the BALANCE stale, so only the sync legs count here.
+        if (syncFailures.isNotEmpty()) {
+            Log.w(TAG, "refresh() completed with ${syncFailures.size} failed sync leg(s)")
+            _syncStatus.value = SyncStatus.Failed(syncFailures.joinToString("; "))
         }
     }
 

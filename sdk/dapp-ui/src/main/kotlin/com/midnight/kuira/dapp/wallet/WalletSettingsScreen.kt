@@ -78,13 +78,19 @@ internal fun WalletSettingsScreen(
                 Spacer(Modifier.height(SendDimens.Space16))
 
                 SettingsSection("NETWORK", palette) {
-                    SettingsRow(
-                        label = "Network",
-                        palette = palette,
-                        leadingGlyph = { GlobeGlyph(it) },
-                        rightValue = networkLabel,
-                        readOnly = true,
-                    )
+                    // The host's own network + proving pickers when it supplies them; a read-only
+                    // row otherwise, so a dApp that doesn't offer switching still shows the chain.
+                    if (config != null) {
+                        config()
+                    } else {
+                        SettingsRow(
+                            label = "Network",
+                            palette = palette,
+                            leadingGlyph = { GlobeGlyph(it) },
+                            rightValue = networkLabel,
+                            readOnly = true,
+                        )
+                    }
                     SettingsDivider(palette)
                     SettingsRow(label = "Sync", palette = palette, rightValue = syncLabel, readOnly = true)
                     SettingsDivider(palette)
@@ -96,16 +102,6 @@ internal fun WalletSettingsScreen(
                         palette = palette,
                         leadingGlyph = { RefreshGlyph(it) },
                         onClick = onResyncBalance,
-                    )
-                }
-                Spacer(Modifier.height(SendDimens.Space32))
-
-                SettingsSection("APPEARANCE", palette) {
-                    ThemeSwatchRow(
-                        themes = themes,
-                        selectedId = selectedThemeId,
-                        palette = palette,
-                        onSelect = onSelectTheme,
                     )
                 }
                 Spacer(Modifier.height(SendDimens.Space32))
@@ -136,15 +132,20 @@ internal fun WalletSettingsScreen(
                 }
                 Spacer(Modifier.height(SendDimens.Space32))
 
-                if (config != null) {
-                    SettingsSection("NETWORK & PROVING", palette) { config() }
-                    Spacer(Modifier.height(SendDimens.Space32))
-                }
-
                 if (backup != null) {
                     backup()
                     Spacer(Modifier.height(SendDimens.Space32))
                 }
+
+                SettingsSection("APPEARANCE", palette) {
+                    ThemeSwatchRow(
+                        themes = themes,
+                        selectedId = selectedThemeId,
+                        palette = palette,
+                        onSelect = onSelectTheme,
+                    )
+                }
+                Spacer(Modifier.height(SendDimens.Space32))
 
                 if (versionLabel != null) {
                     SettingsSection("ABOUT", palette) {

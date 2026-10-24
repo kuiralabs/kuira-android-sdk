@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,23 +14,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -46,24 +43,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.designsystem.component.GlassPanel
 import com.midnight.kuira.core.designsystem.effect.StarField
 import com.midnight.kuira.core.designsystem.theme.MidnightColors
-import com.midnight.kuira.dapp.backup.BackupSection
-import com.midnight.kuira.dapp.backup.BackupSectionState
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.midnight.kuira.dapp.dappPressable
-import com.midnight.kuira.core.compact.proving.ProvingMode
 import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.dapp.backup.BackupSection
+import com.midnight.kuira.dapp.backup.BackupSectionState
+import com.midnight.kuira.dapp.dappPressable
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import kotlinx.coroutines.launch
 
@@ -81,6 +80,11 @@ private object PanelDimens {
     val PillHorizontalPadding = 18.dp
     val PillVerticalPadding = 12.dp
     val PillItemGap = 8.dp
+
+    // Network status chip — reads as a label, not a control, so it sits a step below the pill.
+    val NetworkChipRadius = 12.dp
+    val NetworkChipHPadding = 10.dp
+    val NetworkChipVPadding = 5.dp
     val PillSpinnerSize = 14.dp
     val PillSpinnerStroke = 2.dp
 
@@ -101,12 +105,15 @@ private object PanelDimens {
     val ButtonHorizontalPadding = 8.dp
 }
 
+private const val NETWORK_CHIP_FILL_ALPHA = 0.08f
+
 private object PanelType {
     val PillText = 14.sp
     val SectionLabel = 11.sp // Small uppercase: "address", "balance", etc.
     val ButtonText = 15.sp
     val Body = 14.sp // Address, balance row.
     val Caption = 13.sp // Busy + message lines.
+    val NetworkChipTracking = 1.sp
     val LoadingText = 16.sp
     val ErrorText = 14.sp
     val AirdropCmd = 13.sp // Monospace airdrop command.
@@ -229,6 +236,7 @@ fun WalletStatusPanel(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
+    val syncFailure by viewModel.syncFailure.collectAsStateWithLifecycle()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
@@ -323,7 +331,7 @@ fun WalletStatusPanel(
     // branch, so a host that wanted the numbers but not the drawing had to take
     // over the pill to get them — which is how the last attempt at a two-chain
     // bar ended up reimplementing this composable badly.
-    val chipUi = walletChipUi(status, syncProgress, formatter, network)
+    val chipUi = walletChipUi(status, syncProgress, formatter, network, syncFailure)
     LaunchedEffect(chipUi) { onChipChange(chipUi) }
 
     if (pill != null) {
@@ -467,6 +475,7 @@ fun WalletStatusPanel(
             WalletSheetContent(
                 status = status,
                 syncProgress = syncProgress,
+                syncFailure = syncFailure,
                 config = config,
                 formatter = formatter,
                 colors = activeColors,
@@ -595,6 +604,7 @@ internal fun walletChipUi(
     syncProgress: WalletSyncProgress?,
     formatter: BalanceFormatter,
     network: MidnightNetwork,
+    syncFailure: String?,
 ): WalletChipUi {
     val net = network.pillName.replaceFirstChar { it.uppercase() }
     return (status as? WalletStatus.Ready)?.let { s ->
@@ -607,14 +617,18 @@ internal fun walletChipUi(
             // carries 15 decimals, so formatCompact left it 18 chars long and overflowed the chip.
             dust = formatter.formatAbbreviated(b.dust, "DUST"),
             dustRegistered = b.dustRegistered,
-            synced = syncProgress == null && s.busy == null,
+            syncLabel = WalletSyncLabel.of(
+                syncing = syncProgress != null || s.busy != null,
+                failed = syncFailure != null,
+            ),
             network = net,
-            syncing = syncProgress != null,
             syncProgress = syncProgress?.fraction,
         )
     } ?: WalletChipUi(
         "—", "—", "—", "—",
-        dustRegistered = false, synced = false, network = net, syncing = syncProgress != null,
+        dustRegistered = false,
+        syncLabel = if (syncProgress != null) WalletSyncLabel.SYNCING else null,
+        network = net,
     )
 }
 
@@ -698,9 +712,34 @@ private const val SETUP_OFFER_SKIP = "Not now"
 // ── Sheet content ──
 
 @Composable
+private fun NetworkStatusChip(
+    network: MidnightNetwork,
+    colors: WalletPanelColors,
+    onClick: (() -> Unit)?,
+) {
+    val base = Modifier
+        .clip(RoundedCornerShape(PanelDimens.NetworkChipRadius))
+        .background(colors.onSheet.copy(alpha = NETWORK_CHIP_FILL_ALPHA))
+        .border(1.dp, colors.onSheetSubtle, RoundedCornerShape(PanelDimens.NetworkChipRadius))
+    Text(
+        text = network.displayName.lowercase(),
+        color = colors.onSheetDim,
+        fontSize = PanelType.PillText,
+        letterSpacing = PanelType.NetworkChipTracking,
+        maxLines = 1,
+        modifier = (if (onClick != null) base.dappPressable(onClick = onClick) else base)
+            .padding(
+                horizontal = PanelDimens.NetworkChipHPadding,
+                vertical = PanelDimens.NetworkChipVPadding,
+            ),
+    )
+}
+
+@Composable
 private fun WalletSheetContent(
     status: WalletStatus,
     syncProgress: WalletSyncProgress?,
+    syncFailure: String?,
     config: WalletConfig,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
@@ -773,6 +812,16 @@ private fun WalletSheetContent(
                     // Empty left slot — SpaceBetween still holds the toggle to the right.
                     Spacer(modifier = Modifier)
                 }
+
+                // Which chain the balance belongs to. Without it "0 NIGHT · Synced" is ambiguous
+                // between wrong network, failed funding and broken sync — three different fixes.
+                // Status, not a control: settings still owns switching (see da99419c).
+                NetworkStatusChip(
+                    network = config.network,
+                    colors = colors,
+                    onClick = onSettings.takeIf { status is WalletStatus.Ready },
+                )
+
                 GlyphButton(
                     onClick = onToggleLightMode,
                     contentDescription = if (lightMode) "Switch to dark theme" else "Switch to light theme",
@@ -807,7 +856,8 @@ private fun WalletSheetContent(
                 )
                 is WalletStatus.Ready -> ReadyBody(
                     balanceContent = balanceContent,
-                    status, syncProgress, formatter, colors, onReceive, onSend, onRefreshBalance, onRegisterDust,
+                    status, syncProgress, syncFailure, formatter, colors,
+                    onReceive, onSend, onRefreshBalance, onRegisterDust,
                     busy = busy,
                 )
                 is WalletStatus.Error -> WalletBalanceError(status.message, colors, onRetry = onRefreshBalance)
@@ -877,6 +927,7 @@ private fun ReadyBody(
     balanceContent: (@Composable (WalletPanelColors) -> Unit)?,
     status: WalletStatus.Ready,
     syncProgress: WalletSyncProgress?,
+    syncFailure: String?,
     formatter: BalanceFormatter,
     colors: WalletPanelColors,
     onReceive: () -> Unit,
@@ -899,7 +950,10 @@ private fun ReadyBody(
         nightTotal = formatter.formatCompact(b.unshieldedNight + b.shieldedNight, "NIGHT", includeSymbol = false),
         publicNight = formatter.formatCompact(b.unshieldedNight, "NIGHT", includeSymbol = false),
         privateNight = if (b.hasShielded) formatter.formatCompact(b.shieldedNight, "NIGHT", includeSymbol = false) else null,
-        statusLabel = if (syncProgress != null || status.busy != null) "Syncing…" else "Synced",
+        syncLabel = WalletSyncLabel.of(
+            syncing = syncProgress != null || status.busy != null,
+            failed = syncFailure != null,
+        ),
         dust = dustExact,
         dustRegistered = b.dustRegistered,
     )
@@ -940,10 +994,8 @@ private fun SectionLabel(text: String, colors: WalletPanelColors) {
 private const val MESSAGE_ALPHA = 0.8f
 
 /**
- * Compact wallet config — network + proving as dropdown selectors in one row,
- * plus the proof-server URL field when REMOTE proving is picked. Replaces the
- * old full-width chip rows (5 rows → 1); picking either rebuilds the SDK via the
- * panel's LaunchedEffect on `config`.
+ * Network + proving + the proof-server URL as ordinary settings rows, for the Settings screen's
+ * NETWORK section. Picking either rebuilds the SDK via the panel's LaunchedEffect on `config`.
  */
 @Composable
 internal fun ConfigRow(
@@ -955,132 +1007,82 @@ internal fun ConfigRow(
     onProvingModeChange: (ProvingMode) -> Unit,
     onProofServerUrlChange: (String?) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(PanelDimens.SheetButtonRowGap),
-        ) {
-            PanelSelector(
-                label = "network",
-                selected = network,
-                options = MidnightNetwork.entries,
-                optionLabel = { it.pillName },
-                colors = colors,
-                modifier = Modifier.weight(1f),
-                onSelect = onNetworkChange,
-            )
-            PanelSelector(
-                label = "proving",
-                selected = provingMode,
-                options = ProvingMode.entries,
-                // "on-device" is clearer than "local" for where the proof runs.
-                optionLabel = { mode ->
-                    when (mode) {
-                        ProvingMode.LOCAL -> "on-device"
-                        ProvingMode.REMOTE -> "remote"
-                    }
-                },
-                colors = colors,
-                modifier = Modifier.weight(1f),
-                onSelect = onProvingModeChange,
-            )
-        }
-        if (provingMode == ProvingMode.REMOTE) {
-            Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-            OutlinedTextField(
-                value = proofServerUrl.orEmpty(),
-                onValueChange = { onProofServerUrlChange(it.ifBlank { null }) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = {
-                    Text(
-                        "proof server url (default: localhost:6300)",
-                        color = colors.onSheetDim,
-                        fontSize = PanelType.AirdropCmd,
-                    )
-                },
-                textStyle = TextStyle(
-                    color = colors.onSheet,
-                    fontSize = PanelType.AirdropCmd,
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.accent,
-                    unfocusedBorderColor = colors.pillBorder,
-                    cursorColor = colors.accent,
-                ),
-            )
-        }
+    val palette = remember(colors) { SendPalette.from(colors) }
+    SettingsPickerRow(
+        label = "Network",
+        palette = palette,
+        selected = network,
+        options = MidnightNetwork.entries,
+        optionLabel = { it.pillName },
+        leadingGlyph = { GlobeGlyph(it) },
+        onSelect = onNetworkChange,
+    )
+    SettingsDivider(palette)
+    SettingsPickerRow(
+        label = "Proving",
+        palette = palette,
+        selected = provingMode,
+        options = ProvingMode.entries,
+        optionLabel = { mode ->
+            when (mode) {
+                ProvingMode.LOCAL -> "on-device"
+                ProvingMode.REMOTE -> "remote"
+            }
+        },
+        onSelect = onProvingModeChange,
+    )
+    if (provingMode == ProvingMode.REMOTE) {
+        SettingsDivider(palette)
+        ProofServerRow(
+            url = proofServerUrl,
+            palette = palette,
+            onUrlChange = onProofServerUrlChange,
+        )
     }
 }
 
-/**
- * Compact labelled dropdown selector — a chip showing the current [selected]
- * value; tap opens a [DropdownMenu] of [options]. Generic so it drives both the
- * network and proving pickers.
- */
+/** The proof-server URL, editable in place — remote proving is unusable without it. */
 @Composable
-private fun <T> PanelSelector(
-    label: String,
-    selected: T,
-    options: List<T>,
-    optionLabel: (T) -> String,
-    colors: WalletPanelColors,
-    modifier: Modifier = Modifier,
-    onSelect: (T) -> Unit,
+private fun ProofServerRow(
+    url: String?,
+    palette: SendPalette,
+    onUrlChange: (String?) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(PanelDimens.ButtonCornerRadius)
-    Column(modifier = modifier) {
-        SectionLabel(label, colors)
-        Spacer(modifier = Modifier.height(PanelDimens.SheetLabelGap))
-        Box {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(PanelDimens.ButtonHeight)
-                    .clip(shape)
-                    .background(colors.onSheet.copy(alpha = GLASS_FILL_ALPHA)) // frosted selector
-                    .border(1.dp, colors.pillBorder, shape)
-                    .dappPressable(shape = shape) { expanded = true }
-                    .padding(horizontal = 14.dp),
-            ) {
-                Text(
-                    optionLabel(selected),
-                    color = colors.onSheet,
-                    fontSize = PanelType.ButtonText,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text("▾", color = colors.onSheetDim, fontSize = PanelType.ButtonText)
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.background(colors.sheetBackground),
-            ) {
-                options.forEach { opt ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                optionLabel(opt),
-                                color = if (opt == selected) colors.accent else colors.onSheet,
-                                fontSize = PanelType.ButtonText,
-                                fontWeight = if (opt == selected) FontWeight.Medium else FontWeight.Normal,
-                            )
-                        },
-                        onClick = {
-                            onSelect(opt)
-                            expanded = false
-                        },
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SendDimens.Space16, vertical = SendDimens.Space12),
+    ) {
+        Text(
+            text = "Proof server",
+            color = palette.text,
+            fontSize = SendType.Body,
+            fontWeight = FontWeight.Light,
+        )
+        Spacer(modifier = Modifier.height(SendDimens.Space8))
+        BasicTextField(
+            value = url.orEmpty(),
+            onValueChange = { onUrlChange(it.ifBlank { null }) },
+            singleLine = true,
+            textStyle = TextStyle(color = palette.text, fontSize = SendType.Body, fontFamily = FontFamily.Monospace),
+            cursorBrush = SolidColor(palette.text),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { field ->
+                if (url.isNullOrBlank()) {
+                    Text(
+                        text = PROOF_SERVER_PLACEHOLDER,
+                        color = palette.textMuted,
+                        fontSize = SendType.Body,
+                        fontFamily = FontFamily.Monospace,
                     )
                 }
-            }
-        }
+                field()
+            },
+        )
     }
 }
+
+private const val PROOF_SERVER_PLACEHOLDER = "localhost:6300"
 
 @Composable
 private fun PanelButton(

@@ -14,6 +14,7 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import com.midnight.kuira.core.ledger.api.TransactionRejected
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,6 +156,62 @@ class MidnightWalletTest {
 
         assertEquals(SyncStatus.Idle, wallet.syncStatus.value)
         wallet.syncDust()
+        assertEquals(SyncStatus.UpToDate, wallet.syncStatus.value)
+    }
+
+    // ── refresh() must not report a failed sync as success. The PreProd indexer went dark on
+    //  2026-10-09; every leg swallowed its exception, syncStatus settled on UpToDate, and the UI
+    //  rendered a balance of 0 labelled "Synced" for two weeks. ──
+
+    @Test
+    fun `refresh reports a failed shielded leg instead of settling on UpToDate`() = runTest {
+        val shielded = mock<ShieldedBalanceTracker> {
+            onBlocking { resync() } doThrow IllegalStateException("indexer unreachable")
+        }
+        val wallet = createWallet(shieldedTracker = shielded)
+
+        wallet.refresh()
+
+        val status = wallet.syncStatus.value
+        assertTrue("expected Failed, got $status", status is SyncStatus.Failed)
+        assertTrue((status as SyncStatus.Failed).message.contains("indexer unreachable"))
+    }
+
+    @Test
+    fun `refresh reports a failed dust leg`() = runTest {
+        val syncManager = mock<DustSyncManager> {
+            onBlocking { refreshIncremental(any()) } doThrow IllegalStateException("dust delta failed")
+        }
+        val wallet = createWallet(dustSyncManager = syncManager)
+
+        wallet.refresh()
+
+        assertTrue(wallet.syncStatus.value is SyncStatus.Failed)
+    }
+
+    /**
+     * The dead indexer surfaced as `CancellationException: Channel was cancelled` from a channel we
+     * did not cancel. Rethrowing every CancellationException files that outage as "cancelled" —
+     * status Idle, nothing shown. Only OUR cancellation may propagate.
+     */
+    @Test
+    fun `a downstream channel cancellation is a failure, not our cancellation`() = runTest {
+        val shielded = mock<ShieldedBalanceTracker> {
+            onBlocking { resync() } doThrow CancellationException("Channel was cancelled")
+        }
+        val wallet = createWallet(shieldedTracker = shielded)
+
+        wallet.refresh()
+
+        assertTrue(wallet.syncStatus.value is SyncStatus.Failed)
+    }
+
+    @Test
+    fun `a clean refresh settles on UpToDate`() = runTest {
+        val wallet = createWallet()
+
+        wallet.refresh()
+
         assertEquals(SyncStatus.UpToDate, wallet.syncStatus.value)
     }
 

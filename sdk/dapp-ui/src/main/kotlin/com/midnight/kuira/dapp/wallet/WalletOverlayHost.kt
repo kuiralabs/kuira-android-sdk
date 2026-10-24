@@ -214,6 +214,7 @@ private fun WalletSettingsOverlayContent(
     var recoveryRevealOpen by rememberSaveable { mutableStateOf(false) }
 
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
+    val syncFailure by viewModel.syncFailure.collectAsStateWithLifecycle()
     val recoveryPhraseSaved by viewModel.recoveryPhraseSaved.collectAsStateWithLifecycle()
     val backupSection by viewModel.backupSection.collectAsStateWithLifecycle()
     val controller = LocalWalletOverlay.current
@@ -260,7 +261,7 @@ private fun WalletSettingsOverlayContent(
     } else {
         WalletSettingsScreen(
             networkLabel = network.pillName.replaceFirstChar { it.uppercase() },
-            syncLabel = settingsSyncLabel(status, syncing = syncProgress != null),
+            syncLabel = settingsSyncLabel(status, syncing = syncProgress != null, failed = syncFailure != null),
             recoveryPhraseSaved = recoveryPhraseSaved,
             onViewRecoveryPhrase = { recoveryRevealOpen = true },
             // Moved out of the wallet sheet. The sheet is about money; these are
@@ -313,12 +314,11 @@ private fun WalletSettingsOverlayContent(
 
 /**
  * Coarse, truthful sync state for the Settings NETWORK section — a STATE, not a
- * fabricated "5 min ago" timestamp (the VM tracks no sync clock); mirrors the sheet's
- * Synced/Syncing… derivation.
+ * fabricated "5 min ago" timestamp (the VM tracks no sync clock).
  */
-internal fun settingsSyncLabel(status: WalletStatus, syncing: Boolean): String = when (status) {
-    is WalletStatus.Ready -> if (syncing || status.busy != null) "Syncing…" else "Synced"
-    is WalletStatus.Loading -> "Syncing…"
+internal fun settingsSyncLabel(status: WalletStatus, syncing: Boolean, failed: Boolean): String = when (status) {
+    is WalletStatus.Ready -> WalletSyncLabel.of(syncing || status.busy != null, failed).text
+    is WalletStatus.Loading -> WalletSyncLabel.SYNCING.text
     is WalletStatus.Locked -> "Locked"
     is WalletStatus.Error -> "Error"
     is WalletStatus.SigilRequired -> "Sigil required"

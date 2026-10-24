@@ -87,6 +87,7 @@ internal object SendType {
 
     /** letterSpacing presets (sp) used by the all-caps labels/badges. */
     val TrackBadge = 3.sp
+    val TrackLabel = 1.5.sp // all-caps section eyebrows — ~13% of the cap height
     val TrackMax = 1.sp
     val HeroTracking = (-1).sp
 }
@@ -134,10 +135,13 @@ internal class SendPalette(
     }
 }
 
-/** StarField max-brightness cap — dim in light mode so stars stay texture, not clutter. */
-internal const val STAR_COUNT = 60
-internal const val STAR_ALPHA_LIGHT = 0.55f
-internal const val STAR_ALPHA_DARK = 1f
+/**
+ * StarField density + max-brightness cap. The field is background texture, so it stays below the
+ * threshold where the eye starts tracking individual stars across the content above it.
+ */
+internal const val STAR_COUNT = 28
+internal const val STAR_ALPHA_LIGHT = 0.28f
+internal const val STAR_ALPHA_DARK = 0.45f
 
 /**
  * Frosted-glass fill alpha — the translucency that lets the star field show faintly through a
@@ -145,7 +149,7 @@ internal const val STAR_ALPHA_DARK = 1f
  * so it inverts correctly per mode (white frost on dark, black frost on light). One value → every
  * SDK panel frosts identically.
  */
-internal const val GLASS_FILL_ALPHA = 0.055f
+internal const val GLASS_FILL_ALPHA = 0.10f
 
 // ── Vector icons (Canvas, no material-icons dependency) ──
 //

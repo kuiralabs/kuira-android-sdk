@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
  * @param nightTotal hero figure — formatted total NIGHT.
  * @param publicNight formatted unshielded (public) NIGHT.
  * @param privateNight formatted shielded (private) NIGHT, or null when there's none.
- * @param statusLabel short status under the hero, e.g. "Synced" / "Syncing…".
+ * @param syncLabel short sync status under the hero.
  * @param dust formatted (abbreviated) dust, or null while first-loading.
  * @param dustRegistered true → ✓ on the dust row (only once a sync has settled, so
  *  it never contradicts an in-flight "Syncing dust…"); false → a Register affordance.
@@ -63,7 +63,7 @@ data class WalletBalanceUi(
     val nightTotal: String,
     val publicNight: String,
     val privateNight: String?,
-    val statusLabel: String,
+    val syncLabel: WalletSyncLabel,
     val dust: String?,
     val dustRegistered: Boolean,
 )
@@ -119,10 +119,6 @@ fun WalletBalanceCompact(
             }
             Spacer(Modifier.height(6.dp))
 
-            // "Synced" is the one sync-complete status → green; "Syncing…" and the
-            // "NIGHT ·" prefix stay monochrome (progress is never green mid-flight).
-            val synced = syncProgress == null
-
             // Amount and unit share a baseline instead of stacking. Stacked, each
             // chain cost two lines and left the card's whole right-hand side
             // empty — and a second chain doubled that into a tall box of mostly
@@ -140,8 +136,8 @@ fun WalletBalanceCompact(
                 Text(
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = colors.onSheetDim)) { append("NIGHT · ") }
-                        withStyle(SpanStyle(color = if (synced) colors.positive else colors.onSheetDim)) {
-                            append(ui.statusLabel)
+                        withStyle(SpanStyle(color = ui.syncLabel.color(colors))) {
+                            append(ui.syncLabel.text)
                         }
                     },
                     fontSize = 13.sp,
@@ -382,7 +378,7 @@ private val SampleDefault = WalletBalanceUi(
     nightTotal = "20,000",
     publicNight = "10,000",
     privateNight = "10,000",
-    statusLabel = "Synced",
+    syncLabel = WalletSyncLabel.SYNCED,
     dust = "5.33K",
     dustRegistered = true,
 )
@@ -406,7 +402,7 @@ private fun PreviewBalanceLight() =
 private fun PreviewBalanceSyncing() =
     Column(Modifier.padding(20.dp)) {
         WalletBalanceCompact(
-            SampleDefault.copy(statusLabel = "Syncing…", privateNight = null, dustRegistered = false),
+            SampleDefault.copy(syncLabel = WalletSyncLabel.SYNCING, privateNight = null, dustRegistered = false),
             syncProgress = WalletSyncProgress(0.68f, "Syncing dust"),
             colors = WalletPanelColors.Default,
             onReceive = {},

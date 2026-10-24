@@ -4,9 +4,7 @@ import com.midnight.kuira.core.ledger.ui.BalanceFormatter
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.sdk.WalletBalance
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
 
@@ -26,31 +24,48 @@ class WalletChipUiTest {
 
     @Test
     fun `determinate sync fraction reaches the chip`() {
-        val ui = walletChipUi(ready(nightOf(10)), WalletSyncProgress(0.42f, "Syncing"), formatter, net)
+        val ui = walletChipUi(ready(nightOf(10)), WalletSyncProgress(0.42f, "Syncing"), formatter, net, syncFailure = null)
         assertEquals(0.42f, ui.syncProgress!!, 1e-6f)
-        assertFalse("syncing → not synced", ui.synced)
+        assertEquals(WalletSyncLabel.SYNCING, ui.syncLabel)
     }
 
     @Test
     fun `idle (no sync) hides the bar and marks synced`() {
-        val ui = walletChipUi(ready(nightOf(10)), null, formatter, net)
+        val ui = walletChipUi(ready(nightOf(10)), null, formatter, net, syncFailure = null)
         assertNull("no sync in flight → no determinate bar", ui.syncProgress)
-        assertTrue("idle Ready → synced", ui.synced)
+        assertEquals(WalletSyncLabel.SYNCED, ui.syncLabel)
     }
 
     @Test
     fun `indeterminate sync (null fraction) hides the bar but is not synced`() {
-        val ui = walletChipUi(ready(nightOf(10)), WalletSyncProgress(null, "Working"), formatter, net)
+        val ui = walletChipUi(ready(nightOf(10)), WalletSyncProgress(null, "Working"), formatter, net, syncFailure = null)
         assertNull("indeterminate → no determinate bar", ui.syncProgress)
-        assertFalse("working → not synced", ui.synced)
+        assertEquals(WalletSyncLabel.SYNCING, ui.syncLabel)
     }
 
     @Test
     fun `non-Ready status yields the placeholder chip`() {
-        val ui = walletChipUi(WalletStatus.Loading("boot"), null, formatter, net)
+        val ui = walletChipUi(WalletStatus.Loading("boot"), null, formatter, net, syncFailure = null)
         assertEquals("—", ui.night)
-        assertFalse(ui.synced)
+        assertNull("no wallet yet → nothing to claim about sync", ui.syncLabel)
         assertNull(ui.syncProgress)
+    }
+
+    /**
+     * The PreProd regression. A sync that FAILED is not a sync in flight, so the chip derived
+     * "Synced" from `syncProgress == null` and showed a confident zero against a dead indexer for
+     * two weeks. Idle + a failure must read NOT_SYNCED, never SYNCED.
+     */
+    @Test
+    fun `a failed sync is not synced`() {
+        val ui = walletChipUi(ready(BigInteger.ZERO), null, formatter, net, syncFailure = "shielded: Channel was cancelled")
+        assertEquals(WalletSyncLabel.NOT_SYNCED, ui.syncLabel)
+    }
+
+    @Test
+    fun `an in-flight sync outranks a previous failure`() {
+        val ui = walletChipUi(ready(BigInteger.ZERO), WalletSyncProgress(0.1f, "Syncing"), formatter, net, syncFailure = "stale")
+        assertEquals(WalletSyncLabel.SYNCING, ui.syncLabel)
     }
 
     private fun nightOf(whole: Long): BigInteger = BigInteger.valueOf(whole) * BigInteger.TEN.pow(6)
