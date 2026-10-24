@@ -7,6 +7,7 @@ import com.midnight.kuira.core.indexer.sync.ChainResetGuard
 import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -124,7 +125,11 @@ class DustSyncManager(
         restoreGateRan = true
         Log.i(TAG, "cloud-restore: no local checkpoint — awaiting host restore gate")
         try {
-            gate()
+            // Bounded for the same reason as the fetch below: the gate waits on a host dialog and
+            // on Google Play services, and an unanswered wait is indistinguishable from a hung one.
+            if (withTimeoutOrNull(RESTORE_GATE_TIMEOUT_MS) { gate() } == null) {
+                Log.w(TAG, "cloud-restore: restore gate did not settle within ${RESTORE_GATE_TIMEOUT_MS}ms — continuing")
+            }
         } catch (ce: CancellationException) {
             throw ce // sync cancelled (SDK teardown / network switch) — propagate, never "continue"
         } catch (e: Exception) {
@@ -153,9 +158,21 @@ class DustSyncManager(
             return
         }
         Log.i(TAG, "cloud-restore: no local checkpoint — trying cloud for $walletAddress")
-        val restored = runCatching { source.fetch(walletAddress) }
-            .onFailure { Log.w(TAG, "cloud-restore: fetch failed: ${it.message}", it) }
-            .getOrNull()
+        // Bounded, because the contract is "degrade cleanly to genesis, never block" and an
+        // unreachable Google Play services does not fail — it hangs. A contract call frozen on
+        // "Balancing dust fee…" with no error and no timeout is what that looked like on device.
+        val restored = try {
+            withTimeoutOrNull(CLOUD_FETCH_TIMEOUT_MS) { source.fetch(walletAddress) }
+                ?: run {
+                    Log.w(TAG, "cloud-restore: cloud did not answer within ${CLOUD_FETCH_TIMEOUT_MS}ms — genesis fallback")
+                    null
+                }
+        } catch (ce: CancellationException) {
+            throw ce // never swallow cancellation: the sync is being torn down, not degraded
+        } catch (e: Exception) {
+            Log.w(TAG, "cloud-restore: fetch failed: ${e.message}", e)
+            null
+        }
         if (restored == null) {
             Log.w(TAG, "cloud-restore: no checkpoint in cloud for $walletAddress — genesis fallback")
             return
@@ -217,5 +234,16 @@ class DustSyncManager(
 
     private companion object {
         const val TAG = "DustSyncManager"
+
+        /**
+         * How long the cloud is given to answer before the sync stops waiting on it.
+         *
+         * Long enough for a slow Drive round trip, short enough that a wallet whose Play services
+         * cannot connect reaches a usable balance by its own route instead of never.
+         */
+        const val CLOUD_FETCH_TIMEOUT_MS = 20_000L
+
+        /** The gate waits on a person as well as a network, so it gets longer. */
+        const val RESTORE_GATE_TIMEOUT_MS = 120_000L
     }
 }
