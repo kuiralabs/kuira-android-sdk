@@ -136,6 +136,11 @@ class DustRepository @Inject constructor(
         private const val SPILL_PREFIX = "dust_events_"
         private const val SPILL_SUFFIX = ".hex"
 
+        private const val SPILL_CURSOR_PREFIX = "dust_spill_cursor_"
+
+        /** A spill untouched for this long cannot belong to a sync that is still streaming. */
+        private const val ABANDONED_SPILL_AGE_MS = 60 * 60 * 1000L
+
         /** Events per chunk — matches WASM SDK's chunk size. */
         private const val CHUNK_SIZE = 500
 
@@ -154,7 +159,7 @@ class DustRepository @Inject constructor(
 
         // How far the genesis spill file has been streamed, so a restarted sync resumes the
         // (slow, network-bound) streaming phase instead of repeating it.
-        private fun spillCursorKey(address: String) = longPreferencesKey("dust_spill_cursor_$address")
+        private fun spillCursorKey(address: String) = longPreferencesKey("$SPILL_CURSOR_PREFIX$address")
 
         // Time for balance calculations
         private fun currentTimeMillis(): Long = System.currentTimeMillis()
@@ -419,6 +424,7 @@ class DustRepository @Inject constructor(
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
     ): Boolean = syncMutexFor(address).withLock {
         Log.d(TAG, "Syncing dust from blockchain for $address")
+        discardAbandonedSpills(address)
 
         try {
             // Try delta sync first: load the checkpoint (state + cursor) as ONE
@@ -473,13 +479,20 @@ class DustRepository @Inject constructor(
                         // after the checkpoint ON TOP of the loaded state (streamDustEvents takes
                         // ownership of it).
                         Log.d(TAG, "Delta sync: resuming from event $lastEventId")
-                        val result = streamDustEvents(
-                            address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
-                        )
-                        if (result) return true
-
-                        // Resume failed — drop the checkpoint and rebuild from genesis.
-                        Log.w(TAG, "Delta sync returned no results, falling back to full sync")
+                        val applied = try {
+                            streamDustEvents(
+                                address, dustSeed, fromId = lastEventId + 1, baseState = existingState, onProgress = onProgress,
+                            )
+                        } catch (e: CheckpointRejectedDelta) {
+                            Log.w(
+                                TAG,
+                                "Checkpoint cannot apply event ${e.eventId} — its state is behind its own cursor; " +
+                                    "rebuilding from genesis",
+                            )
+                            null
+                        }
+                        if (applied == true) return true
+                        if (applied == false) Log.w(TAG, "Delta replay produced no state — rebuilding from genesis")
                         deleteState(address)
                     }
                 }
@@ -623,6 +636,21 @@ class DustRepository @Inject constructor(
                         if (firstEvent != null) {
                             writer.write(firstEvent.rawHex)
                             writer.newLine()
+
+                            // One event is enough to know whether this checkpoint can take the
+                            // delta at all: a state that sits behind its own cursor rejects the
+                            // very first insertion. Finding that out here costs a serialize and
+                            // one replay; finding it out after the stream costs the whole gap —
+                            // 368k events on a PreProd device — and then the genesis rebuild
+                            // anyway.
+                            if (baseState != null) {
+                                writer.flush()
+                                if (!checkpointAccepts(baseState, dustSeed, tempFile)) {
+                                    baseState.close()
+                                    throw CheckpointRejectedDelta(firstEvent.id)
+                                }
+                            }
+
                             latestEventId = firstEvent.id
                             totalEvents++
 
@@ -755,6 +783,59 @@ class DustRepository @Inject constructor(
         spillFileFor(address).delete()
         dustStateDataStore.edit { prefs -> prefs.remove(spillCursorKey(address)) }
     }
+
+    /**
+     * Reclaim spill files that no sync can ever read again.
+     *
+     * Before the spill was named per address it was named per attempt, so every failed genesis
+     * sync left its stream behind — nine files and 1.0GB on one device here. Nothing collects
+     * those: the current code only knows the name it would write itself.
+     *
+     * A file is kept when it is this address's spill, when it is the retained spill of an address
+     * that still has a resume cursor, or when it was written recently enough to belong to a sync
+     * that is still running.
+     */
+    private suspend fun discardAbandonedSpills(currentAddress: String) {
+        val directory = spillFileFor(currentAddress).parentFile ?: return
+        val spillsInUse = dustStateDataStore.data.first().asMap().keys
+            .map { it.name }
+            .filter { it.startsWith(SPILL_CURSOR_PREFIX) }
+            .map { spillFileFor(it.removePrefix(SPILL_CURSOR_PREFIX)).name }
+            .toSet() + spillFileFor(currentAddress).name
+        val writtenBefore = currentTimeMillis() - ABANDONED_SPILL_AGE_MS
+
+        directory.listFiles { file ->
+            file.name.startsWith(SPILL_PREFIX) && file.name.endsWith(SPILL_SUFFIX)
+        }?.forEach { file ->
+            if (file.name in spillsInUse || file.lastModified() >= writtenBefore) return@forEach
+            val megabytes = file.length() / 1024 / 1024
+            if (file.delete()) Log.i(TAG, "Deleted an abandoned spill: ${file.name} (${megabytes}MB)")
+        }
+    }
+
+    /**
+     * Can [baseState] take the delta that starts in [firstEvents]?
+     *
+     * The probe runs on a copy, through the same file replay the real sync uses, so a pass here
+     * means the same thing a pass there does. Serialization is root-lossless, so the copy's
+     * commitment frontier is the checkpoint's own.
+     */
+    private fun checkpointAccepts(
+        baseState: DustLocalState,
+        dustSeed: ByteArray,
+        firstEvents: java.io.File,
+    ): Boolean {
+        val serialized = baseState.serialize() ?: return true
+        val copy = DustLocalState.deserialize(serialized) ?: return true
+        return copy.use { probe ->
+            val applied = probe.replayEventsFromFile(dustSeed, firstEvents.absolutePath)
+            applied?.close()
+            applied != null
+        }
+    }
+
+    /** A checkpoint whose state sits behind its own cursor, so the delta can never apply. */
+    private class CheckpointRejectedDelta(val eventId: Long) : Exception()
 
     /**
      * Replay a chunk of events into the state IN MEMORY. No serialization.
