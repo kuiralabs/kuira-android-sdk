@@ -1,8 +1,10 @@
 package com.midnight.kuira.sdk.walletruntime
 
 import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,7 +31,15 @@ class SessionLockTest {
     private val provider = mockk<MidnightSdkProvider>(relaxed = true)
     private val walletSeedSource = mockk<com.midnight.kuira.sdk.walletseed.WalletSeedSource>(relaxed = true)
 
+    /**
+     * A lock for a session that HAS a sigil — the precondition for locking to mean anything.
+     * [SessionLock] declines to lock a sigil-less session (there is no seed to protect), so every
+     * test about lock policy has to state that a sigil exists or it is testing the skip path
+     * instead. A relaxed mock answers `hasSigil()` with `false`, which is precisely the sigil-less
+     * case, so leaving it unstubbed would silently turn these tests green for the wrong reason.
+     */
     private fun newLock() = SessionLock(provider, walletSeedSource).apply {
+        every { walletSeedSource.hasSigil() } returns true
         idleTimeoutMs = 1_000
         backgroundGraceMs = 500
         backgroundLifetimeMs = 5_000 // background seed-lifetime ceiling
@@ -266,5 +276,107 @@ class SessionLockTest {
 
         outer.close()
         verify(exactly = 1) { provider.close() } // last release runs it
+    }
+
+    /**
+     * The trap, reproduced: a sigil-less session that locks can never be unlocked.
+     *
+     * Found on a real device. bboard on a fresh install showed LOCKED with "Authentication didn't
+     * complete — tap to try again", and every tap failed identically because `ensureSeedReady`
+     * throws [SigilRequiredException] when no sigil has been forged — there is no seed for any
+     * biometric to produce. The only control on that screen is the unlock, so the only escape was
+     * force-stopping the app. Logged as:
+     *   `SessionLock: Unlock failed (SigilRequiredException) — staying locked`
+     *
+     * Before the fix the catch-all treated this as just another failed attempt and left `locked`
+     * true, so this test fails on the last assertion. After, the lock lifts (nothing to protect)
+     * and [SessionLock.sigilRequired] says why, so the UI can stop inviting a pointless retry.
+     */
+    @Test
+    fun `unlock with no sigil lifts the lock instead of stranding the user on it`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val activity = mockk<FragmentActivity>(relaxed = true)
+        lock.lockNow()
+        assertTrue("precondition: a sigil-bearing session locks", lock.locked.value)
+
+        // The sigil is gone by the time the unlock runs — a fresh install, or a restore that
+        // dropped it. Retrying this cannot ever succeed.
+        every { walletSeedSource.hasSigil() } returns false
+        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+
+        val ok = lock.unlock(activity)
+
+        assertFalse("unlock cannot succeed without a sigil", ok)
+        assertTrue("the gate must be able to say WHY, not just 'try again'", lock.sigilRequired.value)
+        assertFalse(
+            "a session with no sigil has no seed to protect — staying locked strands the user " +
+                "on a screen whose only control cannot work",
+            lock.locked.value,
+        )
+    }
+
+    /** Locking a sigil-less session is the state the test above has to recover from — don't enter it. */
+    @Test
+    fun `a sigil-less session is never locked in the first place`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        every { walletSeedSource.hasSigil() } returns false
+
+        lock.lockNow()
+        assertFalse("no sigil means no seed to protect, so no lock", lock.locked.value)
+        verify(exactly = 0) { provider.close() }
+
+        lock.onScreenOff()
+        runCurrent()
+        assertFalse("screen-off must not lock a sigil-less session either", lock.locked.value)
+    }
+
+    /**
+     * The flag must not outlive the condition it describes.
+     *
+     * Caught reviewing the fix, not by the tests above: `sigilRequired` was only cleared on a
+     * SUCCESSFUL unlock, so after forging a sigil it stayed true, and the next ordinary lock
+     * rendered "you don't have a sigil on this device yet" over a session that plainly did —
+     * while also suppressing the retry hint that an ordinary lock needs.
+     */
+    @Test
+    fun `forging a sigil clears the stale no-sigil flag before the next lock`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val activity = mockk<FragmentActivity>(relaxed = true)
+
+        // 1. Reach the sigil-less state so the flag is set.
+        lock.lockNow()
+        every { walletSeedSource.hasSigil() } returns false
+        coEvery { walletSeedSource.ensureSeedReady(activity) } throws SigilRequiredException()
+        lock.unlock(activity)
+        assertTrue("precondition: the no-sigil flag is set", lock.sigilRequired.value)
+
+        // 2. The user forges a sigil, then the session locks normally later on.
+        every { walletSeedSource.hasSigil() } returns true
+        lock.lockNow()
+
+        assertTrue("a sigil-bearing session still locks", lock.locked.value)
+        assertFalse(
+            "the lock screen must not claim there is no sigil once one has been forged",
+            lock.sigilRequired.value,
+        )
+    }
+
+    /** The retryable case must keep its old behaviour: a cancelled biometric stays locked. */
+    @Test
+    fun `a cancelled biometric still stays locked and is not reported as a missing sigil`() = runTest {
+        val lock = newLock().also { it.scope = this }
+        val activity = mockk<FragmentActivity>(relaxed = true)
+        lock.lockNow()
+        coEvery { walletSeedSource.ensureSeedReady(activity) } throws
+            IllegalStateException("biometric cancelled")
+
+        val ok = lock.unlock(activity)
+
+        assertFalse("a cancelled biometric is still a failed unlock", ok)
+        assertTrue("retryable failure must KEEP the lock", lock.locked.value)
+        assertFalse(
+            "a cancelled biometric is retryable — it must not be reported as a missing sigil",
+            lock.sigilRequired.value,
+        )
     }
 }

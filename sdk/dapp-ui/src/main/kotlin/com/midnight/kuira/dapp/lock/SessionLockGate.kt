@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +126,13 @@ private fun SessionLockScreen(
     var unlocking by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
 
+    // A failed unlock is normally retryable, so the copy below says "try again". The one failure
+    // that is NOT retryable is a missing sigil: there is no seed for any biometric to produce, so
+    // every retry fails the same way. SessionLock lifts the lock in that case (nothing to protect),
+    // which dismisses this gate — but if it is ever shown in that state, say what is actually wrong
+    // rather than inviting a retry that cannot work.
+    val sigilRequired by sessionLock.sigilRequired.collectAsState()
+
     // Match the rest of the app: resolve the user's persisted appearance + light/dark. ThemeStore is
     // durable, so the lock surface is themed even on a cold start, before the wallet panel composes.
     val colors = remember {
@@ -209,8 +217,13 @@ private fun SessionLockScreen(
             )
             Spacer(modifier = Modifier.height(LOCK_GAP_TITLE_BODY))
             Text(
-                "Your session is locked. Unlock with your device biometric to " +
-                    "continue. Your identity stays signed in.",
+                if (sigilRequired) {
+                    "You don't have a sigil on this device yet, so there's nothing to unlock. " +
+                        "Forge one from the sigil chip in the top bar to get started."
+                } else {
+                    "Your session is locked. Unlock with your device biometric to " +
+                        "continue. Your identity stays signed in."
+                },
                 color = colors.onSheetDim,
                 fontSize = LOCK_BODY_SIZE,
                 lineHeight = LOCK_BODY_LINE_HEIGHT,
@@ -219,7 +232,7 @@ private fun SessionLockScreen(
             Spacer(modifier = Modifier.height(LOCK_GAP_BODY_PANEL))
             // A failed attempt is a quiet retry line ABOVE the button — no card, monochrome (auth
             // retry isn't a financial-danger signal, so never red).
-            if (failed && !unlocking) {
+            if (failed && !unlocking && !sigilRequired) {
                 Text(
                     "Authentication didn't complete — tap to try again.",
                     color = colors.onSheetSubtle,

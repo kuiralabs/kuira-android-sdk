@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.sdk.SyncStatus
 import com.midnight.kuira.sdk.walletseed.WalletSeedSource
 import dagger.hilt.EntryPoint
@@ -109,6 +110,21 @@ class SessionLock @Inject constructor(
      * (that would defeat -264). Cleared when the SDK is rebuilt (re-auth / network switch).
      */
     val hardLocked: StateFlow<Boolean> = _hardLocked.asStateFlow()
+
+    private val _sigilRequired = MutableStateFlow(false)
+
+    /**
+     * True when an unlock failed because no sigil exists, as opposed to any retryable
+     * authentication failure.
+     *
+     * The distinction is the whole point: a cancelled or failed biometric means "try again", and
+     * tapping unlock can genuinely succeed. [SigilRequiredException] means there is nothing to
+     * authenticate against, so every retry fails identically and a UI that says "tap to try again"
+     * is telling the user to repeat something with no success path. The gate reads this to say what
+     * is actually wrong, and the guard in [doLock]/[softLock] means a correctly-behaving session
+     * never gets here in the first place.
+     */
+    val sigilRequired: StateFlow<Boolean> = _sigilRequired.asStateFlow()
 
     private val _inForeground = MutableStateFlow(false)
 
@@ -250,14 +266,27 @@ class SessionLock @Inject constructor(
         return try {
             val seed = walletSeedSource.ensureSeedReady(activity)
             seed.fill(0)
+            _sigilRequired.value = false
             _locked.value = false
             Log.i(TAG, "Session unlocked — re-authenticated, lock lifted")
             true
         } catch (ce: CancellationException) {
             throw ce
+        } catch (e: SigilRequiredException) {
+            // NOT the same as a cancelled biometric. There is no sigil, so there is no seed for
+            // any amount of re-authentication to produce: every retry fails identically. Lifting
+            // the lock is the correct response rather than a security hole — the lock exists to
+            // guard a decrypted seed, and a session without a sigil has none. Leaving it locked
+            // strands the user on a screen whose only control cannot work, with no way back to the
+            // forge but killing the app.
+            Log.w(TAG, "Unlock found no sigil — lifting the lock; there is no seed to protect", e)
+            _sigilRequired.value = true
+            _locked.value = false
+            _hardLocked.value = false
+            false
         } catch (e: Exception) {
-            // Every failure mode here (biometric cancelled, no sigil, Keystore
-            // error) means the same thing: stay locked. Logged, not swallowed.
+            // Retryable: biometric cancelled, Keystore error, prompt contention. Stay locked —
+            // tapping unlock again can genuinely succeed. Logged, not swallowed.
             Log.w(TAG, "Unlock failed (${e.javaClass.simpleName}) — staying locked", e)
             false
         }
@@ -349,8 +378,33 @@ class SessionLock @Inject constructor(
         doLock(reason)
     }
 
+    /**
+     * True when there is no sigil, and therefore no seed for a lock to protect.
+     *
+     * Both lock paths consult this because locking such a session is pure harm: the gate's only
+     * control is an unlock, that unlock calls `ensureSeedReady`, and with no sigil that throws
+     * [SigilRequiredException] every single time. The user is then stranded on a screen telling
+     * them to retry an operation that cannot succeed, with no route back to the forge but killing
+     * the app. The lock exists to re-gate a DECRYPTED seed; before a sigil is forged there is
+     * nothing decrypted and nothing to re-gate, so declining to lock takes nothing away.
+     */
+    private fun noSigilToProtect(reason: String): Boolean {
+        if (walletSeedSource.hasSigil()) {
+            // Clear a stale flag from an earlier sigil-less unlock. Both lock paths funnel through
+            // here, so this is the one place that reliably sees "a sigil exists now". Without it
+            // the flag survives the forge, and the NEXT ordinary lock renders "you don't have a
+            // sigil yet" over a session that plainly does — swallowing the retry hint that lock
+            // actually needs.
+            _sigilRequired.value = false
+            return false
+        }
+        Log.i(TAG, "Lock ($reason) SKIPPED — no sigil forged, so there is no seed to protect")
+        return true
+    }
+
     /** The actual lock: drop the cached SDK + force re-auth. Bypasses holds. */
     private fun doLock(reason: String) {
+        if (noSigilToProtect(reason)) return
         Log.i(TAG, "Locking session ($reason) — dropping cached SDK + forcing re-auth")
         // A real wipe clears every pending timer — including the background lifetime ceiling — so
         // none can fire a redundant second lock afterward (e.g. screen-off wiped, then the ceiling).
@@ -391,6 +445,7 @@ class SessionLock @Inject constructor(
      * separately (it must key off operation/match holds, not a blind timer).
      */
     private fun softLock(reason: String) {
+        if (noSigilToProtect(reason)) return
         Log.i(TAG, "Soft-locking session ($reason) — gating UI + re-auth, KEEPING the SDK alive for monitoring")
         _locked.value = true
         walletSeedSource.requireFreshAuthNext()
