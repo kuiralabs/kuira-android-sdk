@@ -54,8 +54,16 @@ class ConnectedAPIHandler(
 
     fun getConfiguration(): Configuration {
         return Configuration(
-            indexerUri = networkConfig.indexerGraphqlUrl,
-            indexerWsUri = networkConfig.indexerWsUrl,
+            // The connector protocol passes URIs only, so a credentialed indexer has to carry
+            // it in the URI or the dApp gets a 403.
+            indexerUri = NetworkConfig.withCredentialInUrl(
+                networkConfig.indexerGraphqlUrl,
+                networkConfig.indexerCredential,
+            ),
+            indexerWsUri = NetworkConfig.withCredentialInUrl(
+                networkConfig.indexerWsUrl,
+                networkConfig.indexerCredential,
+            ),
             substrateNodeUri = networkConfig.nodeRpcUrl,
             networkId = networkConfig.network.name.lowercase(),
         )

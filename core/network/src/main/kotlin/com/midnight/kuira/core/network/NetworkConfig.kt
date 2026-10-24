@@ -106,6 +106,16 @@ data class NetworkConfig(
         const val INDEXER_GRAPHQL_PATH = "/graphql"
         const val INDEXER_WS_PATH = "/graphql/ws"
 
+        /**
+         * [url] with [credential] as a query parameter, for a consumer that cannot send a header.
+         *
+         * The dApp connector protocol's Configuration carries URIs and nothing else, so a
+         * Blockfrost endpoint handed over without the credential answers 403. The result IS a
+         * secret: everywhere with a header channel uses [indexerGraphqlUrl] + [indexerCredential].
+         */
+        fun withCredentialInUrl(url: String, credential: IndexerCredential?): String =
+            if (credential == null) url else "$url?${credential.header}=${credential.value}"
+
         /** Mask a `project_id` value. Safe on any string, with or without one. */
         fun redactProjectId(url: String): String =
             url.replace(Regex("($BLOCKFROST_PROJECT_ID_PARAM=)[^&\\s]+"), "$1…")
