@@ -703,7 +703,7 @@ class DustRepository @Inject constructor(
             // A genesis spill that did NOT reach the end is the resume point for the next
             // attempt — the ~200MB of events already streamed, which is the expensive part.
             // Everything else is dead weight in a cache dir Android reclaims when over quota.
-            if (reachedTheEnd || fromId != null) {
+            if (reachedTheEnd || fromId != null || latestEventId == NO_EVENT_ID) {
                 discardSpill(address)
             } else {
                 Log.i(TAG, "Keeping the genesis spill at event $latestEventId for the next attempt")
