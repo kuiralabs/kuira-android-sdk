@@ -56,6 +56,8 @@ class WalletSeedSource @Inject constructor(
     private val sigilStateStore: SigilStateStore,
 ) : RecoverySeedStore {
 
+    private val appContext: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -119,8 +121,8 @@ class WalletSeedSource @Inject constructor(
      * the full bootstrap contract.
      */
     suspend fun ensureSeedReady(activity: FragmentActivity): ByteArray = bootstrapMutex.withLock {
-        devSeedBytes(BuildConfig.DEBUG, BuildConfig.DEV_SEED_HEX)?.let { devSeed ->
-            Log.w(TAG, "DEV: bypassing PRF — using dev seed from local.properties (${devSeed.size} bytes)")
+        DevSeed.resolve(appContext)?.let { devSeed ->
+            Log.w(TAG, "DEV: bypassing PRF — using the dev seed this app declares (${devSeed.size} bytes)")
             return@withLock devSeed
         }
 
@@ -265,9 +267,9 @@ class WalletSeedSource @Inject constructor(
          * 128-char hex string (64 bytes), decode and return; otherwise
          * return null and let the PRF path run.
          *
-         * Extracted so the gate is unit-testable without standing up a
-         * BuildConfig fixture. The call site passes
-         * [BuildConfig.DEBUG] + [BuildConfig.DEV_SEED_HEX]; tests pass
+         * Extracted so the gate is unit-testable without standing up an
+         * app fixture. [DevSeed] supplies both values from the host app —
+         * its debuggable flag and its manifest meta-data; tests pass
          * whatever values they need.
          *
          * The 64-byte length is enforced because anything else would

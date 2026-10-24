@@ -76,14 +76,16 @@ class KuiraContractPlugin : Plugin<Project> {
         // needs more; each step past the baseline doubles the file it adds to the APK.
         extension.maxCircuitK.convention(ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K)
 
-        // The SDK reads this from manifest meta-data at runtime; the value comes from the app's
+        // The SDK reads these from manifest meta-data at runtime; the values come from the app's
         // own gitignored local.properties. Always set, defaulting to empty — an undefined
-        // placeholder fails the manifest merge for every app, PreProd or not.
+        // placeholder fails the manifest merge for every app, whether or not it uses the feature.
         project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
-            BlockfrostPlaceholderRegistrar.register(
+            ManifestPlaceholderRegistrar.register(
                 project,
-                BLOCKFROST_PLACEHOLDER,
-                readBlockfrostProjectId(project),
+                mapOf(
+                    BLOCKFROST_PLACEHOLDER to readBlockfrostProjectId(project),
+                    DEV_SEED_PLACEHOLDER to readLocalProperty(project, DEV_SEED_PROPERTY),
+                ),
             )
         }
 
@@ -374,15 +376,30 @@ class KuiraContractPlugin : Plugin<Project> {
         /** Key in the app's gitignored `local.properties`. */
         internal const val BLOCKFROST_PROPERTY = "kuira.blockfrost.projectId"
 
+        /**
+         * Manifest placeholder for the dev-seed escape hatch, and its `local.properties` key.
+         *
+         * It travels from the APP's build rather than the SDK's because the seed belongs to
+         * whoever is testing: baked into the library it would ride inside the published artifact,
+         * and gated on the library's own `BuildConfig.DEBUG` it would be dead code in every
+         * consumer, since a published AAR is a release build.
+         */
+        internal const val DEV_SEED_PLACEHOLDER = "kuiraDevSeed"
+
+        internal const val DEV_SEED_PROPERTY = "kuira.dev.seed"
+
         internal const val LOCAL_PROPERTIES = "local.properties"
 
         /** Empty when unset — an undefined placeholder fails the manifest merge. */
         internal fun readBlockfrostProjectId(project: Project): String =
+            readLocalProperty(project, BLOCKFROST_PROPERTY)
+
+        internal fun readLocalProperty(project: Project, key: String): String =
             project.rootProject.file(LOCAL_PROPERTIES)
                 .takeIf { it.exists() }
                 ?.let { file ->
                     Properties().apply { file.reader().use { load(it) } }
-                        .getProperty(BLOCKFROST_PROPERTY, "")
+                        .getProperty(key, "")
                         .trim()
                 }
                 .orEmpty()

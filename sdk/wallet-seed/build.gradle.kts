@@ -1,33 +1,8 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.google.hilt)
     alias(libs.plugins.ksp)
-}
-
-/**
- * Dev-seed escape hatch — same wiring as the original Step-3 home in
- * `sdk:dapp-ui`. Reads `kuira.dev.seed` from the root `local.properties`
- * at configure time and exposes it as `BuildConfig.DEV_SEED_HEX`. When
- * set, [WalletSeedSource.ensureSeedReady] bypasses the passkey PRF
- * path and returns the supplied 64-byte BIP-39 seed directly.
- *
- * Lives in this module (not dapp-ui) so non-UI hosts — Kicks's
- * `MatchManager`, future game/agent runtimes — get the same dev
- * workflow without depending on Compose.
- *
- * See sdk/wallet-seed/README.md (or sdk/dapp-ui/README.md until that
- * exists) for the local.properties workflow.
- */
-val devSeedHex: String = run {
-    val localProps = rootProject.file("local.properties")
-    if (localProps.exists()) {
-        val props = Properties()
-        localProps.reader().use { reader -> props.load(reader) }
-        props.getProperty("kuira.dev.seed", "").trim()
-    } else ""
 }
 
 android {
@@ -38,7 +13,6 @@ android {
         // SeedVault (core:auth) needs API 30; we depend on it transitively.
         minSdk = 30
         consumerProguardFiles("consumer-rules.pro")
-        buildConfigField("String", "DEV_SEED_HEX", "\"$devSeedHex\"")
     }
 
     compileOptions {
@@ -47,11 +21,6 @@ android {
     }
     kotlin {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) }
-    }
-    buildFeatures {
-        // BuildConfig.DEBUG gates the dev-seed branch (R8 DCE in release).
-        // BuildConfig.DEV_SEED_HEX carries the local.properties override.
-        buildConfig = true
     }
 
     testOptions {
