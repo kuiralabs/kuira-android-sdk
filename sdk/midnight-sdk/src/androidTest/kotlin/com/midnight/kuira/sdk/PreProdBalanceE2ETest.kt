@@ -7,6 +7,7 @@ import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
 import java.math.BigInteger
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,6 +84,106 @@ class PreProdBalanceE2ETest {
         }
     }
 
+    /**
+     * An unreachable indexer must leave [SyncStatus.Failed], never UpToDate.
+     *
+     * This is the OTHER half of the PreProd outage: the balance read as 0 and the panel labelled it
+     * "Synced", because every sync leg swallowed its exception and the tracked span settled on
+     * UpToDate regardless. A well-formed but wrong project id reproduces that shape — Blockfrost
+     * answers 403 — and needs no credentials and no funded wallet, so it runs everywhere.
+     */
+    @Test
+    fun anUnreachableIndexerLeavesSyncFailedNotUpToDate() = runBlocking {
+        val seed = ByteArray(SEED_BYTES) { WRONG_ID_SEED_BYTE }
+        val sdk = MidnightSdk.Builder(InstrumentationRegistry.getInstrumentation().targetContext)
+            .network(MidnightNetwork.PREPROD)
+            .blockfrostProjectId(WRONG_PROJECT_ID)
+            .seed(seed)
+            .provingMode(ProvingMode.REMOTE)
+            .build()
+        seed.fill(0)
+
+        try {
+            withTimeout(UNREACHABLE_TIMEOUT_MS) { sdk.wallet.refresh() }
+            val status = sdk.wallet.syncStatus.value
+            Log.i(TAG, "syncStatus after a 403 indexer: $status")
+            assertTrue(
+                "A rejected indexer left syncStatus on $status. UpToDate here is the defect that " +
+                    "made the PreProd outage invisible: a balance of 0 labelled \"Synced\".",
+                status is SyncStatus.Failed,
+            )
+        } finally {
+            runCatching { sdk.close() }
+        }
+    }
+
+    /**
+     * The action a user actually lost: a send on PreProd.
+     *
+     * The balance arrives over the WebSocket; a send needs HTTP. When our client appended
+     * `/graphql` to Blockfrost — which serves GraphQL at its API root — every HTTP query 404'd
+     * while balances kept arriving, so the wallet looked healthy and only Send failed. No test
+     * issued an HTTP query against PreProd, so nothing caught it.
+     *
+     * Sends to index 1 of the SAME seed: a fixed address, same owner, funds never leave.
+     */
+    @Test
+    fun aPreProdSendFinalizes() = runBlocking {
+        val args = InstrumentationRegistry.getArguments()
+        val seedHex = args.getString("seedHex")?.trim().orEmpty()
+        val projectId = args.getString("blockfrostProjectId")?.trim().orEmpty()
+        val recipient = args.getString("recipient")?.trim().orEmpty()
+
+        assertEquals("seedHex must be 128 hex chars (64 bytes)", SEED_HEX_LENGTH, seedHex.length)
+        assertTrue("blockfrostProjectId is required", projectId.startsWith("nightpreprod"))
+        assertTrue(
+            "recipient must be a PreProd address — the gate derives it from the same seed at index 1",
+            recipient.startsWith("mn_addr_preprod1"),
+        )
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val seed = seedHex.hexToBytes()
+        val sdk = MidnightSdk.Builder(context)
+            .network(MidnightNetwork.PREPROD)
+            .blockfrostProjectId(projectId)
+            .seed(seed)
+            .provingMode(ProvingMode.REMOTE)
+            .build()
+        seed.fill(0)
+
+        try {
+            sdk.wallet.refresh()
+            val before = sdk.wallet.balance().unshieldedNight
+            Log.i(TAG, "sender ${sdk.walletAddress} holds $before, sending to $recipient")
+            assertTrue(
+                "the gate wallet must hold more than the $SEND_WHOLE NIGHT it is about to send, " +
+                    "had $before — fund ${sdk.walletAddress}",
+                before > NIGHT_UNIT.multiply(BigInteger.valueOf(SEND_WHOLE)),
+            )
+
+            // Without registered dust the chain releases no fee token, so the send fails on a
+            // prerequisite rather than on the path under test. Registering is idempotent.
+            val registration = sdk.registerForDustGeneration()
+            Log.i(TAG, "dust registration: $registration")
+            sdk.wallet.refresh()
+
+            val stages = mutableListOf<MidnightSdk.SendProgress>()
+            val result = sdk.sendNight(recipient, NIGHT_UNIT.multiply(BigInteger.valueOf(SEND_WHOLE))) {
+                stages += it
+            }
+            Log.i(TAG, "send result=$result stages=$stages")
+
+            assertTrue(
+                "the send did not go through: $result (stages=$stages). An HTTP 404 here means " +
+                    "the GraphQL endpoint is wrong for this provider; a 403 means the credential " +
+                    "did not reach it.",
+                result is MidnightSdk.SendResult.Success || result is MidnightSdk.SendResult.Pending,
+            )
+        } finally {
+            runCatching { sdk.close() }
+        }
+    }
+
     private fun String.hexToBytes() = ByteArray(length / 2) {
         ((this[it * 2].digitToInt(16) shl 4) or this[it * 2 + 1].digitToInt(16)).toByte()
     }
@@ -92,6 +193,14 @@ class PreProdBalanceE2ETest {
     private companion object {
         private const val TAG = "PreProdBalance"
         private const val SEED_HEX_LENGTH = 128
+        private const val SEED_BYTES = 64
         private val NIGHT_UNIT = BigInteger("1000000")
+
+        // Well-formed (so NetworkConfig accepts it) but not a real project — Blockfrost 403s it,
+        // which is the same shape as the decommissioned indexer's 410.
+        private const val WRONG_PROJECT_ID = "nightpreprod0000000000000000000000000000"
+        private const val WRONG_ID_SEED_BYTE: Byte = 0x11
+        private const val UNREACHABLE_TIMEOUT_MS = 180_000L
+        private const val SEND_WHOLE = 1L
     }
 }
