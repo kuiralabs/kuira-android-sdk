@@ -16,14 +16,19 @@
 #
 # Usage:
 #   scripts/e2e/sdk-test-gate.sh [emulator-serial]
-#   (serial defaults to the first `adb devices` entry)
+#   (serial: the argument, else $ANDROID_SERIAL, else the first `adb devices` entry)
 #
 # Prereq you must do yourself: `mn localnet up` (this script verifies it, doesn't start it).
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
-SERIAL="${1:-$(adb devices | awk '/\tdevice$/{print $1; exit}')}"
+# Honour an exported ANDROID_SERIAL before falling back to "first device attached". Every adb and
+# gradle call below already respects that variable, so ignoring it here meant the caller could ask
+# for one device and silently have the whole ~30-min run execute against another — which is what
+# happened with a phone and an emulator both attached: the phone sorts first, so an explicit
+# ANDROID_SERIAL=emulator-5554 ran on the phone and the log said so in a line easy to miss.
+SERIAL="${1:-${ANDROID_SERIAL:-$(adb devices | awk '/\tdevice$/{print $1; exit}')}}"
 if [ -z "$SERIAL" ]; then
     # Name the actual state. An unauthorized phone IS attached and needs a tap on its screen,
     # which is a different fix from "connect a device", and the ~30-min run should not start

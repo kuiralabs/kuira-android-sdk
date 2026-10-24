@@ -79,15 +79,33 @@ val adbReverseLocalnet by tasks.registering {
             commandLine(adb, "devices")
             standardOutput = devicesOutput
         }
-        val physicalDevices = devicesOutput.toString()
+        val attached = devicesOutput.toString()
             .lineSequence()
             .drop(1) // header line
             .mapNotNull { line ->
                 val parts = line.trim().split(Regex("\\s+"))
                 if (parts.size >= 2 && parts[1] == "device") parts[0] else null
             }
-            .filterNot { it.startsWith("emulator-") }
             .toList()
+
+        // Forward on the device this BUILD is targeting, not on everything plugged into the
+        // laptop. ANDROID_SERIAL is what every adb and gradle call downstream already obeys, so
+        // ignoring it here made an unrelated handset fail a run aimed at the emulator: the task
+        // iterated all physical devices, hit a phone holding a stale listener on one port, and
+        // aborted the whole instrumented leg over a device the tests never touch.
+        val target = System.getenv("ANDROID_SERIAL")?.takeIf { it.isNotBlank() }
+        val physicalDevices = when {
+            target == null -> attached.filterNot { it.startsWith("emulator-") }
+            target.startsWith("emulator-") -> {
+                println("adbReverseLocalnet: target $target is an emulator — skipping (emulators use 10.0.2.2)")
+                return@doLast
+            }
+            target !in attached -> {
+                println("adbReverseLocalnet: target $target is not attached — skipping")
+                return@doLast
+            }
+            else -> listOf(target)
+        }
 
         if (physicalDevices.isEmpty()) {
             println("adbReverseLocalnet: no physical devices connected — skipping (emulators use 10.0.2.2)")
