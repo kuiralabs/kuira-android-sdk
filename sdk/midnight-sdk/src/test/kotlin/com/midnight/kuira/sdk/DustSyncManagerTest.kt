@@ -125,10 +125,12 @@ class DustSyncManagerTest {
         val manager = createManager(dustRepo = dustRepo)
         val result = manager.ensureSynced()
 
+        // The OUTCOME is that a usable state comes back. This used to also assert
+        // verify(deleteState) — pinning the recovery MECHANISM, so the test passed happily while
+        // that mechanism was destroying checkpoints on PreProd, and would have failed when the
+        // destruction was fixed. A test that asserts a step can never tell you the step is wrong.
         assertEquals(dustState, result)
-        // Called twice: first delta attempt, then full sync fallback
         verify(dustRepo, times(2)).syncFromBlockchain(any(), any(), any(), anyOrNull())
-        verify(dustRepo).deleteState("test_addr")
     }
 
     // ── Close releases memory ──

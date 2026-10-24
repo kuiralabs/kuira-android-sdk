@@ -20,6 +20,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.midnight.kuira.core.indexer.model.RawLedgerEvent
 
 /**
  * Decode a hex string to bytes, streaming directly into the output array.
@@ -119,6 +120,12 @@ class DustRepository @Inject constructor(
 
     companion object {
         private const val TAG = "DustRepository"
+
+        /** How often the long replay reports progress, in events. */
+        private const val PROGRESS_LOG_EVERY = 5000
+
+        /** Cursor sentinel for "nothing streamed yet" — event ids start at 0. */
+        private const val NO_EVENT_ID = -1L
 
         /** Replay spill file, written one hex event per line and read back natively. */
         private const val SPILL_PREFIX = "dust_events_"
@@ -535,6 +542,50 @@ class DustRepository @Inject constructor(
                     val flow = indexerClient.subscribeToDustEvents(fromId = fromId)
                     val isDelta = fromId != null
 
+                    // Stream into the writer, reconnecting when the transport drops, for as long
+                    // as each reconnect keeps making forward progress. A PreProd genesis replay
+                    // is ~1.7M events over many minutes and the WebSocket's pong timeout fires
+                    // every 20-60s; failing the whole sync on a drop discarded every event
+                    // received so far, so the next attempt restarted at zero and the sync could
+                    // never converge. A reconnect that yields nothing new still fails, so a
+                    // genuinely dead indexer is not retried forever.
+                    suspend fun streamInto(initial: Flow<RawLedgerEvent>) {
+                        var stream = initial
+                        var resumedPast = NO_EVENT_ID
+                        while (true) {
+                            try {
+                                stream.collect { event ->
+                                    writer.write(event.rawHex)
+                                    writer.newLine()
+                                    latestEventId = event.id
+                                    totalEvents++
+
+                                    if (totalEvents % PROGRESS_LOG_EVERY == 0) {
+                                        Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                                        onProgress?.invoke(totalEvents, event.maxId.toInt())
+                                    }
+
+                                    if (event.id >= event.maxId) {
+                                        throw StreamingCompleteSignal()
+                                    }
+                                }
+                                return
+                            } catch (e: StreamingCompleteSignal) {
+                                throw e
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                if (latestEventId <= resumedPast) throw e
+                                resumedPast = latestEventId
+                                Log.w(
+                                    TAG,
+                                    "Dust stream dropped after $totalEvents events (id=$latestEventId) — resuming: ${e.message}",
+                                )
+                                stream = indexerClient.subscribeToDustEvents(fromId = latestEventId + 1)
+                            }
+                        }
+                    }
+
                     if (isDelta) {
                         // Wait up to the timeout for the first new event. firstOrNull
                         // returns null if the subscription completes with nothing new;
@@ -557,40 +608,11 @@ class DustRepository @Inject constructor(
                             totalEvents++
 
                             if (firstEvent.id < firstEvent.maxId) {
-                                val resumeFlow = indexerClient.subscribeToDustEvents(fromId = firstEvent.id + 1)
-                                resumeFlow.collect { nextEvent ->
-                                    writer.write(nextEvent.rawHex)
-                                    writer.newLine()
-                                    latestEventId = nextEvent.id
-                                    totalEvents++
-
-                                    if (totalEvents % 5000 == 0) {
-                                        Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
-                                        onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
-                                    }
-
-                                    if (nextEvent.id >= nextEvent.maxId) {
-                                        throw StreamingCompleteSignal()
-                                    }
-                                }
+                                streamInto(indexerClient.subscribeToDustEvents(fromId = firstEvent.id + 1))
                             }
                         }
                     } else {
-                        flow.collect { event ->
-                            writer.write(event.rawHex)
-                            writer.newLine()
-                            latestEventId = event.id
-                            totalEvents++
-
-                            if (totalEvents % 5000 == 0) {
-                                Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
-                                onProgress?.invoke(totalEvents, event.maxId.toInt())
-                            }
-
-                            if (event.id >= event.maxId) {
-                                throw StreamingCompleteSignal()
-                            }
-                        }
+                        streamInto(flow)
                     }
                 }
             } catch (_: StreamingCompleteSignal) {

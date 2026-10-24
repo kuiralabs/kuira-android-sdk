@@ -1,0 +1,156 @@
+package com.midnight.kuira.core.indexer.repository
+
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import com.midnight.kuira.core.indexer.api.IndexerClient
+import com.midnight.kuira.core.indexer.database.DustDao
+import com.midnight.kuira.core.indexer.dust.DustBalanceCalculator
+import com.midnight.kuira.core.indexer.model.BlockInfo
+import com.midnight.kuira.core.indexer.model.DustSyncResult
+import com.midnight.kuira.core.indexer.model.NetworkState
+import com.midnight.kuira.core.indexer.model.RawLedgerEvent
+import com.midnight.kuira.core.indexer.model.UnshieldedTransactionUpdate
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+import java.io.IOException
+
+/**
+ * What a dust sync must survive.
+ *
+ * A PreProd genesis replay streams ~1.7M events over many minutes while the indexer WebSocket's
+ * pong timeout fires every 20-60 seconds. Each test here describes a way that combination used to
+ * discard all progress and start again at event zero — which is why the sync never converged.
+ *
+ * The streaming phase is plain Kotlin, so it runs here; the replay that needs the native ledger
+ * happens afterwards and is covered by the instrumented tier.
+ */
+class DustSyncResilienceTest {
+
+    /**
+     * A dropped connection must resume from the last event received.
+     *
+     * This is the defect that made PreProd unusable: the transport cannot stay up for the length
+     * of the replay, so a sync that cannot survive a drop can never finish.
+     */
+    @Test
+    fun `a dropped stream resumes from the event after the last one received`() = runTest {
+        val indexer = FakeIndexer(
+            genesis = emitsThenDrops(upToId = 2),
+            resume = { completesAtTip() },
+        )
+
+        runCatching { repositoryFor(indexer).syncFromBlockchain(ADDRESS, DUST_SEED) }
+
+        assertEquals(
+            "the resume must pick up after event 2, and must not start over",
+            listOf(null, 3L),
+            indexer.dustSubscriptionFromIds,
+        )
+    }
+
+    /** Several drops in one sync is the normal case on PreProd, not an edge case. */
+    @Test
+    fun `repeated drops keep moving forward instead of restarting`() = runTest {
+        val indexer = FakeIndexer(
+            genesis = emitsThenDrops(upToId = 2),
+            resume = { from -> if (from < 9) emitsThenDrops(upToId = from + 2) else completesAtTip() },
+        )
+
+        runCatching { repositoryFor(indexer).syncFromBlockchain(ADDRESS, DUST_SEED) }
+
+        assertEquals(
+            "each resume must start after the previous one's last event",
+            listOf(null, 3L, 6L, 9L),
+            indexer.dustSubscriptionFromIds,
+        )
+    }
+
+    /**
+     * A reconnect that yields nothing new must give up, or a genuinely unreachable indexer is
+     * retried forever. Forward progress is the licence to keep going.
+     */
+    @Test
+    fun `a stream that drops without progress is not retried forever`() = runTest {
+        val indexer = FakeIndexer(genesis = dropsImmediately(), resume = { dropsImmediately() })
+
+        val result = runCatching { repositoryFor(indexer).syncFromBlockchain(ADDRESS, DUST_SEED) }
+
+        assertTrue("an unreachable indexer must surface, not spin: $result", result.isFailure)
+        assertTrue(
+            "it must not have resubscribed without progress: ${indexer.dustSubscriptionFromIds}",
+            indexer.dustSubscriptionFromIds.size == 1,
+        )
+    }
+
+    // ── fixtures ──
+
+    private fun repositoryFor(indexer: IndexerClient): DustRepository {
+        val dataStore = mock<DataStore<Preferences>>()
+        whenever(dataStore.data).thenReturn(flowOf(mock()))
+        return DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), indexer)
+    }
+
+    private fun event(id: Long, maxId: Long = TIP) = RawLedgerEvent(id = id, rawHex = "00", maxId = maxId)
+
+    /** Emits 0..[upToId] then dies the way a pong timeout does. */
+    private fun emitsThenDrops(upToId: Long): Flow<RawLedgerEvent> = flow {
+        var id = currentCoroutineStart
+        while (id <= upToId) {
+            emit(event(id))
+            id++
+        }
+        throw IOException("sent ping but didn't receive pong within 20000ms")
+    }
+
+    private fun dropsImmediately(): Flow<RawLedgerEvent> = flow {
+        throw IOException("sent ping but didn't receive pong within 20000ms")
+    }
+
+    /** Reaching the tip is how the real stream signals it is done. */
+    private fun completesAtTip(): Flow<RawLedgerEvent> = flowOf(event(id = TIP, maxId = TIP))
+
+    private var currentCoroutineStart = 0L
+
+    private inner class FakeIndexer(
+        private val genesis: Flow<RawLedgerEvent>,
+        private val resume: (Long) -> Flow<RawLedgerEvent>,
+    ) : IndexerClient {
+        val dustSubscriptionFromIds = mutableListOf<Long?>()
+
+        override fun subscribeToDustEvents(fromId: Long?): Flow<RawLedgerEvent> {
+            dustSubscriptionFromIds.add(fromId)
+            if (fromId == null) return genesis
+            currentCoroutineStart = fromId
+            return resume(fromId)
+        }
+
+        override fun subscribeToUnshieldedTransactions(address: String, transactionId: Int?): Flow<UnshieldedTransactionUpdate> = error("not used")
+        override fun subscribeToZswapEvents(fromId: Long?): Flow<RawLedgerEvent> = error("not used")
+        override fun subscribeToBlocks(): Flow<BlockInfo> = error("not used")
+        override suspend fun getNetworkState(): NetworkState = error("not used")
+        override suspend fun getCurrentBlockWithParams(): BlockInfo = error("not used")
+        override suspend fun getEventsInRange(fromId: Long, toId: Long): List<RawLedgerEvent> = error("not used")
+        override suspend fun queryDustEvents(maxBlocks: Int): String = error("not used")
+        override suspend fun queryDustEventsDelta(fromId: Long, timeoutMs: Long): DustSyncResult = error("not used")
+        override suspend fun queryZswapEvents(): String = error("not used")
+        override suspend fun queryContractState(address: String): String = error("not used")
+        override suspend fun isHealthy(): Boolean = error("not used")
+        override fun close() = error("not used")
+        override suspend fun resetConnection() = error("not used")
+    }
+
+    private companion object {
+        private const val ADDRESS = "mn_addr_preprod1test"
+        private val DUST_SEED = ByteArray(32)
+
+        /** Far enough away that no fixture reaches it by accident. */
+        private const val TIP = 1_728_618L
+    }
+}
