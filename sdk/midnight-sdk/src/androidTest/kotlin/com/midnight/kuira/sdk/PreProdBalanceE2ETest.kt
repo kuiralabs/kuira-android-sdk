@@ -152,6 +152,12 @@ class PreProdBalanceE2ETest {
         seed.fill(0)
 
         try {
+            // Register BEFORE the first refresh. Without registered dust the chain releases no
+            // fee token, and a refresh then replays the whole chain only to find nothing.
+            // Registration is idempotent.
+            val registration = sdk.registerForDustGeneration()
+            Log.i(TAG, "dust registration: $registration")
+
             sdk.wallet.refresh()
             val before = sdk.wallet.balance().unshieldedNight
             Log.i(TAG, "sender ${sdk.walletAddress} holds $before, sending to $recipient")
@@ -160,12 +166,6 @@ class PreProdBalanceE2ETest {
                     "had $before — fund ${sdk.walletAddress}",
                 before > NIGHT_UNIT.multiply(BigInteger.valueOf(SEND_WHOLE)),
             )
-
-            // Without registered dust the chain releases no fee token, so the send fails on a
-            // prerequisite rather than on the path under test. Registering is idempotent.
-            val registration = sdk.registerForDustGeneration()
-            Log.i(TAG, "dust registration: $registration")
-            sdk.wallet.refresh()
 
             val stages = mutableListOf<MidnightSdk.SendProgress>()
             val result = sdk.sendNight(recipient, NIGHT_UNIT.multiply(BigInteger.valueOf(SEND_WHOLE))) {
