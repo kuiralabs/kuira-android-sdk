@@ -70,7 +70,13 @@ class NetworkRepository(
      * Primarily intended for Hilt module initialization at app startup.
      */
     fun getNetworkConfigBlocking(): NetworkConfig {
-        return NetworkConfig.forNetwork(getSelectedNetworkBlocking())
+        // The Blockfrost project id is only consulted for PreProd, whose indexer authenticates on
+        // every request; for Preview and localnet it resolves to null and is ignored. Resolved
+        // here rather than at each call site so every path that builds a config gets it.
+        return NetworkConfig.forNetwork(
+            getSelectedNetworkBlocking(),
+            BlockfrostProjectId.resolve(context),
+        )
     }
 
     /**

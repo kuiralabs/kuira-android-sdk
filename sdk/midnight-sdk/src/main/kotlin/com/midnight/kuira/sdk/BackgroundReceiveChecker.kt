@@ -11,6 +11,7 @@ import com.midnight.kuira.core.indexer.sync.SyncState
 import com.midnight.kuira.core.indexer.sync.SyncStateManager
 import com.midnight.kuira.core.indexer.utxo.UtxoManager
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.BlockfrostProjectId
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -47,7 +48,12 @@ class BackgroundReceiveChecker(private val appContext: Context) {
      * transaction id) before notifying.
      */
     suspend fun newReceipts(network: MidnightNetwork, address: String): List<ReceiptEvent>? {
-        val config = NetworkConfig.forNetwork(network)
+        // PreProd's indexer authenticates every request, so its config needs the Blockfrost
+        // project id — resolved from the host app's manifest. Null for Preview and localnet.
+        val config = NetworkConfig.forNetwork(
+            network,
+            BlockfrostProjectId.resolve(appContext),
+        )
         // Match how MidnightSdk builds it: localnet uses HTTP, which the default
         // (production) constructor rejects — pass the network's developmentMode flag.
         val indexerClient = IndexerClientImpl(

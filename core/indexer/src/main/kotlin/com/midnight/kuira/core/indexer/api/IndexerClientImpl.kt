@@ -130,7 +130,7 @@ class IndexerClientImpl(
         // Validate configuration
         if (!developmentMode && !baseUrl.startsWith("https://")) {
             throw IllegalArgumentException(
-                "Production mode requires HTTPS. Got: $baseUrl\n" +
+                "Production mode requires HTTPS. Got: ${NetworkConfig.redactProjectId(baseUrl)}\n" +
                 "Use developmentMode=true for HTTP testing (INSECURE)"
             )
         }
@@ -142,8 +142,14 @@ class IndexerClientImpl(
         }
     }
 
-    private val graphqlEndpoint = "$baseUrl/graphql"
-    private val wsEndpoint = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/graphql/ws"
+    // appendPath, NOT "$baseUrl/graphql": PreProd's base carries a query string
+    // (?project_id=<id>), and concatenating would put the path INSIDE the credential —
+    // ...?project_id=<id>/graphql — which fails as a bad project id and blames the wrong thing.
+    private val graphqlEndpoint = NetworkConfig.appendPath(baseUrl, "/graphql")
+    private val wsEndpoint = NetworkConfig.appendPath(
+        baseUrl.replace("http://", "ws://").replace("https://", "wss://"),
+        "/graphql/ws",
+    )
 
     /**
      * WebSocket client for subscriptions.

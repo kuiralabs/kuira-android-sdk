@@ -44,11 +44,18 @@ die()  { printf '  \033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
 # Each consumer: directory | package | launcher activity. Keep in step with scripts/release.sh,
 # which bumps the very same set of repos.
+# Checkout locations — same KUIRA_* overrides scripts/release.sh uses, so one layout change
+# does not have to be made twice.
+BBOARD="${KUIRA_BBOARD:-$HOME/Development/example-bboard-android}"
+STARTER="${KUIRA_STARTER:-$HOME/Development/kuira-starter-android}"
+TALLY="${KUIRA_TALLY:-$HOME/Development/kuira-examples/midnight-tally}"
+KICKS="${KUIRA_KICKS:-$PWD/examples/midnight-kicks}"
+
 CONSUMERS=(
-  "$HOME/Development/example-bboard-android|com.midnight.example.bboard|.BBoardActivity"
-  "$HOME/Development/kuira-starter-android|com.kuiralabs.starter.counter|.MainActivity"
-  "$HOME/Development/kuira-examples/midnight-tally|com.kuiraexamples.tally|.MainActivity"
-  "$PWD/examples/midnight-kicks|com.midnight.kicks|.KicksActivity"
+  "$BBOARD|com.midnight.example.bboard|.BBoardActivity"
+  "$STARTER|com.kuiralabs.starter.counter|.MainActivity"
+  "$TALLY|com.kuiraexamples.tally|.MainActivity"
+  "$KICKS|com.midnight.kicks|.KicksActivity"
 )
 
 echo

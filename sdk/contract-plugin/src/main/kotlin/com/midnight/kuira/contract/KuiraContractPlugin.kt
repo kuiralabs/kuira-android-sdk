@@ -8,6 +8,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.TaskProvider
+import java.util.Properties
 import java.util.concurrent.Callable
 
 /**
@@ -74,6 +75,17 @@ class KuiraContractPlugin : Plugin<Project> {
         // Universal parameters stop at the wallet's own sizes unless a consumer's contract
         // needs more; each step past the baseline doubles the file it adds to the APK.
         extension.maxCircuitK.convention(ProvisionWalletKeysTask.BASELINE_MAX_CIRCUIT_K)
+
+        // The SDK reads this from manifest meta-data at runtime; the value comes from the app's
+        // own gitignored local.properties. Always set, defaulting to empty — an undefined
+        // placeholder fails the manifest merge for every app, PreProd or not.
+        project.plugins.withId(ANDROID_APP_PLUGIN_ID) {
+            BlockfrostPlaceholderRegistrar.register(
+                project,
+                BLOCKFROST_PLACEHOLDER,
+                readBlockfrostProjectId(project),
+            )
+        }
 
         // Resolve source lazily so it picks up the consumer's
         // configuration even if it's set after these register calls.
@@ -355,6 +367,25 @@ class KuiraContractPlugin : Plugin<Project> {
         // String plugin ids used to gate the AGP source-registration touch
         // without referencing AGP types from this class (see afterEvaluate).
         internal const val ANDROID_APP_PLUGIN_ID = "com.android.application"
+
+        /** Manifest placeholder the app's `<meta-data>` substitutes; must match the manifests. */
+        internal const val BLOCKFROST_PLACEHOLDER = "blockfrostProjectId"
+
+        /** Key in the app's gitignored `local.properties`. */
+        internal const val BLOCKFROST_PROPERTY = "kuira.blockfrost.projectId"
+
+        internal const val LOCAL_PROPERTIES = "local.properties"
+
+        /** Empty when unset — an undefined placeholder fails the manifest merge. */
+        internal fun readBlockfrostProjectId(project: Project): String =
+            project.rootProject.file(LOCAL_PROPERTIES)
+                .takeIf { it.exists() }
+                ?.let { file ->
+                    Properties().apply { file.reader().use { load(it) } }
+                        .getProperty(BLOCKFROST_PROPERTY, "")
+                        .trim()
+                }
+                .orEmpty()
         internal const val ANDROID_LIB_PLUGIN_ID = "com.android.library"
 
         internal const val CONTRACT_SUBDIR = "contract"

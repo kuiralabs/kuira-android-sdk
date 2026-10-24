@@ -26,6 +26,12 @@ import javax.inject.Singleton
 class NetworkClientFactory @Inject constructor() {
 
     /** Returns a [NetworkConfig] with the correct URLs for [network]. */
-    fun configFor(network: MidnightNetwork): NetworkConfig =
-        NetworkConfig.forNetwork(network)
+    /**
+     * @param blockfrostProjectId required for PreProd, whose indexer is Blockfrost-served and
+     *   authenticates every request; ignored by Preview and localnet. Resolve one with
+     *   [BlockfrostProjectId.resolve] when you have a Context.
+     */
+    @JvmOverloads
+    fun configFor(network: MidnightNetwork, blockfrostProjectId: String? = null): NetworkConfig =
+        NetworkConfig.forNetwork(network, blockfrostProjectId)
 }

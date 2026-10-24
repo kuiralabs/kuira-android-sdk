@@ -46,6 +46,7 @@ import com.midnight.kuira.core.ledger.fee.DustSpendCreator
 import com.midnight.kuira.core.ledger.fee.FeeCalculator
 import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.BlockfrostProjectId
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -1086,6 +1087,7 @@ class MidnightSdk private constructor(
         private var seed: ByteArray? = null
         private var accountIndex: Int = 0
         private var provingMode: ProvingMode = ProvingMode.DEFAULT
+        private var blockfrostProjectId: String? = null
         private var proofServerUrl: String? = null
         private var dustCloudBackupFactory: ((address: String, dustSeed: ByteArray) -> DustCloudBackup)? = null
         private var dustRestoreGate: (suspend (RestoredAppState?) -> Unit)? = null
@@ -1116,6 +1118,19 @@ class MidnightSdk private constructor(
 
         /** Set the HD wallet seed (from BIP-39 mnemonic). Copied internally — caller should wipe. */
         fun seed(seed: ByteArray) = apply { this.seed = seed.copyOf() }
+
+        /**
+         * Blockfrost project id for PreProd, overriding the app's manifest meta-data.
+         *
+         * Only PreProd needs one: its indexer was decommissioned on 2026-10-09 and the
+         * replacement authenticates on every request, so without an id PreProd reads nothing.
+         * Preview and localnet ignore this.
+         *
+         * Most apps should set `kuira.blockfrost.projectId` in their `local.properties` and let
+         * the manifest carry it. This exists for the case that cannot: a shipped app fetching its
+         * key from its own backend or remote config, which has nowhere else to put the result.
+         */
+        fun blockfrostProjectId(projectId: String?) = apply { this.blockfrostProjectId = projectId }
 
         /** Set the HD wallet account index (default 0). */
         fun accountIndex(index: Int) = apply { this.accountIndex = index }
@@ -1193,7 +1208,15 @@ class MidnightSdk private constructor(
             require(seedBytes.size >= 32) { "seed must be at least 32 bytes" }
 
             val appContext = context.applicationContext
-            val networkConfig = NetworkConfig.forNetwork(net)
+            // PreProd's indexer is Blockfrost-served and authenticates every request, so it needs
+            // a project id. An explicit one wins; otherwise it comes from the app's manifest
+            // meta-data. Preview and localnet resolve to null and ignore it. forNetwork refuses to
+            // build a PreProd config without one, so the failure lands here with an explanation
+            // rather than as an HTTP 410 from inside a later sync.
+            val networkConfig = NetworkConfig.forNetwork(
+                net,
+                BlockfrostProjectId.resolve(appContext, blockfrostProjectId),
+            )
 
             // ── Derive keys ──
 

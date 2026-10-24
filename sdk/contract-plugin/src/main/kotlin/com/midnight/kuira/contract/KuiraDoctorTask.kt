@@ -118,6 +118,7 @@ abstract class KuiraDoctorTask : DefaultTask() {
             checkAssetlinks(),
             checkCompactRuntimePin(),
             checkSdkBundledRuntime(),
+            checkBlockfrostProjectId(),
         )
         printReport(results)
 
@@ -294,6 +295,63 @@ abstract class KuiraDoctorTask : DefaultTask() {
      * `assets/runtime/compact-runtime-iife.js` and compares its
      * `versionString = "X.Y.Z"` to the contract's emitted version.
      */
+    private fun checkBlockfrostProjectId(): CheckResult {
+        val name = "blockfrost-project-id"
+        val projectId = KuiraContractPlugin.readBlockfrostProjectId(project)
+
+        if (projectId.isEmpty()) {
+            return CheckResult(
+                name = name,
+                severity = Severity.FAIL,
+                message = buildString {
+                    append("PREPROD WILL NOT BE FUNCTIONAL — no Blockfrost project id is set.\n")
+                    append("  indexer.preprod.midnight.network was decommissioned on 2026-10-09 ")
+                    append("(it answers HTTP 410); PreProd's indexer is now served by Blockfrost, ")
+                    append("which authenticates every request.\n")
+                    append("  Fix: create a PreProd project at $BLOCKFROST_SITE, then add to this ")
+                    append("app's local.properties (gitignored):\n")
+                    append("      ${KuiraContractPlugin.BLOCKFROST_PROPERTY}=<id>\n")
+                    append("  Preview and localnet need no id and are unaffected.")
+                },
+            )
+        }
+        if (!projectId.startsWith(BLOCKFROST_PREPROD_PREFIX)) {
+            return CheckResult(
+                name = name,
+                severity = Severity.FAIL,
+                message = "The Blockfrost project id is not a PreProd id — those start with " +
+                    "'$BLOCKFROST_PREPROD_PREFIX'. Blockfrost scopes an id to one network and " +
+                    "rejects a foreign one as an opaque 403. Create a PreProd project at " +
+                    "$BLOCKFROST_SITE.",
+            )
+        }
+
+        val url = "https://$BLOCKFROST_PREPROD_HOST$BLOCKFROST_API_PATH" +
+            "?$BLOCKFROST_PROJECT_ID_PARAM=$projectId"
+        val (status, _) = httpPostWithTimeout(url, BLOCKFROST_PROBE_QUERY)
+            ?: return CheckResult(
+                name = name,
+                severity = Severity.WARN,
+                message = "A project id is set, but $BLOCKFROST_PREPROD_HOST could not be " +
+                    "reached to verify it. Expected when offline; re-run when connected.",
+            )
+        return when (status) {
+            in HTTP_2XX -> CheckResult(
+                name = name,
+                severity = Severity.PASS,
+                message = "Blockfrost accepted the project id — PreProd is reachable.",
+            )
+            // A set-but-rejected id is the nastier failure: everything looks configured and
+            // every chain read still fails, so say which it is rather than "PreProd broken".
+            else -> CheckResult(
+                name = name,
+                severity = Severity.FAIL,
+                message = "Blockfrost rejected the project id (HTTP $status). Check it at " +
+                    "$BLOCKFROST_SITE — an expired, revoked or wrong-network id fails this way.",
+            )
+        }
+    }
+
     private fun checkCompactRuntimePin(): CheckResult {
         val srcDir = contractSource.orNull?.asFile
             ?: return CheckResult(
@@ -482,6 +540,30 @@ abstract class KuiraDoctorTask : DefaultTask() {
      * handshake failure, etc.). 5-second timeouts on connect + read so
      * a flaky network doesn't hang a build.
      */
+    /** The Blockfrost indexer is GraphQL: a GET returns 405 regardless of the id. */
+    private fun httpPostWithTimeout(url: String, body: String): Pair<Int, String?>? {
+        return try {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = HTTP_TIMEOUT_MS
+                readTimeout = HTTP_TIMEOUT_MS
+                instanceFollowRedirects = false
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            val status = conn.responseCode
+            val text = runCatching {
+                val stream = if (status in HTTP_2XX) conn.inputStream else conn.errorStream
+                stream?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+            conn.disconnect()
+            status to text
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun httpGetWithTimeout(url: String): Pair<Int, String?>? {
         return try {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -539,6 +621,13 @@ abstract class KuiraDoctorTask : DefaultTask() {
         // Kuira SDK requires API 30 (Block Store API + CredentialManager
         // + Android 11+ scoped storage assumptions).
         internal const val MIN_SDK_REQUIRED = 30
+
+        private const val BLOCKFROST_PREPROD_HOST = "midnight-preprod.blockfrost.io"
+        private const val BLOCKFROST_API_PATH = "/api/v0"
+        private const val BLOCKFROST_PROJECT_ID_PARAM = "project_id"
+        private const val BLOCKFROST_PREPROD_PREFIX = "nightpreprod"
+        private const val BLOCKFROST_SITE = "https://blockfrost.io"
+        private const val BLOCKFROST_PROBE_QUERY = """{"query":"{ __typename }"}"""
 
         private const val HTTP_TIMEOUT_MS = 5_000
         private const val HTTP_NOT_FOUND = 404

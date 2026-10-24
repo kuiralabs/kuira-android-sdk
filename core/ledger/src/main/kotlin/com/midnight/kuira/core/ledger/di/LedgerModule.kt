@@ -161,7 +161,10 @@ object LedgerModule {
             provingKeyManager = provingKeyManager,
             networkClientProvider = TransactionSubmitter.NetworkClientProvider {
                 val network = networkRepository.getSelectedNetworkBlocking()
-                val config = NetworkConfig.forNetwork(network)
+                // Via the repository, not forNetwork directly: the repository resolves the
+                // Blockfrost project id PreProd's indexer requires. Calling forNetwork here
+                // would throw on PreProd for want of an id the repository already has.
+                val config = networkRepository.getNetworkConfigBlocking()
                 TransactionSubmitter.ResolvedClients(
                     networkId = network.name,
                     node = NodeRpcClientImpl(nodeUrl = config.nodeRpcUrl, developmentMode = config.developmentMode),
