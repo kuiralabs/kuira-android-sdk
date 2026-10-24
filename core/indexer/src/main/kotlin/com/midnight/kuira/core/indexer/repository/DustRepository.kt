@@ -21,6 +21,8 @@ import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.midnight.kuira.core.indexer.model.RawLedgerEvent
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * Decode a hex string to bytes, streaming directly into the output array.
@@ -415,7 +417,7 @@ class DustRepository @Inject constructor(
         dustSeed: ByteArray,
         maxBlocks: Int = 100,
         onProgress: (suspend (eventsProcessed: Int, totalEvents: Int) -> Unit)? = null,
-    ): Boolean {
+    ): Boolean = syncMutexFor(address).withLock {
         Log.d(TAG, "Syncing dust from blockchain for $address")
 
         try {
@@ -593,6 +595,7 @@ class DustRepository @Inject constructor(
                             } catch (e: Exception) {
                                 if (latestEventId <= resumedPast) throw e
                                 resumedPast = latestEventId
+                                if (fromId == null) saveSpillCursor(address, writer, latestEventId)
                                 Log.w(
                                     TAG,
                                     "Dust stream dropped after $totalEvents events (id=$latestEventId) — resuming: ${e.message}",
@@ -707,6 +710,19 @@ class DustRepository @Inject constructor(
             }
         }
     }
+
+    /**
+     * One sync at a time per address.
+     *
+     * DustSyncManager holds a mutex, but MidnightSdk's shielded-send path and
+     * TransactionSubmitter's error-196 recovery call this directly and bypass it. Two syncs on one
+     * address share a spill file, a checkpoint and a live state, so the lock belongs on the
+     * resource rather than on one of the callers.
+     */
+    private fun syncMutexFor(address: String): Mutex =
+        syncMutexes.getOrPut(address) { Mutex() }
+
+    private val syncMutexes = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
 
     /**
      * This address's genesis spill file — one deterministic path, not a fresh temp file per

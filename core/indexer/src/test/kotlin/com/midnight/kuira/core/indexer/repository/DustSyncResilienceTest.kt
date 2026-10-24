@@ -20,6 +20,9 @@ import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import java.io.IOException
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
+import kotlinx.coroutines.yield
 
 /**
  * What a dust sync must survive.
@@ -108,6 +111,30 @@ class DustSyncResilienceTest {
         )
     }
 
+    /**
+     * DustSyncManager holds a mutex, but MidnightSdk's shielded-send path and
+     * TransactionSubmitter's error-196 recovery call the repository directly and bypass it. Two
+     * syncs on one address share a spill file, a checkpoint and a live state.
+     */
+    @Test
+    fun `two syncs for one address do not run at the same time`() = runTest {
+        val indexer = FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() })
+        val repository = repositoryFor(indexer)
+
+        val both = listOf(
+            async { runCatching { repository.syncFromBlockchain(ADDRESS, DUST_SEED) } },
+            async { runCatching { repository.syncFromBlockchain(ADDRESS, DUST_SEED) } },
+        )
+        both.awaitAll()
+
+        assertEquals(
+            "two syncs for one address overlapped — they share a spill file, a checkpoint and a " +
+                "live state",
+            1,
+            indexer.peakConcurrentStreams,
+        )
+    }
+
     // ── fixtures ──
 
     /** Mirrors DustRepository.spillFileFor so the test names the same file the code does. */
@@ -130,12 +157,30 @@ class DustSyncResilienceTest {
 
     /** Emits 0..[upToId] then dies the way a pong timeout does. */
     private fun emitsThenDrops(upToId: Long): Flow<RawLedgerEvent> = flow {
-        var id = currentCoroutineStart
-        while (id <= upToId) {
-            emit(event(id))
-            id++
+        enterStream()
+        try {
+            var id = currentCoroutineStart
+            while (id <= upToId) {
+                emit(event(id))
+                yield()
+                id++
+            }
+            throw IOException("sent ping but didn't receive pong within 20000ms")
+        } finally {
+            leaveStream()
         }
-        throw IOException("sent ping but didn't receive pong within 20000ms")
+    }
+
+    private var liveStreams = 0
+    private var peak = 0
+
+    private fun enterStream() {
+        liveStreams++
+        peak = maxOf(peak, liveStreams)
+    }
+
+    private fun leaveStream() {
+        liveStreams--
     }
 
     private fun dropsImmediately(): Flow<RawLedgerEvent> = flow {
@@ -152,6 +197,7 @@ class DustSyncResilienceTest {
         private val resume: (Long) -> Flow<RawLedgerEvent>,
     ) : IndexerClient {
         val dustSubscriptionFromIds = mutableListOf<Long?>()
+        val peakConcurrentStreams: Int get() = peak
 
         override fun subscribeToDustEvents(fromId: Long?): Flow<RawLedgerEvent> {
             dustSubscriptionFromIds.add(fromId)
