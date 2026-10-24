@@ -1255,6 +1255,7 @@ class MidnightSdk private constructor(
                 dustStateDataStore = dustStateDataStore,
                 balanceCalculator = DustBalanceCalculator(),
                 indexerClient = indexerClient,
+                spillDirectory = java.io.File(appContext.filesDir, "dust_spill").apply { mkdirs() },
             )
             val spentDustNullifierStore = SpentDustNullifierStore(dustStateDataStore)
 

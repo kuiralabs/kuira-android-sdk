@@ -92,7 +92,8 @@ class DustRepository @Inject constructor(
     private val dustDao: DustDao,
     @DustStateDataStore private val dustStateDataStore: DataStore<Preferences>,
     private val balanceCalculator: DustBalanceCalculator,
-    private val indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient
+    private val indexerClient: com.midnight.kuira.core.indexer.api.IndexerClient,
+    @com.midnight.kuira.core.indexer.di.DustSpillDir private val spillDirectory: java.io.File,
 ) {
     /**
      * The live in-memory state from the last successful sync.
@@ -137,6 +138,11 @@ class DustRepository @Inject constructor(
         private const val SPILL_SUFFIX = ".hex"
 
         private const val SPILL_CURSOR_PREFIX = "dust_spill_cursor_"
+
+        /** One checkpoint file per address: an 8-byte cursor followed by the serialized state. */
+        private const val CHECKPOINT_PREFIX = "dust_checkpoint_"
+        private const val CHECKPOINT_SUFFIX = ".bin"
+        private const val CHECKPOINT_STAGING_SUFFIX = ".writing"
 
         /** A spill untouched for this long cannot belong to a sync that is still streaming. */
         private const val ABANDONED_SPILL_AGE_MS = 60 * 60 * 1000L
@@ -755,14 +761,21 @@ class DustRepository @Inject constructor(
     /**
      * This address's genesis spill file — one deterministic path, not a fresh temp file per
      * attempt, so an interrupted sync can resume it instead of streaming 1.7M events again.
+     *
+     * Lives in [spillDirectory] rather than the cache dir `java.io.tmpdir` resolves to on
+     * Android: a PreProd spill reaches ~1.5GB, the platform reclaims app caches under storage
+     * pressure, and it took one mid-replay — leaving the native reader with "No such file or
+     * directory" after eight minutes of streaming.
      */
-    private fun spillFileFor(address: String): java.io.File {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+    private fun spillFileFor(address: String): java.io.File =
+        java.io.File(spillDirectory, "$SPILL_PREFIX${addressDigest(address)}$SPILL_SUFFIX")
+
+    /** Short, stable, filesystem-safe stand-in for an address. */
+    private fun addressDigest(address: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
             .digest(address.toByteArray())
             .take(SPILL_NAME_BYTES)
             .joinToString("") { "%02x".format(it) }
-        return java.io.File(System.getProperty("java.io.tmpdir"), "$SPILL_PREFIX$digest$SPILL_SUFFIX")
-    }
 
     /** How far [spillFileFor] has been streamed, or null when there is nothing to resume. */
     private suspend fun loadSpillCursor(address: String): Long? =
@@ -796,7 +809,7 @@ class DustRepository @Inject constructor(
      * that is still running.
      */
     private suspend fun discardAbandonedSpills(currentAddress: String) {
-        val directory = spillFileFor(currentAddress).parentFile ?: return
+        val directory = spillDirectory
         val spillsInUse = dustStateDataStore.data.first().asMap().keys
             .map { it.name }
             .filter { it.startsWith(SPILL_CURSOR_PREFIX) }
@@ -831,6 +844,73 @@ class DustRepository @Inject constructor(
             val applied = probe.replayEventsFromFile(dustSeed, firstEvents.absolutePath)
             applied?.close()
             applied != null
+        }
+    }
+
+    /**
+     * This address's checkpoint file: its cursor and its serialized state, in that order.
+     *
+     * One file per address, because they used to share a single Preferences file. DataStore
+     * rewrites that file whole on every edit, so each delta for one wallet also rewrote every
+     * other wallet's ~870KB blob — and the blob was stored as hex, doubling it. Two wallets on
+     * one device already cost 1.74MB a write, several seconds apart, for a few events.
+     */
+    private fun checkpointFileFor(address: String): java.io.File =
+        java.io.File(spillDirectory, "$CHECKPOINT_PREFIX${addressDigest(address)}$CHECKPOINT_SUFFIX")
+
+    /**
+     * Read this address's cursor and state, migrating a Preferences-era checkpoint on the way.
+     *
+     * Devices synced before this change keep their state in the old keys; re-syncing 1.7M events
+     * to move house is not a migration anyone should pay for, so the first read rewrites it as a
+     * file and drops the old keys.
+     */
+    private suspend fun readCheckpoint(address: String): Pair<Long, ByteArray>? {
+        val file = checkpointFileFor(address)
+        if (file.exists()) {
+            return runCatching {
+                val bytes = file.readBytes()
+                if (bytes.size < Long.SIZE_BYTES) return@runCatching null
+                val cursor = java.nio.ByteBuffer.wrap(bytes, 0, Long.SIZE_BYTES).long
+                cursor to bytes.copyOfRange(Long.SIZE_BYTES, bytes.size)
+            }.getOrNull()
+        }
+
+        val prefs = dustStateDataStore.data.first()
+        val legacyState = prefs[dustStateKey(address)]
+        val legacyCursor = prefs[lastEventIdKey(address)]
+        if (legacyState == null && legacyCursor == null) return null
+
+        val serialized = legacyState?.let { hexStringToBytes(it) } ?: ByteArray(0)
+        val cursor = legacyCursor ?: NO_EVENT_ID
+        Log.i(TAG, "Migrating this address's checkpoint out of the shared preferences file")
+        writeCheckpoint(address, cursor, serialized)
+        dustStateDataStore.edit { editable ->
+            editable.remove(dustStateKey(address))
+            editable.remove(lastEventIdKey(address))
+        }
+        return cursor to serialized
+    }
+
+    /**
+     * Write the pair as one file, atomically.
+     *
+     * Both halves land together or neither does: a state at one frontier paired with a cursor
+     * implying another is the torn checkpoint that produces `NonLinearInsertion` and sends the
+     * sync back to genesis. A temp file plus a rename gives that for free, where two keys in a
+     * shared store needed a transaction.
+     */
+    private fun writeCheckpoint(address: String, lastEventId: Long, serialized: ByteArray) {
+        val file = checkpointFileFor(address)
+        file.parentFile?.mkdirs()
+        val staging = java.io.File(file.parentFile, "${file.name}$CHECKPOINT_STAGING_SUFFIX")
+        staging.outputStream().use { out ->
+            out.write(java.nio.ByteBuffer.allocate(Long.SIZE_BYTES).putLong(lastEventId).array())
+            out.write(serialized)
+        }
+        if (!staging.renameTo(file)) {
+            staging.delete()
+            throw java.io.IOException("Could not replace the dust checkpoint for $address")
         }
     }
 
@@ -1021,11 +1101,8 @@ class DustRepository @Inject constructor(
      * @param address Wallet address
      * @return Serialized state bytes (hex-encoded), or null if not found
      */
-    private suspend fun getSerializedState(address: String): ByteArray? {
-        val key = dustStateKey(address)
-        val hexString = dustStateDataStore.data.first()[key] ?: return null
-        return hexStringToBytes(hexString)
-    }
+    private suspend fun getSerializedState(address: String): ByteArray? =
+        readCheckpoint(address)?.second
 
     /**
      * Save serialized DustLocalState for an address.
@@ -1034,11 +1111,7 @@ class DustRepository @Inject constructor(
      * @param serialized Serialized state bytes
      */
     private suspend fun saveSerializedState(address: String, serialized: ByteArray) {
-        val key = dustStateKey(address)
-        val hexString = bytesToHexString(serialized)
-        dustStateDataStore.edit { prefs ->
-            prefs[key] = hexString
-        }
+        writeCheckpoint(address, readCheckpoint(address)?.first ?: NO_EVENT_ID, serialized)
     }
 
     /**
@@ -1051,6 +1124,7 @@ class DustRepository @Inject constructor(
      * @param address Wallet address
      */
     suspend fun deleteState(address: String) {
+        checkpointFileFor(address).delete()
         val stateKey = dustStateKey(address)
         val eventKey = lastEventIdKey(address)
         dustStateDataStore.edit { prefs ->
@@ -1066,17 +1140,12 @@ class DustRepository @Inject constructor(
     }
 
     /** Get last applied dust event ID for delta sync resume. Null if never synced. */
-    suspend fun getLastAppliedEventId(address: String): Long? {
-        val key = lastEventIdKey(address)
-        return dustStateDataStore.data.first()[key]
-    }
+    suspend fun getLastAppliedEventId(address: String): Long? =
+        readCheckpoint(address)?.first?.takeIf { it != NO_EVENT_ID }
 
     /** Save last applied dust event ID (for delta sync resume). */
     suspend fun saveLastAppliedEventId(address: String, eventId: Long) {
-        val key = lastEventIdKey(address)
-        dustStateDataStore.edit { prefs ->
-            prefs[key] = eventId
-        }
+        writeCheckpoint(address, eventId, readCheckpoint(address)?.second ?: ByteArray(0))
     }
 
     /**
@@ -1104,11 +1173,7 @@ class DustRepository @Inject constructor(
         val serialized = state.serialize()
             ?: throw IllegalStateException("Failed to serialize dust state for $address")
         Log.d(TAG, "Checkpoint saved: ${serialized.size} bytes, lastEventId=$lastEventId")
-        val hexString = bytesToHexString(serialized)
-        dustStateDataStore.edit { prefs ->
-            prefs[dustStateKey(address)] = hexString
-            prefs[lastEventIdKey(address)] = lastEventId
-        }
+        writeCheckpoint(address, lastEventId, serialized)
     }
 
     /**
@@ -1120,10 +1185,9 @@ class DustRepository @Inject constructor(
      * owned by the caller and must be closed.
      */
     suspend fun loadCheckpoint(address: String): DustCheckpoint? {
-        val prefs = dustStateDataStore.data.first()
-        val hexString = prefs[dustStateKey(address)] ?: return null
-        val lastEventId = prefs[lastEventIdKey(address)] ?: return null
-        val state = DustLocalState.deserialize(hexStringToBytes(hexString)) ?: return null
+        val (lastEventId, serialized) = readCheckpoint(address) ?: return null
+        if (lastEventId == NO_EVENT_ID || serialized.isEmpty()) return null
+        val state = DustLocalState.deserialize(serialized) ?: return null
         return DustCheckpoint(state, lastEventId)
     }
 
@@ -1133,8 +1197,8 @@ class DustRepository @Inject constructor(
      * checkpoint reads as absent, forcing a clean genesis sync.
      */
     suspend fun hasCheckpoint(address: String): Boolean {
-        val prefs = dustStateDataStore.data.first()
-        return prefs[dustStateKey(address)] != null && prefs[lastEventIdKey(address)] != null
+        val (lastEventId, serialized) = readCheckpoint(address) ?: return false
+        return lastEventId != NO_EVENT_ID && serialized.isNotEmpty()
     }
 
     // ========== Utility Functions ==========

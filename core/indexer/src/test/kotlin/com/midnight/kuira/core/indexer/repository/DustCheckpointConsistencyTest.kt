@@ -37,6 +37,10 @@ import java.nio.file.Files
  */
 class DustCheckpointConsistencyTest {
 
+    /** Its own directory, so one test's spill can never be another's. */
+    private val spillDir: java.io.File =
+        java.nio.file.Files.createTempDirectory("dust_spill_test").toFile()
+
     private lateinit var scope: CoroutineScope
     private lateinit var dir: File
     private lateinit var dataStore: DataStore<Preferences>
@@ -53,7 +57,7 @@ class DustCheckpointConsistencyTest {
         dataStore = PreferenceDataStoreFactory.create(scope = scope) {
             File(dir, "test.preferences_pb")
         }
-        repository = DustRepository(mock(), dataStore, mock(), mock())
+        repository = DustRepository(mock(), dataStore, mock(), mock(), spillDir)
     }
 
     @After

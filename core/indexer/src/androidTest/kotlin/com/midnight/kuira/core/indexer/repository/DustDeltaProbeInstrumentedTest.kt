@@ -121,7 +121,7 @@ class DustDeltaProbeInstrumentedTest {
     // ── fixtures ──
 
     private fun newRepository(indexer: IndexerClient): DustRepository =
-        DustRepository(database.dustDao(), dataStore, DustBalanceCalculator(), indexer)
+        DustRepository(database.dustDao(), dataStore, DustBalanceCalculator(), indexer, dir)
 
     private fun seedEmptyCheckpoint(repository: DustRepository, lastEventId: Long) = runBlocking {
         val state = DustLocalState.create()

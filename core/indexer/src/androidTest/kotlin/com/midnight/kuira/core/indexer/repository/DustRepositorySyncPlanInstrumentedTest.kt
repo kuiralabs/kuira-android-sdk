@@ -89,7 +89,7 @@ class DustRepositorySyncPlanInstrumentedTest {
     }
 
     private fun newRepository(indexer: IndexerClient): DustRepository =
-        DustRepository(database.dustDao(), dataStore, DustBalanceCalculator(), indexer)
+        DustRepository(database.dustDao(), dataStore, DustBalanceCalculator(), indexer, dir)
 
     @Test
     fun atTipDoesNotOpenTheDeltaSubscriptionAndReturnsFast() = runBlocking<Unit> {

@@ -41,6 +41,10 @@ import java.io.File
  */
 class DustRepositoryTest {
 
+    /** Its own directory, so one test's spill can never be another's. */
+    private val spillDir: java.io.File =
+        java.nio.file.Files.createTempDirectory("dust_spill_test").toFile()
+
     private lateinit var dustDao: DustDao
     private lateinit var dustStateDataStore: DataStore<Preferences>
     private lateinit var balanceCalculator: DustBalanceCalculator
@@ -57,7 +61,7 @@ class DustRepositoryTest {
         dustStateDataStore = mock()
         balanceCalculator = mock()
         indexerClient = mock()
-        repository = DustRepository(dustDao, dustStateDataStore, balanceCalculator, indexerClient)
+        repository = DustRepository(dustDao, dustStateDataStore, balanceCalculator, indexerClient, spillDir)
     }
 
     // ==================== Sync failure handling ====================

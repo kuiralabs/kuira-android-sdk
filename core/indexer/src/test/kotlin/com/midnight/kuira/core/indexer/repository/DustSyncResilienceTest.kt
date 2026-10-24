@@ -36,6 +36,10 @@ import kotlinx.coroutines.yield
  */
 class DustSyncResilienceTest {
 
+    /** Its own directory, so one test's spill can never be another's. */
+    private val spillDir: java.io.File =
+        java.nio.file.Files.createTempDirectory("dust_spill_test").toFile()
+
     /**
      * A dropped connection must resume from the last event received.
      *
@@ -143,14 +147,14 @@ class DustSyncResilienceTest {
             .digest(address.toByteArray())
             .take(8)
             .joinToString("") { "%02x".format(it) }
-        return java.io.File(System.getProperty("java.io.tmpdir"), "dust_events_$digest.hex")
+        return java.io.File(spillDir, "dust_events_$digest.hex")
     }
 
 
     private fun repositoryFor(indexer: IndexerClient): DustRepository {
         val dataStore = mock<DataStore<Preferences>>()
         whenever(dataStore.data).thenReturn(flowOf(mock()))
-        return DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), indexer)
+        return DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), indexer, spillDir)
     }
 
     private fun event(id: Long, maxId: Long = TIP) = RawLedgerEvent(id = id, rawHex = "00", maxId = maxId)

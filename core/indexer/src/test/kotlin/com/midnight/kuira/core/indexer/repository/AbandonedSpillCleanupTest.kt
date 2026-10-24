@@ -88,7 +88,9 @@ class AbandonedSpillCleanupTest {
 
     // ── fixtures ──
 
-    private val spillDirectory = File(System.getProperty("java.io.tmpdir") ?: "/tmp")
+    /** Its own directory: the repository is told where to spill, so a test never shares one. */
+    private val spillDirectory: File =
+        java.nio.file.Files.createTempDirectory("abandoned_spill_test").toFile()
 
     private fun spill(name: String, ageMillis: Long): File =
         File(spillDirectory, name).apply {
@@ -111,7 +113,7 @@ class AbandonedSpillCleanupTest {
     private suspend fun syncOnce(preferences: Preferences = preferencesOf()) {
         val dataStore = mock<DataStore<Preferences>>()
         whenever(dataStore.data).thenReturn(flowOf(preferences))
-        val repository = DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), DeadIndexer())
+        val repository = DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), DeadIndexer(), spillDirectory)
         runCatching { repository.syncFromBlockchain(ADDRESS, ByteArray(32)) }
     }
 

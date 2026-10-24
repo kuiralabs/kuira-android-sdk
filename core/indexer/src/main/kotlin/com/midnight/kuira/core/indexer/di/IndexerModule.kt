@@ -30,6 +30,18 @@ import javax.inject.Singleton
 @Retention(AnnotationRetention.BINARY)
 annotation class DustStateDataStore
 
+/**
+ * Qualifier for the directory a dust sync spills streamed events into.
+ *
+ * Its own binding because the directory is a correctness decision, not a detail: a PreProd
+ * genesis spill is ~1.5GB, which is far over any app's cache quota, so the platform deletes it
+ * mid-sync if it sits in `cacheDir` — the replay then fails with "No such file or directory" and
+ * the whole sync restarts at zero.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DustSpillDir
+
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ShieldedStateDataStore
@@ -163,6 +175,13 @@ object IndexerModule {
     ): DataStore<Preferences> {
         return context.dustStateDataStore
     }
+
+    /** `filesDir`, which the platform never reclaims — never `cacheDir`, which it does. */
+    @Provides
+    @Singleton
+    @DustSpillDir
+    fun provideDustSpillDir(@ApplicationContext context: Context): java.io.File =
+        java.io.File(context.filesDir, "dust_spill").apply { mkdirs() }
 
     @Provides
     @Singleton
