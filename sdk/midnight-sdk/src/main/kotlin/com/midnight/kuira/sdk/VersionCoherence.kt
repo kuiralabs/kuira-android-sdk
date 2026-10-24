@@ -126,6 +126,14 @@ object VersionCoherence {
         // registration (SdkRegistrationE2ETest), unshielded + shielded send, and contract
         // deploy/call all validated the bundled 8.0.3 ledger against this node. (#87)
         1000000L,
+        // PreProd node (specName "midnight", specVersion 1000300, transactionVersion 3) verified
+        // KNOWN-GOOD on 2026-10-24: read from the live node via state_getRuntimeVersion, and a
+        // full Midnight Kicks match finalized against it — contract deploy, joinMatch,
+        // commitRegulation and revealRegulation, each proved on device and submitted, plus the
+        // dust fee for every one of them. The published support matrix claims PreProd runs node
+        // 1.0.400; the node itself reports 1.0.300, which is why this list is built from
+        // state_getRuntimeVersion rather than from the matrix.
+        1000300L,
     )
 
     /**
