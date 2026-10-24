@@ -1232,10 +1232,7 @@ class MidnightSdk private constructor(
 
             // ── Create infrastructure ──
 
-            val indexerClient = IndexerClientImpl(
-                baseUrl = networkConfig.indexerBaseUrl,
-                developmentMode = networkConfig.developmentMode,
-            )
+            val indexerClient = IndexerClientImpl(config = networkConfig)
 
             val nodeRpcClient = NodeRpcClientImpl(
                 nodeUrl = networkConfig.nodeRpcUrl,
@@ -1485,7 +1482,10 @@ class MidnightSdk private constructor(
             // ── Create config with embedded wallet ──
 
             val config = MidnightConfig.Builder(appContext)
-                .indexerUrl(networkConfig.indexerBaseUrl)
+                .indexerGraphqlUrl(networkConfig.indexerGraphqlUrl)
+                .apply {
+                    networkConfig.indexerCredential?.let { indexerCredential(it.header, it.value) }
+                }
                 .transactionBalancer(wallet)
                 .operationListener(contractOperationListener)
                 // Reactive ledger reads: contract.observeLedger() refreshes on each new

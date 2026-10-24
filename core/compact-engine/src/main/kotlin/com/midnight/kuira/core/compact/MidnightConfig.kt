@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import com.midnight.kuira.core.network.IndexerCredential
 
 /**
  * Configuration for Midnight contract operations.
@@ -30,14 +31,14 @@ import java.net.URL
  *
  * // Remote wallet (existing pattern)
  * val config = MidnightConfig.Builder(context)
- * .indexerUrl(previewConfig.indexerBaseUrl)
+ * .indexerGraphqlUrl(previewConfig.indexerGraphqlUrl)
  * .walletUrl("ws://10.0.2.2:9932")
  * .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
  * .build()
  *
  * // Embedded wallet (new pattern)
  * val config = MidnightConfig.Builder(context)
- * .indexerUrl(previewConfig.indexerBaseUrl)
+ * .indexerGraphqlUrl(previewConfig.indexerGraphqlUrl)
  * .transactionBalancer(myWallet)
  * .networkId(MidnightNetwork.PREVIEW.rustNetworkId)
  * .build()
@@ -45,7 +46,8 @@ import java.net.URL
  */
 class MidnightConfig private constructor(
     val context: Context,
-    val indexerUrl: String,
+    val indexerGraphqlUrl: String,
+    private val indexerCredential: IndexerCredential?,
     private val walletUrl: String?,
     val networkId: String,
     val provingKeyManager: ProvingKeyManager,
@@ -224,11 +226,12 @@ class MidnightConfig private constructor(
     }
 
     private suspend fun graphqlQuery(query: String): JSONObject = withContext(Dispatchers.IO) {
-        val url = URL("$indexerUrl/graphql")
+        val url = URL(indexerGraphqlUrl)
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
+            indexerCredential?.let { conn.setRequestProperty(it.header, it.value) }
             conn.doOutput = true
             conn.connectTimeout = CONNECT_TIMEOUT_MS
             conn.readTimeout = READ_TIMEOUT_MS
@@ -262,14 +265,27 @@ class MidnightConfig private constructor(
     }
 
     class Builder(private val context: Context) {
-        private var indexerUrl: String? = null
+        private var indexerGraphqlUrl: String? = null
+        private var indexerCredential: IndexerCredential? = null
         private var walletUrl: String? = null
         private var networkId: String? = null
         private var balancer: TransactionBalancer? = null
         private var operationListener: ContractOperationListener? = null
         private var blockSignals: Flow<Unit>? = null
 
-        fun indexerUrl(url: String) = apply { this.indexerUrl = url }
+        /**
+         * The indexer's RESOLVED GraphQL endpoint — not a base to which this appends a path.
+         *
+         * Where an indexer answers differs per provider (Blockfrost serves GraphQL at its API
+         * root, the self-hosted indexer under /graphql), so the caller passes the endpoint it was
+         * given. Source it from `NetworkConfig.indexerGraphqlUrl`.
+         */
+        fun indexerGraphqlUrl(url: String) = apply { this.indexerGraphqlUrl = url }
+
+        /** A header the indexer requires on every request (PreProd's Blockfrost project id). */
+        fun indexerCredential(header: String, value: String) = apply {
+            this.indexerCredential = IndexerCredential(header, value)
+        }
         fun walletUrl(url: String) = apply { this.walletUrl = url }
         fun networkId(id: String) = apply { this.networkId = id }
 
@@ -291,11 +307,11 @@ class MidnightConfig private constructor(
         fun blockSignals(signals: Flow<Unit>?) = apply { this.blockSignals = signals }
 
         fun build(): MidnightConfig {
-            val indexer = requireNotNull(indexerUrl) { "indexerUrl is required" }
+            val indexer = requireNotNull(indexerGraphqlUrl) { "indexer(...) or indexerGraphqlUrl(...) is required" }
             val network = requireNotNull(networkId) { "networkId is required" }
 
             require(indexer.startsWith("http://") || indexer.startsWith("https://")) {
-                "indexerUrl must start with http:// or https://"
+                "the indexer GraphQL URL must start with http:// or https://"
             }
 
             // Must have either a TransactionBalancer or a walletUrl
@@ -311,7 +327,8 @@ class MidnightConfig private constructor(
 
             return MidnightConfig(
                 context = context.applicationContext,
-                indexerUrl = indexer,
+                indexerGraphqlUrl = indexer,
+                indexerCredential = indexerCredential,
                 walletUrl = wallet,
                 networkId = network,
                 provingKeyManager = ProvingKeyManager(context.applicationContext),
@@ -335,7 +352,7 @@ class MidnightConfig private constructor(
                 com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED,
             )
             return Builder(context)
-                .indexerUrl(local.indexerBaseUrl)
+                .indexerGraphqlUrl(local.indexerGraphqlUrl)
                 .walletUrl("ws://10.0.2.2:9932")
                 .networkId(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED.rustNetworkId)
                 .build()

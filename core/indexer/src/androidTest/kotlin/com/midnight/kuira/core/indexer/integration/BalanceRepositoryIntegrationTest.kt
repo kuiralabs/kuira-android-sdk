@@ -86,10 +86,8 @@ class BalanceRepositoryIntegrationTest {
      * **For physical device:** Replace with computer's local IP
      * Example: "http://192.168.1.100:8088"
      */
-    private val INDEXER_BASE_URL =
-        com.midnight.kuira.core.network.NetworkConfig
-            .forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED)
-            .indexerBaseUrl
+    private val LOCALNET = com.midnight.kuira.core.network.NetworkConfig
+        .forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED)
 
     @Before
     fun setup() {
@@ -106,8 +104,7 @@ class BalanceRepositoryIntegrationTest {
 
         // Initialize indexer client (development mode for HTTP)
         indexerClient = IndexerClientImpl(
-            baseUrl = INDEXER_BASE_URL,
-            developmentMode = true // Allow HTTP for local testing
+            config = LOCALNET,
         )
 
         repository = BalanceRepository(utxoManager, indexerClient)
@@ -153,7 +150,7 @@ class BalanceRepositoryIntegrationTest {
             indexerClient.getCurrentBlockWithParams()
         } catch (e: Exception) {
             throw AssertionError(
-                "localnet indexer unreachable at $INDEXER_BASE_URL. These assertions must RUN, not be\n" +
+                "localnet indexer unreachable at ${LOCALNET.indexerGraphqlUrl}. These assertions must RUN, not be\n" +
                     "skipped: start the localnet, and on a physical device establish the tunnel\n" +
                     "(`./gradlew adbReverseLocalnet`) — the device's own 127.0.0.1 reaches nothing.",
                 e,

@@ -13,7 +13,7 @@ import javax.inject.Singleton
  * networkRepository.selectedNetworkFlow
  *     .flatMapLatest { network ->
  *         val config = networkClientFactory.configFor(network)
- *         val indexer = IndexerClientImpl(config.indexerBaseUrl, developmentMode = config.developmentMode)
+ *         val indexer = IndexerClientImpl(config)
  *         // start subscriptions, return Flow
  *     }
  * ```

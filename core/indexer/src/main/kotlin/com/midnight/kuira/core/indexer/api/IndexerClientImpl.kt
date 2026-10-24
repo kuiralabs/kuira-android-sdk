@@ -42,8 +42,7 @@ import kotlinx.serialization.json.long
  * Ktor-based implementation of IndexerClient for the Midnight indexer GraphQL API.
  *
  * **Connection:**
- * - HTTPS endpoint: `{baseUrl}/graphql` (with TLS certificate pinning)
- * - WebSocket endpoint: `{baseUrl}/graphql/ws`
+ * - HTTPS + WebSocket endpoints come RESOLVED from [NetworkConfig]; this class appends nothing.
  *
  * **GraphQL Protocol:**
  * - Uses HTTPS POST for queries/mutations
@@ -54,30 +53,25 @@ import kotlinx.serialization.json.long
  * - Development mode allows localhost HTTP (for local testing)
  *
  * @param httpClient HTTP client for making requests (injectable for testing)
- * @param baseUrl Indexer API base URL. Typical values come from
- *   [NetworkConfig.forNetwork(...).indexerBaseUrl][NetworkConfig.forNetwork].
+ * @param config supplies the RESOLVED endpoints and the credential; this class composes no URLs.
  * @param pinnedCertificates List of SHA-256 certificate fingerprints for pinning (production only)
- * @param developmentMode If true, allows HTTP to localhost (INSECURE - testing only)
  */
 class IndexerClientImpl(
     private val httpClient: HttpClient,
-    private val baseUrl: String = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW).indexerBaseUrl,
+    private val config: NetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW),
     private val pinnedCertificates: List<String> = emptyList(),
-    private val developmentMode: Boolean = false
 ) : IndexerClient {
 
     /**
      * Convenience constructor for production use (creates default HTTP client).
      */
     constructor(
-        baseUrl: String = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW).indexerBaseUrl,
+        config: NetworkConfig = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW),
         pinnedCertificates: List<String> = emptyList(),
-        developmentMode: Boolean = false
     ) : this(
         httpClient = createDefaultHttpClient(),
-        baseUrl = baseUrl,
+        config = config,
         pinnedCertificates = pinnedCertificates,
-        developmentMode = developmentMode
     )
 
     companion object {
@@ -126,11 +120,26 @@ class IndexerClientImpl(
         classDiscriminator = "__typename"  // Use GraphQL's __typename field for polymorphism
     }
 
+    private val graphqlEndpoint = config.indexerGraphqlUrl
+    private val wsEndpoint = config.indexerWsUrl
+    private val developmentMode = config.developmentMode
+
+    // Safe to put in an exception even if a custom URL still embeds a credential.
+    private val safeEndpoint get() = NetworkConfig.redactProjectId(graphqlEndpoint)
+
+    /** The one place a GraphQL request is built, so none can forget the indexer's credential. */
+    private suspend fun postGraphQL(request: GraphQLRequest): HttpResponse =
+        httpClient.post(graphqlEndpoint) {
+            contentType(ContentType.Application.Json)
+            config.indexerCredential?.let { header(it.header, it.value) }
+            setBody(request)
+        }
+
     init {
         // Validate configuration
-        if (!developmentMode && !baseUrl.startsWith("https://")) {
+        if (!developmentMode && !graphqlEndpoint.startsWith("https://")) {
             throw IllegalArgumentException(
-                "Production mode requires HTTPS. Got: ${NetworkConfig.redactProjectId(baseUrl)}\n" +
+                "Production mode requires HTTPS. Got: $safeEndpoint\n" +
                 "Use developmentMode=true for HTTP testing (INSECURE)"
             )
         }
@@ -142,24 +151,6 @@ class IndexerClientImpl(
         }
     }
 
-    // appendPath, NOT "$baseUrl/graphql": PreProd's base carries a query string
-    // (?project_id=<id>), and concatenating would put the path INSIDE the credential —
-    // ...?project_id=<id>/graphql — which fails as a bad project id and blames the wrong thing.
-    private val graphqlEndpoint = NetworkConfig.appendPath(baseUrl, "/graphql")
-
-    // Safe to put in an exception: the raw endpoint carries the Blockfrost project_id.
-    private val safeEndpoint get() = NetworkConfig.redactProjectId(graphqlEndpoint)
-    // Blockfrost subscribes at /ws, the Midnight indexer at /graphql/ws. Appending the wrong one
-    // leaves HTTP working while every subscription dies — which surfaces as a cancelled channel
-    // mid-sync and a balance of 0, not as an error.
-    private val wsEndpoint = NetworkConfig.appendPath(
-        baseUrl.replace("http://", "ws://").replace("https://", "wss://"),
-        if (baseUrl.contains(NetworkConfig.BLOCKFROST_PREPROD_HOST)) {
-            NetworkConfig.BLOCKFROST_WS_PATH
-        } else {
-            "/graphql/ws"
-        },
-    )
 
     /**
      * WebSocket client for subscriptions.
@@ -174,7 +165,8 @@ class IndexerClientImpl(
         if (wsClient == null) {
             wsClient = GraphQLWebSocketClient(
                 url = wsEndpoint,
-                httpClient = httpClient
+                httpClient = httpClient,
+                credential = config.indexerCredential,
             )
         }
         return wsClient!!
@@ -332,10 +324,7 @@ class IndexerClientImpl(
 
     override suspend fun getNetworkState(): NetworkState = retryWithPolicy() {
         try {
-            val response = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(GraphQLQueries.QUERY_NETWORK_STATE))
-            }
+            val response = postGraphQL(GraphQLRequest(GraphQLQueries.QUERY_NETWORK_STATE))
 
             val responseBody = response.bodyAsText()
             val jsonResponse = json.parseToJsonElement(responseBody).jsonObject
@@ -386,10 +375,7 @@ class IndexerClientImpl(
 
     override suspend fun getCurrentBlockWithParams(): BlockInfo = retryWithPolicy() {
         try {
-            val response = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(GraphQLQueries.QUERY_CURRENT_BLOCK))
-            }
+            val response = postGraphQL(GraphQLRequest(GraphQLQueries.QUERY_CURRENT_BLOCK))
 
             val responseBody = response.bodyAsText()
             val jsonResponse = json.parseToJsonElement(responseBody).jsonObject
@@ -450,10 +436,7 @@ class IndexerClientImpl(
      */
     override suspend fun getBlockHashAtHeight(height: Long): BlockHashLookup {
         return try {
-            val response = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(GraphQLQueries.queryBlockAtHeight(height)))
-            }
+            val response = postGraphQL(GraphQLRequest(GraphQLQueries.queryBlockAtHeight(height)))
             val jsonResponse = json.parseToJsonElement(response.bodyAsText()).jsonObject
             // GraphQL errors → Unavailable ("can't determine", never treated as a reset).
             val errors = jsonResponse["errors"]?.jsonArray
@@ -484,16 +467,13 @@ class IndexerClientImpl(
         }
 
         try {
-            val response = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(
+            val response = postGraphQL(GraphQLRequest(
                     query = GraphQLQueries.QUERY_ZSWAP_EVENTS,
                     variables = mapOf(
                         "fromId" to fromId.toString(),
                         "toId" to toId.toString()
                     )
                 ))
-            }
 
             val responseBody = response.bodyAsText()
             val jsonResponse = json.parseToJsonElement(responseBody).jsonObject
@@ -638,13 +618,10 @@ class IndexerClientImpl(
         }
 
         try {
-            val response = httpClient.post(graphqlEndpoint) {
-                contentType(ContentType.Application.Json)
-                setBody(GraphQLRequest(
+            val response = postGraphQL(GraphQLRequest(
                     query = GraphQLQueries.QUERY_CONTRACT_STATE,
                     variables = mapOf("address" to address),
                 ))
-            }
 
             val responseBody = response.bodyAsText()
             val jsonResponse = json.parseToJsonElement(responseBody).jsonObject

@@ -219,8 +219,7 @@ class RealDustFeePaymentTest {
     @Test
     fun test1_QueryAndReplayDustEvents() = runBlocking {
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
-            baseUrl = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl,
-            developmentMode = true
+            config = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),
         )
 
         // A failed/unreachable indexer query is itself an "unavailable" signal → skip below.
@@ -285,8 +284,7 @@ class RealDustFeePaymentTest {
     fun test2_SerializeTransactionWithDustFee() = runBlocking {
         // Query dust events and restore state
         val indexerClient = com.midnight.kuira.core.indexer.api.IndexerClientImpl(
-            baseUrl = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl,
-            developmentMode = true
+            config = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED),
         )
 
         // A failed/unreachable indexer query is itself an "unavailable" signal → skip below.

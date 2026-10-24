@@ -76,10 +76,7 @@ object IndexerModule {
     fun provideIndexerClient(
         networkConfig: NetworkConfig
     ): IndexerClient {
-        return IndexerClientImpl(
-            baseUrl = networkConfig.indexerBaseUrl,
-            developmentMode = networkConfig.developmentMode
-        )
+        return IndexerClientImpl(config = networkConfig)
     }
 
     /**
@@ -243,9 +240,6 @@ class SubscriptionManagerFactory(
         val repo = networkRepository ?: return defaultIndexerClient
         // Via the repository: it resolves the Blockfrost project id PreProd's indexer requires.
         val config = repo.getNetworkConfigBlocking()
-        return com.midnight.kuira.core.indexer.api.IndexerClientImpl(
-            baseUrl = config.indexerBaseUrl,
-            developmentMode = config.developmentMode,
-        )
+        return com.midnight.kuira.core.indexer.api.IndexerClientImpl(config = config)
     }
 }

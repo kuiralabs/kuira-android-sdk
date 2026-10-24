@@ -19,6 +19,7 @@ import kotlinx.serialization.json.buildJsonObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import com.midnight.kuira.core.network.IndexerCredential
 
 /**
  * GraphQL WebSocket client implementing graphql-transport-ws protocol.
@@ -42,6 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class GraphQLWebSocketClient(
     private val httpClient: HttpClient,
     private val url: String,
+    private val credential: IndexerCredential? = null,
     private val connectionTimeout: Long = 10_000
 ) {
     private val json = Json {
@@ -116,6 +118,7 @@ class GraphQLWebSocketClient(
             urlString = url,
             block = {
                 header(HttpHeaders.SecWebSocketProtocol, "graphql-transport-ws")
+                credential?.let { header(it.header, it.value) }
             }
         )
         session = newSession

@@ -54,10 +54,8 @@ class ConnectedAPIHandler(
 
     fun getConfiguration(): Configuration {
         return Configuration(
-            indexerUri = networkConfig.indexerBaseUrl + "/graphql",
-            indexerWsUri = networkConfig.indexerBaseUrl
-                .replace("http://", "ws://")
-                .replace("https://", "wss://") + "/graphql/ws",
+            indexerUri = networkConfig.indexerGraphqlUrl,
+            indexerWsUri = networkConfig.indexerWsUrl,
             substrateNodeUri = networkConfig.nodeRpcUrl,
             networkId = networkConfig.network.name.lowercase(),
         )

@@ -1,9 +1,15 @@
 package com.midnight.kuira.core.indexer.api
 
+import com.midnight.kuira.core.network.NetworkConfig
+
 /**
  * Base exception for all indexer-related errors.
+ *
+ * Messages are redacted here, not at each throw site: HTTP-client exceptions quote the request URL
+ * in their own message, and a throw site that interpolates one cannot be relied on to remember.
  */
-sealed class IndexerException(message: String, cause: Throwable? = null) : Exception(message, cause)
+sealed class IndexerException(message: String, cause: Throwable? = null) :
+    Exception(NetworkConfig.redactProjectId(message), cause)
 
 /**
  * Network connectivity error (no internet, DNS failure, etc).

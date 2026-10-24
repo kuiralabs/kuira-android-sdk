@@ -33,22 +33,23 @@ class NetworkConfigTest {
     }
 
     @Test
-    fun `PREPROD points at Blockfrost and carries the project id`() {
+    fun `PREPROD points at Blockfrost`() {
         val config = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID)
 
         // The HOST moved and so did the PATH. Changing only the host yields a 404, which reads
         // like a different fault — so both are asserted.
         assertTrue(
-            "indexer must be the Blockfrost host, was: ${config.redacted().indexerBaseUrl}",
-            config.indexerBaseUrl.startsWith("https://${NetworkConfig.BLOCKFROST_PREPROD_HOST}"),
+            "indexer must be the Blockfrost host, was: ${config.indexerGraphqlUrl}",
+            config.indexerGraphqlUrl.startsWith("https://${NetworkConfig.BLOCKFROST_PREPROD_HOST}"),
         )
         assertTrue(
-            "indexer must use Blockfrost's path, was: ${config.redacted().indexerBaseUrl}",
-            config.indexerBaseUrl.contains(NetworkConfig.BLOCKFROST_API_PATH),
+            "indexer must use Blockfrost's path, was: ${config.indexerGraphqlUrl}",
+            config.indexerGraphqlUrl.contains(NetworkConfig.BLOCKFROST_API_PATH),
         )
-        assertTrue(
-            "the project id travels as a query parameter, not a header",
-            config.indexerBaseUrl.contains("${NetworkConfig.BLOCKFROST_PROJECT_ID_PARAM}=$PREPROD_ID"),
+        assertEquals(
+            "the credential travels as a header",
+            IndexerCredential(NetworkConfig.BLOCKFROST_PROJECT_ID_PARAM, PREPROD_ID),
+            config.indexerCredential,
         )
         // Only the INDEXER moved. The node is unaffected — which is exactly why a node-level
         // health probe passes while every chain read fails.
@@ -87,56 +88,94 @@ class NetworkConfigTest {
     }
 
     /**
-     * The credential is IN the URL, so anything that logs a URL logs a working key. This is the
-     * one form that is safe to print, and it has to hide the id while leaving the rest readable —
-     * a redaction that blanked the whole URL would make logs useless and get bypassed.
+     * The invariant the whole design rests on: NO config URL may contain the credential.
+     *
+     * While the project id rode in the query string, every URL was a working key — it reached a
+     * user's Send screen through an HTTP-client exception that quoted the request. Carrying it as
+     * a header means nothing that logs, wraps or displays a URL can leak it.
      */
     @Test
-    fun `redacted hides the project id and keeps the URL legible`() {
-        val redacted = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID).redacted()
+    fun `no URL carries the credential`() {
+        val config = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID)
 
+        listOf(
+            "indexerGraphqlUrl" to config.indexerGraphqlUrl,
+            "indexerWsUrl" to config.indexerWsUrl,
+            "nodeRpcUrl" to config.nodeRpcUrl,
+            "proofServerUrl" to config.proofServerUrl,
+        ).forEach { (name, url) ->
+            assertTrue("$name leaked the credential: $url", !url.contains(PREPROD_ID))
+            assertTrue(
+                "$name must not carry a credential parameter either: $url",
+                !url.contains(NetworkConfig.BLOCKFROST_PROJECT_ID_PARAM),
+            )
+        }
+    }
+
+    /** The credential type exists to stay out of strings — including the ones it builds itself. */
+    @Test
+    fun `printing a credential does not print its value`() {
+        val credential = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID).indexerCredential
+
+        assertTrue("toString leaked it: $credential", !credential.toString().contains(PREPROD_ID))
         assertTrue(
-            "the id must not survive redaction: ${redacted.indexerBaseUrl}",
-            !redacted.indexerBaseUrl.contains(PREPROD_ID),
-        )
-        assertTrue(
-            "the host must still be readable: ${redacted.indexerBaseUrl}",
-            redacted.indexerBaseUrl.contains(NetworkConfig.BLOCKFROST_PREPROD_HOST),
+            "the header name should survive so a log still says what is missing: $credential",
+            credential.toString().contains(NetworkConfig.BLOCKFROST_PROJECT_ID_PARAM),
         )
     }
 
     /**
-     * The bug this method exists for. The indexer composes its endpoints from the base URL, and
-     * `"$baseUrl/graphql"` was correct until PreProd's base started carrying `?project_id=<id>`.
-     * Concatenating then puts the path INSIDE the credential — `...?project_id=<id>/graphql` —
-     * and the request fails as a bad project id, pointing the blame at the id instead of the URL.
+     * The bug that reached a user. Blockfrost serves GraphQL at the API ROOT; appending
+     * `/graphql` 404s every HTTP query. The WebSocket uses a different path and kept working, so
+     * balances arrived normally and only SEND failed — nothing in the gate issued an HTTP query,
+     * so nothing noticed.
      */
     @Test
-    fun `appendPath inserts before a query string instead of after it`() {
-        val base = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID).indexerBaseUrl
-        val endpoint = NetworkConfig.appendPath(base, "/graphql")
+    fun `Blockfrost serves GraphQL at the API root, not under slash-graphql`() {
+        val config = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID)
 
-        assertTrue(
-            "the path must not land inside the project id: ${NetworkConfig.redactProjectId(endpoint)}",
-            !endpoint.contains("$PREPROD_ID/graphql"),
+        assertEquals(
+            "https://${NetworkConfig.BLOCKFROST_PREPROD_HOST}${NetworkConfig.BLOCKFROST_API_PATH}",
+            config.indexerGraphqlUrl,
         )
         assertTrue(
-            "the path must precede the query: ${NetworkConfig.redactProjectId(endpoint)}",
-            endpoint.contains("/api/v0/graphql?"),
-        )
-        assertTrue(
-            "the project id must survive intact",
-            endpoint.endsWith("${NetworkConfig.BLOCKFROST_PROJECT_ID_PARAM}=$PREPROD_ID"),
+            "appending /graphql here 404s: ${config.indexerGraphqlUrl}",
+            !config.indexerGraphqlUrl.contains(NetworkConfig.INDEXER_GRAPHQL_PATH),
         )
     }
 
-    /** A URL with no query string must be untouched, so the helper is safe everywhere. */
+    /** The self-hosted indexer keeps its own shape — the fix above must not move everyone. */
     @Test
-    fun `appendPath on a plain URL just appends`() {
-        assertEquals(
-            "https://indexer.preview.midnight.network/api/v4/graphql",
-            NetworkConfig.appendPath("https://indexer.preview.midnight.network/api/v4", "/graphql"),
+    fun `the self-hosted indexer still answers GraphQL under slash-graphql`() {
+        val config = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW)
+
+        assertTrue(
+            "was: ${config.indexerGraphqlUrl}",
+            config.indexerGraphqlUrl.endsWith(NetworkConfig.INDEXER_GRAPHQL_PATH),
         )
+        assertEquals("a self-hosted indexer needs no credential", null, config.indexerCredential)
+    }
+
+    /**
+     * HTTP and WS are resolved together because getting ONE of them wrong is the failure that
+     * hides: a broken WS with working HTTP reads as a stale balance, a broken HTTP with working WS
+     * reads as a healthy wallet that cannot send. Both shipped, three weeks apart.
+     */
+    @Test
+    fun `each provider pairs its own HTTP and WebSocket endpoints`() {
+        val blockfrost = NetworkConfig.forNetwork(MidnightNetwork.PREPROD, PREPROD_ID)
+        assertEquals(
+            "wss://${NetworkConfig.BLOCKFROST_PREPROD_HOST}" +
+                "${NetworkConfig.BLOCKFROST_API_PATH}${NetworkConfig.BLOCKFROST_WS_PATH}",
+            blockfrost.indexerWsUrl,
+        )
+
+        val selfHosted = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW)
+        assertTrue(
+            "the Midnight indexer subscribes at ${NetworkConfig.INDEXER_WS_PATH}, was: ${selfHosted.indexerWsUrl}",
+            selfHosted.indexerWsUrl.endsWith(NetworkConfig.INDEXER_WS_PATH),
+        )
+        assertTrue("subscriptions are wss/ws", selfHosted.indexerWsUrl.startsWith("wss://"))
     }
 
     /** Redaction must be safe to call on anything, so no caller has to decide whether it applies. */
@@ -157,7 +196,7 @@ class NetworkConfigTest {
     @Test
     fun `PREVIEW uses HTTPS for indexer and WSS for node`() {
         val config = NetworkConfig.forNetwork(MidnightNetwork.PREVIEW)
-        assertTrue(config.indexerBaseUrl.startsWith("https://"))
+        assertTrue(config.indexerGraphqlUrl.startsWith("https://"))
         assertTrue(config.nodeRpcUrl.startsWith("wss://"))
         assertTrue(config.proofServerUrl.endsWith(":${NetworkConfig.LOCALNET_PROOF_SERVER_PORT}"))
     }
@@ -166,10 +205,10 @@ class NetworkConfigTest {
     fun `UNDEPLOYED uses HTTP for everything and the right ports`() {
         val config = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED)
 
-        assertTrue(config.indexerBaseUrl.startsWith("http://"))
+        assertTrue(config.indexerGraphqlUrl.startsWith("http://"))
         assertTrue(
-            "indexer should target port 8088, was: ${config.indexerBaseUrl}",
-            config.indexerBaseUrl.contains(":${NetworkConfig.LOCALNET_INDEXER_PORT}/")
+            "indexer should target port 8088, was: ${config.indexerGraphqlUrl}",
+            config.indexerGraphqlUrl.contains(":${NetworkConfig.LOCALNET_INDEXER_PORT}/")
         )
 
         assertTrue(config.nodeRpcUrl.startsWith("ws://"))

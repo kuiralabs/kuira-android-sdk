@@ -61,9 +61,7 @@ open class ShieldedRepository @Inject constructor(
     }
 
     // Each subscription gets a fresh WebSocket client to avoid state corruption
-    private val wsEndpoint = networkConfig.indexerBaseUrl
-        .replace("http://", "ws://")
-        .replace("https://", "wss://") + "/graphql/ws"
+    private val wsEndpoint = networkConfig.indexerWsUrl
 
     // Returns the engine so the caller can close it on teardown — the
     // GraphQLWebSocketClient does NOT own the injected httpClient's lifecycle, so

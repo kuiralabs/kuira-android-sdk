@@ -4,8 +4,8 @@ package com.midnight.kuira.core.network
  * Configuration for a Midnight network environment.
  *
  * **URL Conventions:**
- * - indexerBaseUrl: Base URL for indexer API (without /graphql suffix)
- *   - IndexerClientImpl appends /graphql for HTTP and /graphql/ws for WebSocket
+ * - indexerGraphqlUrl / indexerWsUrl: RESOLVED endpoints — use as given, never append a path.
+ * - indexerCredential: the indexer's secret, as a header, deliberately not in the URLs.
  * - nodeRpcUrl: Full URL for node JSON-RPC endpoint
  * - proofServerUrl: Full URL for proof server (appends /prove-tx internally)
  *
@@ -18,24 +18,26 @@ package com.midnight.kuira.core.network
  * PREPROD and PREVIEW use it only for the local proof server.
  *
  * @property network The network this configuration is for
- * @property indexerBaseUrl Indexer API base URL
+ * @property indexerGraphqlUrl Indexer GraphQL endpoint, ready to POST to
+ * @property indexerWsUrl Indexer GraphQL subscription endpoint, ready to open
+ * @property indexerCredential Header this indexer requires, or null when it needs none
  * @property nodeRpcUrl Node RPC URL
  * @property proofServerUrl Proof server URL
  * @property developmentMode If true, allows HTTP connections (for local testing only)
  */
 data class NetworkConfig(
     val network: MidnightNetwork,
-    val indexerBaseUrl: String,
+    val indexerGraphqlUrl: String,
+    val indexerWsUrl: String,
+    val indexerCredential: IndexerCredential?,
     val nodeRpcUrl: String,
     val proofServerUrl: String,
     val developmentMode: Boolean
 ) {
-    /**
-     * This config's URLs with any Blockfrost `project_id` masked. The credential is IN the URL,
-     * so this is the only form safe to log.
-     */
+    /** Masks a credential that a CUSTOM indexer URL still embeds; the configs built here do not. */
     fun redacted(): NetworkConfig = copy(
-        indexerBaseUrl = redactProjectId(indexerBaseUrl),
+        indexerGraphqlUrl = redactProjectId(indexerGraphqlUrl),
+        indexerWsUrl = redactProjectId(indexerWsUrl),
         nodeRpcUrl = redactProjectId(nodeRpcUrl),
     )
 
@@ -100,15 +102,9 @@ data class NetworkConfig(
         fun requiresBlockfrostProjectId(network: MidnightNetwork): Boolean =
             network == MidnightNetwork.PREPROD
 
-        /**
-         * Append [path] to [url] BEFORE any query string — PreProd's base carries
-         * `?project_id=<id>`, so plain concatenation would bury the path in the credential.
-         */
-        fun appendPath(url: String, path: String): String {
-            val queryAt = url.indexOf('?')
-            return if (queryAt < 0) url + path
-            else url.substring(0, queryAt) + path + url.substring(queryAt)
-        }
+        /** The self-hosted Midnight indexer's GraphQL paths; Blockfrost's differ — see below. */
+        const val INDEXER_GRAPHQL_PATH = "/graphql"
+        const val INDEXER_WS_PATH = "/graphql/ws"
 
         /** Mask a `project_id` value. Safe on any string, with or without one. */
         fun redactProjectId(url: String): String =
@@ -180,36 +176,53 @@ data class NetworkConfig(
                             "  Run ./gradlew :app:kuiraDoctor to check your setup."
                     }
                     validateBlockfrostProjectId(blockfrostProjectId)
-                    // The project id rides in the QUERY STRING, so these URLs are credentials.
-                    // Never log them raw — use redacted(). The node keeps its own host: only the
-                    // indexer moved to Blockfrost, which is why a node health probe still passes
-                    // while every chain read fails.
-                    val auth = "?$BLOCKFROST_PROJECT_ID_PARAM=$blockfrostProjectId"
+                    // Blockfrost serves GraphQL at the API ROOT and subscribes at /ws; neither
+                    // matches the self-hosted indexer below. Only the indexer moved — the node
+                    // keeps its own host, so a node health probe passes while chain reads fail.
+                    val blockfrost = "https://$BLOCKFROST_PREPROD_HOST$BLOCKFROST_API_PATH"
                     NetworkConfig(
                         network = network,
-                        indexerBaseUrl = "https://$BLOCKFROST_PREPROD_HOST$BLOCKFROST_API_PATH$auth",
+                        indexerGraphqlUrl = blockfrost,
+                        indexerWsUrl = blockfrost.asWebSocket() + BLOCKFROST_WS_PATH,
+                        indexerCredential = IndexerCredential(BLOCKFROST_PROJECT_ID_PARAM, blockfrostProjectId),
                         nodeRpcUrl = "wss://rpc.preprod.midnight.network",
                         proofServerUrl = proofServerUrl,
                         developmentMode = true // Allow local proof server HTTP
                     )
                 }
 
-                MidnightNetwork.PREVIEW -> NetworkConfig(
+                MidnightNetwork.PREVIEW -> selfHostedIndexer(
                     network = network,
-                    indexerBaseUrl = "https://indexer.preview.midnight.network$INDEXER_API_PATH",
+                    indexerRoot = "https://indexer.preview.midnight.network$INDEXER_API_PATH",
                     nodeRpcUrl = "wss://rpc.preview.midnight.network",
                     proofServerUrl = proofServerUrl,
-                    developmentMode = true // Allow local proof server HTTP
                 )
 
-                MidnightNetwork.UNDEPLOYED -> NetworkConfig(
+                MidnightNetwork.UNDEPLOYED -> selfHostedIndexer(
                     network = network,
-                    indexerBaseUrl = "http://$host:$LOCALNET_INDEXER_PORT$INDEXER_API_PATH",
+                    indexerRoot = "http://$host:$LOCALNET_INDEXER_PORT$INDEXER_API_PATH",
                     nodeRpcUrl = "ws://$host:$LOCALNET_NODE_RPC_PORT",
                     proofServerUrl = proofServerUrl,
-                    developmentMode = true // All local services
                 )
             }
         }
+
+        /** The Midnight indexer's own shape: GraphQL under /graphql, subscriptions under /graphql/ws. */
+        private fun selfHostedIndexer(
+            network: MidnightNetwork,
+            indexerRoot: String,
+            nodeRpcUrl: String,
+            proofServerUrl: String,
+        ) = NetworkConfig(
+            network = network,
+            indexerGraphqlUrl = indexerRoot + INDEXER_GRAPHQL_PATH,
+            indexerWsUrl = indexerRoot.asWebSocket() + INDEXER_WS_PATH,
+            indexerCredential = null,
+            nodeRpcUrl = nodeRpcUrl,
+            proofServerUrl = proofServerUrl,
+            developmentMode = true,
+        )
+
+        private fun String.asWebSocket() = replace("http://", "ws://").replace("https://", "wss://")
     }
 }

@@ -228,7 +228,7 @@ class BboardEndToEndTest {
 
     /** Execute a GraphQL query against the configured indexer and return the parsed response. */
     private fun graphqlQuery(query: String): JSONObject {
-        val url = URL("${readIndexerUrl()}/graphql")
+        val url = URL(readIndexerUrl())
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
@@ -393,7 +393,7 @@ class BboardEndToEndTest {
         private const val PROOF_SIZE_TOLERANCE_B = 64
 
         /** Default URLs — host reached via `adb reverse` (works on emulator and real hardware) */
-        private val DEFAULT_INDEXER_URL = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerBaseUrl
+        private val DEFAULT_INDEXER_URL = com.midnight.kuira.core.network.NetworkConfig.forNetwork(com.midnight.kuira.core.network.MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
         private const val DAPP_CONNECTOR_URL = "ws://127.0.0.1:9932"
 
         /** Fallback contract address — update after each `mn contract deploy` */

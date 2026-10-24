@@ -31,8 +31,7 @@ import org.junit.runner.RunWith
 class BlockHashLookupIntegrationTest {
 
     private val client = IndexerClientImpl(
-        baseUrl = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl,
-        developmentMode = true,
+        config = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),
     )
 
     /**
@@ -49,7 +48,7 @@ class BlockHashLookupIntegrationTest {
             client.getCurrentBlockWithParams()
         } catch (e: Exception) {
             throw AssertionError(
-                "localnet indexer unreachable at ${NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl}. " +
+                "localnet indexer unreachable at ${NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl}. " +
                     "This assertion must RUN, not be skipped: start the localnet, and on a physical " +
                     "device establish the tunnel (`./gradlew adbReverseLocalnet`).",
                 e,
@@ -87,8 +86,8 @@ class BlockHashLookupIntegrationTest {
     @Test
     fun unreachableIndexer_returnsUnavailable_neverThrows() = runBlocking<Unit> {
         val dead = IndexerClientImpl(
-            baseUrl = "http://10.0.2.2:59999/api/v3",
-            developmentMode = true,
+            config = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED)
+                .copy(indexerGraphqlUrl = "http://10.0.2.2:59999/api/v3/graphql"),
         )
         assertEquals(BlockHashLookup.Unavailable, dead.getBlockHashAtHeight(1L))
     }

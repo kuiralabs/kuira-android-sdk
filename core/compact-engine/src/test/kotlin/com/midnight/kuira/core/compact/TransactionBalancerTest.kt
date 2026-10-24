@@ -64,7 +64,7 @@ class TransactionBalancerTest {
         // context.applicationContext returns null with isReturnDefaultValues = true,
         // but the require check fires before that. Builder.build() validates inputs.
         MidnightConfig.Builder(android.content.ContextWrapper(null))
-            .indexerUrl(TEST_INDEXER_URL)
+            .indexerGraphqlUrl(TEST_INDEXER_URL)
             .networkId("preview")
             .build()
     }
@@ -72,7 +72,7 @@ class TransactionBalancerTest {
     @Test(expected = IllegalArgumentException::class)
     fun `builder rejects walletUrl without ws scheme`() {
         MidnightConfig.Builder(android.content.ContextWrapper(null))
-            .indexerUrl(TEST_INDEXER_URL)
+            .indexerGraphqlUrl(TEST_INDEXER_URL)
             .walletUrl("http://localhost:9932")
             .networkId("preview")
             .build()
@@ -91,7 +91,7 @@ class TransactionBalancerTest {
         // receive null. That's fine for validating the builder logic.
         try {
             MidnightConfig.Builder(android.content.ContextWrapper(null))
-                .indexerUrl(TEST_INDEXER_URL)
+                .indexerGraphqlUrl(TEST_INDEXER_URL)
                 .transactionBalancer(balancer)
                 .networkId("preview")
                 .build()

@@ -56,10 +56,7 @@ class BackgroundReceiveChecker(private val appContext: Context) {
         )
         // Match how MidnightSdk builds it: localnet uses HTTP, which the default
         // (production) constructor rejects — pass the network's developmentMode flag.
-        val indexerClient = IndexerClientImpl(
-            baseUrl = config.indexerBaseUrl,
-            developmentMode = config.developmentMode,
-        )
+        val indexerClient = IndexerClientImpl(config = config)
         val database = UtxoDatabase.getInstance(appContext)
         val utxoManager = UtxoManager(
             utxoDao = database.unshieldedUtxoDao(),

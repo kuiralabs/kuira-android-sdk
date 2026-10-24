@@ -169,7 +169,7 @@ object LedgerModule {
                     networkId = network.name,
                     node = NodeRpcClientImpl(nodeUrl = config.nodeRpcUrl, developmentMode = config.developmentMode),
                     proofServer = ProofServerClientImpl(proofServerUrl = config.proofServerUrl, developmentMode = config.developmentMode),
-                    indexer = IndexerClientImpl(baseUrl = config.indexerBaseUrl, developmentMode = config.developmentMode),
+                    indexer = IndexerClientImpl(config = config),
                 )
             },
         )

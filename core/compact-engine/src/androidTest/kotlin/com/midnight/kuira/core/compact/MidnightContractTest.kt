@@ -63,7 +63,7 @@ class MidnightContractTest {
         )
 
         config = MidnightConfig.Builder(context)
-            .indexerUrl(indexerUrl)
+            .indexerGraphqlUrl(indexerUrl)
             .walletUrl(DAPP_CONNECTOR_URL)
             .networkId(networkId)
             .build()
@@ -172,7 +172,7 @@ class MidnightContractTest {
 
     companion object {
         private const val TAG = "MidnightContractTest"
-        private val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerBaseUrl
+        private val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
         private const val DAPP_CONNECTOR_URL = "ws://127.0.0.1:9932"
 
         private val BBOARD_CIRCUITS = listOf("post", "takeDown")

@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.Flow
  * - Calculate balances from UTXO set
  * - No full node required
  *
- * **GraphQL Endpoints** (composed from `NetworkConfig.forNetwork(...).indexerBaseUrl`):
+ * **GraphQL Endpoints** (taken RESOLVED from `NetworkConfig`, never composed here):
  * - HTTP Queries: `{baseUrl}/graphql`
  * - WebSocket Subscriptions: `{baseUrl}/graphql/ws` (scheme switched to `ws(s)://`)
  *
