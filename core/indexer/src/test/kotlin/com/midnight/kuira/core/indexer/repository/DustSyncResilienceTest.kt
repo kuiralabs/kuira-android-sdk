@@ -89,7 +89,36 @@ class DustSyncResilienceTest {
         )
     }
 
+    /**
+     * The other half of the problem. Resuming inside one attempt is not enough: the sync is also
+     * restarted from above — a new refresh, a new process — and each of those used to repeat all
+     * ~1.7M events. The streamed spill is the expensive part, so it survives a failure and the
+     * next attempt picks it up.
+     */
+    @Test
+    fun `a genesis sync that fails keeps its streamed events for the next attempt`() = runTest {
+        val indexer = FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() })
+        val repository = repositoryFor(indexer)
+
+        runCatching { repository.syncFromBlockchain(ADDRESS, DUST_SEED) }
+
+        assertTrue(
+            "the streamed events must survive, or the next attempt starts at zero again",
+            spillFor(ADDRESS).exists(),
+        )
+    }
+
     // ── fixtures ──
+
+    /** Mirrors DustRepository.spillFileFor so the test names the same file the code does. */
+    private fun spillFor(address: String): java.io.File {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(address.toByteArray())
+            .take(8)
+            .joinToString("") { "%02x".format(it) }
+        return java.io.File(System.getProperty("java.io.tmpdir"), "dust_events_$digest.hex")
+    }
+
 
     private fun repositoryFor(indexer: IndexerClient): DustRepository {
         val dataStore = mock<DataStore<Preferences>>()

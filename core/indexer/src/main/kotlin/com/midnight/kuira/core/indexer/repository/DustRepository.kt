@@ -127,6 +127,9 @@ class DustRepository @Inject constructor(
         /** Cursor sentinel for "nothing streamed yet" — event ids start at 0. */
         private const val NO_EVENT_ID = -1L
 
+        /** Bytes of the address digest used to name a spill file; 8 is far past collision risk. */
+        private const val SPILL_NAME_BYTES = 8
+
         /** Replay spill file, written one hex event per line and read back natively. */
         private const val SPILL_PREFIX = "dust_events_"
         private const val SPILL_SUFFIX = ".hex"
@@ -146,6 +149,10 @@ class DustRepository @Inject constructor(
 
         // Key format: "dust_last_event_{address}" (for delta sync resume)
         private fun lastEventIdKey(address: String) = longPreferencesKey("dust_last_event_$address")
+
+        // How far the genesis spill file has been streamed, so a restarted sync resumes the
+        // (slow, network-bound) streaming phase instead of repeating it.
+        private fun spillCursorKey(address: String) = longPreferencesKey("dust_spill_cursor_$address")
 
         // Time for balance calculations
         private fun currentTimeMillis(): Long = System.currentTimeMillis()
@@ -531,15 +538,22 @@ class DustRepository @Inject constructor(
         // CRITICAL: Do NOT use hex-concatenation + tag-prefix splitting.
         // The tag prefix can appear in SCALE binary data, causing false splits
         // that corrupt events and produce wrong Merkle roots.
-        deleteOrphanedSpillFiles()
-        val tempFile = java.io.File.createTempFile(SPILL_PREFIX, SPILL_SUFFIX)
+        // A genesis sync resumes its own spill file when one survived an earlier attempt; a
+        // delta sync always starts a fresh one, since it is bounded and cheap by definition.
+        val tempFile = spillFileFor(address)
+        val resumeFrom = if (fromId == null) loadSpillCursor(address)?.takeIf { tempFile.exists() } else null
+        if (resumeFrom == null) discardSpill(address)
         var totalEvents = 0
-        var latestEventId = getLastAppliedEventId(address) ?: -1L
+        var latestEventId = resumeFrom ?: (getLastAppliedEventId(address) ?: NO_EVENT_ID)
+        var reachedTheEnd = false
+        if (resumeFrom != null) {
+            Log.i(TAG, "Resuming the genesis spill at event $resumeFrom (${tempFile.length() / 1024 / 1024}MB already streamed)")
+        }
 
         try {
             try {
-                tempFile.bufferedWriter().use { writer ->
-                    val flow = indexerClient.subscribeToDustEvents(fromId = fromId)
+                java.io.BufferedWriter(java.io.FileWriter(tempFile, resumeFrom != null)).use { writer ->
+                    val flow = indexerClient.subscribeToDustEvents(fromId = resumeFrom?.plus(1) ?: fromId)
                     val isDelta = fromId != null
 
                     // Stream into the writer, reconnecting when the transport drops, for as long
@@ -563,6 +577,8 @@ class DustRepository @Inject constructor(
                                     if (totalEvents % PROGRESS_LOG_EVERY == 0) {
                                         Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
                                         onProgress?.invoke(totalEvents, event.maxId.toInt())
+                                        // Genesis only: the cursor is what makes a restart cheap.
+                                        if (fromId == null) saveSpillCursor(address, writer, latestEventId)
                                     }
 
                                     if (event.id >= event.maxId) {
@@ -624,8 +640,10 @@ class DustRepository @Inject constructor(
                     // Delta resume with nothing new on chain — the loaded checkpoint
                     // is already current. Keep it live for callers.
                     retainLastSyncedState(baseState)
+                    reachedTheEnd = true
                     return true
                 }
+                reachedTheEnd = true
                 return fromId != null
             }
 
@@ -676,26 +694,50 @@ class DustRepository @Inject constructor(
             // failed delta sync, so syncFromBlockchain deleted the checkpoint and
             // re-synced from genesis on every refresh. UTXO count is a separate
             // query (getUtxoCount / getBalance).
+            reachedTheEnd = true
             return true
         } finally {
-            // The spill file is ~200MB at PreProd scale and lives in the app's CACHE dir, which
-            // Android reclaims when over quota. Deleting it only on the success paths leaked one
-            // per failed sync — enough of them and installd starts purging the file the NEXT sync
-            // is still reading.
-            tempFile.delete()
+            // A genesis spill that did NOT reach the end is the resume point for the next
+            // attempt — the ~200MB of events already streamed, which is the expensive part.
+            // Everything else is dead weight in a cache dir Android reclaims when over quota.
+            if (reachedTheEnd || fromId != null) {
+                discardSpill(address)
+            } else {
+                Log.i(TAG, "Keeping the genesis spill at event $latestEventId for the next attempt")
+            }
         }
     }
 
-    /** Spill files left by a sync that died before its cleanup ran — a crash, a kill, an OOM. */
-    private fun deleteOrphanedSpillFiles() {
-        val tmpDir = java.io.File(System.getProperty("java.io.tmpdir") ?: return)
-        val orphans = tmpDir.listFiles { f ->
-            f.name.startsWith(SPILL_PREFIX) && f.name.endsWith(SPILL_SUFFIX)
-        } ?: return
-        if (orphans.isEmpty()) return
-        val bytes = orphans.sumOf { it.length() }
-        orphans.forEach { it.delete() }
-        Log.d(TAG, "Removed ${orphans.size} orphaned spill file(s), ${bytes / 1024 / 1024}MB")
+    /**
+     * This address's genesis spill file — one deterministic path, not a fresh temp file per
+     * attempt, so an interrupted sync can resume it instead of streaming 1.7M events again.
+     */
+    private fun spillFileFor(address: String): java.io.File {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(address.toByteArray())
+            .take(SPILL_NAME_BYTES)
+            .joinToString("") { "%02x".format(it) }
+        return java.io.File(System.getProperty("java.io.tmpdir"), "$SPILL_PREFIX$digest$SPILL_SUFFIX")
+    }
+
+    /** How far [spillFileFor] has been streamed, or null when there is nothing to resume. */
+    private suspend fun loadSpillCursor(address: String): Long? =
+        dustStateDataStore.data.first()[spillCursorKey(address)]
+
+    /**
+     * Record how far the spill file is good for.
+     *
+     * The flush MUST precede the write: the cursor is a promise that those events are on disk, and
+     * a resume that trusts a buffered cursor would skip events that never landed.
+     */
+    private suspend fun saveSpillCursor(address: String, writer: java.io.Writer, cursor: Long) {
+        writer.flush()
+        dustStateDataStore.edit { prefs -> prefs[spillCursorKey(address)] = cursor }
+    }
+
+    private suspend fun discardSpill(address: String) {
+        spillFileFor(address).delete()
+        dustStateDataStore.edit { prefs -> prefs.remove(spillCursorKey(address)) }
     }
 
     /**
