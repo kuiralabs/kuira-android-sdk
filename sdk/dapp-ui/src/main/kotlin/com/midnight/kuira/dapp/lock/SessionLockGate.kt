@@ -235,7 +235,7 @@ private fun SessionLockScreen(
             if (failed && !unlocking && !sigilRequired) {
                 Text(
                     "Authentication didn't complete — tap to try again.",
-                    color = colors.onSheetSubtle,
+                    color = colors.onSheetDim,
                     fontSize = LOCK_HINT_SIZE,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),

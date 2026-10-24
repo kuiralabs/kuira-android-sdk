@@ -310,7 +310,7 @@ private fun QuickAction(
         Spacer(Modifier.height(6.dp))
         Text(label, color = if (enabled) colors.onSheetDim else colors.onSheetSubtle, fontSize = 12.sp)
         if (hint != null) {
-            Text(hint, color = colors.onSheetSubtle, fontSize = 10.sp)
+            Text(hint, color = colors.onSheetDim, fontSize = 10.sp)
         }
     }
 }
@@ -438,7 +438,7 @@ public fun WalletDustCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
             ) {
-                Text("•", color = colors.onSheetSubtle, fontSize = 14.sp)
+                Text("•", color = colors.onSheetDim, fontSize = 14.sp)
                 Spacer(Modifier.width(8.dp))
                 Text("DUST", color = colors.onSheet, fontSize = 13.sp, fontWeight = FontWeight.W300, letterSpacing = 1.sp)
                 Spacer(Modifier.weight(1f))

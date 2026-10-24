@@ -252,7 +252,7 @@ private fun QrAddressCard(
         Spacer(modifier = Modifier.height(ReceiveDimens.AddressHintGap))
         Text(
             text = "tap address to copy",
-            color = colors.onSheetSubtle,
+            color = colors.onSheetDim,
             fontSize = ReceiveType.AddressHint,
         )
     }
@@ -326,7 +326,7 @@ private fun FundCommandBlock(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "fund via cli",
-            color = colors.onSheetSubtle,
+            color = colors.onSheetDim,
             fontSize = ReceiveType.SectionLabel,
             fontWeight = FontWeight.Medium,
         )

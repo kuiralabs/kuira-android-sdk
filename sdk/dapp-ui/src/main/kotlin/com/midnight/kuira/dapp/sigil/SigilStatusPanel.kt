@@ -510,7 +510,7 @@ private fun NoneBody(
 ) {
     Text(
         "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
-        color = colors.onSheetSubtle,
+        color = colors.onSheetDim,
         fontSize = SigilType.Body,
     )
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
@@ -537,7 +537,7 @@ private fun BackupAvailableBody(
 ) {
     Text(
         "A previous wallet backup was found in your cloud. Restore it, or start fresh on this device.",
-        color = colors.onSheetSubtle,
+        color = colors.onSheetDim,
         fontSize = SigilType.Body,
     )
     Spacer(modifier = Modifier.height(SigilDimens.SheetSectionGap))
@@ -628,7 +628,7 @@ private fun MonoField(
     colors: SigilPanelColors,
     onCopy: (String) -> Unit,
 ) {
-    Text(label, color = colors.onSheetSubtle, fontSize = SigilType.FieldLabel, fontWeight = FontWeight.Medium)
+    Text(label, color = colors.onSheetDim, fontSize = SigilType.FieldLabel, fontWeight = FontWeight.Medium)
     Spacer(modifier = Modifier.height(SigilDimens.SheetLabelGap))
     Text(
         text = value,

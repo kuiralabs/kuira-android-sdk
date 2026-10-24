@@ -847,7 +847,7 @@ private fun SigilPrompt(colors: WalletPanelColors) {
         Text(
             "Forge your sigil first — the wallet derives its seed from your passkey. " +
                 "Open the sigil panel above, tap “forge sigil”, then return.",
-            color = colors.onSheetSubtle,
+            color = colors.onSheetDim,
             fontSize = PanelType.Body,
             lineHeight = 20.sp,
         )
@@ -863,7 +863,7 @@ private fun WalletLocked(colors: WalletPanelColors, onUnlock: () -> Unit) {
         Text(
             "Your session is locked. Unlock with your device biometric to see your " +
                 "balance and act. Your identity stays signed in.",
-            color = colors.onSheetSubtle,
+            color = colors.onSheetDim,
             fontSize = PanelType.Body,
             lineHeight = 20.sp,
         )
@@ -995,7 +995,7 @@ internal fun ConfigRow(
                 placeholder = {
                     Text(
                         "proof server url (default: localhost:6300)",
-                        color = colors.onSheetSubtle,
+                        color = colors.onSheetDim,
                         fontSize = PanelType.AirdropCmd,
                     )
                 },
@@ -1167,23 +1167,21 @@ data class WalletPanelColors(
         // sun/moon toggle swaps to this. Black-on-off-white at varying alpha;
         // semantic Error/Success darkened for contrast on a light surface.
         val Light = WalletPanelColors(
-            pillBackground = Color(0xFFFFFFFF),
-            pillBorder = Color(0x33000000),
-            onPill = Color(0xCC000000),
-            onPillDim = Color(0x80000000),
-            sheetBackground = Color(0xFFF7F7F7),
-            onSheet = Color(0xFF000000),
-            onSheetDim = Color(0x80000000),
-            onSheetSubtle = Color(0x33000000),
-            accent = Color(0xFF000000), // monochrome (was green 0xFF2E7D32) — see Default
-            error = Color(0xFFCC0000),
-            button = Color(0xFFFFFFFF),
-            onButton = Color(0xFF000000),
-            buttonDisabled = Color(0x0A000000),
-            onButtonDisabled = Color(0x33000000),
-            // Darkened green — keeps WCAG-AA contrast on the light surface (the base
-            // #4CAF50 drops below AA there), mirroring how `error` darkens.
-            positive = Color(0xFF2E7D32),
+            pillBackground = MidnightColors.Light,
+            pillBorder = MidnightColors.DarkFaint,
+            onPill = MidnightColors.DarkSoft,
+            onPillDim = MidnightColors.DarkMuted,
+            sheetBackground = MidnightColors.SurfaceLight,
+            onSheet = MidnightColors.Dark,
+            onSheetDim = MidnightColors.DarkMuted,
+            onSheetSubtle = MidnightColors.DarkFaint,
+            accent = MidnightColors.Dark,
+            error = MidnightColors.ErrorTextOnLight,
+            button = MidnightColors.Light,
+            onButton = MidnightColors.Dark,
+            buttonDisabled = MidnightColors.DarkBarely,
+            onButtonDisabled = MidnightColors.DarkFaint,
+            positive = MidnightColors.SuccessTextOnLight,
         )
     }
 }

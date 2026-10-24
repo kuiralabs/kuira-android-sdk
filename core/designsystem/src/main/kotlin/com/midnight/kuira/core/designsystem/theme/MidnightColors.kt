@@ -30,6 +30,19 @@ object MidnightColors {
     val LightFaint = Color(0x33FFFFFF)
     val LightBarely = Color(0x1AFFFFFF)
 
+    // ── Dark (text & elements on a LIGHT surface) ──
+    //
+    // The light-mode mirror of the Light* ramp. Alphas are set from measured contrast against
+    // [SurfaceLight], not copied from the dark ramp: 50% black reads 3.95:1 there and misses
+    // WCAG AA's 4.5:1 for body text, while 50% white on #1A1A1A reads 5.18:1 and passes.
+
+    val SurfaceLight = Color(0xFFF7F7F7)
+    val Dark = Color(0xFF000000)
+    val DarkSoft = Color(0xCC000000)
+    val DarkMuted = Color(0x99000000)   // 60% — 5.61:1 on SurfaceLight
+    val DarkFaint = Color(0x33000000)
+    val DarkBarely = Color(0x1A000000)
+
     // ── Stars ──
 
     val StarBright = Color(0xCCFFFFFF)
@@ -45,4 +58,8 @@ object MidnightColors {
 
     val ErrorText = Color(0xFFFF4444)
     val SuccessText = Color(0xFF4CAF50)
+
+    /** Darkened for a light surface — the dark-mode hues drop below WCAG AA there. */
+    val ErrorTextOnLight = Color(0xFFCC0000)
+    val SuccessTextOnLight = Color(0xFF2E7D32)
 }
