@@ -183,7 +183,39 @@ so release builds stay HTTPS-clean:
 
 ---
 
-## 6. Minimal "Hello World" — deploy + call
+## 6. *(PreProd only)* Supply a Blockfrost project id
+
+PreProd's own indexer was decommissioned on 2026-10-09 — it answers HTTP 410 — and PreProd is now served by Blockfrost, which authenticates every request. Without a project id your app reaches the node but reads nothing from the chain: balances stay empty and sends fail. Localnet and Preview are unaffected and need no credential.
+
+Get a **PreProd** project id at [blockfrost.io](https://blockfrost.io) (PreProd ids start with `nightpreprod`; an id for another network comes back as an opaque 403), then put it in your app's gitignored `local.properties`:
+
+```properties
+# local.properties — never commit this
+kuira.blockfrost.projectId=nightpreprod...
+```
+
+The Kuira contract plugin reads that property and sets it as the `blockfrostProjectId` manifest placeholder on every application variant, so all your manifest needs is the meta-data entry that consumes it:
+
+```xml
+<!-- app/src/main/AndroidManifest.xml, inside <application> -->
+<meta-data
+    android:name="io.github.kuiralabs.BLOCKFROST_PROJECT_ID"
+    android:value="${blockfrostProjectId}" />
+```
+
+The placeholder resolves to an empty string when the property is unset, which keeps the manifest merge working for apps that never touch PreProd. Building a PreProd config without an id then fails fast, with a message naming what is missing rather than a 403 from inside a sync. To check your setup before you run:
+
+```bash
+./gradlew :app:kuiraDoctor
+```
+
+If you build your config in code rather than from the manifest, pass it directly instead: `MidnightSdk.Builder(...).blockfrostProjectId("nightpreprod...")`.
+
+> The SDK sends the id as an HTTP header, never as a URL query parameter, and redacts it from exception messages. That matters because HTTP clients quote the request URL in their own error text — a credential in the URL ends up in every log line and on any error screen that shows the cause.
+
+---
+
+## 7. Minimal "Hello World" — deploy + call
 
 Assuming you picked `dapp-ui` (panel) and your app's main activity is a
 Hilt'd `FragmentActivity`:
@@ -231,7 +263,7 @@ touch.
 
 ---
 
-## 7. Going headless (no panel)
+## 8. Going headless (no panel)
 
 If you don't want the Compose wallet panel, swap the dep:
 
@@ -254,6 +286,7 @@ throws `SigilRequiredException` until a sigil exists. Forge it through
 | Dagger: *"PasskeyConfig cannot be provided without an @Provides-annotated method"* | Step 3 — declare your own `PasskeyConfig` module. |
 | Runtime: *"CLEARTEXT communication to 10.0.2.2 not permitted by network security policy"* | Step 5 — add the debug manifest. |
 | Biometric prompt fails / PRF returns null | Step 4 — `assetlinks.json` missing, wrong `package_name`, or wrong cert SHA-256. |
+| On PreProd: balance stays empty, sends fail, indexer returns 403 or 410 | Step 6 — no Blockfrost project id, or one for a different network. Run `./gradlew :app:kuiraDoctor`. |
 | App balance stays at 0 after an airdrop | The wallet's background subscription is live; check `adb logcat` for indexer connectivity. If you're on localnet, see the internal docs — localnet state is ephemeral; restart wipes funds. |
 | `IllegalArgumentException: Could not find io.github.kuiralabs:…` | Check the alpha version is current; the SDK is `0.1.0-alpha01` at the time of writing. |
 

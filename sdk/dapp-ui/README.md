@@ -163,6 +163,17 @@ A loud `Log.w(WalletPanel, "DEV: bypassing PRF…")` fires on every
 seed read while the override is active so it's obvious the wallet
 isn't using a real user seed.
 
+## Running the panel on PreProd
+
+PreProd's indexer was decommissioned on 2026-10-09 and is now served by Blockfrost, which authenticates every request, so the panel needs a project id to read anything there. It comes from the same gitignored file as the dev seed:
+
+```properties
+# root local.properties (gitignored)
+kuira.blockfrost.projectId=nightpreprod...
+```
+
+The Kuira contract plugin turns that into the `blockfrostProjectId` manifest placeholder; the host app consumes it through a `<meta-data android:name="io.github.kuiralabs.BLOCKFROST_PROJECT_ID">` entry. Full setup, including what happens when it is missing, is in [INTEGRATION.md](../../INTEGRATION.md) step 6. Localnet and Preview need nothing.
+
 ## Tests
 
 ```bash

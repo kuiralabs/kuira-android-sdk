@@ -25,6 +25,7 @@ self-custody wallet.
 | Android NDK | 26+ — required to build the Rust FFI |
 | Rust | via [rustup](https://rustup.rs); add the Android targets: `rustup target add aarch64-linux-android x86_64-linux-android` |
 | A localnet | node + indexer + proof server, to run anything on-chain — see the [localnet / integration guide][docs] |
+| A Blockfrost project id | PreProd only. Its own indexer was decommissioned on 2026-10-09, so PreProd reads now authenticate against Blockfrost — see [INTEGRATION.md](INTEGRATION.md) step 6 |
 
 ### Clone (with the native submodule)
 
