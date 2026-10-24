@@ -19,6 +19,7 @@ import org.mockito.kotlin.whenever
 import java.math.BigInteger
 import org.junit.Assert.assertTrue
 import java.net.SocketTimeoutException
+import java.io.File
 
 /**
  * Unit tests for DustRepository.
@@ -82,6 +83,30 @@ class DustRepositoryTest {
             "a failed sync must not return a verdict about the chain: ${thrown.getOrNull()}",
             thrown.isFailure,
         )
+    }
+
+    /**
+     * The spill file is ~200MB at PreProd scale and lives in the app's cache dir, which Android
+     * reclaims when over quota. Deleting it only on the success paths leaked one per FAILED sync,
+     * and the PreProd retry loop produced those by the dozen — 2GB observed against a 37MB quota,
+     * at which point installd purges the file the next sync is still reading.
+     */
+    @Test
+    fun `a failed sync leaves no spill file behind`() = runTest {
+        val tmpDir = File(System.getProperty("java.io.tmpdir")!!)
+        fun spillFiles() = tmpDir.listFiles { f: File ->
+            f.name.startsWith("dust_events_") && f.name.endsWith(".hex")
+        }?.size ?: 0
+
+        whenever(dustStateDataStore.data).thenReturn(flowOf(mock()))
+        whenever(indexerClient.getCurrentBlockWithParams()).thenAnswer {
+            throw SocketTimeoutException("sent ping but didn't receive pong within 20000ms")
+        }
+
+        val before = spillFiles()
+        runCatching { repository.syncFromBlockchain(testAddress, ByteArray(32)) }
+
+        assertEquals("a failed sync must clean up after itself", before, spillFiles())
     }
 
     // ==================== Balance Calculation Tests ====================

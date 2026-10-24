@@ -120,6 +120,10 @@ class DustRepository @Inject constructor(
     companion object {
         private const val TAG = "DustRepository"
 
+        /** Replay spill file, written one hex event per line and read back natively. */
+        private const val SPILL_PREFIX = "dust_events_"
+        private const val SPILL_SUFFIX = ".hex"
+
         /** Events per chunk — matches WASM SDK's chunk size. */
         private const val CHUNK_SIZE = 500
 
@@ -520,138 +524,156 @@ class DustRepository @Inject constructor(
         // CRITICAL: Do NOT use hex-concatenation + tag-prefix splitting.
         // The tag prefix can appear in SCALE binary data, causing false splits
         // that corrupt events and produce wrong Merkle roots.
-        val tempFile = java.io.File.createTempFile("dust_events_", ".hex")
+        deleteOrphanedSpillFiles()
+        val tempFile = java.io.File.createTempFile(SPILL_PREFIX, SPILL_SUFFIX)
         var totalEvents = 0
         var latestEventId = getLastAppliedEventId(address) ?: -1L
 
         try {
-            tempFile.bufferedWriter().use { writer ->
-                val flow = indexerClient.subscribeToDustEvents(fromId = fromId)
-                val isDelta = fromId != null
+            try {
+                tempFile.bufferedWriter().use { writer ->
+                    val flow = indexerClient.subscribeToDustEvents(fromId = fromId)
+                    val isDelta = fromId != null
 
-                if (isDelta) {
-                    // Wait up to the timeout for the first new event. firstOrNull
-                    // returns null if the subscription completes with nothing new;
-                    // withTimeoutOrNull returns null if none arrives in time — either
-                    // way the checkpoint is already current, totalEvents stays 0, and
-                    // the totalEvents == 0 block below keeps the loaded state.
-                    //
-                    // This previously collected the first event then threw
-                    // StreamingCompleteSignal, which unwound straight to the outer
-                    // catch — skipping the write + resume, so every delta applied zero
-                    // events and the checkpoint never advanced past its seed.
-                    val firstEvent = withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
-                        flow.firstOrNull()
-                    }
+                    if (isDelta) {
+                        // Wait up to the timeout for the first new event. firstOrNull
+                        // returns null if the subscription completes with nothing new;
+                        // withTimeoutOrNull returns null if none arrives in time — either
+                        // way the checkpoint is already current, totalEvents stays 0, and
+                        // the totalEvents == 0 block below keeps the loaded state.
+                        //
+                        // This previously collected the first event then threw
+                        // StreamingCompleteSignal, which unwound straight to the outer
+                        // catch — skipping the write + resume, so every delta applied zero
+                        // events and the checkpoint never advanced past its seed.
+                        val firstEvent = withTimeoutOrNull(DELTA_FIRST_EVENT_TIMEOUT_MS) {
+                            flow.firstOrNull()
+                        }
 
-                    if (firstEvent != null) {
-                        writer.write(firstEvent.rawHex)
-                        writer.newLine()
-                        latestEventId = firstEvent.id
-                        totalEvents++
+                        if (firstEvent != null) {
+                            writer.write(firstEvent.rawHex)
+                            writer.newLine()
+                            latestEventId = firstEvent.id
+                            totalEvents++
 
-                        if (firstEvent.id < firstEvent.maxId) {
-                            val resumeFlow = indexerClient.subscribeToDustEvents(fromId = firstEvent.id + 1)
-                            resumeFlow.collect { nextEvent ->
-                                writer.write(nextEvent.rawHex)
-                                writer.newLine()
-                                latestEventId = nextEvent.id
-                                totalEvents++
+                            if (firstEvent.id < firstEvent.maxId) {
+                                val resumeFlow = indexerClient.subscribeToDustEvents(fromId = firstEvent.id + 1)
+                                resumeFlow.collect { nextEvent ->
+                                    writer.write(nextEvent.rawHex)
+                                    writer.newLine()
+                                    latestEventId = nextEvent.id
+                                    totalEvents++
 
-                                if (totalEvents % 5000 == 0) {
-                                    Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
-                                    onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
-                                }
+                                    if (totalEvents % 5000 == 0) {
+                                        Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${nextEvent.maxId})")
+                                        onProgress?.invoke(totalEvents, nextEvent.maxId.toInt())
+                                    }
 
-                                if (nextEvent.id >= nextEvent.maxId) {
-                                    throw StreamingCompleteSignal()
+                                    if (nextEvent.id >= nextEvent.maxId) {
+                                        throw StreamingCompleteSignal()
+                                    }
                                 }
                             }
                         }
-                    }
-                } else {
-                    flow.collect { event ->
-                        writer.write(event.rawHex)
-                        writer.newLine()
-                        latestEventId = event.id
-                        totalEvents++
+                    } else {
+                        flow.collect { event ->
+                            writer.write(event.rawHex)
+                            writer.newLine()
+                            latestEventId = event.id
+                            totalEvents++
 
-                        if (totalEvents % 5000 == 0) {
-                            Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
-                            onProgress?.invoke(totalEvents, event.maxId.toInt())
-                        }
+                            if (totalEvents % 5000 == 0) {
+                                Log.d(TAG, "Streaming progress: $totalEvents events (id=$latestEventId/${event.maxId})")
+                                onProgress?.invoke(totalEvents, event.maxId.toInt())
+                            }
 
-                        if (event.id >= event.maxId) {
-                            throw StreamingCompleteSignal()
+                            if (event.id >= event.maxId) {
+                                throw StreamingCompleteSignal()
+                            }
                         }
                     }
                 }
+            } catch (_: StreamingCompleteSignal) {
+                // Normal completion
             }
-        } catch (_: StreamingCompleteSignal) {
-            // Normal completion
-        }
 
-        if (totalEvents == 0) {
-            tempFile.delete()
-            if (baseState != null) {
-                // Delta resume with nothing new on chain — the loaded checkpoint
-                // is already current. Keep it live for callers.
-                retainLastSyncedState(baseState)
-                return true
+            if (totalEvents == 0) {
+                if (baseState != null) {
+                    // Delta resume with nothing new on chain — the loaded checkpoint
+                    // is already current. Keep it live for callers.
+                    retainLastSyncedState(baseState)
+                    return true
+                }
+                return fromId != null
             }
-            return fromId != null
-        }
 
-        // Signal: streaming done, now replaying (this is the long part)
-        onProgress?.invoke(totalEvents, totalEvents) // 100% streaming
-        // Use negative totalEvents as sentinel for "replaying" phase
-        onProgress?.invoke(-1, totalEvents)
+            // Signal: streaming done, now replaying (this is the long part)
+            onProgress?.invoke(totalEvents, totalEvents) // 100% streaming
+            // Use negative totalEvents as sentinel for "replaying" phase
+            onProgress?.invoke(-1, totalEvents)
 
-        // Delta resume replays onto the loaded checkpoint; full sync onto a
-        // fresh empty state.
-        val state = baseState ?: (DustLocalState.create()
-            ?: run {
-                tempFile.delete()
-                Log.e(TAG, "Failed to create DustLocalState")
+            // Delta resume replays onto the loaded checkpoint; full sync onto a
+            // fresh empty state.
+            val state = baseState ?: (DustLocalState.create()
+                ?: run {
+                    Log.e(TAG, "Failed to create DustLocalState")
+                    return false
+                })
+
+            val replayKind = if (baseState != null) "delta onto checkpoint" else "full from genesis"
+            Log.d(TAG, "Replaying $totalEvents events ($replayKind, ${tempFile.length() / 1024}KB file)")
+            val newState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                state.replayEventsFromFile(dustSeed, tempFile.absolutePath)
+            }
+            state.close()
+
+            if (newState == null) {
+                Log.e(TAG, "Dust replay failed after $totalEvents events")
                 return false
-            })
+            }
 
-        val replayKind = if (baseState != null) "delta onto checkpoint" else "full from genesis"
-        Log.d(TAG, "Replaying $totalEvents events ($replayKind, ${tempFile.length() / 1024}KB file)")
-        val newState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            state.replayEventsFromFile(dustSeed, tempFile.absolutePath)
+            // Save checkpoint (best-effort) but keep state alive for caller
+            val utxoCount = newState.getUtxoCount()
+            syncTokensFromState(address, newState)
+            try {
+                saveCheckpoint(address, newState, latestEventId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Checkpoint save failed (non-fatal): ${e.message}")
+            }
+            Log.d(TAG, "Sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
+
+            // Keep the live state so same-process callers skip a re-deserialize.
+            // (Serialization is root-lossless — proven by the compact-engine
+            // serialize_deserialize_reproduces_root test — so this is a perf
+            // shortcut, not a correctness workaround; the saved checkpoint above
+            // is authoritative across process restarts.)
+            retainLastSyncedState(newState)
+
+            // Success = the sync completed and the checkpoint is saved, NOT "has
+            // dust". Returning utxoCount > 0 here made a 0-UTXO wallet look like a
+            // failed delta sync, so syncFromBlockchain deleted the checkpoint and
+            // re-synced from genesis on every refresh. UTXO count is a separate
+            // query (getUtxoCount / getBalance).
+            return true
+        } finally {
+            // The spill file is ~200MB at PreProd scale and lives in the app's CACHE dir, which
+            // Android reclaims when over quota. Deleting it only on the success paths leaked one
+            // per failed sync — enough of them and installd starts purging the file the NEXT sync
+            // is still reading.
+            tempFile.delete()
         }
-        state.close()
-        tempFile.delete()
+    }
 
-        if (newState == null) {
-            Log.e(TAG, "Dust replay failed after $totalEvents events")
-            return false
-        }
-
-        // Save checkpoint (best-effort) but keep state alive for caller
-        val utxoCount = newState.getUtxoCount()
-        syncTokensFromState(address, newState)
-        try {
-            saveCheckpoint(address, newState, latestEventId)
-        } catch (e: Exception) {
-            Log.w(TAG, "Checkpoint save failed (non-fatal): ${e.message}")
-        }
-        Log.d(TAG, "Sync complete: $utxoCount UTXOs, $totalEvents events, last ID=$latestEventId")
-
-        // Keep the live state so same-process callers skip a re-deserialize.
-        // (Serialization is root-lossless — proven by the compact-engine
-        // serialize_deserialize_reproduces_root test — so this is a perf
-        // shortcut, not a correctness workaround; the saved checkpoint above
-        // is authoritative across process restarts.)
-        retainLastSyncedState(newState)
-
-        // Success = the sync completed and the checkpoint is saved, NOT "has
-        // dust". Returning utxoCount > 0 here made a 0-UTXO wallet look like a
-        // failed delta sync, so syncFromBlockchain deleted the checkpoint and
-        // re-synced from genesis on every refresh. UTXO count is a separate
-        // query (getUtxoCount / getBalance).
-        return true
+    /** Spill files left by a sync that died before its cleanup ran — a crash, a kill, an OOM. */
+    private fun deleteOrphanedSpillFiles() {
+        val tmpDir = java.io.File(System.getProperty("java.io.tmpdir") ?: return)
+        val orphans = tmpDir.listFiles { f ->
+            f.name.startsWith(SPILL_PREFIX) && f.name.endsWith(SPILL_SUFFIX)
+        } ?: return
+        if (orphans.isEmpty()) return
+        val bytes = orphans.sumOf { it.length() }
+        orphans.forEach { it.delete() }
+        Log.d(TAG, "Removed ${orphans.size} orphaned spill file(s), ${bytes / 1024 / 1024}MB")
     }
 
     /**
