@@ -17,6 +17,8 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.math.BigInteger
+import org.junit.Assert.assertTrue
+import java.net.SocketTimeoutException
 
 /**
  * Unit tests for DustRepository.
@@ -55,6 +57,31 @@ class DustRepositoryTest {
         balanceCalculator = mock()
         indexerClient = mock()
         repository = DustRepository(dustDao, dustStateDataStore, balanceCalculator, indexerClient)
+    }
+
+    // ==================== Sync failure handling ====================
+
+    /**
+     * The PreProd loop. A dropped WebSocket ping used to be swallowed into `false`, which is this
+     * method's word for "synced fine, this address has no dust" — and the caller's recovery for
+     * THAT is to delete the checkpoint and rebuild from genesis. On PreProd the replay streams
+     * ~1.7M events, so another ping drops before it finishes and it starts over, forever.
+     *
+     * A sync that FAILED must say so, and must not be mistaken for an empty chain.
+     */
+    @Test
+    fun `a transport failure is reported, not reported as an empty chain`() = runTest {
+        whenever(dustStateDataStore.data).thenReturn(flowOf(mock()))
+        whenever(indexerClient.getCurrentBlockWithParams()).thenAnswer {
+            throw SocketTimeoutException("sent ping but didn't receive pong within 20000ms")
+        }
+
+        val thrown = runCatching { repository.syncFromBlockchain(testAddress, ByteArray(32)) }
+
+        assertTrue(
+            "a failed sync must not return a verdict about the chain: ${thrown.getOrNull()}",
+            thrown.isFailure,
+        )
     }
 
     // ==================== Balance Calculation Tests ====================

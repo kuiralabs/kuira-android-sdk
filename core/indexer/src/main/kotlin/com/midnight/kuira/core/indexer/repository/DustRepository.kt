@@ -479,8 +479,13 @@ class DustRepository @Inject constructor(
         } catch (e: CancellationException) {
             throw e // Never swallow cancellation in suspend functions
         } catch (e: Exception) {
+            // A FAILED sync says nothing about the checkpoint, so it must not be reported as
+            // `false` — that is this function's word for "synced fine, this address has no dust",
+            // and the caller's recovery for that is to delete the checkpoint and rebuild from
+            // genesis. One dropped WebSocket ping then destroys a multi-minute replay and starts
+            // it over, which on PreProd means it can never finish.
             Log.e(TAG, "Failed to sync dust from blockchain", e)
-            return false
+            throw e
         }
     }
 
