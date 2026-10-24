@@ -81,7 +81,14 @@ class AbandonedSpillCleanupTest {
     fun `this address keeps the spill it is about to resume`() = runTest {
         val mine = spill(spillNameFor(ADDRESS), ageMillis = ONE_DAY)
 
-        syncOnce(preferences = preferencesOf(longPreferencesKey("dust_spill_cursor_$ADDRESS") to 9L))
+        // Both halves: a cursor says which event is safe, the byte count says how much of the file
+        // it covers. A cursor alone is not resumable — the bytes past it are unaccounted for.
+        syncOnce(
+            preferences = preferencesOf(
+                longPreferencesKey("dust_spill_cursor_$ADDRESS") to 9L,
+                longPreferencesKey("dust_spill_bytes_$ADDRESS") to mine.length(),
+            ),
+        )
 
         assertTrue("the sync deleted the very spill it was going to resume", mine.exists())
     }

@@ -177,6 +177,33 @@ class DustSyncResilienceTest {
         )
     }
 
+    /**
+     * Discarding an unusable spill must restart the STREAM, not just the file.
+     *
+     * Leaving the cursor set after the discard made the next subscription resume from it onto the
+     * empty state the discard had just created, so a few thousand tail events replayed against a
+     * tree starting at zero — `MerkleTreeUpdate(BadUpdatePath)`, ninety seconds after a log line
+     * claiming the stream had restarted.
+     */
+    @Test
+    fun `an unusable spill restarts from genesis, not from its old cursor`() = runTest {
+        val store = RecordingPreferences()
+        val first = FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() })
+        runCatching { repositoryFor(first, store).syncFromBlockchain(ADDRESS, DUST_SEED) }
+        // A file SHORTER than the cursor claims — truncated by a purge, a full disk, a half-written
+        // flush. Nothing can be salvaged from it, so the only honest move is to start over.
+        spillFor(ADDRESS).writeText("")
+
+        val second = FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() })
+        runCatching { repositoryFor(second, store).syncFromBlockchain(ADDRESS, DUST_SEED) }
+
+        assertEquals(
+            "after discarding the spill the stream must open at genesis, not at the dead cursor",
+            null,
+            second.dustSubscriptionFromIds.firstOrNull(),
+        )
+    }
+
     // ── fixtures ──
 
     /** Mirrors DustRepository.spillFileFor so the test names the same file the code does. */

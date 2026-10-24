@@ -565,15 +565,21 @@ class DustRepository @Inject constructor(
         // A genesis sync resumes its own spill file when one survived an earlier attempt; a
         // delta sync always starts a fresh one, since it is bounded and cheap by definition.
         val tempFile = spillFileFor(address)
-        val resumeFrom = if (fromId == null) loadSpillCursor(address)?.takeIf { tempFile.exists() } else null
+        var resumeFrom = if (fromId == null) loadSpillCursor(address)?.takeIf { tempFile.exists() } else null
         if (resumeFrom == null) {
             discardSpill(address)
         } else if (!trimSpillToCursor(address, tempFile)) {
             // The file reaches past what the cursor accounts for and we cannot tell by how much,
             // so appending would duplicate events. Streaming 1.7M again costs minutes; replaying a
             // file with events out of order costs the sync and says so only at the very end.
-            Log.w(TAG, "Spill cannot be reconciled with its cursor — restarting the stream")
+            //
+            // Dropping the cursor matters as much as dropping the file: left set, the stream
+            // resumes from it onto the empty state the discard just created, and the few thousand
+            // events from the tail replay against a tree that starts at zero — MerkleTreeUpdate
+            // (BadUpdatePath), after a restart that only restarted the file.
+            Log.w(TAG, "Spill cannot be reconciled with its cursor — restarting the stream from genesis")
             discardSpill(address)
+            resumeFrom = null
         }
         var totalEvents = 0
         var latestEventId = resumeFrom ?: (getLastAppliedEventId(address) ?: NO_EVENT_ID)
