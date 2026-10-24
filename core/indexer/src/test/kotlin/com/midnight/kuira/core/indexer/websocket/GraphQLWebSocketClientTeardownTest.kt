@@ -104,6 +104,7 @@ class GraphQLWebSocketClientTeardownTest {
         val client = GraphQLWebSocketClient(
             httpClient = httpClient,
             url = "ws://localhost:$port/graphql/ws",
+            credential = null,
             connectionTimeout = 5_000,
         )
         client.connect()

@@ -250,7 +250,11 @@ open class ShieldedRepository @Inject constructor(
             // network's host. Symptom: switching networks leaves "phantom"
             // shielded subscriptions hammering the old endpoint forever.
             val httpClient = createFreshHttpClient()
-            val client = GraphQLWebSocketClient(url = wsEndpoint, httpClient = httpClient)
+            val client = GraphQLWebSocketClient(
+                url = wsEndpoint,
+                httpClient = httpClient,
+                credential = networkConfig.indexerCredential,
+            )
             try {
                 client.connect()
                 client.subscribe(GraphQLQueries.SUBSCRIBE_ZSWAP_LEDGER_EVENTS, variables)

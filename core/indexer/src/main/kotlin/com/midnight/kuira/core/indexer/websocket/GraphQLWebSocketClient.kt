@@ -43,7 +43,7 @@ import com.midnight.kuira.core.network.IndexerCredential
 class GraphQLWebSocketClient(
     private val httpClient: HttpClient,
     private val url: String,
-    private val credential: IndexerCredential? = null,
+    private val credential: IndexerCredential?,
     private val connectionTimeout: Long = 10_000
 ) {
     private val json = Json {

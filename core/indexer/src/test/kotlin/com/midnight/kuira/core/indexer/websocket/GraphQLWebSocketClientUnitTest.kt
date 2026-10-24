@@ -59,6 +59,7 @@ class GraphQLWebSocketClientUnitTest {
         val client = GraphQLWebSocketClient(
             httpClient = mockClient,
             url = testWsUrl,
+            credential = null,
             connectionTimeout = 5000
         )
 
@@ -78,6 +79,7 @@ class GraphQLWebSocketClientUnitTest {
         val client = GraphQLWebSocketClient(
             httpClient = mockClient,
             url = "invalid-url",
+            credential = null,
             connectionTimeout = 5000
         )
         assertNotNull(client)
