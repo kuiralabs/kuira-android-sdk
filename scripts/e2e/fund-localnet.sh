@@ -44,8 +44,13 @@ MN_EP=(--node "$MN_NODE" --indexer-ws "$MN_INDEXER_WS" --proof-server "$MN_PROOF
 # The CLI is a variable because mn is ledger-VERSIONED: a 0.6.x build talks only to ledger 9, a
 # 0.5.x build only to ledger 8, and it refuses rather than mis-signing. Set MN_CLI to point this
 # script at a build matching the stack (it is word-split, so a launcher with args works):
-#   MN_CLI="npx -y midnight-wallet-cli@0.5.8" scripts/e2e/fund-localnet.sh
-IFS=' ' read -r -a MN <<< "${MN_CLI:-mn}"
+#   MN_CLI="npx -y midnight-wallet-cli@0.6.0-rc.10" scripts/e2e/fund-localnet.sh
+#
+# Pinned to a ledger-8 build rather than `mn` from PATH, which on a developer machine is whatever
+# they installed last — here 0.6.0-rc.10, which is ledger 9. localnet measured 8.1.3 and PreProd
+# "=8.1.2" on 2026-10-23, so ledger 8 is correct for both. See prepare-localnet-e2e.sh for the
+# full note; keep the two defaults in step.
+IFS=' ' read -r -a MN <<< "${MN_CLI:-npx -y midnight-wallet-cli@0.5.8}"
 
 echo "==> Ensuring the canonical e2e wallet '$WALLET' exists"
 # wallet info/generate are offline (key derivation only) — no endpoints to pin.

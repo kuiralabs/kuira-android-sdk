@@ -67,8 +67,19 @@ INDEXER_URL="$(to_http "${MN_INDEXER_WS%/ws}")"
 PROOF_SERVER_URL="$(to_http "$MN_PROOF_SERVER")"
 
 # `mn` is ledger-versioned, so the CLI is a variable: point this at a build matching the stack.
-#   MN_CLI="npx -y midnight-wallet-cli@0.5.8" scripts/e2e/prepare-localnet-e2e.sh
-export MN_CLI="${MN_CLI:-mn}"
+#   MN_CLI="npx -y midnight-wallet-cli@0.6.0-rc.10" scripts/e2e/prepare-localnet-e2e.sh
+#
+# PINNED, not `mn` from PATH. The default used to be bare `mn`, which is whatever the developer
+# happens to have installed — and on this machine that is 0.6.0-rc.10, a LEDGER 9 build. Both
+# chains we test against are ledger 8, measured 2026-10-23 rather than read off the support
+# matrix (which runs ahead of reality):
+#     localnet  ->  8.1.3
+#     PreProd   ->  "=8.1.2"   (midnight_ledgerVersion over RPC; node runtime 1.0.400)
+# So a default run picked a ledger-9 CLI for ledger-8 chains — the exact skew that cost the
+# investigations behind the MN_CLI seam. 0.5.x drives ledger 8 and is correct for BOTH today.
+# When a chain moves to ledger 9, re-measure and bump this; do not infer it from version numbers,
+# and do not assume PreProd leads localnet — right now it trails it.
+export MN_CLI="${MN_CLI:-npx -y midnight-wallet-cli@0.5.8}"
 IFS=' ' read -r -a MN <<< "$MN_CLI"
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
