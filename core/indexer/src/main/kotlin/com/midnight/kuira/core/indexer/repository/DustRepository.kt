@@ -167,6 +167,9 @@ class DustRepository @Inject constructor(
         // (slow, network-bound) streaming phase instead of repeating it.
         private fun spillCursorKey(address: String) = longPreferencesKey("$SPILL_CURSOR_PREFIX$address")
 
+        /** Bytes of the spill the cursor actually covers; anything past this is unaccounted for. */
+        private fun spillLengthKey(address: String) = longPreferencesKey("dust_spill_bytes_$address")
+
         // Time for balance calculations
         private fun currentTimeMillis(): Long = System.currentTimeMillis()
     }
@@ -563,7 +566,15 @@ class DustRepository @Inject constructor(
         // delta sync always starts a fresh one, since it is bounded and cheap by definition.
         val tempFile = spillFileFor(address)
         val resumeFrom = if (fromId == null) loadSpillCursor(address)?.takeIf { tempFile.exists() } else null
-        if (resumeFrom == null) discardSpill(address)
+        if (resumeFrom == null) {
+            discardSpill(address)
+        } else if (!trimSpillToCursor(address, tempFile)) {
+            // The file reaches past what the cursor accounts for and we cannot tell by how much,
+            // so appending would duplicate events. Streaming 1.7M again costs minutes; replaying a
+            // file with events out of order costs the sync and says so only at the very end.
+            Log.w(TAG, "Spill cannot be reconciled with its cursor — restarting the stream")
+            discardSpill(address)
+        }
         var totalEvents = 0
         var latestEventId = resumeFrom ?: (getLastAppliedEventId(address) ?: NO_EVENT_ID)
         var reachedTheEnd = false
@@ -782,19 +793,50 @@ class DustRepository @Inject constructor(
         dustStateDataStore.data.first()[spillCursorKey(address)]
 
     /**
-     * Record how far the spill file is good for.
+     * Record how far the spill file is good for — as an event id AND as a byte count.
      *
      * The flush MUST precede the write: the cursor is a promise that those events are on disk, and
      * a resume that trusts a buffered cursor would skip events that never landed.
+     *
+     * The byte count matters just as much. The cursor is saved every few thousand events while the
+     * writer keeps going, so when a sync dies the file reaches further than the cursor admits.
+     * Appending from the cursor then writes those events a SECOND time, and the replay meets an
+     * event it has already passed — `EventForPastTime`, eight hours of chain time out of order,
+     * after a 1.4GB stream. Truncating to this length on resume keeps the two in step.
      */
     private suspend fun saveSpillCursor(address: String, writer: java.io.Writer, cursor: Long) {
         writer.flush()
-        dustStateDataStore.edit { prefs -> prefs[spillCursorKey(address)] = cursor }
+        val bytes = spillFileFor(address).length()
+        dustStateDataStore.edit { prefs ->
+            prefs[spillCursorKey(address)] = cursor
+            prefs[spillLengthKey(address)] = bytes
+        }
+    }
+
+    /**
+     * Cut the spill back to exactly the bytes its cursor covers.
+     *
+     * Returns false when the two cannot be reconciled — no recorded length (a spill written before
+     * this was tracked) or a file shorter than claimed — leaving the caller to start over rather
+     * than append onto an unknown tail.
+     */
+    private suspend fun trimSpillToCursor(address: String, spill: java.io.File): Boolean {
+        val accounted = dustStateDataStore.data.first()[spillLengthKey(address)] ?: return false
+        val actual = spill.length()
+        if (actual < accounted) return false
+        if (actual == accounted) return true
+        Log.i(TAG, "Trimming ${actual - accounted} unaccounted bytes off the spill before resuming")
+        return runCatching {
+            java.io.RandomAccessFile(spill, "rw").use { it.setLength(accounted) }
+        }.isSuccess
     }
 
     private suspend fun discardSpill(address: String) {
         spillFileFor(address).delete()
-        dustStateDataStore.edit { prefs -> prefs.remove(spillCursorKey(address)) }
+        dustStateDataStore.edit { prefs ->
+            prefs.remove(spillCursorKey(address))
+            prefs.remove(spillLengthKey(address))
+        }
     }
 
     /**

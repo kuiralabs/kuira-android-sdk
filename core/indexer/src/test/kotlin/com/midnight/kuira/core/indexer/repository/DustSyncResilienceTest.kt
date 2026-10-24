@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -139,6 +140,43 @@ class DustSyncResilienceTest {
         )
     }
 
+    /**
+     * A resumed spill must not contain an event twice.
+     *
+     * The cursor is saved every few thousand events while the writer keeps going, so a sync that
+     * dies leaves a file reaching further than the cursor admits. Appending from the cursor wrote
+     * those events a second time, and the replay met an event it had already passed — on a PreProd
+     * device that surfaced as `EventForPastTime`, eight hours of chain time out of order, only
+     * after 1.4GB had been streamed.
+     *
+     * The second sync is made to fail too, so the spill is still on disk to be read.
+     */
+    @Test
+    fun `a resumed spill drops the tail its cursor never accounted for`() = runTest {
+        val store = RecordingPreferences()
+        val repository = repositoryFor(
+            FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() }),
+            store,
+        )
+        runCatching { repository.syncFromBlockchain(ADDRESS, DUST_SEED) }
+        val spill = spillFor(ADDRESS)
+        assertTrue("the failed sync must leave a spill to resume", spill.exists())
+        // What a dying writer leaves behind: bytes written after the last cursor save.
+        spill.appendText(UNACCOUNTED + "\n")
+
+        runCatching {
+            repositoryFor(
+                FakeIndexer(genesis = emitsThenDrops(upToId = 2), resume = { dropsImmediately() }),
+                store,
+            ).syncFromBlockchain(ADDRESS, DUST_SEED)
+        }
+
+        assertFalse(
+            "the unaccounted tail survived the resume — the replay will meet it out of order",
+            spill.exists() && spill.readText().contains(UNACCOUNTED),
+        )
+    }
+
     // ── fixtures ──
 
     /** Mirrors DustRepository.spillFileFor so the test names the same file the code does. */
@@ -151,11 +189,27 @@ class DustSyncResilienceTest {
     }
 
 
-    private fun repositoryFor(indexer: IndexerClient): DustRepository {
-        val dataStore = mock<DataStore<Preferences>>()
-        whenever(dataStore.data).thenReturn(flowOf(mock()))
-        return DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), indexer, spillDir)
+
+    /**
+     * A DataStore that actually remembers, because a resume is only reachable when the cursor
+     * written by the previous sync survives into the next one. A per-call mock silently made
+     * every "resume" test a fresh genesis instead.
+     */
+    private class RecordingPreferences : DataStore<Preferences> {
+        private val state = kotlinx.coroutines.flow.MutableStateFlow<Preferences>(
+            androidx.datastore.preferences.core.emptyPreferences(),
+        )
+        override val data: Flow<Preferences> get() = state
+        override suspend fun updateData(
+            transform: suspend (t: Preferences) -> Preferences,
+        ): Preferences = transform(state.value).also { state.value = it }
     }
+
+    private fun repositoryFor(
+        indexer: IndexerClient,
+        dataStore: DataStore<Preferences> = RecordingPreferences(),
+    ): DustRepository =
+        DustRepository(mock<DustDao>(), dataStore, mock<DustBalanceCalculator>(), indexer, spillDir)
 
     private fun event(id: Long, maxId: Long = TIP) = RawLedgerEvent(id = id, rawHex = "00", maxId = maxId)
 
@@ -227,6 +281,9 @@ class DustSyncResilienceTest {
 
     private companion object {
         private const val ADDRESS = "mn_addr_preprod1test"
+
+        /** Stands in for bytes a dying writer wrote after the last cursor save. */
+        private const val UNACCOUNTED = "beyond-the-cursor"
         private val DUST_SEED = ByteArray(32)
 
         /** Far enough away that no fixture reaches it by accident. */
