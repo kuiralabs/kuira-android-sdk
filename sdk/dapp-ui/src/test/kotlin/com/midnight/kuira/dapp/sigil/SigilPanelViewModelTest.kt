@@ -319,6 +319,13 @@ class SigilPanelViewModelTest {
         verify(exactly = 0) { sdkProvider.close() }
     }
 
+    // NOT TESTED HERE: a Block Store probe that HANGS rather than throws. The probe is bounded in
+    // production (BACKUP_PROBE_TIMEOUT_MS), but this class's MainDispatcherRule builds its own
+    // UnconfinedTestDispatcher with a private scheduler, so runTest's virtual clock never drives
+    // the view model's coroutine and the timeout cannot be made to fire. Testing it needs the
+    // timeout injected or the rule sharing the test scheduler. Verified on device instead:
+    // Midnight Tally sat on "checking for cloud backup…" indefinitely without the bound.
+
     // ── Helpers ──
 
     private fun newVm(

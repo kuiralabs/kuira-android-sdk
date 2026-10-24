@@ -14,6 +14,7 @@ import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.Optional
@@ -109,7 +110,15 @@ class SigilPanelViewModel @Inject constructor(
             return
         }
         try {
-            val blob = blockStoreStorage.retrieve()
+            // Bounded: Block Store does not fail when Play services cannot connect, it hangs — and
+            // this status gates the whole panel, so a host app that shows its own controls only
+            // once the sigil settles never shows them at all. A probe that cannot answer is the
+            // same as no backup for our purposes; the user can still restore deliberately.
+            val blob = withTimeoutOrNull(BACKUP_PROBE_TIMEOUT_MS) { blockStoreStorage.retrieve() }
+                ?: run {
+                    Log.w(TAG, "Block Store did not answer within ${BACKUP_PROBE_TIMEOUT_MS}ms — settling on None")
+                    null
+                }
             if (blob != null && blob.isNotEmpty() &&
                 _status.value is SigilStatus.Initializing) {
                 Log.i(TAG, "Block Store backup detected (${blob.size} bytes) — offering Restore vs Start Fresh")
@@ -351,6 +360,9 @@ class SigilPanelViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "SigilPanel"
+
+        /** A cloud probe the panel blocks on cannot be allowed to block forever. */
+        private const val BACKUP_PROBE_TIMEOUT_MS = 15_000L
 
         // Pref schema (file name, key names) lives on
         // [com.midnight.kuira.core.identity.sigil.SigilStateStore]
