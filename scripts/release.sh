@@ -51,8 +51,14 @@ bump() {
   [[ -f "$f" ]] || { echo "  (skip, not found) $f"; return 0; }
   # 1. Maven coordinates: io.github.kuiralabs:<artifact>:<version>
   sedi "s#(io\.github\.kuiralabs:[a-z0-9-]+:)${V}#\1${VERSION}#g" "$f"
-  # 2. Contract Gradle plugin: id("io.github.kuiralabs.contract") version "<version>"
-  sedi "s#(id\(\"io\.github\.kuiralabs\.contract\"\) version \")${V}#\1${VERSION}#g" "$f"
+  # 2. ANY Kuira Gradle plugin: id("io.github.kuiralabs.<plugin>") version "<version>"
+  #    Matches the plugin id generically rather than naming one. This used to hardcode
+  #    `.contract`, so when `.localnet` shipped later it was never bumped — leaving apps
+  #    half-bumped, with the contract plugin and dapp-ui on the new version and the localnet
+  #    plugin still on the old one. Gradle resolves that happily, so nothing complains; the app
+  #    just quietly runs two SDK generations at once. Any plugin added in future is covered now
+  #    without touching this script again.
+  sedi "s#(id\(\"io\.github\.kuiralabs\.[a-z0-9-]+\"\) version \")${V}#\1${VERSION}#g" "$f"
   # 3. Version catalog: kuira = "<version>"
   sedi "s#^(kuira = \")${V}#\1${VERSION}#" "$f"
   # 4. mkdocs macro vars
@@ -72,6 +78,9 @@ bump "$DOCS/mkdocs.yml"
 bump "$DOCS/README.md"
 bump "$BBOARD/app/build.gradle.kts"
 bump "$TALLY/gradle/libs.versions.toml"
+# Tally applies the contract plugin in its app script too, and this line was missing — so its
+# version catalog moved to the new release while its plugin id stayed on the old one.
+bump "$TALLY/app/build.gradle.kts"
 bump "$TALLY/README.md"
 bump "$MONOREPO/examples/midnight-kicks/app/build.gradle.kts"
 # examples/bboard — skipped on purpose (-PkuiraVersion-driven).

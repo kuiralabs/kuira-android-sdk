@@ -46,10 +46,10 @@ die()  { printf '  \033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 # which bumps the very same set of repos.
 CONSUMERS=(
   "$HOME/Development/example-bboard-android|com.midnight.example.bboard|.BBoardActivity"
+  "$HOME/Development/kuira-starter-android|com.kuiralabs.starter.counter|.MainActivity"
+  "$HOME/Development/kuira-examples/midnight-tally|com.kuiraexamples.tally|.MainActivity"
+  "$PWD/examples/midnight-kicks|com.midnight.kicks|.KicksActivity"
 )
-# starter, midnight-tally and midnight-kicks join this list once they carry journeys; they are
-# listed nowhere yet precisely because an app in this array with no journeys would fail the run,
-# which is the correct behaviour and not something to paper over with an empty directory.
 
 echo
 bold "Release gate for $VERSION on $SERIAL"

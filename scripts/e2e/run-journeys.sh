@@ -57,6 +57,18 @@ adb "${ADB_ARGS[@]}" shell pm list packages 2>/dev/null | grep -q "^package:$PAC
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Pre-grant the runtime permissions these apps ask for on first launch. Without this the very
+# first journey reads a system permission dialog instead of the app — the layout tree comes back
+# holding "Allow <app> to send you notifications?" and nothing else, so every assertion about the
+# app's own screen fails for a reason that has nothing to do with the app. Granting beforehand is
+# also the only deterministic option: a gate cannot depend on something tapping that dialog.
+# `installDebug -Pandroid.injected.install.options=-g` is NOT sufficient here — tried, and the
+# dialog still appeared. Failure is ignored: an app that does not declare a permission cannot be
+# granted it, and that is not an error.
+for perm in android.permission.POST_NOTIFICATIONS; do
+    adb "${ADB_ARGS[@]}" shell pm grant "$PACKAGE" "$perm" >/dev/null 2>&1 || true
+done
+
 total=0; failed=0
 for journey in "$JOURNEY_DIR"/*.xml; do
     [ -f "$journey" ] || continue
