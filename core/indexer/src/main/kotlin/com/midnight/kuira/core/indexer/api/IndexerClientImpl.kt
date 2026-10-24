@@ -146,9 +146,19 @@ class IndexerClientImpl(
     // (?project_id=<id>), and concatenating would put the path INSIDE the credential —
     // ...?project_id=<id>/graphql — which fails as a bad project id and blames the wrong thing.
     private val graphqlEndpoint = NetworkConfig.appendPath(baseUrl, "/graphql")
+
+    // Safe to put in an exception: the raw endpoint carries the Blockfrost project_id.
+    private val safeEndpoint get() = NetworkConfig.redactProjectId(graphqlEndpoint)
+    // Blockfrost subscribes at /ws, the Midnight indexer at /graphql/ws. Appending the wrong one
+    // leaves HTTP working while every subscription dies — which surfaces as a cancelled channel
+    // mid-sync and a balance of 0, not as an error.
     private val wsEndpoint = NetworkConfig.appendPath(
         baseUrl.replace("http://", "ws://").replace("https://", "wss://"),
-        "/graphql/ws",
+        if (baseUrl.contains(NetworkConfig.BLOCKFROST_PREPROD_HOST)) {
+            NetworkConfig.BLOCKFROST_WS_PATH
+        } else {
+            "/graphql/ws"
+        },
     )
 
     /**
@@ -362,9 +372,9 @@ class IndexerClientImpl(
         } catch (e: HttpRequestTimeoutException) {
             throw TimeoutException("Request timeout while fetching network state", e)
         } catch (e: java.net.UnknownHostException) {
-            throw NetworkException("DNS resolution failed for $graphqlEndpoint", e)
+            throw NetworkException("DNS resolution failed for $safeEndpoint", e)
         } catch (e: java.net.ConnectException) {
-            throw NetworkException("Connection failed to $graphqlEndpoint", e)
+            throw NetworkException("Connection failed to $safeEndpoint", e)
         } catch (e: java.io.IOException) {
             throw NetworkException("Network I/O error: ${e.message}", e)
         } catch (e: IndexerException) {
@@ -418,9 +428,9 @@ class IndexerClientImpl(
         } catch (e: HttpRequestTimeoutException) {
             throw TimeoutException("Request timeout while fetching current block", e)
         } catch (e: java.net.UnknownHostException) {
-            throw NetworkException("DNS resolution failed for $graphqlEndpoint", e)
+            throw NetworkException("DNS resolution failed for $safeEndpoint", e)
         } catch (e: java.net.ConnectException) {
-            throw NetworkException("Connection failed to $graphqlEndpoint", e)
+            throw NetworkException("Connection failed to $safeEndpoint", e)
         } catch (e: java.io.IOException) {
             throw NetworkException("Network I/O error: ${e.message}", e)
         } catch (e: IndexerException) {
@@ -528,9 +538,9 @@ class IndexerClientImpl(
         } catch (e: HttpRequestTimeoutException) {
             throw TimeoutException("Request timeout while fetching events [$fromId-$toId]", e)
         } catch (e: java.net.UnknownHostException) {
-            throw NetworkException("DNS resolution failed for $graphqlEndpoint", e)
+            throw NetworkException("DNS resolution failed for $safeEndpoint", e)
         } catch (e: java.net.ConnectException) {
-            throw NetworkException("Connection failed to $graphqlEndpoint", e)
+            throw NetworkException("Connection failed to $safeEndpoint", e)
         } catch (e: java.io.IOException) {
             throw NetworkException("Network I/O error: ${e.message}", e)
         } catch (e: IndexerException) {
@@ -658,9 +668,9 @@ class IndexerClientImpl(
         } catch (e: HttpRequestTimeoutException) {
             throw TimeoutException("Request timeout while fetching contract state", e)
         } catch (e: java.net.UnknownHostException) {
-            throw NetworkException("DNS resolution failed for $graphqlEndpoint", e)
+            throw NetworkException("DNS resolution failed for $safeEndpoint", e)
         } catch (e: java.net.ConnectException) {
-            throw NetworkException("Connection failed to $graphqlEndpoint", e)
+            throw NetworkException("Connection failed to $safeEndpoint", e)
         } catch (e: java.io.IOException) {
             throw NetworkException("Network I/O error: ${e.message}", e)
         } catch (e: IndexerException) {

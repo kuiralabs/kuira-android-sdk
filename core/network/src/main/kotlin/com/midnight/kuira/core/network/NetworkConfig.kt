@@ -81,6 +81,9 @@ data class NetworkConfig(
         /** Blockfrost's API path — NOT [INDEXER_API_PATH]; the path changed with the host. */
         const val BLOCKFROST_API_PATH = "/api/v0"
 
+        /** Blockfrost's subscription path. The Midnight indexer uses `/graphql/ws`; Blockfrost does not. */
+        const val BLOCKFROST_WS_PATH = "/ws"
+
         /** Blockfrost authenticates with a query parameter, not a header. */
         const val BLOCKFROST_PROJECT_ID_PARAM = "project_id"
 
