@@ -97,6 +97,16 @@ class MidnightSdkProvider @Inject constructor(
      */
     val selectedNetwork: StateFlow<MidnightNetwork> get() = networkStore.selected
 
+    /**
+     * Can this app open a wallet at all?
+     *
+     * The question a dApp is really asking when it gates its UI on "has a sigil": is there an
+     * identity to act as. Reading the sigil store directly answers a narrower question and misses
+     * a debuggable build that declares a dev seed, which is exactly the case an automated run
+     * depends on — BBoard showed "identity required" with a usable wallet behind it.
+     */
+    fun hasIdentity(): Boolean = walletSeedSource.hasSigil()
+
     /** Persist + publish a network switch durably (commit, survives a kill). See [selectedNetwork]. */
     fun selectNetwork(network: MidnightNetwork) = networkStore.set(network)
 
