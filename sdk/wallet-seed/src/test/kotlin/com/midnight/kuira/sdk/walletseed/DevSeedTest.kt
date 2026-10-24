@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -78,6 +79,25 @@ class DevSeedTest {
 
         makeDebuggable(false)
         assertFalse(DevSeed.isHostDebuggable(context))
+    }
+
+    /**
+     * The gate apps actually consult.
+     *
+     * Three example apps ask the SDK for a seed and were unblocked by the dev seed alone; two ask
+     * `hasSigil()` first and showed "identity required" with a perfectly good wallet behind it.
+     * The seed answered "give me a wallet" while the gate asked "is there an identity", so an
+     * automated run could reach neither.
+     */
+    @Test
+    fun `a declared dev seed counts as an identity`() {
+        makeDebuggable(true)
+        applicationInfo().metaData.putString(DevSeed.MANIFEST_KEY, SEED_HEX)
+
+        assertNotNull(
+            "a debuggable app that declares a seed can open a wallet, which is what the gate asks",
+            DevSeed.resolve(context),
+        )
     }
 
     private fun applicationInfo(): ApplicationInfo =

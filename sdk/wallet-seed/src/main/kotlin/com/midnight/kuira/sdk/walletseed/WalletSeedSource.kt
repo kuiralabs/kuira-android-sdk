@@ -83,15 +83,19 @@ class WalletSeedSource @Inject constructor(
     fun requireFreshAuthNext() = seedVault.requireFreshAuthNext()
 
     /**
-     * True when a sigil has been forged, i.e. when [ensureSeedReady] has something to
-     * authenticate against at all.
+     * True when [ensureSeedReady] has something to produce a seed from at all.
+     *
+     * A declared dev seed counts. It is the same question — can this wallet be opened — and apps
+     * that gate their UI on a sigil rather than on a seed were otherwise unreachable by an
+     * automated run even with the seed declared: the seed answered "give me a wallet" while the
+     * gate asked "is there an identity", and the two disagreed.
      *
      * Exposed because the sigil gate below is the ONE failure that re-authentication can never
      * clear: with no sigil there is no seed, so no biometric can produce one. `SessionLock` reads
      * this before locking, so it never gates a session whose seed does not exist — a lock with
      * nothing to protect, and no way out but killing the app. Cheap: a single prefs read.
      */
-    fun hasSigil(): Boolean = sigilStateStore.hasSigil()
+    fun hasSigil(): Boolean = sigilStateStore.hasSigil() || DevSeed.resolve(appContext) != null
 
     /** : true if a wallet seed exists. Recovery restore must not clobber an existing wallet. */
     override suspend fun hasSeed(): Boolean = seedVault.hasSeed()
