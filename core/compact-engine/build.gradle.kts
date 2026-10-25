@@ -321,11 +321,17 @@ val bboardSetup by tasks.registering {
         // doesn't have to be edited on a version bump. The Kotlin sibling and
         // this task push the same string into /data/local/tmp/.
         val networkConfigSrc = file("${rootProject.projectDir}/core/network/src/main/kotlin/com/midnight/kuira/core/network/NetworkConfig.kt")
-        val apiPath = Regex("""INDEXER_API_PATH\s*=\s*"([^"]+)"""")
-            .find(networkConfigSrc.readText())
-            ?.groupValues
-            ?.get(1)
-            ?: throw GradleException("Couldn't extract INDEXER_API_PATH from ${networkConfigSrc.absolutePath}")
+        val networkConfigText = networkConfigSrc.readText()
+        fun constFromNetworkConfig(name: String): String =
+            Regex("""$name\s*=\s*"([^"]+)"""")
+                .find(networkConfigText)
+                ?.groupValues
+                ?.get(1)
+                ?: throw GradleException("Couldn't extract $name from ${networkConfigSrc.absolutePath}")
+        // BOTH halves: the tests POST GraphQL to this URL, and the indexer answers 308 at the
+        // API root.
+        val apiPath = constFromNetworkConfig("INDEXER_API_PATH")
+        val graphqlPath = constFromNetworkConfig("INDEXER_GRAPHQL_PATH")
         // 10.0.2.2 is the EMULATOR's alias for the host and means nothing on a real phone,
         // which is why these tests could only ever run on an emulator. Forward the localnet
         // ports instead and address them as 127.0.0.1: `adb reverse` is an adb feature, not
@@ -333,7 +339,7 @@ val bboardSetup by tasks.registering {
         LOCALNET_PORTS.forEach { port -> adb("reverse", "tcp:$port", "tcp:$port") }
         logger.lifecycle("Forwarded localnet ports ${LOCALNET_PORTS.joinToString(", ")} to the device")
 
-        pushConfig("indexer_url.txt", "http://127.0.0.1:8088$apiPath")
+        pushConfig("indexer_url.txt", "http://127.0.0.1:8088$apiPath$graphqlPath")
         pushConfig("network_id.txt", network)
 
         logger.lifecycle("BBoard e2e setup complete!")
