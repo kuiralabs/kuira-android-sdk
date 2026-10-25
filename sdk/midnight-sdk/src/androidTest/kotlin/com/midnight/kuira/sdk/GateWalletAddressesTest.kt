@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.midnight.kuira.core.crypto.proving.ProvingMode
 import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,7 +29,8 @@ import org.junit.runner.RunWith
  * ```
  * ./gradlew :sdk:midnight-sdk:connectedDebugAndroidTest \
  *   -Pandroid.testInstrumentationRunnerArguments.class=com.midnight.kuira.sdk.GateWalletAddressesTest \
- *   -Pandroid.testInstrumentationRunnerArguments.seedHex=<128 hex chars>
+ *   -Pandroid.testInstrumentationRunnerArguments.seedHex=<128 hex chars> \
+ *   -Pandroid.testInstrumentationRunnerArguments.blockfrostProjectId=<nightpreprod…>
  * ```
  *
  * Then read them back with: `adb logcat -d -s GateWallet:I`
@@ -42,6 +44,8 @@ class GateWalletAddressesTest {
     fun printAddressesForEveryNetwork() {
         val args = InstrumentationRegistry.getArguments()
         val seedHex = args.getString("seedHex")?.trim().orEmpty()
+        // Deriving an address needs no indexer, but building a PREPROD config needs its id.
+        val projectId = args.getString("blockfrostProjectId")?.trim().orEmpty()
 
         // Fail loudly rather than skip. A skipped run here looks identical to a passing one in
         // the gate's counts, and the whole point of this test is to produce an answer.
@@ -54,6 +58,12 @@ class GateWalletAddressesTest {
         assertTrue(
             "seedHex must be hexadecimal",
             seedHex.all { it in "0123456789abcdefABCDEF" },
+        )
+        assertTrue(
+            "pass a PreProd Blockfrost project id as " +
+                "-Pandroid.testInstrumentationRunnerArguments.blockfrostProjectId=<id>; " +
+                "PREPROD is one of the networks below and its config cannot be built without one.",
+            projectId.isNotBlank(),
         )
 
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -69,6 +79,7 @@ class GateWalletAddressesTest {
                 .network(network)
                 .seed(seed)
                 .provingMode(ProvingMode.REMOTE)
+                .apply { if (NetworkConfig.requiresBlockfrostProjectId(network)) blockfrostProjectId(projectId) }
                 .build()
             seed.fill(0)
 

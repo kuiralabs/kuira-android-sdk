@@ -51,6 +51,8 @@ export MN_CLI="${MN_CLI:-mn}"
 IFS=' ' read -r -a MN <<< "$MN_CLI"
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+# A local.properties value, or empty when the file or the key is absent. Never echoed.
+prop_or_empty() { awk -F= -v k="$1" '$1==k{sub(/^[^=]*=/,""); print; exit}' local.properties 2>/dev/null; }
 fail() { printf '\033[31mGATE ABORTED: %s\033[0m\n' "$1" >&2; exit 1; }
 
 # ── What counts as a pass ─────────────────────────────────────────────────────
@@ -193,11 +195,31 @@ assert_results "unit" "src/test" "build/test-results/*/TEST-*.xml" "$UNIT_START"
 # keeps it IN the sign-off rather than dropping it.
 ISOLATED_TIER="com.midnight.kuira.sdk.e2e.SdkSendNightIsolatedE2ETest,com.midnight.kuira.sdk.e2e.SdkSendShieldedIsolatedE2ETest"
 
-step "Instrumented 1/2 — ALL modules on $SERIAL, except the host-funded tier (the ~30-min leg)"
+# The PreProd balance tier is the same shape as the isolated tier above, and was added after it
+# without getting the same treatment: it needs a FUNDED PreProd wallet, a Blockfrost project id
+# and a live proof server, none of which this script provisions, and it fails naming them rather
+# than skipping. So a plain connected run produced guaranteed failures that said nothing about the
+# code -- the gate aborted on its own missing arguments. preprod-gate.sh is where it runs.
+#
+# GateWalletAddressesTest used to fail here for a DIFFERENT reason, worth recording because it
+# looked identical in the counts: it built a PreProd SDK without handing the builder a project id,
+# which that builder has required since PreProd's indexer moved to Blockfrost, so no argument
+# could have fixed it. The test now forwards the id, and both values come from local.properties
+# below, so it stays in this run rather than being excluded into a gap nothing covers.
+PREPROD_TIER="com.midnight.kuira.sdk.PreProdBalanceE2ETest"
+
+# Read once, never echoed. Empty when local.properties lacks them, and the tests that need them
+# then fail loudly naming what is missing -- which is the behaviour this gate wants.
+SEED_HEX="$(prop_or_empty kuira.dev.seed)"
+PROJECT_ID="$(prop_or_empty kuira.blockfrost.projectId)"
+
+step "Instrumented 1/2 — ALL modules on $SERIAL, except the host-funded and PreProd tiers (the ~30-min leg)"
 clear_results "outputs/androidTest-results"
 INSTR_START=$(date +%s)
 ANDROID_SERIAL="$SERIAL" ./gradlew connectedDebugAndroidTest --continue --console=plain \
-  -Pandroid.testInstrumentationRunnerArguments.notClass="$ISOLATED_TIER" 2>&1 \
+  -Pandroid.testInstrumentationRunnerArguments.notClass="$ISOLATED_TIER,$PREPROD_TIER" \
+  -Pandroid.testInstrumentationRunnerArguments.seedHex="$SEED_HEX" \
+  -Pandroid.testInstrumentationRunnerArguments.blockfrostProjectId="$PROJECT_ID" 2>&1 \
   | tee /tmp/gate-instr.log | tail -5 || true
 assert_results "instrumented" "src/androidTest" "build/outputs/androidTest-results/**/TEST-*.xml" "$INSTR_START" \
   || fail "instrumented tests did not pass clean — see /tmp/gate-instr.log and the counts above"
@@ -216,3 +238,7 @@ assert_results "isolated-tier" "src/androidTest" "build/outputs/androidTest-resu
   || fail "the isolated send tier did not pass clean — see /tmp/gate-tier.log and /tmp/sdk-e2e-fund.log"
 
 printf '\n\033[32m════ SDK TEST GATE GREEN — unit + instrumented, all modules ════\033[0m\n'
+# Name what this sign-off does NOT cover, so green here is not read as green everywhere. A gate
+# that silently excludes a tier is the same failure as one that skips a test.
+printf '      PreProdBalanceE2ETest is NOT in this run -- it needs a funded PreProd wallet and a\n'
+printf '      live proof server: scripts/e2e/preprod-gate.sh\n'
