@@ -1,6 +1,7 @@
 package com.midnight.kuira.dapp.sigil
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.auth.AuthenticationCancelledException
@@ -14,6 +15,7 @@ import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.sdk.MidnightSdk
 import com.midnight.kuira.sdk.MidnightWallet
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletseed.DevSeed
 import com.midnight.kuira.sdk.walletseed.EstablishResult
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import io.mockk.coEvery
@@ -30,6 +32,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import java.util.Optional
 
 /**
@@ -116,6 +119,26 @@ class SigilPanelViewModelTest {
         val vm = newVm()
         coVerify(exactly = 0) { blockStoreStorage.retrieve() }
         assertEquals(SigilStatus.None, vm.status.value)
+    }
+
+    /**
+     * The fifth probe branch, and the one a device found: a build that declares a dev seed was
+     * still asked to choose between restoring a cloud backup and starting fresh.
+     *
+     * The seed overrides both answers — it is resolved before the sigil gate and before the vault
+     * — so the question has no consequence, and the panel sits on it. Nothing in an automated run
+     * can answer it, and the wallet never opens: the starter reported "Forge a sigil above" with a
+     * funded wallet one tap away. This asserts the offer is not raised at all.
+     */
+    @Test
+    fun `init skips the offer when this app declares a dev seed`() = runTest {
+        coEvery { blockStoreStorage.retrieve() } returns Fixtures.backupBlob()
+        declareDevSeed()
+
+        val vm = newVm()
+
+        assertEquals(SigilStatus.None, vm.status.value)
+        coVerify(exactly = 0) { blockStoreStorage.retrieve() }
     }
 
     // ── dismissBackup durability ──
@@ -338,7 +361,18 @@ class SigilPanelViewModelTest {
         biometricGate = biometricGate,
         sdkProvider = sdkProvider,
         appDataProvider = appDataProvider,
+        appContext = context,
     )
+
+    /** A debuggable host app declaring a seed in its manifest — what a driven example app is. */
+    private fun declareDevSeed() {
+        val info = shadowOf(context.packageManager)
+            .getInternalMutablePackageInfo(context.packageName)
+            .applicationInfo!!
+        info.metaData = android.os.Bundle().apply { putString(DevSeed.MANIFEST_KEY, Fixtures.DEV_SEED_HEX) }
+        info.flags = info.flags or ApplicationInfo.FLAG_DEBUGGABLE
+        context.applicationInfo.flags = info.flags
+    }
 
     private fun prefs() = context.getSharedPreferences(
         SigilStateStore.PREFS_NAME, Context.MODE_PRIVATE,
@@ -357,6 +391,9 @@ class SigilPanelViewModelTest {
         /** Compressed P-256 pubkey hex returned by the create ceremony on forge. */
         const val PUBLIC_KEY_HEX_EXPECTED =
             "031111111111111111111111111111111111111111111111111111111111111111"
+
+        /** 64 bytes of hex — the shape [DevSeed] accepts; the value is never used to sign. */
+        val DEV_SEED_HEX = "9f".repeat(64)
 
         /** Non-empty Block Store blob — content doesn't matter, only size>0 for probe. */
         fun backupBlob(): ByteArray = ByteArray(64) { 0xAB.toByte() }

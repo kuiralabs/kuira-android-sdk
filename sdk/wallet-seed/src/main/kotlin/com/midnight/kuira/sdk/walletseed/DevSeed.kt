@@ -40,6 +40,15 @@ object DevSeed {
         return WalletSeedSource.devSeedBytes(isDebug = true, hex = hex)
     }
 
+    /**
+     * Whether this app declares a usable dev seed, without decoding it — for the callers that only
+     * need the yes/no, so a boolean question never materializes key material. A declared value of
+     * the wrong shape answers true here and then fails loudly in [resolve], which is where the
+     * shape is enforced.
+     */
+    fun isDeclared(context: Context): Boolean =
+        fromManifest(context) != null && isHostDebuggable(context)
+
     /** The host app's own debuggable flag — not the library's, which is false once published. */
     fun isHostDebuggable(context: Context): Boolean =
         (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0

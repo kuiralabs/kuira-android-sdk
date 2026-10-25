@@ -100,6 +100,29 @@ class DevSeedTest {
         )
     }
 
+    /**
+     * The yes/no the sigil panel asks, which must not decode the seed to answer: a boolean
+     * question that materializes key material is key material in memory for no reason.
+     */
+    @Test
+    fun `a declared seed is visible without decoding it`() {
+        makeDebuggable(true)
+        applicationInfo().metaData.putString(DevSeed.MANIFEST_KEY, SEED_HEX)
+        assertTrue(DevSeed.isDeclared(context))
+
+        makeDebuggable(false)
+        assertFalse("a release app declares nothing usable", DevSeed.isDeclared(context))
+    }
+
+    @Test
+    fun `an app that declares nothing, or a bare placeholder, declares no seed`() {
+        makeDebuggable(true)
+        assertFalse(DevSeed.isDeclared(context))
+
+        applicationInfo().metaData.putString(DevSeed.MANIFEST_KEY, "\${kuiraDevSeed}")
+        assertFalse(DevSeed.isDeclared(context))
+    }
+
     private fun applicationInfo(): ApplicationInfo =
         shadowOf(context.packageManager)
             .getInternalMutablePackageInfo(context.packageName)

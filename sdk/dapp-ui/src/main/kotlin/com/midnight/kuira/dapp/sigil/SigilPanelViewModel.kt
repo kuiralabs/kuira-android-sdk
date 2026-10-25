@@ -1,5 +1,6 @@
 package com.midnight.kuira.dapp.sigil
 
+import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
@@ -11,8 +12,10 @@ import com.midnight.kuira.core.identity.backup.BlockStoreBackupStorage
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
+import com.midnight.kuira.sdk.walletseed.DevSeed
 import com.midnight.kuira.sdk.walletseed.SigilSession
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +76,7 @@ class SigilPanelViewModel @Inject constructor(
      * trip their state across uninstall.
      */
     private val appDataProvider: Optional<AppDataBackupProvider>,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<SigilStatus>(SigilStatus.Initializing)
@@ -97,13 +101,20 @@ class SigilPanelViewModel @Inject constructor(
      * blob for this app? Only meaningful when the local sigil prefs are
      * empty (fresh install / post-reinstall). Transitions
      * [SigilStatus.Initializing] → [SigilStatus.BackupAvailable] when a
-     * blob is found and the user hasn't previously dismissed the prompt.
+     * blob is found, the user hasn't previously dismissed the prompt, and this app declares no dev
+     * seed — a seed overrides both branches of the offer, so there is nothing to decide and an app
+     * driven by an automated run would otherwise wait forever on a choice nothing can make.
      * Otherwise → [SigilStatus.None].
      *
      * No biometric. The blob is encrypted at rest under the user's
      * passkey PRF — we never decrypt it here, just verify it exists.
      */
     private suspend fun probeBlockStoreBackup() {
+        if (DevSeed.isDeclared(appContext)) {
+            Log.i(TAG, "DEV: this app declares a dev seed — no cloud-backup decision to make")
+            _status.value = SigilStatus.None
+            return
+        }
         if (sigilStateStore.isBackupDismissed()) {
             Log.i(TAG, "Backup prompt previously dismissed — skipping probe")
             _status.value = SigilStatus.None
