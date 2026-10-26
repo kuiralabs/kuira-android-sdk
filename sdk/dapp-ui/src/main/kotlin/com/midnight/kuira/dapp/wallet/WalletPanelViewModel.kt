@@ -12,7 +12,6 @@ import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.core.identity.backup.DriveAuthManager
 import com.midnight.kuira.core.identity.backup.SigilRequiredException
 import com.midnight.kuira.core.identity.sigil.SigilStateStore
-import com.midnight.kuira.core.ledger.api.TransactionSubmitter
 import com.midnight.kuira.dapp.backup.BackupLaneState
 import com.midnight.kuira.dapp.backup.BackupSectionState
 import com.midnight.kuira.sdk.BackupStatusSnapshot
@@ -634,15 +633,8 @@ class WalletPanelViewModel @Inject constructor(
                 val result = built.registerForDustGeneration()
                 Log.i(TAG, "registerDust result: $result")
 
-                val ok = result is TransactionSubmitter.SubmissionResult.Success ||
-                    result is TransactionSubmitter.SubmissionResult.Pending
-                if (!ok) {
-                    val reason = when (result) {
-                        is TransactionSubmitter.SubmissionResult.Failed -> result.reason
-                        is TransactionSubmitter.SubmissionResult.StaleUtxo -> "stale UTXO"
-                        is TransactionSubmitter.SubmissionResult.Success,
-                        is TransactionSubmitter.SubmissionResult.Pending -> "unexpected: $result"
-                    }
+                if (result is MidnightSdk.DustRegistrationResult.Failed) {
+                    val reason = result.reason
                     _status.value = WalletStatus.Ready(
                         address = built.walletAddress,
                         shieldedAddress = built.shieldedWalletAddress,
@@ -1122,7 +1114,7 @@ sealed interface SendUiState {
     /** A send is running; [stage] is the coarse step (e.g. "Submitting transaction…"). */
     data class Sending(val stage: String) : SendUiState
 
-    /** The transfer finalized (or was accepted and is finalizing); [txHash] may be empty. */
+    /** The transfer finalized (or was accepted and is finalizing) under [txHash]. */
     data class Success(val txHash: String) : SendUiState
 
     /** The send failed; [message] is a user-facing reason. */

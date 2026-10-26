@@ -4,6 +4,7 @@ import com.midnight.kuira.core.connector.model.DustBalance
 import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignEncoding
 import com.midnight.kuira.core.connector.model.SignatureResult
+import com.midnight.kuira.core.connector.model.SubmissionReceipt
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.CoroutineScope
@@ -64,7 +65,7 @@ class ConnectorIntegrationTest {
             signDataFn = { data, _ ->
                 SignatureResult(data = data, signature = "sig_$data", verifyingKey = "vk_1")
             },
-            submitTransactionFn = { /* accepted */ },
+            submitTransactionFn = { SubmissionReceipt(txHash = "cd".repeat(32), finalized = true, blockHeight = 7L) },
             makeTransferFn = { _, _ -> "transfer_tx_hex" },
             balanceUnsealedFn = { tx, _ -> "balanced_$tx" },
             balanceSealedFn = { tx, _ -> "sealed_$tx" },
@@ -200,8 +201,9 @@ class ConnectorIntegrationTest {
     @Test
     fun `e2e submitTransaction approved succeeds`() {
         val params = """{"tx":"sealed_hex"}"""
-        val result = assertResult(send("submitTransaction", params))
-        assertTrue(result is JsonNull)
+        val result = assertResult(send("submitTransaction", params)).jsonObject
+        assertEquals("cd".repeat(32), result["transactionHash"]?.jsonPrimitive?.content)
+        assertEquals("finalized", result["status"]?.jsonPrimitive?.content)
         assertEquals("submitTransaction", approvedMethods.single())
     }
 

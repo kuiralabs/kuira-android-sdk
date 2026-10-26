@@ -124,6 +124,7 @@ class RefreshFailureInvariantsTest {
         provingKeysDir = "/tmp/keys",
         networkId = "undeployed",
         spentDustNullifierStore = mock { onBlocking { spentNullifiers(any()) } doReturn emptySet() },
+        transactionHash = { throw AssertionError("transaction hash reached but not stubbed in this test") },
         nativeBalance = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ ->
             throw AssertionError("native balance reached but not stubbed in this test")
         },

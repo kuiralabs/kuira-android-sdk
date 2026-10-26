@@ -3,6 +3,7 @@ package com.midnight.kuira.core.connector
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.connector.model.DustBalance
 import com.midnight.kuira.core.connector.model.SignatureResult
+import com.midnight.kuira.core.connector.model.SubmissionReceipt
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.CoroutineScope
@@ -59,7 +60,7 @@ class ConnectorDeviceTest {
             signDataFn = { data, _ ->
                 SignatureResult(data, "device_sig_$data", "device_vk")
             },
-            submitTransactionFn = { },
+            submitTransactionFn = { SubmissionReceipt(txHash = "cd".repeat(32), finalized = true, blockHeight = 7L) },
             makeTransferFn = { _, _ -> "device_transfer_tx" },
         )
 
@@ -168,8 +169,9 @@ class ConnectorDeviceTest {
 
     @Test
     fun device_submitTransaction() {
-        val result = send("submitTransaction", """{"tx":"sealed_hex"}""")["result"]
-        assertTrue(result is JsonNull)
+        val result = send("submitTransaction", """{"tx":"sealed_hex"}""")["result"]!!.jsonObject
+        assertEquals("cd".repeat(32), result["transactionHash"]?.jsonPrimitive?.content)
+        assertEquals("finalized", result["status"]?.jsonPrimitive?.content)
     }
 
     // ── Device: Error handling ──

@@ -126,13 +126,14 @@ class OperationRegistry {
      * de-enroll in `finally` — whether [block] returns OR throws.
      *
      * [classify] maps a NORMAL return to its real status (e.g. a `SendResult.Failed`
-     * is a returned failure, not a thrown one); a thrown exception is always
+     * is a returned failure, not a thrown one), or to null when the operation turned out to
+     * have nothing to do and so has no outcome to report; a thrown exception is always
      * [OperationTerminalStatus.Failed] and is rethrown so structured concurrency
      * keeps working.
      */
     suspend fun <T> run(
         descriptor: OperationDescriptor,
-        classify: (T) -> OperationResult = { OperationResult(OperationTerminalStatus.Success) },
+        classify: (T) -> OperationResult? = { OperationResult(OperationTerminalStatus.Success) },
         block: suspend () -> T,
     ): T {
         // Nesting guard: a contract call enrolls once at the full-pipeline listener
@@ -145,7 +146,7 @@ class OperationRegistry {
         _active.update { it + ActiveOperation(id, descriptor.kind, descriptor.label, contentIntent = descriptor.contentIntent) }
         try {
             val result = withContext(Marker(id)) { block() }
-            emitOutcome(id, descriptor, classify(result))
+            classify(result)?.let { emitOutcome(id, descriptor, it) }
             return result
         } catch (c: CancellationException) {
             // A cancelled operation is ABANDONED, not failed — e.g. a host re-launches a

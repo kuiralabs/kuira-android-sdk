@@ -4,14 +4,22 @@ import android.content.Context
 import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.midnight.kuira.core.network.MidnightNetwork
+import com.midnight.kuira.core.network.NetworkConfig
 import com.midnight.kuira.sdk.MidnightSdk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigInteger
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -44,13 +52,11 @@ class SdkSendNightIsolatedE2ETest {
         val result = sdk.sendNight(RECIPIENT_ADDR, night(1)) { stages.add(it) }
         Log.i(TAG, "single-input result=$result stages=$stages")
         assertTrue(
-            "single-input send must finalize: $result",
-            result is MidnightSdk.SendResult.Success || result is MidnightSdk.SendResult.Pending,
-        )
-        assertTrue(
             "a single coin covers it → no consolidation: $stages",
             !stages.contains(MidnightSdk.SendProgress.CONSOLIDATING),
         )
+
+        assertFinalizedOnChain(result)
     }
 
     /** Multi-input: the top two coins can't cover the amount → sendNight consolidates, then sends. */
@@ -66,10 +72,7 @@ class SdkSendNightIsolatedE2ETest {
             "consolidation must run (CONSOLIDATING emitted): $stages",
             stages.contains(MidnightSdk.SendProgress.CONSOLIDATING),
         )
-        assertTrue(
-            "consolidated send must finalize: $result",
-            result is MidnightSdk.SendResult.Success || result is MidnightSdk.SendResult.Pending,
-        )
+        assertFinalizedOnChain(result)
 
         // : the send's change UTXO has no dust backing; sendNight must auto-register it (in the
         // background) so the wallet keeps generating dust. Poll until it reads fully registered.
@@ -83,8 +86,63 @@ class SdkSendNightIsolatedE2ETest {
         assertTrue("post-send change UTXO must auto-register (#265)", registered)
     }
 
+    /** A finalized send, whose hash and block height are the ones the chain recorded. */
+    private suspend fun assertFinalizedOnChain(result: MidnightSdk.SendResult) {
+        val success = result as? MidnightSdk.SendResult.Success
+        val txHash = success?.txHash.orEmpty()
+        assertTrue("the send must finalize with a 64-hex transaction hash: $result", TX_HASH.matches(txHash))
+        val indexedHeight = awaitIndexedBlockHeight(txHash)
+        assertTrue("the indexer must know the returned hash as a transaction: $txHash", indexedHeight != null)
+        assertEquals("the send's block height must be the block the chain recorded it in", indexedHeight, success?.blockHeight)
+    }
+
+    /** The height of the block the indexer records [hash] in, or null if it never shows up. */
+    private suspend fun awaitIndexedBlockHeight(hash: String): Long? {
+        val deadline = System.currentTimeMillis() + INDEXED_TX_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val height = runCatching { indexedBlockHeight(hash) }
+                .onFailure { Log.w(TAG, "indexer lookup failed, retrying: ${it.message}") }
+                .getOrNull()
+            if (height != null) return height
+            delay(INDEXED_TX_POLL_MS)
+        }
+        return null
+    }
+
+    private suspend fun indexedBlockHeight(hash: String): Long? = withContext(Dispatchers.IO) {
+        val url = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
+        val body = JSONObject()
+            .put("query", "query(${'$'}h: HexEncoded!) { transactions(offset: { hash: ${'$'}h }) { hash block { height } } }")
+            .put("variables", JSONObject().put("h", hash))
+            .toString()
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = INDEXER_IO_TIMEOUT_MS
+            connection.readTimeout = INDEXER_IO_TIMEOUT_MS
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            val transactions = response.optJSONObject("data")?.optJSONArray("transactions")
+                ?: return@withContext null
+            (0 until transactions.length())
+                .map { transactions.getJSONObject(it) }
+                .firstOrNull { it.optString("hash") == hash }
+                ?.optJSONObject("block")
+                ?.optLong("height")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     companion object {
         private const val TAG = "SdkSendIsolatedE2E"
+
+        private val TX_HASH = Regex("^[0-9a-f]{64}$")
+        private const val INDEXED_TX_TIMEOUT_MS = 60_000L
+        private const val INDEXED_TX_POLL_MS = 2_000L
+        private const val INDEXER_IO_TIMEOUT_MS = 10_000
 
         /** A valid undeployed recipient (the canonical test wallet). We only ever SEND to it. */
         private const val RECIPIENT_ADDR =

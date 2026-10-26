@@ -5,6 +5,7 @@ import com.midnight.kuira.core.connector.model.HistoryEntry
 import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignEncoding
 import com.midnight.kuira.core.connector.model.SignatureResult
+import com.midnight.kuira.core.connector.model.SubmissionReceipt
 import com.midnight.kuira.core.connector.model.TxStatus
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
@@ -21,6 +22,8 @@ class JsonRpcRouterTest {
     private lateinit var router: JsonRpcRouter
     private val json = Json { ignoreUnknownKeys = true }
     private val nightToken = "0".repeat(64)
+    private var submitReceipt = SubmissionReceipt(txHash = "cd".repeat(32), finalized = true, blockHeight = 58_277L)
+    private val submitted = mutableListOf<String>()
 
     private fun rpc(method: String, params: String = "{}"): String =
         """{"jsonrpc":"2.0","id":1,"method":"$method","params":$params}"""
@@ -64,7 +67,7 @@ class JsonRpcRouterTest {
             signDataFn = { data, _ ->
                 SignatureResult(data = data, signature = "sig_$data", verifyingKey = "vk_1")
             },
-            submitTransactionFn = { /* no-op */ },
+            submitTransactionFn = { tx -> submitted += tx; submitReceipt },
             makeTransferFn = { _, _ -> "transfer_tx_hex" },
             balanceUnsealedFn = { tx, _ -> "balanced_$tx" },
             balanceSealedFn = { tx, _ -> "sealed_$tx" },
@@ -191,10 +194,33 @@ class JsonRpcRouterTest {
     }
 
     @Test
-    fun `submitTransaction returns null`() = runTest {
-        val params = """{"tx":"sealed_tx_hex"}"""
-        val result = parseResult(router.handleMessage(rpc("submitTransaction", params)))
-        assertTrue(result is JsonNull)
+    fun `submitTransaction answers with the hash, status and height of a finalized transaction`() = runTest {
+        // Given: the wallet finalized the transaction (setup's receipt)
+
+        // When
+        val result = parseResult(router.handleMessage(rpc("submitTransaction", """{"tx":"sealed_tx_hex"}""")))
+
+        // Then: the wire format a dApp reads
+        assertEquals(listOf("sealed_tx_hex"), submitted)
+        val receipt = result.jsonObject
+        assertEquals("cd".repeat(32), receipt["transactionHash"]?.jsonPrimitive?.content)
+        assertEquals("finalized", receipt["status"]?.jsonPrimitive?.content)
+        assertEquals(58_277L, receipt["blockHeight"]?.jsonPrimitive?.long)
+    }
+
+    @Test
+    fun `submitTransaction answers pending, without a height, when finality was not observed`() = runTest {
+        // Given
+        submitReceipt = SubmissionReceipt(txHash = "ef".repeat(32), finalized = false, blockHeight = null)
+
+        // When
+        val result = parseResult(router.handleMessage(rpc("submitTransaction", """{"tx":"sealed_tx_hex"}""")))
+
+        // Then
+        val receipt = result.jsonObject
+        assertEquals("ef".repeat(32), receipt["transactionHash"]?.jsonPrimitive?.content)
+        assertEquals("pending", receipt["status"]?.jsonPrimitive?.content)
+        assertFalse("a pending transaction has no block to report", "blockHeight" in receipt)
     }
 
     @Test

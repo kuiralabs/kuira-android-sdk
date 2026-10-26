@@ -1,22 +1,30 @@
 package com.midnight.kuira.core.compact
 
 /**
- * Result of a successful [MidnightContract.call].
+ * Result of a [MidnightContract.call] the chain accepted.
  *
- * Contains the transaction hash (if submitted), status, and timing breakdown.
+ * @property txHash Midnight transaction hash, or null when a connector wallet reported only an
+ *  identifier the indexer never resolved
+ * @property txIdentifier The transaction identifier a connector wallet reported, when it did
+ * @property status [TransactionStatus.FINALIZED], or [TransactionStatus.PENDING] when finality was
+ *  not observed in time
+ * @property blockHeight Height of the finalized block, null while pending or when unknown
  */
 data class TransactionReceipt(
     val txHash: String?,
+    val txIdentifier: String?,
     val status: TransactionStatus,
+    val blockHeight: Long?,
     val timings: PipelineTimings,
     val provenTxHex: String,
 )
 
 enum class TransactionStatus {
-    /** Transaction submitted to the blockchain. */
-    SUBMITTED,
-    /** Transaction rejected by the node. */
-    FAILED,
+    /** In a finalized block. */
+    FINALIZED,
+
+    /** Accepted by the node, finality not yet observed. It may still fail to land. */
+    PENDING,
 }
 
 /** Timing breakdown for each pipeline stage (milliseconds). */

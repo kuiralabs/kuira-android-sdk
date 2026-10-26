@@ -7,6 +7,7 @@ import com.midnight.kuira.core.ledger.model.UtxoSpend
 import com.midnight.kuira.core.ledger.model.UtxoOutput
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 
 /**
  * Serializes signed transactions to SCALE codec for node submission.
@@ -36,6 +37,15 @@ interface TransactionSerializer {
      * @return Hex-encoded finalized (sealed) transaction, or null on error
      */
     fun sealProvenTransaction(provenTxHex: String): String?
+
+    /**
+     * The Midnight transaction hash of a sealed transaction: the id the indexer, `mn` and
+     * explorers look it up by. Not the node's extrinsic hash, which wraps the same bytes.
+     *
+     * @param sealedTxHex Hex-encoded sealed transaction
+     * @return Hex-encoded 32-byte hash, or null on error
+     */
+    fun getTransactionHash(sealedTxHex: String): String?
 }
 
 /**
@@ -467,7 +477,7 @@ class FfiTransactionSerializer(
      * @param sealedTxHex Hex-encoded sealed transaction
      * @return Hex-encoded Midnight transaction hash, or null on error
      */
-    fun getTransactionHash(sealedTxHex: String): String? {
+    override fun getTransactionHash(sealedTxHex: String): String? {
         return nativeGetTransactionHash(sealedTxHex)
     }
 
@@ -523,4 +533,9 @@ internal class StubTransactionSerializer : TransactionSerializer {
         // Real sealing would transform binding commitment type
         return provenTxHex
     }
+
+    override fun getTransactionHash(sealedTxHex: String): String? =
+        MessageDigest.getInstance("SHA-256")
+            .digest(sealedTxHex.toByteArray())
+            .joinToString("") { "%02x".format(it) }
 }

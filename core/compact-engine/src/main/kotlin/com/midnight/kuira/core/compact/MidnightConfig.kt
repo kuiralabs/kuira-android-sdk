@@ -1,6 +1,7 @@
 package com.midnight.kuira.core.compact
 
 import android.content.Context
+import android.util.Log
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -196,6 +197,44 @@ class MidnightConfig private constructor(
         }
     }
 
+    /**
+     * Fill in the hash and height of a transaction a connector wallet named only by identifier,
+     * from the indexer. The indexer follows the node's finalized blocks, so a transaction it
+     * returns is final. One it never shows within [timeoutMs] comes back unchanged: pending,
+     * named by identifier alone.
+     */
+    internal suspend fun settle(
+        submitted: SubmittedTransaction,
+        timeoutMs: Long = SETTLE_TIMEOUT_MS,
+        pollMs: Long = SETTLE_POLL_MS,
+    ): SubmittedTransaction {
+        if (submitted.txHash != null) return submitted
+        val identifier = submitted.txIdentifier?.takeIf { HEX.matches(it) } ?: return submitted
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val indexed = try {
+                findTransactionByIdentifier(identifier)
+            } catch (e: ContractCallException.StateFetchFailed) {
+                Log.w(TAG, "indexer lookup of $identifier failed, retrying: ${e.message}")
+                null
+            }
+            if (indexed != null) {
+                return submitted.copy(txHash = indexed.hash, status = TransactionStatus.FINALIZED, blockHeight = indexed.blockHeight)
+            }
+            delay(pollMs)
+        }
+        Log.w(TAG, "transaction $identifier not indexed within ${timeoutMs}ms; reporting it pending")
+        return submitted
+    }
+
+    private suspend fun findTransactionByIdentifier(identifier: String): IndexedTransaction? =
+        graphqlQuery("query { transactions(offset: { identifier: \\\"$identifier\\\" }) { hash block { height } } }")
+            .optJSONArray("transactions")
+            ?.optJSONObject(0)
+            ?.let { IndexedTransaction(hash = it.getString("hash"), blockHeight = it.getJSONObject("block").getLong("height")) }
+
+    private data class IndexedTransaction(val hash: String, val blockHeight: Long)
+
     /** Submit a previously prepared transaction. */
     suspend fun submit(prepared: PreparedTransaction): TransactionReceipt = runTracked(prepared.circuitName) {
         val balancer = getBalancer()
@@ -205,12 +244,14 @@ class MidnightConfig private constructor(
         val balanceMs = System.currentTimeMillis() - start
 
         val submitStart = System.currentTimeMillis()
-        balancer.submitTransaction(balancedTxHex)
+        val submitted = settle(balancer.submitTransaction(balancedTxHex))
         val submitMs = System.currentTimeMillis() - submitStart
 
         TransactionReceipt(
-            txHash = null,
-            status = TransactionStatus.SUBMITTED,
+            txHash = submitted.txHash,
+            txIdentifier = submitted.txIdentifier,
+            status = submitted.status,
+            blockHeight = submitted.blockHeight,
             timings = prepared.timings.copy(
                 balanceMs = balanceMs,
                 submitMs = submitMs,
@@ -340,8 +381,14 @@ class MidnightConfig private constructor(
     }
 
     companion object {
+        private const val TAG = "MidnightConfig"
         private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 30_000
+
+        /** How long [settle] waits for the indexer to show a connector-submitted transaction. */
+        private const val SETTLE_TIMEOUT_MS = 60_000L
+        private const val SETTLE_POLL_MS = 1_000L
+        private val HEX = Regex("^[0-9a-f]+$")
 
         /** Poll cadence for [ledgerSignals] when no block subscription is wired. */
         private const val LEDGER_POLL_INTERVAL_MS = 5_000L

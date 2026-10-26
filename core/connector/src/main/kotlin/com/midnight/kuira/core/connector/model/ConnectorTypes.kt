@@ -43,6 +43,20 @@ sealed class ConnectionStatus {
     data object Disconnected : ConnectionStatus()
 }
 
+/**
+ * What the wallet did with a transaction a dApp asked it to submit.
+ *
+ * @property txHash Midnight transaction hash
+ * @property finalized True once it is in a finalized block; false when the node accepted it but
+ *  finality was not observed in time
+ * @property blockHeight Height of the finalized block, null while pending or when unknown
+ */
+data class SubmissionReceipt(
+    val txHash: String,
+    val finalized: Boolean,
+    val blockHeight: Long?,
+)
+
 /** Transaction history entry. */
 data class HistoryEntry(
     val txHash: String,

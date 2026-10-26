@@ -13,120 +13,128 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
 
+/**
+ * What [TransactionSubmitter] reports for every way a submission can end.
+ *
+ * The node is faked, so each test drives one outcome the real node can produce. The fake node
+ * reports what the real one does: block hashes and heights, never the transaction's own hash,
+ * which the submitter derives from the sealed transaction.
+ */
 class TransactionSubmitterTest {
 
+    // ── submitAndWait: every node outcome ──
+
     @Test
-    fun `submitAndWait returns Success when transaction is confirmed`() = runTest {
-        // Given: Mock node client that returns finalized result via WebSocket
-        val nodeClient = mockk<NodeRpcClient>()
-        val expectedTxHash = "a".repeat(64) // 64 hex chars
-        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } returns
-            TransactionFinalizationResult.Finalized(
-                txHash = expectedTxHash,
-                blockHash = "b".repeat(64),
-                blockHeight = 12345L
-            )
+    fun `a finalized transaction is a success carrying the Midnight hash and block height`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Finalized(blockHash = BLOCK, blockHeight = 12_345L))
 
-        // Given: Mock proof server client that returns proven tx
-        val proofServerClient = mockk<ProofServerClient>()
-        coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
 
-        // Given: Mock indexer client (not called in WebSocket-based flow)
-        val indexerClient = mockk<IndexerClient>(relaxed = true)
-
-        // Given: Transaction serializer that returns sealed tx
-        val serializer = mockk<TransactionSerializer>()
-        every { serializer.serialize(any()) } returns "unproven_tx_hex"
-        every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
-
-        // Given: Mock UTXO manager for marking UTXOs as spent after finalization
-        val utxoManager = mockk<UtxoManager>()
-        coEvery { utxoManager.markUtxosAsSpentByIntent(any()) } returns 1
-
-        // Given: Transaction submitter
-        val submitter = TransactionSubmitter(
-            nodeRpcClient = nodeClient,
-            proofServerClient = proofServerClient,
-            indexerClient = indexerClient,
-            serializer = serializer,
-            utxoManager = utxoManager,
-            provingMode = ProvingMode.REMOTE,
-        )
-
-        // Given: Signed intent
-        val signedIntent = createTestIntent()
-
-        // When: Submit and wait
-        val result = submitter.submitAndWait(
-            signedIntent = signedIntent,
-            fromAddress = "mn_addr_test"
-        )
-
-        // Then: Should succeed
-        assertTrue(result is TransactionSubmitter.SubmissionResult.Success)
-        val success = result as TransactionSubmitter.SubmissionResult.Success
-        assertEquals(expectedTxHash, success.txHash)
-        assertEquals(12345L, success.blockHeight)
-
-        // Verify: Node client was called with WebSocket-based finalization
-        coVerify { nodeClient.submitAndWaitForFinalization(any(), any()) }
+        // Then
+        assertEquals(TransactionSubmitter.SubmissionResult.Success(txHash = MIDNIGHT_TX_HASH, blockHeight = 12_345L), result)
+        assertEquals("the node is handed the sealed transaction", "sealed_tx_hex", fixture.submittedTx.captured)
+        coVerify(exactly = 1) { fixture.utxoManager.markUtxosAsSpentByIntent(SPENT_INPUTS) }
     }
 
     @Test
-    fun `submitAndWait returns Failed when node rejects transaction`() = runTest {
-        // Given: Mock node client that rejects transaction via WebSocket
-        val nodeClient = mockk<NodeRpcClient>()
-        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } throws TransactionRejected(
-            reason = "Invalid signature",
-            txHash = null
+    fun `a finalized transaction whose height could not be read reports no height, not zero`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Finalized(blockHash = BLOCK, blockHeight = null))
+
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
+
+        // Then
+        assertEquals(TransactionSubmitter.SubmissionResult.Success(txHash = MIDNIGHT_TX_HASH, blockHeight = null), result)
+    }
+
+    @Test
+    fun `a timeout after the transaction reached a block is pending and stops offering its inputs`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Timeout(inBlockHash = BLOCK))
+
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
+
+        // Then
+        val pending = result as TransactionSubmitter.SubmissionResult.Pending
+        assertEquals(MIDNIGHT_TX_HASH, pending.txHash)
+        assertTrue("the reason names the block: ${pending.reason}", pending.reason.contains(BLOCK))
+        coVerify(exactly = 1) { fixture.utxoManager.markUtxosAsSpentByIntent(SPENT_INPUTS) }
+    }
+
+    @Test
+    fun `a timeout before the transaction reached any block is pending and keeps its inputs`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Timeout(inBlockHash = null))
+
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
+
+        // Then
+        assertEquals(MIDNIGHT_TX_HASH, (result as TransactionSubmitter.SubmissionResult.Pending).txHash)
+        coVerify(exactly = 0) { fixture.utxoManager.markUtxosAsSpentByIntent(any()) }
+    }
+
+    @Test
+    fun `each outcome that will not land is a failure carrying the hash, and keeps the inputs`() = runTest {
+        val notLanding = listOf(
+            TransactionFinalizationResult.Dropped("Transaction dropped from pool"),
+            TransactionFinalizationResult.Invalid("Transaction is invalid"),
+            TransactionFinalizationResult.Usurped(replacedBy = "e".repeat(64)),
         )
+        for (outcome in notLanding) {
+            // Given
+            val fixture = Fixture(outcome)
 
-        // Given: Mock proof server client that returns proven tx
-        val proofServerClient = mockk<ProofServerClient>()
-        coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
+            // When
+            val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
 
-        // Given: Mock indexer (won't be called)
-        val indexerClient = mockk<IndexerClient>(relaxed = true)
+            // Then
+            val failed = result as? TransactionSubmitter.SubmissionResult.Failed
+            assertEquals("$outcome must fail under the transaction's hash", MIDNIGHT_TX_HASH, failed?.txHash)
+            assertTrue("$outcome: reason ${failed?.reason}", failed!!.reason.isNotBlank())
+            coVerify(exactly = 0) { fixture.utxoManager.markUtxosAsSpentByIntent(any()) }
+        }
+    }
 
-        // Given: Transaction serializer that returns sealed tx
-        val serializer = mockk<TransactionSerializer>()
-        every { serializer.serialize(any()) } returns "unproven_tx_hex"
-        every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
+    @Test
+    fun `a node rejection is a failure carrying the hash and the node's error code`() = runTest {
+        // Given
+        val fixture = Fixture(rejection = TransactionRejected(reason = "Invalid Transaction", customErrorCode = 170))
 
-        // Given: Mock UTXO manager (won't be called due to node rejection)
-        val utxoManager = mockk<UtxoManager>(relaxed = true)
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
 
-        // Given: Transaction submitter
-        val submitter = TransactionSubmitter(
-            nodeRpcClient = nodeClient,
-            proofServerClient = proofServerClient,
-            indexerClient = indexerClient,
-            serializer = serializer,
-            utxoManager = utxoManager,
-            provingMode = ProvingMode.REMOTE,
-        )
-
-        // Given: Signed intent
-        val signedIntent = createTestIntent()
-
-        // When: Submit and wait
-        val result = submitter.submitAndWait(
-            signedIntent = signedIntent,
-            fromAddress = "mn_addr_test"
-        )
-
-        // Then: Should fail
-        assertTrue(result is TransactionSubmitter.SubmissionResult.Failed)
+        // Then
         val failed = result as TransactionSubmitter.SubmissionResult.Failed
-        assertEquals(null, failed.txHash)
+        assertEquals("a rejected transaction was still submitted, under this hash", MIDNIGHT_TX_HASH, failed.txHash)
+        assertEquals(TransactionRejected.ERROR_INVALID_DUST_SPEND_PROOF, failed.customErrorCode)
         assertTrue(failed.reason.contains("rejected"))
+    }
+
+    @Test
+    fun `a sealed transaction with no derivable hash is never submitted`() = runTest {
+        // Given: the native hash cannot read the sealed transaction
+        val fixture = Fixture(TransactionFinalizationResult.Finalized(blockHash = BLOCK, blockHeight = 1L), midnightHash = null)
+
+        // When
+        val result = fixture.submitter.submitAndWait(signedIntent = createTestIntent(), fromAddress = ADDRESS)
+
+        // Then: failing before submission is safe; nothing was spent
+        assertNull((result as TransactionSubmitter.SubmissionResult.Failed).txHash)
+        coVerify(exactly = 0) { fixture.node.submitAndWaitForFinalization(any(), any(), any()) }
     }
 
     // : error 170 (stale dust spend root) must be detectable so the send path can
@@ -150,85 +158,51 @@ class TransactionSubmitterTest {
         assertFalse(TransactionRejected("Invalid Transaction", customErrorCode = null).isOutOfDustValidityWindow)
     }
 
+    // ── submitPrebuiltTransaction (the shielded and dust-registration path) ──
+
     @Test
-    fun `submitAndWait surfaces node error 170 as customErrorCode for dust-root recovery`() = runTest {
-        val nodeClient = mockk<NodeRpcClient>()
-        coEvery { nodeClient.submitAndWaitForFinalization(any(), any()) } throws TransactionRejected(
-            reason = "Invalid Transaction",
-            txHash = null,
-            customErrorCode = 170,
-        )
-        val proofServerClient = mockk<ProofServerClient>()
-        coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
-        val indexerClient = mockk<IndexerClient>(relaxed = true)
-        val serializer = mockk<TransactionSerializer>()
-        every { serializer.serialize(any()) } returns "unproven_tx_hex"
-        every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
-        val utxoManager = mockk<UtxoManager>(relaxed = true)
-        val submitter = TransactionSubmitter(
-            nodeRpcClient = nodeClient,
-            proofServerClient = proofServerClient,
-            indexerClient = indexerClient,
-            serializer = serializer,
-            utxoManager = utxoManager,
-            provingMode = ProvingMode.REMOTE,
-        )
+    fun `a finalized prebuilt transaction is a success carrying the Midnight hash and block height`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Finalized(blockHash = BLOCK, blockHeight = 9L))
 
-        val result = submitter.submitAndWait(
-            signedIntent = createTestIntent(),
-            fromAddress = "mn_addr_test",
-        )
+        // When
+        val result = fixture.submitter.submitPrebuiltTransaction("unproven_tx_hex")
 
-        assertTrue(result is TransactionSubmitter.SubmissionResult.Failed)
-        assertEquals(170, (result as TransactionSubmitter.SubmissionResult.Failed).customErrorCode)
+        // Then
+        assertEquals(TransactionSubmitter.SubmissionResult.Success(txHash = MIDNIGHT_TX_HASH, blockHeight = 9L), result)
     }
 
     @Test
-    fun `submitOnly returns transaction hash without waiting`() = runTest {
-        // Given: Mock node client
-        val nodeClient = mockk<NodeRpcClient>()
-        val expectedTxHash = "b".repeat(64)
-        coEvery { nodeClient.submitTransaction(any()) } returns expectedTxHash
+    fun `a prebuilt transaction the node drops is a failure carrying its hash`() = runTest {
+        // Given
+        val fixture = Fixture(TransactionFinalizationResult.Dropped("Transaction dropped from pool"))
 
-        // Given: Mock proof server client that returns proven tx
-        val proofServerClient = mockk<ProofServerClient>()
-        coEvery { proofServerClient.proveTransaction(any()) } returns "proven_tx_hex"
+        // When
+        val result = fixture.submitter.submitPrebuiltTransaction("unproven_tx_hex")
 
-        // Given: Mock indexer (won't be called)
-        val indexerClient = mockk<IndexerClient>(relaxed = true)
-
-        // Given: Transaction serializer that returns sealed tx
-        val serializer = mockk<TransactionSerializer>()
-        every { serializer.serialize(any()) } returns "unproven_tx_hex"
-        every { serializer.sealProvenTransaction(any()) } returns "sealed_tx_hex"
-
-        // Given: Mock UTXO manager (won't be called for submitOnly)
-        val utxoManager = mockk<UtxoManager>(relaxed = true)
-
-        // Given: Transaction submitter
-        val submitter = TransactionSubmitter(
-            nodeRpcClient = nodeClient,
-            proofServerClient = proofServerClient,
-            indexerClient = indexerClient,
-            serializer = serializer,
-            utxoManager = utxoManager,
-            provingMode = ProvingMode.REMOTE,
+        // Then
+        assertEquals(
+            TransactionSubmitter.SubmissionResult.Failed(txHash = MIDNIGHT_TX_HASH, reason = "Transaction dropped from pool"),
+            result,
         )
-
-        // Given: Signed intent
-        val signedIntent = createTestIntent()
-
-        // When: Submit only (no wait)
-        val txHash = submitter.submitOnly(signedIntent)
-
-        // Then: Should return hash immediately
-        assertEquals(expectedTxHash, txHash)
-
-        // Verify: Node client was called
-        coVerify { nodeClient.submitTransaction(any()) }
     }
 
-    // ==================== Test Helpers ====================
+    // ── submitOnly (fire-and-forget) ──
+
+    @Test
+    fun `submitOnly returns the Midnight hash, not the node's extrinsic hash`() = runTest {
+        // Given: the node answers with its extrinsic hash, which is a different value
+        val fixture = Fixture(extrinsicHash = "b".repeat(64))
+
+        // When
+        val txHash = fixture.submitter.submitOnly(createTestIntent())
+
+        // Then
+        assertEquals(MIDNIGHT_TX_HASH, txHash)
+        coVerify(exactly = 1) { fixture.node.submitTransaction("sealed_tx_hex") }
+    }
+
+    // ── submitWithFees ──
 
     /**
      * : the dust-fee send must load the dust state ONCE, not twice. Pre-#291,
@@ -291,6 +265,44 @@ class TransactionSubmitterTest {
         }
     }
 
+    // ==================== Test Helpers ====================
+
+    /** A submitter wired to a node that ends every watched submission with [outcome]. */
+    private class Fixture(
+        outcome: TransactionFinalizationResult? = null,
+        rejection: TransactionRejected? = null,
+        extrinsicHash: String = "b".repeat(64),
+        midnightHash: String? = MIDNIGHT_TX_HASH,
+    ) {
+        val submittedTx = slot<String>()
+        val node = mockk<NodeRpcClient>().also { node ->
+            coEvery { node.submitAndWaitForFinalization(capture(submittedTx), any(), any()) } answers {
+                rejection?.let { throw it }
+                outcome ?: error("no watched outcome configured")
+            }
+            coEvery { node.submitTransaction(any()) } returns extrinsicHash
+        }
+        val utxoManager = mockk<UtxoManager>().also {
+            coEvery { it.markUtxosAsSpentByIntent(any()) } returns 1
+        }
+        private val serializer = mockk<TransactionSerializer>().also {
+            every { it.serialize(any()) } returns "unproven_tx_hex"
+            every { it.sealProvenTransaction(any()) } returns "sealed_tx_hex"
+            every { it.getTransactionHash("sealed_tx_hex") } returns midnightHash
+        }
+        private val proofServer = mockk<ProofServerClient>().also {
+            coEvery { it.proveTransaction(any()) } returns "proven_tx_hex"
+        }
+        val submitter = TransactionSubmitter(
+            nodeRpcClient = node,
+            proofServerClient = proofServer,
+            indexerClient = mockk(relaxed = true),
+            serializer = serializer,
+            utxoManager = utxoManager,
+            provingMode = ProvingMode.REMOTE,
+        )
+    }
+
     private fun createTestIntent(): Intent {
         val input = UtxoSpend(
             intentHash = "1".repeat(64),
@@ -320,5 +332,15 @@ class TransactionSubmitterTest {
             fallibleUnshieldedOffer = null,
             ttl = 1704067200000 // 2024-01-01
         )
+    }
+
+    private companion object {
+        /** Distinct from the node's extrinsic hash and every block hash, so a test can tell which surfaced. */
+        val MIDNIGHT_TX_HASH = "c".repeat(64)
+        val BLOCK = "d".repeat(64)
+        const val ADDRESS = "mn_addr_test"
+
+        /** The (intentHash, outputNo) pairs of [createTestIntent]'s one input. */
+        val SPENT_INPUTS = listOf("1".repeat(64) to 0)
     }
 }

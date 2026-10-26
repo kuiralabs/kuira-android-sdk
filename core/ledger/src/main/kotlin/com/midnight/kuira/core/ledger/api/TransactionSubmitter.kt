@@ -210,6 +210,9 @@ class TransactionSubmitter(
             )
         }
 
+        val txHash = serializer.getTransactionHash(finalizedTxHex)
+            ?: return hashUnavailable()
+
         // Track which UTXOs are being spent (for UTXO state management)
         val spentUtxoIntents = signedIntent.guaranteedUnshieldedOffer?.inputs?.map {
             it.intentHash to it.outputNo
@@ -234,7 +237,7 @@ class TransactionSubmitter(
             }
 
             return SubmissionResult.Failed(
-                txHash = e.txHash,
+                txHash = txHash,
                 reason = "Transaction rejected by node: ${e.reason}",
                 customErrorCode = e.customErrorCode,
             )
@@ -248,7 +251,7 @@ class TransactionSubmitter(
         // Step 5: Handle finalization result
         return when (finalizationResult) {
             is TransactionFinalizationResult.Finalized -> {
-                Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
+                Log.i(TAG, "✅ Transaction FINALIZED: $txHash")
                 Log.d(TAG, "   Block: ${finalizationResult.blockHash}")
 
                 // NOW mark UTXOs as SPENT - the node has confirmed the transaction
@@ -258,39 +261,24 @@ class TransactionSubmitter(
                 }
 
                 SubmissionResult.Success(
-                    txHash = finalizationResult.txHash,
-                    blockHeight = finalizationResult.blockHeight ?: 0L
-                )
-            }
-
-            is TransactionFinalizationResult.InBlock -> {
-                // Transaction is in a block but not finalized yet
-                // This shouldn't happen with our timeout, but handle gracefully
-                Log.w(TAG, "Transaction in block but not finalized: ${finalizationResult.txHash}")
-
-                // Still mark as spent - it's very likely to be finalized
-                if (spentUtxoIntents.isNotEmpty()) {
-                    utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
-                }
-
-                SubmissionResult.Pending(
-                    txHash = finalizationResult.txHash,
-                    reason = "Transaction in block, waiting for finalization"
+                    txHash = txHash,
+                    blockHeight = finalizationResult.blockHeight
                 )
             }
 
             is TransactionFinalizationResult.Timeout -> {
-                Log.w(TAG, "Transaction finalization timed out: ${finalizationResult.txHash}")
-                SubmissionResult.Pending(
-                    txHash = finalizationResult.txHash,
-                    reason = "Finalization timeout (transaction may still be processing)"
-                )
+                Log.w(TAG, "Transaction finalization timed out: $txHash (in block: ${finalizationResult.inBlockHash})")
+                // Included in a block: its inputs are as good as spent, so stop offering them.
+                if (finalizationResult.inBlockHash != null && spentUtxoIntents.isNotEmpty()) {
+                    utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                }
+                SubmissionResult.Pending(txHash = txHash, reason = finalizationResult.pendingReason())
             }
 
             is TransactionFinalizationResult.Dropped -> {
                 Log.e(TAG, "Transaction dropped: ${finalizationResult.reason}")
                 SubmissionResult.Failed(
-                    txHash = finalizationResult.txHash,
+                    txHash = txHash,
                     reason = "Transaction dropped from pool: ${finalizationResult.reason}"
                 )
             }
@@ -298,7 +286,7 @@ class TransactionSubmitter(
             is TransactionFinalizationResult.Invalid -> {
                 Log.e(TAG, "Transaction invalid: ${finalizationResult.reason}")
                 SubmissionResult.Failed(
-                    txHash = finalizationResult.txHash,
+                    txHash = txHash,
                     reason = "Transaction invalid: ${finalizationResult.reason}"
                 )
             }
@@ -306,7 +294,7 @@ class TransactionSubmitter(
             is TransactionFinalizationResult.Usurped -> {
                 Log.e(TAG, "Transaction usurped (replaced)")
                 SubmissionResult.Failed(
-                    txHash = finalizationResult.txHash,
+                    txHash = txHash,
                     reason = "Transaction replaced by another"
                 )
             }
@@ -650,7 +638,8 @@ class TransactionSubmitter(
                 ?: throw IllegalStateException("Sealing returned null")
 
             // Step 9: Get the Midnight transaction hash
-            val midnightTxHash = ffiSerializer.getTransactionHash(sealedTxHex)
+            val txHash = ffiSerializer.getTransactionHash(sealedTxHex)
+                ?: return hashUnavailable()
 
             // Track which UTXOs are being spent (for error recovery)
             val spentUtxoIntents = inputs.map { it.intentHash to it.outputNo }
@@ -671,7 +660,7 @@ class TransactionSubmitter(
                     )
                 }
                 return SubmissionResult.Failed(
-                    txHash = e.txHash,
+                    txHash = txHash,
                     reason = "Transaction rejected by node: ${e.reason}",
                     customErrorCode = e.customErrorCode,
                 )
@@ -685,7 +674,7 @@ class TransactionSubmitter(
             // Step 11: Handle finalization result
             return when (finalizationResult) {
                 is TransactionFinalizationResult.Finalized -> {
-                    Log.i(TAG, "✅ Transaction FINALIZED: ${finalizationResult.txHash}")
+                    Log.i(TAG, "✅ Transaction FINALIZED: $txHash")
 
                     // : do NOT delete the dust checkpoint here. The post-send refresh
                     // (MidnightSdk.sendNight → wallet.refresh → DustSyncManager.refreshIncremental,
@@ -704,45 +693,25 @@ class TransactionSubmitter(
                     }
 
                     SubmissionResult.Success(
-                        txHash = finalizationResult.txHash,
-                        blockHeight = finalizationResult.blockHeight ?: 0L
-                    )
-                }
-
-                is TransactionFinalizationResult.InBlock -> {
-                    Log.w(TAG, "Transaction in block but not finalized")
-                    // : keep the dust checkpoint intact (see the Finalized branch). The
-                    // post-send refresh deltas from it; deleting would force a full genesis replay.
-                    if (spentUtxoIntents.isNotEmpty()) {
-                        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
-                    }
-                    SubmissionResult.Pending(
-                        txHash = finalizationResult.txHash,
-                        reason = "Transaction in block, waiting for finalization"
+                        txHash = txHash,
+                        blockHeight = finalizationResult.blockHeight
                     )
                 }
 
                 is TransactionFinalizationResult.Timeout -> {
-                    Log.w(TAG, "Transaction finalization timed out")
-                    // Don't save dust state - unclear if transaction will succeed
-                    SubmissionResult.Pending(
-                        txHash = finalizationResult.txHash,
-                        reason = "Finalization timeout (transaction may still be processing)"
-                    )
+                    Log.w(TAG, "Transaction finalization timed out: $txHash (in block: ${finalizationResult.inBlockHash})")
+                    // Don't save dust state - unclear if transaction will succeed. Included in a
+                    // block, though, its inputs are as good as spent, so stop offering them.
+                    if (finalizationResult.inBlockHash != null && spentUtxoIntents.isNotEmpty()) {
+                        utxoManager.markUtxosAsSpentByIntent(spentUtxoIntents)
+                    }
+                    SubmissionResult.Pending(txHash = txHash, reason = finalizationResult.pendingReason())
                 }
 
-                is TransactionFinalizationResult.Dropped,
-                is TransactionFinalizationResult.Invalid,
-                is TransactionFinalizationResult.Usurped -> {
+                is TransactionFinalizationResult.Failure -> {
                     Log.e(TAG, "Transaction failed: $finalizationResult")
                     // Don't save dust state - transaction failed
-                    val (txHash, reason) = when (finalizationResult) {
-                        is TransactionFinalizationResult.Dropped -> finalizationResult.txHash to finalizationResult.reason
-                        is TransactionFinalizationResult.Invalid -> finalizationResult.txHash to finalizationResult.reason
-                        is TransactionFinalizationResult.Usurped -> finalizationResult.txHash to "Transaction replaced"
-                        else -> "" to "Unknown error"
-                    }
-                    SubmissionResult.Failed(txHash = txHash, reason = reason)
+                    SubmissionResult.Failed(txHash = txHash, reason = finalizationResult.reason)
                 }
             }
 
@@ -785,7 +754,7 @@ class TransactionSubmitter(
      * 4. Submit finalized transaction to node
      *
      * @param signedIntent Signed Intent
-     * @return Transaction hash on success
+     * @return Midnight transaction hash on success
      * @throws NodeRpcException on submission failure
      * @throws ProofServerException if proving fails
      */
@@ -800,8 +769,12 @@ class TransactionSubmitter(
         val finalizedTxHex = serializer.sealProvenTransaction(provenTxHex)
             ?: throw IllegalStateException("Sealing returned null")
 
+        val txHash = serializer.getTransactionHash(finalizedTxHex)
+            ?: throw IllegalStateException(HASH_UNAVAILABLE)
+
         // Step 3: Submit finalized transaction
-        return resolveClients().node.submitTransaction(finalizedTxHex)
+        resolveClients().node.submitTransaction(finalizedTxHex)
+        return txHash
     }
 
     /**
@@ -811,12 +784,13 @@ class TransactionSubmitter(
         /**
          * Transaction successfully submitted and finalized.
          *
-         * @property txHash Transaction hash (32 bytes hex)
-         * @property blockHeight Approximate block height where tx was included
+         * @property txHash Midnight transaction hash (32 bytes hex)
+         * @property blockHeight Height of the finalized block that includes it, or null when the
+         *  node confirmed finality but could not be asked for the height
          */
         data class Success(
             val txHash: String,
-            val blockHeight: Long
+            val blockHeight: Long?
         ) : SubmissionResult()
 
         /**
@@ -902,6 +876,9 @@ class TransactionSubmitter(
             )
         }
 
+        val txHash = serializer.getTransactionHash(sealedTxHex)
+            ?: return hashUnavailable()
+
         // Step 3: Submit via WebSocket and wait for finalization
         Log.d(TAG, "Submitting shielded transaction and waiting for finalization...")
 
@@ -909,7 +886,7 @@ class TransactionSubmitter(
             resolveClients().node.submitAndWaitForFinalization(sealedTxHex, timeoutMs)
         } catch (e: TransactionRejected) {
             return SubmissionResult.Failed(
-                txHash = e.txHash,
+                txHash = txHash,
                 reason = "Shielded transaction rejected: ${e.reason}"
             )
         } catch (e: NodeRpcException) {
@@ -921,40 +898,34 @@ class TransactionSubmitter(
 
         return when (finalizationResult) {
             is TransactionFinalizationResult.Finalized -> {
-                Log.i(TAG, "Shielded transaction FINALIZED: ${finalizationResult.txHash}")
+                Log.i(TAG, "Shielded transaction FINALIZED: $txHash")
                 SubmissionResult.Success(
-                    txHash = finalizationResult.txHash,
-                    blockHeight = finalizationResult.blockHeight ?: 0L
-                )
-            }
-            is TransactionFinalizationResult.InBlock -> {
-                SubmissionResult.Pending(
-                    txHash = finalizationResult.txHash,
-                    reason = "Transaction in block, waiting for finalization"
+                    txHash = txHash,
+                    blockHeight = finalizationResult.blockHeight
                 )
             }
             is TransactionFinalizationResult.Timeout -> {
-                SubmissionResult.Pending(
-                    txHash = finalizationResult.txHash,
-                    reason = "Finalization timeout (transaction may still be processing)"
-                )
+                SubmissionResult.Pending(txHash = txHash, reason = finalizationResult.pendingReason())
             }
-            is TransactionFinalizationResult.Dropped,
-            is TransactionFinalizationResult.Invalid,
-            is TransactionFinalizationResult.Usurped -> {
-                val (txHash, reason) = when (finalizationResult) {
-                    is TransactionFinalizationResult.Dropped -> finalizationResult.txHash to finalizationResult.reason
-                    is TransactionFinalizationResult.Invalid -> finalizationResult.txHash to finalizationResult.reason
-                    is TransactionFinalizationResult.Usurped -> finalizationResult.txHash to "Transaction replaced"
-                    else -> "" to "Unknown error"
-                }
-                SubmissionResult.Failed(txHash = txHash, reason = reason)
+            is TransactionFinalizationResult.Failure -> {
+                SubmissionResult.Failed(txHash = txHash, reason = finalizationResult.reason)
             }
         }
     }
 
+    private fun hashUnavailable() = SubmissionResult.Failed(txHash = null, reason = HASH_UNAVAILABLE)
+
+    private fun TransactionFinalizationResult.Timeout.pendingReason() =
+        if (inBlockHash != null) {
+            "Transaction in block $inBlockHash, not yet finalized"
+        } else {
+            "Finalization timeout (transaction may still be processing)"
+        }
+
     companion object {
         private const val TAG = "TransactionSubmitter"
+
+        private const val HASH_UNAVAILABLE = "Could not derive the transaction hash of the sealed transaction"
 
         /**
          * Default timeout for waiting for transaction finalization: 60 seconds.

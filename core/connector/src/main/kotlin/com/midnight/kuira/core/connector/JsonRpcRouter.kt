@@ -11,6 +11,7 @@ import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignEncoding
 import com.midnight.kuira.core.connector.model.TransferKind
 import com.midnight.kuira.core.connector.model.TxStatus
+import com.midnight.kuira.core.network.ConnectorSubmitReceipt
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import java.math.BigInteger
@@ -195,8 +196,15 @@ class JsonRpcRouter(
             "submitTransaction" -> {
                 val tx = params["tx"]?.jsonPrimitive?.content
                     ?: throw IllegalArgumentException("Missing 'tx' parameter")
-                handler.submitTransaction(tx)
-                JsonNull
+                val receipt = handler.submitTransaction(tx)
+                buildJsonObject {
+                    put(ConnectorSubmitReceipt.TX_HASH, receipt.txHash)
+                    put(
+                        ConnectorSubmitReceipt.STATUS,
+                        if (receipt.finalized) ConnectorSubmitReceipt.STATUS_FINALIZED else ConnectorSubmitReceipt.STATUS_PENDING,
+                    )
+                    receipt.blockHeight?.let { put(ConnectorSubmitReceipt.BLOCK_HEIGHT, it) }
+                }
             }
 
             "balanceUnsealedTransaction" -> {

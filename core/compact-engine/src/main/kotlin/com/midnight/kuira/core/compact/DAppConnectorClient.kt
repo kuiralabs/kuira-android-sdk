@@ -1,5 +1,6 @@
 package com.midnight.kuira.core.compact
 
+import com.midnight.kuira.core.network.ConnectorSubmitReceipt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -89,9 +90,27 @@ class DAppConnectorClient(private val wsUrl: String) : TransactionBalancer {
         }
     }
 
-    override suspend fun submitTransaction(balancedTxHex: String) {
+    /**
+     * A Kuira wallet answers with a [ConnectorSubmitReceipt]. Other wallets promise less, and are
+     * reported as pending: a wallet built on Midnight's wallet SDK (`mn serve` among them) answers
+     * with the transaction's identifier, and one that follows the DApp Connector API to the letter
+     * answers with nothing.
+     */
+    override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction {
         val params = JSONObject().put("tx", balancedTxHex)
-        call("submitTransaction", params)
+        val receipt = call("submitTransaction", params).optJSONObject("result")
+            ?: return SubmittedTransaction(txHash = null, txIdentifier = null, status = TransactionStatus.PENDING, blockHeight = null)
+        val finalized = receipt.optString(ConnectorSubmitReceipt.STATUS) == ConnectorSubmitReceipt.STATUS_FINALIZED
+        return SubmittedTransaction(
+            txHash = receipt.optString(ConnectorSubmitReceipt.TX_HASH).takeIf { it.isNotEmpty() },
+            txIdentifier = receipt.optString(ConnectorSubmitReceipt.WALLET_SDK_TX_IDENTIFIER).takeIf { it.isNotEmpty() },
+            status = if (finalized) TransactionStatus.FINALIZED else TransactionStatus.PENDING,
+            blockHeight = if (finalized && receipt.has(ConnectorSubmitReceipt.BLOCK_HEIGHT)) {
+                receipt.getLong(ConnectorSubmitReceipt.BLOCK_HEIGHT)
+            } else {
+                null
+            },
+        )
     }
 
     private suspend fun call(

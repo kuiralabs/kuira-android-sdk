@@ -1,6 +1,9 @@
 package com.midnight.kuira.sdk
 
+import com.midnight.kuira.core.compact.SubmissionNotAcceptedException
+import com.midnight.kuira.core.compact.SubmittedTransaction
 import com.midnight.kuira.core.compact.TransactionBalancer
+import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.BlockInfo
@@ -29,6 +32,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.mockito.kotlin.*
 import java.math.BigInteger
+import java.security.MessageDigest
 
 /**
  * Unit tests for [MidnightWallet].
@@ -80,20 +84,93 @@ class MidnightWalletTest {
     // ── submitTransaction delegates to NodeRpcClient ──
 
     @Test
-    fun `submitTransaction calls submitAndWaitForFinalization then invalidates dust memo`() = runTest {
-        val nodeRpc = mock<NodeRpcClient> {
-            onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doReturn
-                TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
-        }
+    fun `submitTransaction reports the finalized transaction's hash and height`() = runTest {
+        // Given: the node finalizes the transaction
+        val nodeRpc = nodeAnswering(TransactionFinalizationResult.Finalized(blockHash = "b".repeat(64), blockHeight = 42L))
         val syncManager = mock<DustSyncManager> {
             onBlocking { invalidateMemo() } doReturn Unit
         }
-
         val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = syncManager)
-        wallet.submitTransaction("balanced_hex")
 
+        // When
+        val submitted = wallet.submitTransaction("balanced_hex")
+
+        // Then
+        assertEquals(
+            SubmittedTransaction(midnightHashOf("balanced_hex"), txIdentifier = null, TransactionStatus.FINALIZED, 42L),
+            submitted,
+        )
         verify(nodeRpc).submitAndWaitForFinalization(eq("balanced_hex"), any(), anyOrNull())
         verify(syncManager).invalidateMemo()
+    }
+
+    @Test
+    fun `submitTransaction reports a timed-out transaction as pending, with its hash`() = runTest {
+        // Given: finality not observed, though the transaction reached a block
+        val nodeRpc = nodeAnswering(TransactionFinalizationResult.Timeout(inBlockHash = "b".repeat(64)))
+        val wallet = createWallet(nodeRpcClient = nodeRpc, dustSyncManager = mock())
+
+        // When
+        val submitted = wallet.submitTransaction("balanced_hex")
+
+        // Then
+        assertEquals(
+            SubmittedTransaction(midnightHashOf("balanced_hex"), txIdentifier = null, TransactionStatus.PENDING, blockHeight = null),
+            submitted,
+        )
+    }
+
+    @Test
+    fun `submitTransaction throws for each outcome that will not land`() = runTest {
+        val notLanding: List<TransactionFinalizationResult> = listOf(
+            TransactionFinalizationResult.Dropped("Transaction dropped from pool"),
+            TransactionFinalizationResult.Invalid("Transaction is invalid"),
+            TransactionFinalizationResult.Usurped(replacedBy = "e".repeat(64)),
+        )
+        for (outcome in notLanding) {
+            // Given
+            val syncManager = mock<DustSyncManager>()
+            val wallet = createWallet(nodeRpcClient = nodeAnswering(outcome), dustSyncManager = syncManager)
+
+            // When
+            val thrown = runCatching { wallet.submitTransaction("balanced_hex") }.exceptionOrNull()
+
+            // Then: an error, never a result a caller could read as success
+            assertTrue("$outcome must throw, got $thrown", thrown is SubmissionNotAcceptedException)
+            assertEquals((outcome as TransactionFinalizationResult.Failure).reason, (thrown as SubmissionNotAcceptedException).reason)
+            verify(syncManager, never()).invalidateMemo()
+        }
+    }
+
+    @Test
+    fun `balanceAndSubmit reports the balanced transaction's hash and records its dust as spent`() = runTest {
+        // Given: balancing produces "cafe" spending one dust nullifier; the node finalizes it
+        val nodeRpc = nodeAnswering(TransactionFinalizationResult.Finalized(blockHash = "b".repeat(64), blockHeight = 42L))
+        val store = mock<SpentDustNullifierStore> { onBlocking { spentNullifiers(any()) } doReturn emptySet() }
+        val (wallet, _) = submitLadderWallet(nodeRpc, spentDustNullifierStore = store, balancedEnvelope = "cafe;nf1")
+
+        // When
+        val submitted = wallet.balanceAndSubmit("proven_hex", null)
+
+        // Then
+        assertEquals(SubmittedTransaction(midnightHashOf("cafe"), txIdentifier = null, TransactionStatus.FINALIZED, 42L), submitted)
+        verify(nodeRpc).submitAndWaitForFinalization(eq("cafe"), any(), anyOrNull())
+        verify(store).recordSpent("test_address", "nf1")
+    }
+
+    @Test
+    fun `balanceAndSubmit of a dropped transaction throws and records no dust as spent`() = runTest {
+        // Given: the node drops the balanced transaction
+        val nodeRpc = nodeAnswering(TransactionFinalizationResult.Dropped("Transaction dropped from pool"))
+        val store = mock<SpentDustNullifierStore> { onBlocking { spentNullifiers(any()) } doReturn emptySet() }
+        val (wallet, _) = submitLadderWallet(nodeRpc, spentDustNullifierStore = store, balancedEnvelope = "cafe;nf1")
+
+        // When
+        val thrown = runCatching { wallet.balanceAndSubmit("proven_hex", null) }.exceptionOrNull()
+
+        // Then: the dust was not spent, so a later balance may still use it
+        assertTrue("a dropped transaction must throw, got $thrown", thrown is SubmissionNotAcceptedException)
+        verify(store, never()).recordSpent(any(), any())
     }
 
     // ── : heavy SDK work runs off the caller's thread (withContext IO),
@@ -417,8 +494,16 @@ class MidnightWalletTest {
 
     private fun rejected(code: Int) = TransactionRejected("Invalid Transaction", customErrorCode = code)
 
+    private fun nodeAnswering(outcome: TransactionFinalizationResult) = mock<NodeRpcClient> {
+        onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doReturn outcome
+    }
+
     /** Wallet whose balance always succeeds, so the tests drive recovery purely from submit. */
-    private fun submitLadderWallet(nodeRpc: NodeRpcClient): Pair<MidnightWallet, DustSyncManager> {
+    private fun submitLadderWallet(
+        nodeRpc: NodeRpcClient,
+        spentDustNullifierStore: SpentDustNullifierStore = mock { onBlocking { spentNullifiers(any()) } doReturn emptySet() },
+        balancedEnvelope: String = "cafe;",
+    ): Pair<MidnightWallet, DustSyncManager> {
         val dustState = mock<DustLocalState> {
             on { getStatePointer() } doReturn 1L
             on { currentNullifiers(any()) } doReturn null
@@ -440,14 +525,15 @@ class MidnightWalletTest {
             dustSyncManager = syncManager,
             indexerClient = indexer,
             nodeRpcClient = nodeRpc,
-            nativeBalance = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ -> "cafe;" },
+            spentDustNullifierStore = spentDustNullifierStore,
+            nativeBalance = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ -> balancedEnvelope },
         )
         return wallet to syncManager
     }
 
     @Test
     fun `submit-time 170 recovers with a delta re-sync first — no genesis rebuild`() = runTest {
-        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        val finalized = TransactionFinalizationResult.Finalized(blockHash = "b".repeat(64), blockHeight = 42L)
         var submits = 0
         // doSuspendableAnswer, not doThrow: Mockito validates doThrow's exception against the
         // compiled signature, and a suspend fun declares no `throws` — so any checked exception
@@ -468,7 +554,7 @@ class MidnightWalletTest {
 
     @Test
     fun `submit-time 171 takes the same delta-first ladder`() = runTest {
-        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        val finalized = TransactionFinalizationResult.Finalized(blockHash = "b".repeat(64), blockHeight = 42L)
         var submits = 0
         val nodeRpc = mock<NodeRpcClient> {
             onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
@@ -485,7 +571,7 @@ class MidnightWalletTest {
 
     @Test
     fun `submit-time 170 persisting after the delta escalates to a genesis rebuild — in that order`() = runTest {
-        val finalized = TransactionFinalizationResult.Finalized("tx_hash", "block_hash", 42L)
+        val finalized = TransactionFinalizationResult.Finalized(blockHash = "b".repeat(64), blockHeight = 42L)
         var submits = 0
         val nodeRpc = mock<NodeRpcClient> {
             onBlocking { submitAndWaitForFinalization(any(), any(), anyOrNull()) } doSuspendableAnswer {
@@ -610,6 +696,7 @@ class MidnightWalletTest {
         nativeBalance: NativeBalanceInvoker = NativeBalanceInvoker { _, _, _, _, _, _, _, _, _ ->
             throw AssertionError("native balance reached but not stubbed in this test")
         },
+        transactionHash: (String) -> String? = ::midnightHashOf,
         dustCloudBackup: DustCloudBackup? = null,
         appStateCloudBackup: AppStateCloudBackup? = null,
     ) = MidnightWallet(
@@ -624,8 +711,16 @@ class MidnightWalletTest {
         provingKeysDir = provingKeysDir,
         networkId = networkId,
         spentDustNullifierStore = spentDustNullifierStore,
+        transactionHash = transactionHash,
         nativeBalance = nativeBalance,
         dustCloudBackup = dustCloudBackup,
         appStateCloudBackup = appStateCloudBackup,
     )
+
+    /**
+     * Stands in for the native transaction hash, which a JVM test can't load: the same 64-hex
+     * shape, and different for every transaction, so a test can tell which one it got.
+     */
+    private fun midnightHashOf(sealedTxHex: String): String =
+        MessageDigest.getInstance("SHA-256").digest(sealedTxHex.toByteArray()).joinToString("") { "%02x".format(it) }
 }

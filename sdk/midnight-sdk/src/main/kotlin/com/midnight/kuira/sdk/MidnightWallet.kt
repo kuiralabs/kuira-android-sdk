@@ -3,7 +3,10 @@ package com.midnight.kuira.sdk
 import android.util.Log
 import com.midnight.kuira.core.compact.BalanceProgress
 import com.midnight.kuira.core.compact.DustCtime
+import com.midnight.kuira.core.compact.SubmissionNotAcceptedException
+import com.midnight.kuira.core.compact.SubmittedTransaction
 import com.midnight.kuira.core.compact.TransactionBalancer
+import com.midnight.kuira.core.compact.TransactionStatus
 import com.midnight.kuira.core.crypto.dust.DustLocalState
 import com.midnight.kuira.core.indexer.api.IndexerClient
 import com.midnight.kuira.core.indexer.model.ReceiptEvent
@@ -15,6 +18,7 @@ import com.midnight.kuira.core.ledger.api.NodeRpcClient
 import com.midnight.kuira.core.ledger.api.NodeRpcClient.SubmissionStage
 import com.midnight.kuira.core.ledger.api.NodeRpcError
 import com.midnight.kuira.core.ledger.api.NodeRpcException
+import com.midnight.kuira.core.ledger.api.TransactionFinalizationResult
 import com.midnight.kuira.core.ledger.api.TransactionRejected
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -59,6 +63,8 @@ class MidnightWallet internal constructor(
     private val provingKeysDir: String,
     private val networkId: String,
     private val spentDustNullifierStore: SpentDustNullifierStore,
+    /** The Midnight hash of a sealed transaction (the SDK's serializer), null when it can't be read. */
+    private val transactionHash: (sealedTxHex: String) -> String?,
     private val dustCloudBackup: DustCloudBackup? = null,
     private val appStateCloudBackup: AppStateCloudBackup? = null,
     receiptEvents: Flow<ReceiptEvent> = emptyFlow(),
@@ -453,10 +459,11 @@ class MidnightWallet internal constructor(
         }
     }
 
-    override suspend fun submitTransaction(balancedTxHex: String) = withContext(Dispatchers.IO) {
+    override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction = withContext(Dispatchers.IO) {
         // Remove the pending entry up front so it can't leak if submit throws.
         val pending = pendingSpentNullifiers.remove(balancedTxHex)
-        try {
+        val txHash = midnightHashOf(balancedTxHex)
+        val outcome = try {
             nodeRpcClient.submitAndWaitForFinalization(balancedTxHex)
         } catch (e: TransactionRejected) {
             // Error 115: the node says these dust UTXOs are already spent — record
@@ -465,14 +472,23 @@ class MidnightWallet internal constructor(
             if (e.isStaleUtxo) recordSpentNullifiers(pending)
             throw e
         }
+        val submitted = outcome.toSubmitted(txHash)
         recordSpentNullifiers(pending)
         dustSyncManager.invalidateMemo()
+        submitted
     }
 
     override suspend fun balanceAndSubmit(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)?,
-    ): Unit = withContext(Dispatchers.IO) { balanceMutex.withLock {
+    ): SubmittedTransaction = withContext(Dispatchers.IO) {
+        balanceMutex.withLock { submitWithDustRecovery(provenTxHex, onProgress) }
+    }
+
+    private suspend fun submitWithDustRecovery(
+        provenTxHex: String,
+        onProgress: (suspend (BalanceProgress) -> Unit)?,
+    ): SubmittedTransaction {
         onProgress?.invoke(BalanceProgress.SyncingDust)
 
         // Dust-state recovery escalates: a fast delta re-sync first, then a full genesis
@@ -492,17 +508,19 @@ class MidnightWallet internal constructor(
         while (true) {
             try {
                 val balanced = doBalance(provenTxHex, onProgress)
+                val txHash = midnightHashOf(balanced.txHex)
                 onProgress?.invoke(BalanceProgress.Submitting)
-                nodeRpcClient.submitAndWaitForFinalization(balanced.txHex) { stage ->
+                val outcome = nodeRpcClient.submitAndWaitForFinalization(balanced.txHex) { stage ->
                     if (stage == SubmissionStage.IN_BLOCK) {
                         onProgress?.invoke(BalanceProgress.WaitingFinalization)
                     }
                 }
+                val submitted = outcome.toSubmitted(txHash)
                 // Record the dust nullifier(s) the node accepted as spent so a later
                 // balance can exclude them (no-op on 0-fee, where nothing is spent).
                 recordSpentNullifiers(balanced.spentNullifiers)
                 dustSyncManager.invalidateMemo()
-                return@withLock
+                return submitted
             } catch (e: NodeRpcException) {
                 val recoverable = isDustSpendProofError(e) || isOutOfDustValidityWindowError(e)
                 if (!recoverable || attempt >= recoveries.size) throw e
@@ -513,7 +531,7 @@ class MidnightWallet internal constructor(
                 recover()
             }
         }
-    } }
+    }
 
     private suspend fun doBalance(
         provenTxHex: String,
@@ -545,6 +563,22 @@ class MidnightWallet internal constructor(
      *  balancer never re-selects them (the dust event stream doesn't reliably
      *  reflect the wallet's own fee spends → otherwise error 115). Best-effort:
      *  the tx already landed, so a storage hiccup must not surface as a failure. */
+    private fun midnightHashOf(sealedTxHex: String): String =
+        transactionHash(sealedTxHex)
+            ?: throw IllegalStateException("Could not derive the transaction hash of the balanced transaction")
+
+    /**
+     * A dropped, invalidated or replaced transaction will not land, so its dust was not spent:
+     * it is thrown before the caller records anything as spent.
+     */
+    private fun TransactionFinalizationResult.toSubmitted(txHash: String): SubmittedTransaction = when (this) {
+        is TransactionFinalizationResult.Finalized ->
+            SubmittedTransaction(txHash, txIdentifier = null, TransactionStatus.FINALIZED, blockHeight)
+        is TransactionFinalizationResult.Timeout ->
+            SubmittedTransaction(txHash, txIdentifier = null, TransactionStatus.PENDING, blockHeight = null)
+        is TransactionFinalizationResult.Failure -> throw SubmissionNotAcceptedException(reason)
+    }
+
     private suspend fun recordSpentNullifiers(nullifiers: List<String>?) {
         nullifiers?.forEach { nullifier ->
             runCatching { spentDustNullifierStore.recordSpent(walletAddress, nullifier) }

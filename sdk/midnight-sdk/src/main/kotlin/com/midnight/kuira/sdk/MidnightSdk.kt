@@ -200,23 +200,21 @@ class MidnightSdk private constructor(
      * The chain rejects registration with no NIGHT to back the generation. Call
      * [MidnightWallet.waitForFunding] first if the wallet is fresh.
      *
-     * @return [SubmissionResult.Success] when the registration tx is finalized on
-     *  chain. [SubmissionResult.Pending] if the tx made it into a block but the
-     *  wait for finalization timed out (it'll usually finalize shortly after).
-     *  [SubmissionResult.Failed] if the chain rejected the tx, or no NIGHT UTXOs
-     *  are available, or the FFI builder returned null.
+     * @return [DustRegistrationResult.Registered] when the last registration tx finalized,
+     *  [DustRegistrationResult.Pending] when the node accepted it but finality was not observed in
+     *  time, [DustRegistrationResult.AlreadyRegistered] when every NIGHT coin already generates
+     *  dust and nothing was sent, or [DustRegistrationResult.Failed].
      */
-    suspend fun registerForDustGeneration(): SubmissionResult = operations.run(
+    suspend fun registerForDustGeneration(): DustRegistrationResult = operations.run(
         OperationDescriptor(OperationKind.DustRegistration),
         classify = { it.toOperationResult() },
     ) {
         registerForDustGenerationInternal()
     }
 
-    private suspend fun registerForDustGenerationInternal(): SubmissionResult {
+    private suspend fun registerForDustGenerationInternal(): DustRegistrationResult {
         val dustPublicKeyHex = DustKeyDeriver.derivePublicKey(dustSeed)
-            ?: return SubmissionResult.Failed(
-                txHash = null,
+            ?: return DustRegistrationResult.Failed(
                 reason = "DustKeyDeriver returned null — native library not loaded?",
             )
 
@@ -224,8 +222,7 @@ class MidnightSdk private constructor(
             .filter { it.tokenType == UtxoSpend.NATIVE_TOKEN_TYPE }
 
         if (currentNight().isEmpty()) {
-            return SubmissionResult.Failed(
-                txHash = null,
+            return DustRegistrationResult.Failed(
                 reason = "No NIGHT UTXOs at $walletAddress. Fund the wallet first.",
             )
         }
@@ -234,7 +231,7 @@ class MidnightSdk private constructor(
         try {
             versionCoherenceChecker.ensure()
         } catch (e: VersionSkewException) {
-            return SubmissionResult.Failed(txHash = null, reason = e.message ?: "Ledger version skew with the node.")
+            return DustRegistrationResult.Failed(reason = e.message ?: "Ledger version skew with the node.")
         }
 
         // A registration can carry only ~one NIGHT input before it exceeds the ledger's
@@ -268,14 +265,15 @@ class MidnightSdk private constructor(
 
             val night = currentNight()
             if (night.isEmpty()) {
-                return lastResult ?: SubmissionResult.Failed(txHash = null, reason = "No NIGHT UTXOs remaining.")
+                return lastResult?.toRegistrationResult() ?: DustRegistrationResult.Failed(
+                                reason = "No NIGHT UTXOs remaining.")
             }
 
             val unregisteredJson = wallet.unregisteredNightUtxos(nightUtxosToJson(night))
             val unregisteredCount = JSONArray(unregisteredJson).length()
             if (unregisteredCount == 0) {
                 Log.i(TAG, "Dust registration complete — all NIGHT generating after $iteration tx(s)")
-                return lastResult ?: SubmissionResult.Success(txHash = "", blockHeight = 0L)
+                return lastResult?.toRegistrationResult() ?: DustRegistrationResult.AlreadyRegistered
             }
 
             // Build the registration, waiting out coin maturity if needed.
@@ -313,8 +311,7 @@ class MidnightSdk private constructor(
                     is DustRegistrationBuilder.Result.NotMatured -> {
                         lastShortfall = built.shortfallSpecks
                         if (System.currentTimeMillis() >= maturityDeadline) {
-                            return lastResult ?: SubmissionResult.Failed(
-                                txHash = null,
+                            return lastResult?.toRegistrationResult() ?: DustRegistrationResult.Failed(
                                 reason = "NIGHT coin never generated enough dust to pay the " +
                                     "registration fee (short ${built.shortfallSpecks} Specks) " +
                                     "within ${DUST_MATURITY_TIMEOUT_MS}ms.",
@@ -330,21 +327,21 @@ class MidnightSdk private constructor(
                         continue
                     }
                     DustRegistrationBuilder.Result.Failed -> {
-                        return SubmissionResult.Failed(
-                            txHash = null,
-                            reason = "DustRegistrationBuilder.build failed (last shortfall=$lastShortfall)",
+                        return DustRegistrationResult.Failed(
+                reason = "DustRegistrationBuilder.build failed (last shortfall=$lastShortfall)",
                         )
                     }
                 }
                 break
             }
             val builtHex = unprovenHex
-                ?: return SubmissionResult.Failed(txHash = null, reason = "DustRegistrationBuilder produced no tx")
+                ?: return DustRegistrationResult.Failed(
+                reason = "DustRegistrationBuilder produced no tx")
 
             Log.i(TAG, "Registering dust: $unregisteredCount NIGHT UTXO(s) not yet generating (tx ${iteration + 1})")
             val result = transactionSubmitter.submitPrebuiltTransaction(builtHex)
             if (result !is SubmissionResult.Success && result !is SubmissionResult.Pending) {
-                return result
+                return result.toRegistrationResult()
             }
             lastResult = result
 
@@ -361,7 +358,8 @@ class MidnightSdk private constructor(
             }
         }
 
-        return lastResult ?: SubmissionResult.Failed(txHash = null, reason = "Dust registration made no progress.")
+        return lastResult?.toRegistrationResult() ?: DustRegistrationResult.Failed(
+                                reason = "Dust registration made no progress.")
     }
 
     /** Serialize NIGHT UTXOs to the JSON the FFI registration builder/filter expect. */
@@ -696,6 +694,21 @@ class MidnightSdk private constructor(
     }
 
     /** Map a [SubmissionResult] onto the operation-registry terminal outcome (#261-264). */
+    private fun SubmissionResult.toRegistrationResult(): DustRegistrationResult = when (this) {
+        is SubmissionResult.Success -> DustRegistrationResult.Registered(txHash, blockHeight)
+        is SubmissionResult.Pending -> DustRegistrationResult.Pending(txHash, reason)
+        is SubmissionResult.Failed -> DustRegistrationResult.Failed(reason, txHash)
+        is SubmissionResult.StaleUtxo -> DustRegistrationResult.Failed(reason)
+    }
+
+    /** No transaction, no outcome: an already-registered wallet must not report a finished registration. */
+    private fun DustRegistrationResult.toOperationResult(): OperationResult? = when (this) {
+        is DustRegistrationResult.Registered -> OperationResult(OperationTerminalStatus.Success, txHash)
+        is DustRegistrationResult.Pending -> OperationResult(OperationTerminalStatus.Pending, txHash)
+        is DustRegistrationResult.Failed -> OperationResult(OperationTerminalStatus.Failed, txHash)
+        DustRegistrationResult.AlreadyRegistered -> null
+    }
+
     private fun SubmissionResult.toOperationResult(): OperationResult = when (this) {
         is SubmissionResult.Success -> OperationResult(OperationTerminalStatus.Success, txHash)
         is SubmissionResult.Pending -> OperationResult(OperationTerminalStatus.Pending, txHash)
@@ -858,9 +871,29 @@ class MidnightSdk private constructor(
     }
 
     /** Outcome of [sendNight] — a typed result so callers can render distinct UX. */
+    /** Outcome of [registerForDustGeneration]. */
+    sealed class DustRegistrationResult {
+        /** The last registration transaction finalized. */
+        data class Registered(val txHash: String, val blockHeight: Long?) : DustRegistrationResult()
+
+        /** Every NIGHT coin already generates dust; no transaction was sent. */
+        data object AlreadyRegistered : DustRegistrationResult()
+
+        /** The node accepted the registration; finality was not observed in time. */
+        data class Pending(val txHash: String, val reason: String) : DustRegistrationResult()
+
+        data class Failed(val reason: String, val txHash: String? = null) : DustRegistrationResult()
+    }
+
     sealed class SendResult {
-        /** Transfer finalized on chain. */
-        data class Success(val txHash: String, val blockHeight: Long) : SendResult()
+        /**
+         * Transfer finalized on chain.
+         *
+         * @property txHash Midnight transaction hash, the id the indexer and explorers use
+         * @property blockHeight Height of the finalized block, or null when the node confirmed
+         *  finality but could not be asked for the height
+         */
+        data class Success(val txHash: String, val blockHeight: Long?) : SendResult()
 
         /** Not enough NIGHT to cover [required]; carries the [shortfall] for the UI. */
         data class InsufficientFunds(
@@ -1389,6 +1422,7 @@ class MidnightSdk private constructor(
                 restoreGate = restoreGate,
             )
 
+            val serializer = FfiTransactionSerializer(net.rustNetworkId)
             val wallet = MidnightWallet(
                 dustSyncManager = dustSyncManager,
                 dustRepository = dustRepository,
@@ -1401,6 +1435,7 @@ class MidnightSdk private constructor(
                 provingKeysDir = provingKeyManager.keysDir.absolutePath,
                 networkId = net.rustNetworkId,
                 spentDustNullifierStore = spentDustNullifierStore,
+                transactionHash = serializer::getTransactionHash,
                 dustCloudBackup = dustCloudBackup,
                 appStateCloudBackup = appStateCloudBackup,
                 // : per-transaction inbound NIGHT receipts, classified by UTXO-set
@@ -1441,7 +1476,6 @@ class MidnightSdk private constructor(
             // non-null client. In LOCAL mode the client is constructed but
             // never used; the URL just has to be parseable.
             val effectiveProofServerUrl = this.proofServerUrl ?: networkConfig.proofServerUrl
-            val serializer = FfiTransactionSerializer(net.rustNetworkId)
             val proofServerClient = ProofServerClientImpl(
                 proofServerUrl = effectiveProofServerUrl,
                 developmentMode = networkConfig.developmentMode,

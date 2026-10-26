@@ -7,13 +7,19 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.midnight.kuira.core.compact.proving.ProvingKeyManager
 import com.midnight.kuira.core.network.MidnightNetwork
 import com.midnight.kuira.core.network.NetworkConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Integration test for the developer-facing MidnightContract API.
@@ -40,12 +46,13 @@ class MidnightContractTest {
     private val testSecretKey = ByteArray(32) { (it + 1).toByte() }
 
     private lateinit var config: MidnightConfig
+    private lateinit var indexerUrl: String
 
     @Before
     fun setup() {
         installProvingKeys()
 
-        val indexerUrl = readConfig("indexer_url.txt") ?: DEFAULT_INDEXER_URL
+        indexerUrl = readConfig("indexer_url.txt") ?: DEFAULT_INDEXER_URL
         val networkId = readConfig("network_id.txt") ?: "undeployed"
         val baseAddress = readConfig("contract_address.txt")
 
@@ -98,7 +105,7 @@ class MidnightContractTest {
         val bboard = contractFor("contract_address_post1.txt")
         val receipt = bboard.call("post", "Hello from MidnightContract!")
 
-        assertEquals(TransactionStatus.SUBMITTED, receipt.status)
+        assertAcceptedThroughConnector(receipt)
         assertTrue("Proven TX should exist", receipt.provenTxHex.isNotEmpty())
         assertTrue("Total time should be positive", receipt.timings.totalMs > 0)
         Log.i(TAG, "Submitted! total=${receipt.timings.totalMs}ms " +
@@ -115,7 +122,7 @@ class MidnightContractTest {
             stages.add(stage)
         }
 
-        assertEquals(TransactionStatus.SUBMITTED, receipt.status)
+        assertAcceptedThroughConnector(receipt)
         // Deterministic prefix, then a variable number of granular BalancingDetail
         // updates (their count depends on dust state), so assert the prefix only.
         assertEquals(
@@ -170,11 +177,71 @@ class MidnightContractTest {
         return if (file.exists()) file.readText().trim().ifEmpty { null } else null
     }
 
+    /**
+     * Through `mn serve`, which names the transaction by identifier: the SDK must resolve it on the
+     * indexer to the transaction's hash and finalized block, and the chain must agree.
+     */
+    private suspend fun assertAcceptedThroughConnector(receipt: TransactionReceipt) {
+        assertEquals("resolved on the finalized-only indexer: $receipt", TransactionStatus.FINALIZED, receipt.status)
+        assertTrue("the connector named the transaction by identifier: $receipt", receipt.txIdentifier?.isNotEmpty() == true)
+        val txHash = receipt.txHash.orEmpty()
+        assertTrue("the receipt must carry the 64-hex transaction hash: $receipt", TX_HASH.matches(txHash))
+        assertEquals(
+            "the receipt's block height must be the block the chain recorded the hash in",
+            awaitIndexedBlockHeight(txHash),
+            receipt.blockHeight,
+        )
+    }
+
+    /** The height of the block the indexer records [hash] in, or null if it never shows up. */
+    private suspend fun awaitIndexedBlockHeight(hash: String): Long? {
+        val deadline = System.currentTimeMillis() + INDEXED_TX_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val height = runCatching { indexedBlockHeight(hash) }
+                .onFailure { Log.w(TAG, "indexer lookup failed, retrying: ${it.message}") }
+                .getOrNull()
+            if (height != null) return height
+            delay(INDEXED_TX_POLL_MS)
+        }
+        return null
+    }
+
+    private suspend fun indexedBlockHeight(hash: String): Long? = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("query", "query(${'$'}h: HexEncoded!) { transactions(offset: { hash: ${'$'}h }) { hash block { height } } }")
+            .put("variables", JSONObject().put("h", hash))
+            .toString()
+        val connection = URL(indexerUrl).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = INDEXER_IO_TIMEOUT_MS
+            connection.readTimeout = INDEXER_IO_TIMEOUT_MS
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            val transactions = response.optJSONObject("data")?.optJSONArray("transactions")
+                ?: return@withContext null
+            (0 until transactions.length())
+                .map { transactions.getJSONObject(it) }
+                .firstOrNull { it.optString("hash") == hash }
+                ?.optJSONObject("block")
+                ?.optLong("height")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     companion object {
         private const val TAG = "MidnightContractTest"
         private val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
         private const val DAPP_CONNECTOR_URL = "ws://127.0.0.1:9932"
 
         private val BBOARD_CIRCUITS = listOf("post", "takeDown")
+
+        private val TX_HASH = Regex("^[0-9a-f]{64}$")
+        private const val INDEXED_TX_TIMEOUT_MS = 60_000L
+        private const val INDEXED_TX_POLL_MS = 2_000L
+        private const val INDEXER_IO_TIMEOUT_MS = 10_000
     }
 }

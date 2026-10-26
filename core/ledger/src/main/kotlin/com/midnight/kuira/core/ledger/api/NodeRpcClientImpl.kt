@@ -244,7 +244,6 @@ class NodeRpcClientImpl(
 
                     throw TransactionRejected(
                         reason = error.message,
-                        txHash = null,
                         customErrorCode = customErrorCode
                     )
                 }
@@ -260,15 +259,15 @@ class NodeRpcClientImpl(
             val result = jsonResponse.result
                 ?: throw NodeInvalidResponseException("Missing 'result' field in response")
 
-            val txHash = result.jsonPrimitive.content
+            val extrinsicHash = result.jsonPrimitive.content
                 .removePrefix("0x") // Remove "0x" prefix if present
 
-            // Validate transaction hash format (32 bytes hex = 64 characters)
-            require(txHash.matches(Regex("^[0-9a-f]{64}$"))) {
-                "Invalid transaction hash format: $txHash (expected 64 hex characters)"
+            // Validate hash format (32 bytes hex = 64 characters)
+            require(extrinsicHash.matches(Regex("^[0-9a-f]{64}$"))) {
+                "Invalid extrinsic hash format: $extrinsicHash (expected 64 hex characters)"
             }
 
-            return txHash
+            return extrinsicHash
         } catch (e: ResponseException) {
             throw NodeHttpException(
                 statusCode = e.response.status.value,
@@ -347,7 +346,7 @@ class NodeRpcClientImpl(
         Log.d(TAG, "Connecting to node via WebSocket: $wsUrl")
 
         val result = CompletableDeferred<TransactionFinalizationResult>()
-        var txHash: String? = null
+        var inBlockHash: String? = null
         var subscriptionId: String? = null
 
         try {
@@ -397,7 +396,6 @@ class NodeRpcClientImpl(
                                         Log.e(TAG, "Transaction rejected: custom error $customErrorCode ($errorData)")
                                         throw TransactionRejected(
                                             reason = errorMessage,
-                                            txHash = txHash,
                                             customErrorCode = customErrorCode,
                                         )
                                     }
@@ -417,54 +415,41 @@ class NodeRpcClientImpl(
                                     continue
                                 }
 
-                                // Check if this is a subscription notification
-                                val params = response["params"]?.jsonObject
-                                if (params != null) {
-                                    val statusResult = params["result"]
-                                    if (statusResult != null) {
-                                        val finalizationResult = parseTransactionStatus(statusResult, txHash ?: "")
-                                        Log.d(TAG, "Transaction status: $finalizationResult")
-
-                                        when (finalizationResult) {
-                                            is TransactionFinalizationResult.Finalized -> {
-                                                Log.i(TAG, "✅ Transaction FINALIZED in block ${finalizationResult.blockHash}")
-                                                result.complete(finalizationResult)
-                                                // Unsubscribe
-                                                subscriptionId?.let { subId ->
-                                                    val unsubRequest = buildJsonRpcRequest(
-                                                        id = requestIdCounter.incrementAndGet(),
-                                                        method = "author_unwatchExtrinsic",
-                                                        params = listOf(subId)
-                                                    )
-                                                    send(Frame.Text(unsubRequest))
-                                                }
-                                                return@webSocket
-                                            }
-                                            is TransactionFinalizationResult.InBlock -> {
-                                                txHash = finalizationResult.txHash
-                                                Log.d(TAG, "Transaction in block, waiting for finalization...")
-                                                onStage?.invoke(NodeRpcClient.SubmissionStage.IN_BLOCK)
-                                            }
-                                            is TransactionFinalizationResult.Dropped,
-                                            is TransactionFinalizationResult.Invalid,
-                                            is TransactionFinalizationResult.Usurped -> {
-                                                Log.e(TAG, "Transaction failed: $finalizationResult")
-                                                result.complete(finalizationResult)
-                                                return@webSocket
-                                            }
-                                            else -> {
-                                                // Continue waiting (ready, broadcast, etc.)
-                                                Log.d(TAG, "Intermediate status, continuing...")
-                                                onStage?.invoke(NodeRpcClient.SubmissionStage.BROADCAST)
-                                            }
+                                val statusResult = response["params"]?.jsonObject?.get("result") ?: continue
+                                val status = parseWatchedStatus(statusResult)
+                                Log.d(TAG, "Transaction status: $status")
+                                when (status) {
+                                    WatchedStatus.Pooled -> Unit
+                                    WatchedStatus.Broadcast -> onStage?.invoke(NodeRpcClient.SubmissionStage.BROADCAST)
+                                    is WatchedStatus.InBlock -> {
+                                        inBlockHash = status.blockHash
+                                        onStage?.invoke(NodeRpcClient.SubmissionStage.IN_BLOCK)
+                                    }
+                                    WatchedStatus.Retracted -> inBlockHash = null
+                                    is WatchedStatus.Finalized -> {
+                                        Log.i(TAG, "✅ Transaction FINALIZED in block ${status.blockHash}")
+                                        result.complete(TransactionFinalizationResult.Finalized(status.blockHash, blockHeight = null))
+                                        subscriptionId?.let { subId ->
+                                            val unsubRequest = buildJsonRpcRequest(
+                                                id = requestIdCounter.incrementAndGet(),
+                                                method = "author_unwatchExtrinsic",
+                                                params = listOf(subId)
+                                            )
+                                            send(Frame.Text(unsubRequest))
                                         }
+                                        return@webSocket
+                                    }
+                                    is WatchedStatus.Ended -> {
+                                        Log.e(TAG, "Transaction failed: ${status.result}")
+                                        result.complete(status.result)
+                                        return@webSocket
                                     }
                                 }
                             }
                             is Frame.Close -> {
                                 Log.w(TAG, "WebSocket closed")
                                 if (!result.isCompleted) {
-                                    result.complete(TransactionFinalizationResult.Timeout(txHash ?: ""))
+                                    result.complete(TransactionFinalizationResult.Timeout(inBlockHash))
                                 }
                                 return@webSocket
                             }
@@ -475,7 +460,7 @@ class NodeRpcClientImpl(
             }
         } catch (e: TimeoutCancellationException) {
             Log.w(TAG, "Transaction finalization timed out after ${timeoutMs}ms")
-            return TransactionFinalizationResult.Timeout(txHash ?: "")
+            return TransactionFinalizationResult.Timeout(inBlockHash)
         } catch (e: TransactionRejected) {
             throw e // Re-throw for caller to handle
         } catch (e: NodeRpcException) {
@@ -483,7 +468,7 @@ class NodeRpcClientImpl(
         } catch (e: ClosedReceiveChannelException) {
             Log.w(TAG, "WebSocket channel closed unexpectedly")
             if (result.isCompleted) {
-                return result.getCompleted()
+                return withBlockHeight(result.getCompleted())
             }
             throw NodeNetworkException("WebSocket connection closed unexpectedly", e)
         } catch (e: Exception) {
@@ -492,10 +477,25 @@ class NodeRpcClientImpl(
         }
 
         return if (result.isCompleted) {
-            result.getCompleted()
+            withBlockHeight(result.getCompleted())
         } else {
-            TransactionFinalizationResult.Timeout(txHash ?: "")
+            TransactionFinalizationResult.Timeout(inBlockHash)
         }
+    }
+
+    /**
+     * Fill in a finalized block's height. The transaction is final either way, so a failed
+     * lookup leaves the height unknown rather than failing the submission.
+     */
+    private suspend fun withBlockHeight(result: TransactionFinalizationResult): TransactionFinalizationResult {
+        if (result !is TransactionFinalizationResult.Finalized) return result
+        val height = try {
+            getBlockHeight(result.blockHash)
+        } catch (e: NodeRpcException) {
+            Log.w(TAG, "Finalized in ${result.blockHash}, but its height could not be read: ${e.message}")
+            null
+        }
+        return result.copy(blockHeight = height)
     }
 
     /**
@@ -506,71 +506,44 @@ class NodeRpcClientImpl(
         return """{"jsonrpc":"2.0","id":$id,"method":"$method","params":[$paramsJson]}"""
     }
 
-    /**
-     * Parse transaction status from Substrate node.
-     *
-     * Substrate `TransactionStatus` lifecycle:
-     *   future → ready → broadcast → inBlock → finalized
-     *
-     * Wire form varies: some statuses are bare strings, others arrive as single-key
-     * objects. Both shapes may appear for the same logical status depending on node
-     * version — `broadcast` in particular is emitted as `{"broadcast": [peer_ids]}`
-     * by Substrate's JSON-RPC, not as the string `"broadcast"` (which is what the
-     * Rust enum debug format uses). Treating the object form as unknown → Invalid
-     * was aborting every submission mid-flight right after the proof server
-     * succeeded.
-     */
-    private fun parseTransactionStatus(status: JsonElement, txHash: String): TransactionFinalizationResult {
-        return when {
-            // String statuses
-            status is JsonPrimitive && status.isString -> {
-                when (status.content) {
-                    "future", "ready", "broadcast" -> {
-                        // Intermediate status - not a final result
-                        // Return InBlock with empty hash to signal "still waiting"
-                        TransactionFinalizationResult.InBlock(txHash, "")
-                    }
-                    "dropped" -> TransactionFinalizationResult.Dropped(txHash, "Transaction dropped from pool")
-                    "invalid" -> TransactionFinalizationResult.Invalid(txHash, "Transaction is invalid")
-                    else -> TransactionFinalizationResult.Invalid(txHash, "Unknown status: ${status.content}")
+    /** The height of [blockHash], from Substrate's `chain_getHeader`. */
+    private suspend fun getBlockHeight(blockHash: String): Long {
+        val requestId = requestIdCounter.incrementAndGet()
+        val request = JsonRpcRequest(
+            id = requestId,
+            method = "chain_getHeader",
+            params = listOf("0x$blockHash"),
+        )
+        val httpUrl = nodeUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://")
+
+        try {
+            val response = httpClient.post(httpUrl) {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout {
+                    requestTimeoutMillis = TIP_FETCH_TIMEOUT_MS
                 }
             }
-
-            // Object statuses
-            status is JsonObject -> {
-                when {
-                    status.containsKey("inBlock") -> {
-                        val blockHash = status["inBlock"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x") ?: ""
-                        TransactionFinalizationResult.InBlock(txHash, blockHash)
-                    }
-                    status.containsKey("finalized") -> {
-                        val blockHash = status["finalized"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x") ?: ""
-                        TransactionFinalizationResult.Finalized(txHash, blockHash)
-                    }
-                    status.containsKey("broadcast") -> {
-                        // Payload is the peer id list; still an intermediate status.
-                        TransactionFinalizationResult.InBlock(txHash, "")
-                    }
-                    status.containsKey("usurped") -> {
-                        val replacedBy = status["usurped"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x")
-                        TransactionFinalizationResult.Usurped(txHash, replacedBy)
-                    }
-                    status.containsKey("retracted") -> {
-                        // Block was retracted (reorg) - transaction went back to pool
-                        // Treat as still waiting
-                        TransactionFinalizationResult.InBlock(txHash, "")
-                    }
-                    status.containsKey("finalityTimeout") -> {
-                        // Block finalization timed out; substrate no longer tracks it.
-                        // Surface as Dropped so the caller can decide whether to retry.
-                        val blockHash = status["finalityTimeout"]?.jsonPrimitive?.contentOrNull?.removePrefix("0x")
-                        TransactionFinalizationResult.Dropped(txHash, "Finality timeout at block $blockHash")
-                    }
-                    else -> TransactionFinalizationResult.Invalid(txHash, "Unknown status object: $status")
-                }
+            val jsonResponse = json.decodeFromString<JsonRpcResponse>(response.bodyAsText())
+            if (jsonResponse.error != null) {
+                throw NodeRpcError(
+                    code = jsonResponse.error.code,
+                    message = jsonResponse.error.message,
+                    data = jsonResponse.error.data,
+                )
             }
-
-            else -> TransactionFinalizationResult.Invalid(txHash, "Cannot parse status: $status")
+            val number = (jsonResponse.result as? JsonObject)?.get("number")?.jsonPrimitive?.contentOrNull
+                ?: throw NodeInvalidResponseException("chain_getHeader($blockHash) returned no block number")
+            return parseBlockNumber(number)
+                ?: throw NodeInvalidResponseException("chain_getHeader($blockHash) returned an unreadable number: $number")
+        } catch (e: NodeRpcException) {
+            throw e
+        } catch (e: HttpRequestTimeoutException) {
+            throw NodeTimeoutException("Timeout fetching the header of $blockHash", e)
+        } catch (e: Exception) {
+            throw NodeNetworkException("Failed to fetch the header of $blockHash: ${e.message}", e)
         }
     }
 

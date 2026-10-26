@@ -7,6 +7,7 @@ import com.midnight.kuira.core.connector.model.HistoryEntry
 import com.midnight.kuira.core.connector.model.IntentOptions
 import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignatureResult
+import com.midnight.kuira.core.connector.model.SubmissionReceipt
 import com.midnight.kuira.core.connector.transport.ConnectorBinder
 import com.midnight.kuira.core.connector.transport.ConnectorJsBridge
 import com.midnight.kuira.core.network.NetworkConfig
@@ -50,7 +51,7 @@ class ConnectorManager(
         walletAddresses: WalletAddresses,
         balanceProvider: BalanceProvider? = null,
         signDataFn: (suspend (String, SignDataOptions) -> SignatureResult)? = null,
-        submitTransactionFn: (suspend (String) -> Unit)? = null,
+        submitTransactionFn: (suspend (String) -> SubmissionReceipt)? = null,
         makeTransferFn: (suspend (List<DesiredOutput>, Boolean) -> String)? = null,
         serverPort: Int = ConnectorWebSocketServer.DEFAULT_PORT,
     ) {

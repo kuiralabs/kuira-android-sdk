@@ -39,7 +39,7 @@ class ConnectedAPIHandler(
     val walletAddresses: WalletAddresses,
     private val balanceProvider: BalanceProvider? = null,
     private val signDataFn: (suspend (String, SignDataOptions) -> SignatureResult)? = null,
-    private val submitTransactionFn: (suspend (String) -> Unit)? = null,
+    private val submitTransactionFn: (suspend (String) -> SubmissionReceipt)? = null,
     private val makeTransferFn: (suspend (List<DesiredOutput>, Boolean) -> String)? = null,
     private val balanceUnsealedFn: (suspend (String, Boolean) -> String)? = null,
     private val balanceSealedFn: (suspend (String, Boolean) -> String)? = null,
@@ -125,11 +125,11 @@ class ConnectedAPIHandler(
         return fn(desiredOutputs, payFees)
     }
 
-    suspend fun submitTransaction(tx: String) {
+    suspend fun submitTransaction(tx: String): SubmissionReceipt {
         val fn = submitTransactionFn ?: throw ConnectorApiError(
             ErrorCodes.INTERNAL_ERROR, "Transaction submission not configured"
         )
-        fn(tx)
+        return fn(tx)
     }
 
     suspend fun balanceUnsealedTransaction(

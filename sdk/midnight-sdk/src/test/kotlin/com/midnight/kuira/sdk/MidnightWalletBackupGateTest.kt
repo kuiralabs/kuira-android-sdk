@@ -31,6 +31,7 @@ class MidnightWalletBackupGateTest {
         provingKeysDir = "",
         networkId = "test",
         spentDustNullifierStore = mock(),
+        transactionHash = { throw AssertionError("transaction hash reached but not stubbed in this test") },
         dustCloudBackup = backup,
         appStateCloudBackup = appStateBackup,
     )

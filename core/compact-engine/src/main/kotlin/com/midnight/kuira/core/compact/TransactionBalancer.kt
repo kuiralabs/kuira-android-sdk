@@ -22,11 +22,13 @@ interface TransactionBalancer {
     suspend fun balanceTransaction(provenTxHex: String): String
 
     /**
-     * Submit a balanced transaction to the blockchain.
+     * Submit a balanced transaction and report what the chain did with it.
      *
      * @param balancedTxHex Hex-encoded balanced transaction
+     * @return The accepted transaction: finalized, or pending when finality was not observed in time
+     * @throws SubmissionNotAcceptedException when the node dropped, invalidated or replaced it
      */
-    suspend fun submitTransaction(balancedTxHex: String)
+    suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction
 
     /**
      * Balance and submit a proven transaction in one operation.
@@ -39,13 +41,15 @@ interface TransactionBalancer {
      * @param onProgress Optional callback for granular progress updates.
      *   DApp developers use this to show users what's happening during the
      *   long balance+submit pipeline. See [BalanceProgress] for available stages.
+     * @return What [submitTransaction] reports for the balanced transaction
+     * @throws SubmissionNotAcceptedException when the node dropped, invalidated or replaced it
      */
     suspend fun balanceAndSubmit(
         provenTxHex: String,
         onProgress: (suspend (BalanceProgress) -> Unit)? = null,
-    ) {
+    ): SubmittedTransaction {
         val balanced = balanceTransaction(provenTxHex)
         onProgress?.invoke(BalanceProgress.Submitting)
-        submitTransaction(balanced)
+        return submitTransaction(balanced)
     }
 }

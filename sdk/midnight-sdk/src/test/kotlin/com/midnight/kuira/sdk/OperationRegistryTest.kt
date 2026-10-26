@@ -127,6 +127,26 @@ class OperationRegistryTest {
         }
 
     @Test
+    fun `an operation that had nothing to do de-enrolls and emits no outcome`() =
+        runTest(UnconfinedTestDispatcher()) {
+            // Given: a dust registration whose coins all generate dust already
+            val reg = OperationRegistry()
+            val outcomes = mutableListOf<OperationOutcome>()
+            val collector = launch { reg.outcomes.collect { outcomes.add(it) } }
+
+            // When
+            val result = reg.run(OperationDescriptor(OperationKind.DustRegistration), classify = { null }) {
+                "nothing to register"
+            }
+
+            // Then: no "registration finished" for a registration that never happened
+            assertEquals("nothing to register", result)
+            assertTrue("de-enrolled after", reg.active.value.isEmpty())
+            assertTrue("no outcome for an operation that sent nothing: $outcomes", outcomes.isEmpty())
+            collector.cancel()
+        }
+
+    @Test
     fun `a nested run does not double-enroll or double-emit (the nesting guard)`() =
         runTest(UnconfinedTestDispatcher()) {
             val reg = OperationRegistry()

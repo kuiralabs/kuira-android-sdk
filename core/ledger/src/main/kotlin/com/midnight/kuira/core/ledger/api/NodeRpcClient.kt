@@ -41,7 +41,8 @@ interface NodeRpcClient {
      * 4. Returns transaction hash (32 bytes hex)
      *
      * @param serializedTxHex Hex-encoded serialized transaction (without "0x" prefix)
-     * @return Transaction hash (32 bytes hex, without "0x" prefix)
+     * @return The node's extrinsic hash (32 bytes hex, without "0x" prefix) — not the Midnight
+     *  transaction hash the indexer uses
      * @throws NodeNetworkException if network connectivity fails
      * @throws NodeHttpException if HTTP request fails
      * @throws NodeTimeoutException if request times out
@@ -169,75 +170,50 @@ data class RuntimeVersion(
 )
 
 /**
- * Result of transaction finalization.
+ * How a watched submission ended, as the node reported it.
+ *
+ * Carries only what the node knows. The transaction's own hash is not here: it is derived from
+ * the sealed transaction by whoever sealed it, before submission.
  */
 sealed class TransactionFinalizationResult {
     /**
-     * Transaction was finalized successfully.
+     * The transaction is in a finalized block.
      *
-     * @property txHash Extrinsic hash (Substrate)
-     * @property blockHash Block hash where transaction was finalized
-     * @property blockHeight Block height (if available)
+     * @property blockHash Hash of the finalized block that includes it
+     * @property blockHeight That block's height, or null when the node could not be asked for it
+     *  after confirming finality
      */
     data class Finalized(
-        val txHash: String,
         val blockHash: String,
-        val blockHeight: Long? = null
+        val blockHeight: Long?,
     ) : TransactionFinalizationResult()
 
-    /**
-     * Transaction was included in a block but not yet finalized.
-     * This is a temporary state - finalization should follow.
-     *
-     * @property txHash Extrinsic hash
-     * @property blockHash Block hash
-     */
-    data class InBlock(
-        val txHash: String,
-        val blockHash: String
-    ) : TransactionFinalizationResult()
-
-    /**
-     * Transaction was dropped from the pool.
-     * Likely due to mempool congestion.
-     *
-     * @property txHash Extrinsic hash
-     * @property reason Reason for dropping
-     */
-    data class Dropped(
-        val txHash: String,
+    /** The transaction will not land: the node dropped, invalidated or replaced it. */
+    sealed interface Failure {
         val reason: String
-    ) : TransactionFinalizationResult()
+    }
+
+    /** The node dropped the transaction from its pool without including it. */
+    data class Dropped(override val reason: String) : TransactionFinalizationResult(), Failure
 
     /**
-     * Transaction was replaced by another (usurped).
+     * Another transaction replaced this one in the pool.
      *
-     * @property txHash Original extrinsic hash
-     * @property replacedBy Hash of the replacing transaction
+     * @property replacedBy Hash of the replacing transaction, when the node names it
      */
-    data class Usurped(
-        val txHash: String,
-        val replacedBy: String?
-    ) : TransactionFinalizationResult()
+    data class Usurped(val replacedBy: String?) : TransactionFinalizationResult(), Failure {
+        override val reason: String
+            get() = "Transaction replaced" + (replacedBy?.let { " by $it" } ?: "")
+    }
+
+    /** The node judged the transaction invalid after accepting it into the pool. */
+    data class Invalid(override val reason: String) : TransactionFinalizationResult(), Failure
 
     /**
-     * Transaction is invalid.
+     * Finality was not observed in time. The transaction may still land.
      *
-     * @property txHash Extrinsic hash
-     * @property reason Reason for invalidity
+     * @property inBlockHash The block it was last seen included in, or null if it never was —
+     *  included-but-not-final is far more likely to land than never-included
      */
-    data class Invalid(
-        val txHash: String,
-        val reason: String
-    ) : TransactionFinalizationResult()
-
-    /**
-     * Finalization timed out.
-     * Transaction may still be processing.
-     *
-     * @property txHash Extrinsic hash
-     */
-    data class Timeout(
-        val txHash: String
-    ) : TransactionFinalizationResult()
+    data class Timeout(val inBlockHash: String?) : TransactionFinalizationResult()
 }

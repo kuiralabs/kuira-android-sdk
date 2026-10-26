@@ -102,9 +102,8 @@ class NodeRpcError(
  */
 class TransactionRejected(
     val reason: String,
-    val txHash: String? = null,
     val customErrorCode: Int? = null
-) : NodeRpcException("Transaction rejected: $reason${txHash?.let { " (hash: $it)" } ?: ""}") {
+) : NodeRpcException("Transaction rejected: $reason") {
 
     companion object {
         /** The ZK proof failed verification (wrong/stale public inputs or key mismatch). */

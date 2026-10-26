@@ -18,27 +18,43 @@ class TransactionBalancerTest {
     }
 
     @Test
-    fun `custom TransactionBalancer implementation works`() = runTest {
+    fun `balanceAndSubmit submits the balanced transaction and returns what the submit reported`() = runTest {
+        // Given: a balancer whose submit reports a finalized transaction
+        val reported = SubmittedTransaction(txHash = "ab".repeat(32), txIdentifier = null, status = TransactionStatus.FINALIZED, blockHeight = 42L)
+        val submitted = mutableListOf<String>()
         val balancer = object : TransactionBalancer {
-            var lastBalanced: String? = null
-            var lastSubmitted: String? = null
-
-            override suspend fun balanceTransaction(provenTxHex: String): String {
-                lastBalanced = provenTxHex
-                return "balanced_$provenTxHex"
-            }
-
-            override suspend fun submitTransaction(balancedTxHex: String) {
-                lastSubmitted = balancedTxHex
+            override suspend fun balanceTransaction(provenTxHex: String) = "balanced_$provenTxHex"
+            override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction {
+                submitted += balancedTxHex
+                return reported
             }
         }
+        val stages = mutableListOf<BalanceProgress>()
 
-        val balanced = balancer.balanceTransaction("abc123")
-        assertEquals("balanced_abc123", balanced)
-        assertEquals("abc123", balancer.lastBalanced)
+        // When
+        val result = balancer.balanceAndSubmit("abc123") { stages += it }
 
-        balancer.submitTransaction(balanced)
-        assertEquals("balanced_abc123", balancer.lastSubmitted)
+        // Then
+        assertEquals("the BALANCED transaction is what gets submitted", listOf("balanced_abc123"), submitted)
+        assertEquals("the caller gets the submit's report unchanged", reported, result)
+        assertEquals(listOf<BalanceProgress>(BalanceProgress.Submitting), stages)
+    }
+
+    @Test
+    fun `balanceAndSubmit lets a not-accepted submission propagate`() = runTest {
+        // Given
+        val balancer = object : TransactionBalancer {
+            override suspend fun balanceTransaction(provenTxHex: String) = provenTxHex
+            override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction =
+                throw SubmissionNotAcceptedException("Transaction dropped from pool")
+        }
+
+        // When
+        val thrown = runCatching { balancer.balanceAndSubmit("abc123") }.exceptionOrNull()
+
+        // Then
+        assertTrue("a dropped transaction must not come back as a result: $thrown", thrown is SubmissionNotAcceptedException)
+        assertEquals("Transaction dropped from pool", (thrown as SubmissionNotAcceptedException).reason)
     }
 
     // ── DAppConnectorClient preserves payFees overload ──
@@ -82,7 +98,8 @@ class TransactionBalancerTest {
     fun `builder accepts transactionBalancer without walletUrl`() {
         val balancer = object : TransactionBalancer {
             override suspend fun balanceTransaction(provenTxHex: String) = provenTxHex
-            override suspend fun submitTransaction(balancedTxHex: String) {}
+            override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction =
+                error("not submitted by a builder-validation test")
         }
 
         // This should not throw — walletUrl is not required when balancer is set.

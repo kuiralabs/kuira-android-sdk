@@ -13,6 +13,7 @@ import com.midnight.kuira.core.connector.model.IntentOptions
 import com.midnight.kuira.core.connector.model.SignDataOptions
 import com.midnight.kuira.core.connector.model.SignEncoding
 import com.midnight.kuira.core.connector.model.SignatureResult
+import com.midnight.kuira.core.connector.model.SubmissionReceipt
 import com.midnight.kuira.core.connector.model.TransferKind
 import com.midnight.kuira.core.connector.model.TxStatus
 import com.midnight.kuira.core.network.MidnightNetwork
@@ -183,11 +184,18 @@ class ConnectedAPIHandlerTest {
     // ── submitTransaction ──
 
     @Test
-    fun `submitTransaction delegates to submitter`() = runTest {
-        var submitted = false
-        val handlerWithSubmitter = createHandlerWithSubmitter { submitted = true }
-        handlerWithSubmitter.submitTransaction("sealed_tx_hex")
-        assertTrue("Transaction should be submitted", submitted)
+    fun `submitTransaction hands the transaction to the submitter and returns its receipt`() = runTest {
+        // Given
+        val receipt = SubmissionReceipt(txHash = "cd".repeat(32), finalized = true, blockHeight = 7L)
+        val submitted = mutableListOf<String>()
+        val handlerWithSubmitter = createHandlerWithSubmitter { tx -> submitted += tx; receipt }
+
+        // When
+        val result = handlerWithSubmitter.submitTransaction("sealed_tx_hex")
+
+        // Then
+        assertEquals(listOf("sealed_tx_hex"), submitted)
+        assertEquals(receipt, result)
     }
 
     // ── getProvingProvider ──
@@ -391,7 +399,7 @@ class ConnectedAPIHandlerTest {
     }
 
     private fun createHandlerWithSubmitter(
-        submitter: suspend (String) -> Unit,
+        submitter: suspend (String) -> SubmissionReceipt,
     ): ConnectedAPIHandler {
         return ConnectedAPIHandler(
             networkConfig = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED),

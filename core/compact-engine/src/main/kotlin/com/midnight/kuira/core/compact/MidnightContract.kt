@@ -100,7 +100,7 @@ class MidnightContract private constructor(
 
             onProgress?.invoke(ContractCallStage.Balancing)
             val balanceStart = System.currentTimeMillis()
-            try {
+            val submitted = try {
                 balancer.balanceAndSubmit(prepared.provenTxHex) { balanceProgress ->
                     onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
                 }
@@ -109,12 +109,16 @@ class MidnightContract private constructor(
                 // On a healthy chain a contract-call rejection with the replay/TTL code means the
                 // intent was built from STALE state — re-read + rebuild fixes it. Else it's fatal.
                 if (isDuplicateIntentRejection(e)) return@repeat
+                if (e is SubmissionNotAcceptedException) {
+                    throw ContractCallException.SubmissionFailed("Submit failed: ${e.reason}", e)
+                }
                 val message = e.message ?: ""
                 if (message.contains("Balance failed") || message.contains("balance")) {
                     throw ContractCallException.BalancingFailed("Balance failed: $message", e)
                 }
                 throw ContractCallException.SubmissionFailed("Submit failed: $message", e)
             }
+            val settled = config.settle(submitted)
             val balanceMs = System.currentTimeMillis() - balanceStart
 
             // Submitted OK → wait for the indexer to reflect this call so the NEXT call reads fresh
@@ -125,8 +129,10 @@ class MidnightContract private constructor(
             }
 
             return@runTracked TransactionReceipt(
-                txHash = null,
-                status = TransactionStatus.SUBMITTED,
+                txHash = settled.txHash,
+                txIdentifier = settled.txIdentifier,
+                status = settled.status,
+                blockHeight = settled.blockHeight,
                 timings = prepared.timings.copy(balanceMs = balanceMs, submitMs = 0),
                 provenTxHex = prepared.provenTxHex,
             )
@@ -563,17 +569,21 @@ class MidnightContract private constructor(
         onProgress?.invoke(ContractCallStage.Balancing)
         val balanceStart = System.currentTimeMillis()
         val balancer = config.getBalancer()
-        try {
+        val submitted = try {
             balancer.balanceAndSubmit(provenTxHex) { balanceProgress ->
                 onProgress?.invoke(ContractCallStage.BalancingDetail(balanceProgress))
             }
         } catch (e: Exception) {
             throw ContractCallException.SubmissionFailed("Deploy submit failed: ${e.message}", e)
-        }
+        }.let { config.settle(it) }
         val balanceMs = System.currentTimeMillis() - balanceStart
 
         DeployResult(
             contractAddress = deployExec.contractAddress,
+            txHash = submitted.txHash,
+            txIdentifier = submitted.txIdentifier,
+            status = submitted.status,
+            blockHeight = submitted.blockHeight,
             timings = DeployTimings(
                 executeMs = executeMs,
                 proveMs = proveMs,
