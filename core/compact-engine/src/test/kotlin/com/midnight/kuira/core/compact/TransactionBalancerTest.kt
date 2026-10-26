@@ -1,8 +1,13 @@
 package com.midnight.kuira.core.compact
 
+import android.content.Context
+import android.content.ContextWrapper
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class TransactionBalancerTest {
 
@@ -96,28 +101,32 @@ class TransactionBalancerTest {
 
     @Test
     fun `builder accepts transactionBalancer without walletUrl`() {
+        // Given: an external balancer and no wallet URL
         val balancer = object : TransactionBalancer {
             override suspend fun balanceTransaction(provenTxHex: String) = provenTxHex
             override suspend fun submitTransaction(balancedTxHex: String): SubmittedTransaction =
                 error("not submitted by a builder-validation test")
         }
 
-        // This should not throw — walletUrl is not required when balancer is set.
-        // Note: build() will call context.applicationContext which returns null
-        // with isReturnDefaultValues = true, causing MidnightConfig constructor to
-        // receive null. That's fine for validating the builder logic.
-        try {
-            MidnightConfig.Builder(android.content.ContextWrapper(null))
-                .indexerGraphqlUrl(TEST_INDEXER_URL)
-                .transactionBalancer(balancer)
-                .networkId("preview")
-                .build()
-        } catch (e: IllegalArgumentException) {
-            fail("Should not throw when transactionBalancer is provided: ${e.message}")
-        } catch (_: Exception) {
-            // Other exceptions (NullPointerException from null context) are OK —
-            // we're testing builder validation, not full config construction.
-        }
+        // When
+        val config = MidnightConfig.Builder(appContext())
+            .indexerGraphqlUrl(TEST_INDEXER_URL)
+            .transactionBalancer(balancer)
+            .networkId("preview")
+            .build()
+
+        // Then: a config is built, carrying what was configured
+        assertEquals(TEST_INDEXER_URL, config.indexerGraphqlUrl)
+        assertEquals("preview", config.networkId)
+    }
+
+    @get:Rule
+    val temp = TemporaryFolder()
+
+    /** A context that answers as its own application context, with a real files dir. */
+    private fun appContext(): Context = object : ContextWrapper(null) {
+        override fun getApplicationContext(): Context = this
+        override fun getFilesDir(): File = temp.root
     }
 
     private companion object {
