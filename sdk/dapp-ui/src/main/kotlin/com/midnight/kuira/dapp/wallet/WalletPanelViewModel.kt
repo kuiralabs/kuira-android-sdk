@@ -26,6 +26,7 @@ import com.midnight.kuira.sdk.walletruntime.NetworkPreferenceStore
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
 import com.midnight.kuira.sdk.walletruntime.labelRes
+import com.midnight.kuira.sdk.walletseed.DevSeed
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -236,6 +237,7 @@ class WalletPanelViewModel @Inject constructor(
     val backupSetupOffer: StateFlow<Boolean> = _backupSetupOffer
 
     private fun maybeOfferBackupSetup() {
+        if (DevSeed.isDeclared(appContext)) return
         if (backupState.onboardingOffered) return
         if (backupState.enabled.value || backupState.optedOut.value) return
         if (identityProvenance.identityRestored) return

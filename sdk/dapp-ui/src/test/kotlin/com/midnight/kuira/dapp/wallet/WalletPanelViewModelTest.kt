@@ -1,6 +1,8 @@
 package com.midnight.kuira.dapp.wallet
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.midnight.kuira.core.compact.proving.ProvingMode
@@ -18,6 +20,7 @@ import com.midnight.kuira.sdk.walletruntime.MidnightSdkProvider
 import com.midnight.kuira.sdk.walletruntime.NetworkPreferenceStore
 import com.midnight.kuira.sdk.walletruntime.SessionLock
 import com.midnight.kuira.sdk.walletruntime.WalletConfig
+import com.midnight.kuira.sdk.walletseed.DevSeed
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -36,6 +39,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 /**
  * Tests for [WalletPanelViewModel]'s UI-translation contract.
@@ -543,7 +547,45 @@ class WalletPanelViewModelTest {
         coVerify(exactly = 1) { second.refresh() }
     }
 
+    @Test
+    fun `a new wallet is offered backup setup once it is ready`() = runTest {
+        // Given
+        stubReadyWallet()
+        val vm = newVm()
+
+        // When
+        vm.refreshBalance(devConfig(), activity)
+        advanceUntilIdle()
+
+        // Then
+        assertTrue("a new wallet's first Ready offers backup setup", vm.backupSetupOffer.value)
+    }
+
+    @Test
+    fun `a build that declares a dev seed is not asked to set up backup`() = runTest {
+        // Given: a debuggable host declaring a dev seed — a driven example app, where nobody answers
+        declareDevSeed()
+        stubReadyWallet()
+        val vm = newVm()
+
+        // When
+        vm.refreshBalance(devConfig(), activity)
+        advanceUntilIdle()
+
+        // Then
+        assertEquals("a dev-seed wallet is not the user's to back up", false, vm.backupSetupOffer.value)
+    }
+
     // ── Helpers ──
+
+    private fun declareDevSeed() {
+        val info = shadowOf(context.packageManager)
+            .getInternalMutablePackageInfo(context.packageName)
+            .applicationInfo!!
+        info.metaData = Bundle().apply { putString(DevSeed.MANIFEST_KEY, DEV_SEED_HEX) }
+        info.flags = info.flags or ApplicationInfo.FLAG_DEBUGGABLE
+        context.applicationInfo.flags = info.flags
+    }
 
     /**
      * Wire [sdkProvider] to return a Ready SDK whose wallet reports [balance] and
@@ -588,6 +630,11 @@ class WalletPanelViewModelTest {
         // Locked is its own state (not None/Loading) so the sheet renders an
         // explicit "tap to unlock" instead of an indefinite shimmer.
         assertEquals(WalletStatus.Locked, vm.status.value)
+    }
+
+    private companion object {
+        /** 64 bytes of hex, the shape DevSeed accepts; never used to sign here. */
+        val DEV_SEED_HEX = "9f".repeat(64)
     }
 
     private fun newVm(): WalletPanelViewModel = newVmWithStore(SigilStateStore(context))
