@@ -1,5 +1,7 @@
 package com.midnight.kuira.core.compact.proving
 
+import com.midnight.kuira.core.compact.ProvingException
+
 /**
  * Local ZK prover — generates proofs on the phone instead of a remote server.
  *
@@ -31,6 +33,21 @@ class LocalProver private constructor() {
             com.midnight.kuira.core.compact.ContractRuntime.ensureLoaded()
             return nativeProveTransactionLocal(unprovenTxHex, keysDir)
         }
+
+        /**
+         * [proveTransaction], failing with the prover's own reason instead of a null — the
+         * circuit too large for the device, too little free memory, a missing key.
+         *
+         * @throws ProvingException carrying that reason
+         */
+        fun proveTransactionOrFail(unprovenTxHex: String, keysDir: String): String =
+            proveTransaction(unprovenTxHex, keysDir)
+                ?: throw ProvingException(nativeLastProveError() ?: UNKNOWN_FAILURE)
+
+        private const val UNKNOWN_FAILURE = "local proving failed without a reason"
+
+        @JvmStatic
+        private external fun nativeLastProveError(): String?
 
         @JvmStatic
         private external fun nativeProveTransactionLocal(

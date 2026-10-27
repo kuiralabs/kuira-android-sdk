@@ -67,6 +67,12 @@ class WitnessResultTest {
         assertEquals(max, BigInteger(1, WitnessResult.uint(max).data))
     }
 
+    @Test
+    fun `bool carries one byte as the BOOLEAN kind`() {
+        assertEquals("null|BOOLEAN|1", WitnessResult.bool(true).toJsArrayString())
+        assertEquals("null|BOOLEAN|0", WitnessResult.bool(false).toJsArrayString())
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `uint refuses a negative value`() {
         WitnessResult.uint(BigInteger.valueOf(-1))
@@ -156,46 +162,5 @@ class WitnessBufferOwnershipTest {
             "null|BYTES|42,0,255",
             CircuitExecutor.serializeWitness(WitnessResult(null, data, WitnessKind.BYTES)),
         )
-    }
-}
-
-/**
- * kuira-android-sdk#4, constraint 1: a contract's generated constructor resolves every
- * declared witness when it is built, so omitting one the called circuit never invokes
- * still fails — and it fails at construction, nowhere near the call being made. The
- * runtime names the witness; these tests pin the guidance that explains the rule.
- */
-class WitnessGapExplanationTest {
-
-    private val runtimeError =
-        "CompactError: first (witnesses) argument to Contract constructor " +
-            "does not contain a function-valued field named enrolmentPath"
-
-    @Test
-    fun `names the missing witness and states the all-witnesses rule`() {
-        val explained = CircuitExecutor.explainWitnessGap(
-            runtimeError,
-            setOf("localSecretKey", "birthYear"),
-        )
-
-        assertTrue("keeps the original runtime text", explained.contains(runtimeError))
-        assertTrue("names the missing witness", explained.contains("'enrolmentPath'"))
-        assertTrue("lists what was supplied", explained.contains("birthYear, localSecretKey"))
-        assertTrue(
-            "explains that unused witnesses still have to be declared",
-            explained.contains("never") && explained.contains("invokes"),
-        )
-    }
-
-    @Test
-    fun `says so plainly when no witnesses were supplied at all`() {
-        val explained = CircuitExecutor.explainWitnessGap(runtimeError, emptySet())
-        assertTrue(explained.contains("the witnesses map is empty"))
-    }
-
-    @Test
-    fun `passes unrelated errors through untouched`() {
-        val other = "CompactError: failed assert: not on the roll"
-        assertEquals(other, CircuitExecutor.explainWitnessGap(other, setOf("sib0")))
     }
 }

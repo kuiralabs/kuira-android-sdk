@@ -67,7 +67,10 @@ val CHAIN_CONTRACTS = listOf(
 )
 // Chain-dependent classes that deploy their own contract from the device, so need the localnet
 // and the connector but nothing deployed in advance.
-val SELF_DEPLOYING_CHAIN_TEST_CLASSES = setOf("$COMPACT_TEST_PKG.MerkleMembershipOnChainTest")
+val SELF_DEPLOYING_CHAIN_TEST_CLASSES = setOf(
+    "$COMPACT_TEST_PKG.MerkleMembershipOnChainTest",
+    "$COMPACT_TEST_PKG.ConstructorWitnessOnChainTest",
+)
 val CHAIN_TEST_CLASSES = CHAIN_CONTRACTS.map { it.testClass }.toSet() + SELF_DEPLOYING_CHAIN_TEST_CLASSES
 
 // `mn` is ledger-VERSIONED: a 0.5.x build drives ledger 8, a 0.6.x build drives ledger 9, and it

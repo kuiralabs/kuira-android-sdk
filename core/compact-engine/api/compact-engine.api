@@ -655,6 +655,7 @@ public final class com/midnight/kuira/core/compact/TransactionStatus : java/lang
 }
 
 public final class com/midnight/kuira/core/compact/WitnessKind : java/lang/Enum {
+	public static final field BOOLEAN Lcom/midnight/kuira/core/compact/WitnessKind;
 	public static final field BYTES Lcom/midnight/kuira/core/compact/WitnessKind;
 	public static final field UINT Lcom/midnight/kuira/core/compact/WitnessKind;
 	public static final field VECTOR_OF_UINT8 Lcom/midnight/kuira/core/compact/WitnessKind;
@@ -685,6 +686,8 @@ public final class com/midnight/kuira/core/compact/WitnessResult {
 }
 
 public final class com/midnight/kuira/core/compact/WitnessResult$Companion {
+	public final fun bool (ZLjava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
+	public static synthetic fun bool$default (Lcom/midnight/kuira/core/compact/WitnessResult$Companion;ZLjava/lang/Object;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
 	public final fun uint (Ljava/math/BigInteger;Ljava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
 	public static synthetic fun uint$default (Lcom/midnight/kuira/core/compact/WitnessResult$Companion;Ljava/math/BigInteger;Ljava/lang/Object;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
 }
@@ -702,6 +705,7 @@ public final class com/midnight/kuira/core/compact/proving/LocalProver {
 
 public final class com/midnight/kuira/core/compact/proving/LocalProver$Companion {
 	public final fun proveTransaction (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	public final fun proveTransactionOrFail (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/compact/proving/ProvingKeyManager {

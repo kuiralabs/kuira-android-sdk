@@ -9,6 +9,7 @@ import com.midnight.kuira.core.network.NetworkConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -90,6 +91,10 @@ class MerkleMembershipOnChainTest {
             "the failure must say the leaf is not in the tree: ${error.message}",
             error.message.orEmpty().contains("the leaf is not in the ledger tree 'members'"),
         )
+        assertFalse(
+            "the failure is for the app, so it must not carry the runtime's JS stack: ${error.message}",
+            JS_STACK_FRAME.containsMatchIn(error.message.orEmpty()),
+        )
     }
 
     @Test
@@ -115,6 +120,42 @@ class MerkleMembershipOnChainTest {
         )
     }
 
+    @Test
+    fun aHandleWithoutThePathWitnessCanStillCallACircuitThatDoesNotUseIt(): Unit = runBlocking {
+        // Given: a deployed tree, and a handle that supplies no memberPath witness
+        val address = deployedAddress()
+        val withoutPath = membership(address, supplyPath = false)
+
+        // When: it calls join, which never asks for a path
+        val receipt = withoutPath.call("join", LEAF_A)
+
+        // Then
+        receipt.assertFinalized("join without the path witness")
+    }
+
+    @Test
+    fun aCircuitThatCallsAnUnsuppliedWitnessFailsNamingIt(): Unit = runBlocking {
+        // Given: a joined leaf, and a handle that supplies no memberPath witness
+        val address = deployedAddress()
+        membership(address).call("join", LEAF_A).assertFinalized("join A")
+        val withoutPath = membership(address, supplyPath = false)
+
+        // When
+        val error = try {
+            withoutPath.call("proveMember", LEAF_A)
+            fail("a circuit whose witness was not supplied must not produce a proof")
+            return@runBlocking
+        } catch (e: ContractCallException.CircuitExecutionFailed) {
+            e
+        }
+
+        // Then
+        assertTrue(
+            "the failure must name the witness that was not supplied: ${error.message}",
+            error.message.orEmpty().contains("the contract called witness 'memberPath', and this contract handle supplies none"),
+        )
+    }
+
     private suspend fun deployedMembership(): MidnightContract = membership(deployedAddress())
 
     private suspend fun deployedAddress(): String {
@@ -123,10 +164,14 @@ class MerkleMembershipOnChainTest {
         return deployed.contractAddress
     }
 
-    private fun membership(address: String?, ledgerTree: String = MEMBERS_TREE): MidnightContract = MidnightContract.create(config) {
+    private fun membership(
+        address: String?,
+        ledgerTree: String = MEMBERS_TREE,
+        supplyPath: Boolean = true,
+    ): MidnightContract = MidnightContract.create(config) {
         contractJs = context.assets.open(CONTRACT_ASSET)
         this.address = address
-        merklePathWitness("memberPath", ledgerTree = ledgerTree)
+        if (supplyPath) merklePathWitness("memberPath", ledgerTree = ledgerTree)
         coinPublicKey = ByteArray(32)
         circuitVerifierKeys = CIRCUITS.associateWith { circuit ->
             context.assets.open("$KEYS_ASSET_DIR/$circuit.verifier").use { it.readBytes() }
@@ -153,6 +198,7 @@ class MerkleMembershipOnChainTest {
         val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
         const val DAPP_CONNECTOR_URL = "ws://127.0.0.1:9932"
         val TX_HASH = Regex("^[0-9a-f]{64}$")
+        val JS_STACK_FRAME = Regex("\\n\\s+at ")
 
         val LEAF_A = ByteArray(32) { 0xa1.toByte() }
         val LEAF_B = ByteArray(32) { 0xb2.toByte() }

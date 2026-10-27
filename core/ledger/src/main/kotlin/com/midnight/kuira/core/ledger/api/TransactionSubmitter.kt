@@ -134,11 +134,11 @@ class TransactionSubmitter(
                 }
                 Log.d(TAG, "Proving locally (keys at ${provingKeyManager.keysDir})")
                 val result = withContext(Dispatchers.Default) {
-                    LocalProver.proveTransaction(
+                    LocalProver.proveTransactionOrFail(
                         unprovenTxHex,
                         provingKeyManager.keysDir.absolutePath,
                     )
-                } ?: throw IllegalStateException("Local proving failed — check proving keys")
+                }
                 Log.i(TAG, "Local proving succeeded")
                 lastProvingMode = ProvingMode.LOCAL
                 result

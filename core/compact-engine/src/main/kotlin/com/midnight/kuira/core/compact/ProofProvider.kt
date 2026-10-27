@@ -43,11 +43,9 @@ class LocalProofProvider(
         }
 
         val keysDir = provingKeyManager.keysDir.absolutePath
-        val result = withContext(Dispatchers.IO) {
-            LocalProver.proveTransaction(unprovenTxHex, keysDir)
-        } ?: throw ProvingException("Local prover returned null — proving failed")
-
-        return result
+        return withContext(Dispatchers.IO) {
+            LocalProver.proveTransactionOrFail(unprovenTxHex, keysDir)
+        }
     }
 }
 

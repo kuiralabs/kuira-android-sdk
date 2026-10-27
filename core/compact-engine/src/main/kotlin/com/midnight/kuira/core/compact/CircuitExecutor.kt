@@ -323,14 +323,14 @@ class CircuitExecutor(
 
         quickJs {
             function("__capture") { args: Array<Any?> -> stateHandle = args[0] as? String }
-            function("__captureError") { args: Array<Any?> -> jsError = args[0] as? String }
+            function("__captureError") { args: Array<Any?> -> jsError = captureJsError(args) }
 
             registerWitnesses(this, witnesses)
             registerNativeFfi(this)
             loadRuntime(this, contractJs)
 
             val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
-            val witnessEntries = buildWitnessEntriesJs(witnesses)
+            val witnessEntries = buildWitnessEntriesJs(witnesses, declaredWitnesses(contractJs))
             // Compact's generated initialState is `initialState(context,...constructorArgs)`.
             // Append the (already JS-encoded) args after the context object; empty = no-arg.
             val constructorArgsJs = if (constructorArgs.isEmpty()) "" else ", ${constructorArgs.joinToString(", ")}"
@@ -348,7 +348,7 @@ class CircuitExecutor(
                     // Capture the state handle for the deploy transaction assembler
                     __capture(initResult.currentContractState._rustHandle.toString());
                 } catch (e) {
-                    __captureError(String(e) + (e && e.stack ? "\n" + e.stack : ""));
+                    __captureError(String(e), e && e.stack ? String(e.stack) : "");
                 }
             """.trimIndent()
 
@@ -357,9 +357,7 @@ class CircuitExecutor(
 
         val constructorError = jsError
         if (constructorError != null) {
-            throw CircuitExecutionException(
-                "Constructor execution failed: ${explainWitnessGap(constructorError, witnesses.keys)}"
-            )
+            throw CircuitExecutionException("Constructor execution failed: $constructorError")
         }
 
         val handle = stateHandle?.toLongOrNull()
@@ -417,7 +415,7 @@ class CircuitExecutor(
 
         quickJs {
             function("__capture") { args: Array<Any?> -> txParamsJson = args[0] as? String }
-            function("__captureError") { args: Array<Any?> -> jsError = args[0] as? String }
+            function("__captureError") { args: Array<Any?> -> jsError = captureJsError(args) }
 
             registerWitnesses(this, witnesses)
             registerNativeFfi(this)
@@ -425,6 +423,7 @@ class CircuitExecutor(
 
             val circuitJs = buildCircuitJs(
                 witnesses = witnesses,
+                declaredWitnesses = declaredWitnesses(contractJs),
                 contractAddress = contractAddress,
                 circuitName = circuitName,
                 circuitArgs = circuitArgs,
@@ -443,9 +442,7 @@ class CircuitExecutor(
 
         val circuitError = jsError
         if (circuitError != null) {
-            throw CircuitExecutionException(
-                "Circuit execution failed: ${explainWitnessGap(circuitError, witnesses.keys)}"
-            )
+            throw CircuitExecutionException("Circuit execution failed: $circuitError")
         }
 
         return txParamsJson
@@ -531,6 +528,7 @@ class CircuitExecutor(
 
     private fun buildCircuitJs(
         witnesses: Map<String, WitnessProvider>,
+        declaredWitnesses: Set<String>,
         contractAddress: String,
         circuitName: String,
         circuitArgs: List<String>,
@@ -547,7 +545,7 @@ class CircuitExecutor(
         // by readManyCircuits; each runs against its own native clone of the fetched state.
         multiReadCallsJs: String? = null,
     ): String {
-        val witnessEntries = buildWitnessEntriesJs(witnesses)
+        val witnessEntries = buildWitnessEntriesJs(witnesses, declaredWitnesses)
 
         // initialState() below builds a throwaway state (the on-chain state is swapped in after), so
         // a constructor-args contract needs shape-valid args here just to pass its validation.
@@ -705,9 +703,15 @@ class CircuitExecutor(
                 );
                 $executionTail
             } catch (e) {
-                __captureError(String(e) + (e && e.stack ? "\n" + e.stack : ""));
+                __captureError(String(e), e && e.stack ? String(e.stack) : "");
             }
         """.trimIndent()
+    }
+
+    /** The error's own message for the caller; its JS stack only to the debug log. */
+    private fun captureJsError(args: Array<Any?>): String? {
+        (args.getOrNull(1) as? String)?.takeIf { it.isNotEmpty() }?.let { Log.d(TAG, "JS stack:\n$it") }
+        return args.getOrNull(0) as? String
     }
 
     private fun loadAsset(path: String): String =
@@ -718,32 +722,6 @@ class CircuitExecutor(
 
         private val IDENTIFIER_REGEX = Regex("^[a-zA-Z_][a-zA-Z0-9_]*$")
         private val HEX_REGEX = Regex("^[0-9a-fA-F]+$")
-
-        private val MISSING_WITNESS_REGEX =
-            Regex("does not contain a function-valued field named ([A-Za-z_][A-Za-z0-9_]*)")
-
-        /**
-         * Append actionable guidance when the Compact runtime rejects the witness handle.
-         *
-         * The runtime names the witness it could not find, but not the rule that explains
-         * it: the generated constructor looks up EVERY witness the contract declares when
-         * it is built, so omitting one the circuit under call never invokes still fails —
-         * and it fails at construction, far from the call the developer was making
-         * (kuira-android-sdk#4). Any other error is passed through untouched.
-         */
-        internal fun explainWitnessGap(jsError: String, provided: Set<String>): String {
-            val missing = MISSING_WITNESS_REGEX.find(jsError)?.groupValues?.get(1)
-                ?: return jsError
-            val supplied = if (provided.isEmpty()) {
-                "the witnesses map is empty"
-            } else {
-                "supplied: ${provided.sorted().joinToString(", ")}"
-            }
-            return "$jsError\n\nThe contract declares a witness named '$missing' and the " +
-                "witnesses map has no entry for it ($supplied). Every witness a contract " +
-                "declares must be present, including ones the circuit you are calling never " +
-                "invokes — the generated constructor resolves all of them when it is built."
-        }
 
         /**
          * Serialize a provider's witness result into the QuickJS wire form, wiping only
@@ -965,6 +943,37 @@ fun interface WitnessProvider {
 }
 
 /**
+ * The witnesses a compiled contract declares. Its generated constructor checks each one by
+ * name, so the names are read from those checks rather than from the circuit being called.
+ */
+internal fun declaredWitnesses(contractJs: String): Set<String> =
+    DECLARED_WITNESS.findAll(contractJs).map { it.groupValues[1] }.toSet()
+
+private val DECLARED_WITNESS =
+    Regex("does not contain a function-valued field named ([A-Za-z_$][A-Za-z0-9_$]*)")
+
+/**
+ * The JS witnesses object: one entry per supplied witness, and a stand-in for each declared
+ * witness the app did not supply. The generated constructor requires every declared witness to
+ * be a function, even ones the circuit being called never invokes; the stand-in satisfies that
+ * and fails only if a circuit actually calls it, naming the witness.
+ */
+internal fun buildWitnessEntriesJs(
+    witnesses: Map<String, WitnessProvider>,
+    declared: Set<String> = emptySet(),
+): String =
+    (witnesses.entries.map { (name, provider) -> suppliedWitnessJs(name, provider) } +
+        (declared - witnesses.keys).sorted().map(::unsuppliedWitnessJs))
+        .joinToString(",\n")
+
+private fun unsuppliedWitnessJs(name: String): String =
+    """
+        $name: function() {
+            throw new Error("the contract called witness '$name', and this contract handle supplies none");
+        }
+    """.trimIndent()
+
+/**
  * Build the per-witness JS function bodies that bridge native
  * `__witness_$name` calls to the shape the Compact runtime expects.
  *
@@ -982,11 +991,10 @@ fun interface WitnessProvider {
  *  - `BYTES` (default) → length-1 ⇒ `BigInt`, length-N ⇒ `Uint8Array`,
  *  matching scalar `Uint<…>` and `Bytes<N>` respectively
  */
-internal fun buildWitnessEntriesJs(witnesses: Map<String, WitnessProvider>): String =
-    witnesses.entries.joinToString(",\n") { (name, provider) ->
-        require(JS_IDENTIFIER.matches(name)) { "a witness name must be the contract's witness identifier, got '$name'" }
-        if (provider is LedgerTreePathWitness) return@joinToString ledgerTreePathWitnessJs(name, provider.ledgerTree)
-        """
+private fun suppliedWitnessJs(name: String, provider: WitnessProvider): String {
+    require(JS_IDENTIFIER.matches(name)) { "a witness name must be the contract's witness identifier, got '$name'" }
+    if (provider is LedgerTreePathWitness) return ledgerTreePathWitnessJs(name, provider.ledgerTree)
+    return """
         $name: function(witnessContext) {
             const resultStr = __witness_$name(
                 JSON.stringify(witnessContext.privateState)
@@ -1009,6 +1017,8 @@ internal fun buildWitnessEntriesJs(witnesses: Map<String, WitnessProvider>): Str
             } else if (kind === 'UINT') {
                 // Uint<N> / Field — the bytes are the big-endian value.
                 result = values.reduce(function (acc, v) { return (acc << 8n) | BigInt(v); }, 0n);
+            } else if (kind === 'BOOLEAN') {
+                result = values[0] !== 0;
             } else {
                 // BYTES (default) — Bytes<N> + scalar Uint<…>.
                 // Single-byte payloads become BigInt; multi-byte
@@ -1018,7 +1028,7 @@ internal fun buildWitnessEntriesJs(witnesses: Map<String, WitnessProvider>): Str
             return [privateState, result];
         }
         """.trimIndent()
-    }
+}
 
 /**
  * A witness answered with the membership path of its argument in one of the contract's own
@@ -1099,6 +1109,9 @@ enum class WitnessKind {
      * [BYTES] can only express below 256. Build it with [WitnessResult.uint].
      */
     UINT,
+
+    /** [WitnessResult.data] is one byte, 1 or 0, and becomes a JS boolean. Build it with [WitnessResult.bool]. */
+    BOOLEAN,
 }
 
 /**
@@ -1141,6 +1154,10 @@ data class WitnessResult(
     }
 
     companion object {
+        /** A `Boolean` witness value, carried as [WitnessKind.BOOLEAN]. */
+        fun bool(value: Boolean, privateState: Any? = null): WitnessResult =
+            WitnessResult(privateState, byteArrayOf(if (value) 1 else 0), WitnessKind.BOOLEAN)
+
         /** A `Uint<N>` witness value, carried as [WitnessKind.UINT]. */
         fun uint(value: BigInteger, privateState: Any? = null): WitnessResult {
             require(value.signum() >= 0) { "a Uint witness cannot be negative: $value" }

@@ -1,0 +1,21 @@
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+// The deployer becomes the owner: the constructor reads the deployer's secret through a
+// witness and stores only its hash, so no circuit is needed to claim ownership afterwards.
+export ledger owner: Bytes<32>;
+
+witness localSecretKey(): Bytes<32>;
+
+circuit ownerTag(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "constructor-owner:"), sk]);
+}
+
+constructor() {
+  owner = disclose(ownerTag(localSecretKey()));
+}
+
+export circuit isOwner(): Boolean {
+  return disclose(owner == ownerTag(localSecretKey()));
+}
