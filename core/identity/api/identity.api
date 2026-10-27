@@ -363,6 +363,14 @@ public final class com/midnight/kuira/core/identity/link/LinkException$SealFaile
 	public fun <init> (Ljava/lang/String;)V
 }
 
+public final class com/midnight/kuira/core/identity/link/LinkException$SeedUnavailable : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/identity/link/LinkException$StorageFailed : com/midnight/kuira/core/identity/link/LinkException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public final class com/midnight/kuira/core/identity/link/LinkException$UnsupportedEntropySize : com/midnight/kuira/core/identity/link/LinkException {
 	public fun <init> (I)V
 	public final fun getSize ()I
@@ -380,6 +388,8 @@ public final class com/midnight/kuira/core/identity/link/LinkQrText {
 }
 
 public final class com/midnight/kuira/core/identity/link/LinkQrTextKt {
+	public static final fun fromQrText (Lcom/midnight/kuira/core/identity/link/LinkRequest$Companion;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/link/LinkRequest;
+	public static final fun fromQrText (Lcom/midnight/kuira/core/identity/link/LinkResponse$Companion;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/link/LinkResponse;
 	public static final fun qrText (Lcom/midnight/kuira/core/identity/link/LinkRequest;)Ljava/lang/String;
 	public static final fun qrText (Lcom/midnight/kuira/core/identity/link/LinkResponse;)Ljava/lang/String;
 }
@@ -407,6 +417,126 @@ public final class com/midnight/kuira/core/identity/link/LinkResponse$Companion 
 }
 
 public final class com/midnight/kuira/core/identity/link/LinkSecret {
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession {
+	public fun <init> (Lkotlin/jvm/functions/Function2;)V
+	public final fun abort ()V
+	public final fun confirm (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getRequestQrText ()Ljava/lang/String;
+	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun readyToScan ()V
+	public final fun scan (Ljava/lang/String;)V
+	public final fun showRequestAgain ()V
+}
+
+public abstract interface class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$AwaitingConfirmation : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$AwaitingConfirmation;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$AwaitingConfirmation;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$AwaitingConfirmation;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCode ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Cancelled : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Cancelled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Failed : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public fun <init> (Lcom/midnight/kuira/core/identity/link/LinkException;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/identity/link/LinkException;
+	public final fun copy (Lcom/midnight/kuira/core/identity/link/LinkException;)Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Failed;Lcom/midnight/kuira/core/identity/link/LinkException;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCause ()Lcom/midnight/kuira/core/identity/link/LinkException;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Linked : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$Linked;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$ScanningResponse : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$ScanningResponse;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$ShowingRequest : com/midnight/kuira/core/identity/link/NewDeviceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/NewDeviceLinkSession$State$ShowingRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession {
+	public fun <init> (Lkotlin/jvm/functions/Function1;)V
+	public final fun abort ()V
+	public final fun approve (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun scan (Ljava/lang/String;)V
+}
+
+public abstract interface class com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession$State$AwaitingApproval : com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$AwaitingApproval;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession$State$Cancelled : com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$Cancelled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession$State$Failed : com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+	public fun <init> (Lcom/midnight/kuira/core/identity/link/LinkException;)V
+	public final fun component1 ()Lcom/midnight/kuira/core/identity/link/LinkException;
+	public final fun copy (Lcom/midnight/kuira/core/identity/link/LinkException;)Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$Failed;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$Failed;Lcom/midnight/kuira/core/identity/link/LinkException;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCause ()Lcom/midnight/kuira/core/identity/link/LinkException;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession$State$Scanning : com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+	public static final field INSTANCE Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$Scanning;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/identity/link/SourceLinkSession$State$ShowingResponse : com/midnight/kuira/core/identity/link/SourceLinkSession$State {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$ShowingResponse;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$ShowingResponse;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/identity/link/SourceLinkSession$State$ShowingResponse;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCode ()Ljava/lang/String;
+	public final fun getQrText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/identity/passkey/AttestationParseException : java/lang/Exception {

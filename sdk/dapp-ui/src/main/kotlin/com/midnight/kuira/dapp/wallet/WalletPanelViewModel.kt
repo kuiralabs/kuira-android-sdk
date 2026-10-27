@@ -7,6 +7,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.midnight.kuira.core.identity.backup.SeedDeriver
 import com.midnight.kuira.core.identity.backup.AuthorizeOutcome
 import com.midnight.kuira.dapp.backup.AppDataBackupProvider
 import com.midnight.kuira.core.identity.backup.DriveAuthManager
@@ -860,6 +861,26 @@ class WalletPanelViewModel @Inject constructor(
 
     /** Record that the user has saved their phrase (their "I've written it down" confirm). */
     fun markRecoveryPhraseSaved() = sdkProvider.recovery.markPhraseSaved()
+
+    /**
+     * Reads this device's 32-byte entropy so it can be sealed to another phone. Biometric-gated,
+     * and called only after the person approves the copy — reading it is what raises the prompt.
+     *
+     * Routed through the existing [com.midnight.kuira.sdk.walletseed.WalletRecovery] surface rather
+     * than widening the provider with the raw seed store: the phrase IS the entropy, and this way
+     * the link ceremony adds no new way to reach the wallet's secret. The caller wipes the result.
+     */
+    suspend fun linkEntropy(activity: FragmentActivity): ByteArray =
+        SeedDeriver.recoveryWordsToEntropy(sdkProvider.recovery.revealPhrase(activity))
+
+    /**
+     * Stores entropy received from another device, seeding this phone's vault.
+     *
+     * Reuses the restore path, which already refuses when a wallet exists here — linking onto a
+     * device that already holds one would otherwise silently replace it.
+     */
+    suspend fun acceptLinkedEntropy(activity: FragmentActivity, entropy: ByteArray) =
+        sdkProvider.recovery.restoreFromPhrase(activity, SeedDeriver.entropyToRecoveryWords(entropy))
 
     /** Validate a phrase without restoring — for live input feedback in the restore screen. */
     fun isValidRecoveryPhrase(words: List<String>): Boolean =

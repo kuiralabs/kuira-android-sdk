@@ -20,4 +20,19 @@ sealed class LinkException(message: String) : Exception(message) {
 
     /** The sealed payload did not open: wrong recipient key, or the ciphertext was altered. */
     class SealFailed(detail: String) : LinkException("Could not open the sealed wallet: $detail")
+
+    /**
+     * The source device could not read its own seed. Usually a declined biometric prompt, which is
+     * a choice rather than a fault, so it is reported separately from a protocol failure — telling
+     * someone the crypto broke when they simply dismissed Face ID sends them to re-run a ceremony
+     * that was never wrong.
+     */
+    class SeedUnavailable(detail: String) : LinkException("Could not read this device's wallet: $detail")
+
+    /**
+     * The new device opened the payload but could not store it. The wallet is not on this device,
+     * and the distinction matters: everything about the ceremony itself was correct, so the fix is
+     * on this phone rather than back at the other one.
+     */
+    class StorageFailed(detail: String) : LinkException("Could not store the wallet on this device: $detail")
 }

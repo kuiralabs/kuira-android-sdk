@@ -187,6 +187,19 @@ private fun WalletOverlayContent(
                 onClose = { controller.close() },
             )
         }
+
+        is WalletOverlay.LinkDevice -> {
+            // Opened straight from the sigil gate, where there is no wallet yet and so no Settings
+            // to nest inside. Same screen the Settings row reaches, just its own way in.
+            if (activity != null) {
+                WalletLinkDeviceScreen(
+                    entropy = { viewModel.linkEntropy(activity) },
+                    deliver = { viewModel.acceptLinkedEntropy(activity, it) },
+                    colors = colors,
+                    onFinish = { controller.close() },
+                )
+            }
+        }
     }
 }
 
@@ -212,6 +225,7 @@ private fun WalletSettingsOverlayContent(
     onClose: () -> Unit,
 ) {
     var recoveryRevealOpen by rememberSaveable { mutableStateOf(false) }
+    var linkDeviceOpen by rememberSaveable { mutableStateOf(false) }
 
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
     val syncFailure by viewModel.syncFailure.collectAsStateWithLifecycle()
@@ -230,17 +244,30 @@ private fun WalletSettingsOverlayContent(
             )
         }
 
-    // Back returns to Settings from the reveal; otherwise closes Settings entirely.
+    // Back returns to Settings from the reveal or the link ceremony; otherwise closes Settings.
+    // Linking deliberately does NOT confirm on the way out: nothing is committed until the codes
+    // are confirmed, so backing out of it costs nothing.
     BackHandler(enabled = true) {
         if (recoveryRevealOpen) {
             viewModel.clearRevealedPhrase()
             recoveryRevealOpen = false
+        } else if (linkDeviceOpen) {
+            linkDeviceOpen = false
         } else {
             onClose()
         }
     }
 
-    if (recoveryRevealOpen) {
+    if (linkDeviceOpen && activity != null) {
+        WalletLinkDeviceScreen(
+            // Both halves are biometric-gated reads or writes of this device's vault, so they need
+            // the activity — which is also why the row is only live when one is attached.
+            entropy = { viewModel.linkEntropy(activity) },
+            deliver = { viewModel.acceptLinkedEntropy(activity, it) },
+            colors = colors,
+            onFinish = { linkDeviceOpen = false },
+        )
+    } else if (recoveryRevealOpen) {
         val revealedPhrase by viewModel.revealedPhrase.collectAsStateWithLifecycle()
         val recoveryError by viewModel.recoveryError.collectAsStateWithLifecycle()
         WalletRecoveryScreen(
@@ -264,6 +291,7 @@ private fun WalletSettingsOverlayContent(
             syncLabel = settingsSyncLabel(status, syncing = syncProgress != null, failed = syncFailure != null),
             recoveryPhraseSaved = recoveryPhraseSaved,
             onViewRecoveryPhrase = { recoveryRevealOpen = true },
+            onLinkDevice = { linkDeviceOpen = true },
             // Moved out of the wallet sheet. The sheet is about money; these are
             // configuration, and with a second chain's balance in that sheet the
             // room they were taking stopped being affordable.

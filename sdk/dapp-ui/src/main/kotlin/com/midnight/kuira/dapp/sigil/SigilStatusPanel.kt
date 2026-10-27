@@ -99,6 +99,12 @@ fun SigilStatusPanel(
      * so the gear is one entry point from either panel. Default no-op hides the gear.
      */
     onOpenSettings: () -> Unit = {},
+    /**
+     * Opens the host's link-a-device ceremony — offered at the gate, where there is no wallet yet.
+     * This is the only route to the RECEIVING half of a link: the device that needs a wallet cannot
+     * reach Settings, where linking otherwise lives. Default no-op hides the option.
+     */
+    onLinkDevice: () -> Unit = {},
     /** One-shot: each new non-zero value opens the sheet (a floating host taps the chip → here). */
     openSheetSignal: Int = 0,
     /**
@@ -172,6 +178,10 @@ fun SigilStatusPanel(
                 onOpenSettings = {
                     sheetOpen = false
                     onOpenSettings()
+                },
+                onLinkDevice = {
+                    sheetOpen = false
+                    onLinkDevice()
                 },
             )
         }
@@ -447,6 +457,7 @@ private fun SigilSheetContent(
     onSignOut: () -> Unit = {},
     onStartFresh: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onLinkDevice: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
 
@@ -476,6 +487,7 @@ private fun SigilSheetContent(
             colors = colors,
             onForgeSigil = onForgeSigil,
             onRestore = onRestore,
+            onLinkDevice = onLinkDevice,
         )
         is SigilStatus.BackupAvailable -> BackupAvailableBody(
             colors = colors,
@@ -507,6 +519,7 @@ private fun NoneBody(
     colors: SigilPanelColors,
     onForgeSigil: () -> Unit,
     onRestore: () -> Unit,
+    onLinkDevice: () -> Unit,
 ) {
     Text(
         "Create a passkey to establish your identity. One DID, stable across all Midnight dApps.",
@@ -517,6 +530,18 @@ private fun NoneBody(
     SheetButton(text = "forge sigil", enabled = true, colors = colors, onClick = onForgeSigil)
     Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
     SheetButton(text = "restore from cloud", enabled = true, colors = colors, onClick = onRestore, dimmed = true)
+    Spacer(modifier = Modifier.height(SigilDimens.SheetSmallGap))
+    // The ONLY place the receiving half of a device link is reachable. Linking otherwise lives in
+    // Settings, which sits behind the wallet — so on the one device that needs to receive a wallet,
+    // it could not be reached at all, and the only way forward was Forge, which makes a DIFFERENT
+    // wallet. iOS shipped with exactly that gap.
+    SheetButton(
+        text = "i have this wallet on another phone",
+        enabled = true,
+        colors = colors,
+        onClick = onLinkDevice,
+        dimmed = true,
+    )
 }
 
 /**

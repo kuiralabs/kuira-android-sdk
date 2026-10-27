@@ -1,0 +1,77 @@
+<resources>
+    <!--
+      Link a device. The wording avoids "seed" and "entropy": the person doing this is holding two
+      phones, not reading a spec, and the thing being moved is their wallet.
+
+      Resources rather than inline literals, as in :sdk:wallet-runtime — this is the SDK's own
+      consumer-facing copy, so a host app can localise or override it. Prefixed kuira_ so nothing
+      collides when these merge into a host's resources.
+
+      Kept word-for-word in step with the iOS KuiraStrings. The two phones in a ceremony are usually
+      not the same platform, and each step tells the person what the OTHER phone should be showing —
+      so copy that drifts between the platforms describes a screen that isn't there.
+    -->
+    <string name="kuira_link_title">Link a device</string>
+    <string name="kuira_link_intro">Put the same wallet on another phone. Both phones need to be here and working.</string>
+    <!--
+      Says what this is NOT, because the entry point sits directly below "View recovery phrase" and
+      nothing else distinguishes the two. Linking needs the first phone working, so it is useless in
+      exactly the situation people reach for when a phone is lost.
+    -->
+    <string name="kuira_link_not_recovery">Lost your phone? This won\'t help — use your recovery phrase instead.</string>
+    <string name="kuira_link_role_question">Which phone is this?</string>
+    <string name="kuira_link_role_source">This phone has the wallet</string>
+    <string name="kuira_link_role_new">This phone needs the wallet</string>
+
+    <!--
+      Every step names what the OTHER phone should be doing. Without that, a camera pointed at a
+      phone that is not ready yet looks exactly like a camera that is broken — which is how the
+      first iOS cut stranded people silently.
+    -->
+    <string name="kuira_link_show_this_code">Show this code to your other phone</string>
+    <string name="kuira_link_show_this_code_detail">On the other phone, choose “This phone has the wallet” and scan this code.</string>
+    <!--
+      Not "Done". The only button on a screen gets tapped immediately, and tapping this one early
+      lands the person on a camera with nothing in existence to scan, waiting forever. Phrased as a
+      fact they have to be able to confirm.
+    -->
+    <string name="kuira_link_shown_it">They\'ve scanned it</string>
+    <string name="kuira_link_scan_their_code">Now scan their code</string>
+    <string name="kuira_link_scan_their_code_detail">The other phone should be showing a code. If it isn\'t, it\'s still waiting for you.</string>
+    <string name="kuira_link_scan_other_phone">Scan your other phone\'s code</string>
+    <string name="kuira_link_scan_detail">On the other phone, choose “This phone needs the wallet”. It will show a code.</string>
+    <string name="kuira_link_show_mine_again">Show my code again</string>
+
+    <!--
+      Step counters name the phone as well as the number. Both devices are mid-ceremony at once, and
+      a bare "Step 1 of 3" on each reads as two independent wizards rather than one alternating
+      dance between them.
+    -->
+    <string name="kuira_link_step_this_phone">This phone · step %1$d of 3</string>
+
+    <string name="kuira_link_approve_title">Copy this wallet to your other device?</string>
+    <string name="kuira_link_approve_detail">Your other phone will hold the same wallet, and can spend from it.</string>
+    <string name="kuira_link_approve">Copy wallet</string>
+    <string name="kuira_link_decline">Not now</string>
+
+    <string name="kuira_link_code_question">Do both phones show this number?</string>
+    <string name="kuira_link_code_why">If the numbers differ, stop. Someone else may be answering.</string>
+    <string name="kuira_link_codes_match">Yes, they match</string>
+    <string name="kuira_link_codes_differ">No, they differ</string>
+
+    <string name="kuira_link_waiting_for_scan">Waiting for the other phone to scan this. It will then ask you to compare a number.</string>
+    <string name="kuira_link_done">Wallet copied</string>
+    <string name="kuira_link_done_detail">This phone now holds the same wallet.</string>
+    <string name="kuira_link_cancelled">Linking stopped. Nothing was copied.</string>
+    <string name="kuira_link_failed">Linking did not finish. Nothing was copied.</string>
+    <!--
+      Failure detail. The session distinguishes these because collapsing them sends someone to redo
+      a ceremony that was never the problem.
+    -->
+    <string name="kuira_link_failed_seed_unavailable">This phone could not unlock its wallet, so nothing was sent.</string>
+    <string name="kuira_link_failed_storage">The wallet arrived but could not be saved on this phone.</string>
+    <string name="kuira_link_failed_generic">The code could not be read. Start over on both phones.</string>
+
+    <string name="kuira_link_done_button">Done</string>
+    <string name="kuira_link_back">Back</string>
+</resources>

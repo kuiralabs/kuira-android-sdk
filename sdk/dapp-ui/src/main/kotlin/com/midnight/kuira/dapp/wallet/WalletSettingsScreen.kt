@@ -34,6 +34,7 @@ internal fun WalletSettingsScreen(
     syncLabel: String,
     recoveryPhraseSaved: Boolean,
     onViewRecoveryPhrase: () -> Unit,
+    onLinkDevice: () -> Unit,
     onResyncBalance: () -> Unit,
     onLockNow: () -> Unit,
     onSignOut: () -> Unit,
@@ -113,6 +114,16 @@ internal fun WalletSettingsScreen(
                         leadingGlyph = { KeyGlyph(it) },
                         rightValue = if (recoveryPhraseSaved) "Saved" else null,
                         onClick = onViewRecoveryPhrase,
+                    )
+                    SettingsDivider(palette)
+                    // Sits under the recovery phrase because the two get confused, and the link
+                    // screen's own copy is what separates them: linking needs BOTH phones working,
+                    // so it is useless in exactly the moment people reach for recovery.
+                    SettingsRow(
+                        label = "Link a device",
+                        palette = palette,
+                        leadingGlyph = { KeyGlyph(it) },
+                        onClick = onLinkDevice,
                     )
                     SettingsDivider(palette)
                     SettingsRow(

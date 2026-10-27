@@ -47,3 +47,15 @@ fun LinkRequest.qrText(): String = LinkQrText.encode(encode())
 
 /** The text to render as this device's QR. */
 fun LinkResponse.qrText(): String = LinkQrText.encode(encode())
+
+/**
+ * Parses text a scanner handed back as this device's request.
+ *
+ * The symmetric half of [qrText], so a caller never has to remember that the text decodes to bytes
+ * first and the message second. Throws [LinkException.Malformed] for anything that is not one of
+ * ours — which, pointing a camera at a phone, is most of what it will see before the right code.
+ */
+fun LinkRequest.Companion.fromQrText(text: String): LinkRequest = decode(LinkQrText.decode(text))
+
+/** Parses text a scanner handed back as the source device's response. See [LinkRequest.Companion.fromQrText]. */
+fun LinkResponse.Companion.fromQrText(text: String): LinkResponse = decode(LinkQrText.decode(text))
