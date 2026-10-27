@@ -3,7 +3,7 @@ public final class com/midnight/kuira/core/ledger/api/FfiTransactionSerializer :
 	public final fun getBindingCommitmentHex ()Ljava/lang/String;
 	public final fun getSigningMessageForInput (Ljava/util/List;Ljava/util/List;IJLjava/lang/String;)Ljava/lang/String;
 	public static synthetic fun getSigningMessageForInput$default (Lcom/midnight/kuira/core/ledger/api/FfiTransactionSerializer;Ljava/util/List;Ljava/util/List;IJLjava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
-	public final fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
+	public fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
 	public fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
 	public fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
 	public final fun serializeWithDust (Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/midnight/kuira/core/crypto/dust/DustLocalState;[BLjava/lang/String;JJ)Ljava/lang/String;
@@ -172,57 +172,41 @@ public final class com/midnight/kuira/core/ledger/api/RuntimeVersion {
 public abstract class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
 }
 
-public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult, com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Failure {
+	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Dropped;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getReason ()Ljava/lang/String;
-	public final fun getTxHash ()Ljava/lang/String;
+	public fun getReason ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Failure {
+	public abstract fun getReason ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/Long;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun component3 ()Ljava/lang/Long;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/Long;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Finalized;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBlockHash ()Ljava/lang/String;
 	public final fun getBlockHeight ()Ljava/lang/Long;
-	public final fun getTxHash ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult, com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Failure {
+	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$InBlock;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getBlockHash ()Ljava/lang/String;
-	public final fun getTxHash ()Ljava/lang/String;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
-	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Invalid;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getReason ()Ljava/lang/String;
-	public final fun getTxHash ()Ljava/lang/String;
+	public fun getReason ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -233,20 +217,19 @@ public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationRes
 	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;
 	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Timeout;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getTxHash ()Ljava/lang/String;
+	public final fun getInBlockHash ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+public final class com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped : com/midnight/kuira/core/ledger/api/TransactionFinalizationResult, com/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Failure {
+	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionFinalizationResult$Usurped;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getReason ()Ljava/lang/String;
 	public final fun getReplacedBy ()Ljava/lang/String;
-	public final fun getTxHash ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -259,11 +242,10 @@ public final class com/midnight/kuira/core/ledger/api/TransactionRejected : com/
 	public static final field ERROR_INVALID_DUST_SPEND_PROOF I
 	public static final field ERROR_INVALID_PROOF I
 	public static final field ERROR_OUT_OF_DUST_VALIDITY_WINDOW I
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getCustomErrorCode ()Ljava/lang/Integer;
 	public final fun getReason ()Ljava/lang/String;
-	public final fun getTxHash ()Ljava/lang/String;
 	public final fun isDustDoubleSpend ()Z
 	public final fun isDustSpendProof ()Z
 	public final fun isInvalidProof ()Z
@@ -275,6 +257,7 @@ public final class com/midnight/kuira/core/ledger/api/TransactionRejected$Compan
 }
 
 public abstract interface class com/midnight/kuira/core/ledger/api/TransactionSerializer {
+	public abstract fun getTransactionHash (Ljava/lang/String;)Ljava/lang/String;
 	public abstract fun sealProvenTransaction (Ljava/lang/String;)Ljava/lang/String;
 	public abstract fun serialize (Lcom/midnight/kuira/core/ledger/model/Intent;)Ljava/lang/String;
 }
@@ -369,13 +352,13 @@ public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$Submi
 }
 
 public final class com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success : com/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult {
-	public fun <init> (Ljava/lang/String;J)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/Long;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()J
-	public final fun copy (Ljava/lang/String;J)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;Ljava/lang/String;JILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/Long;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/ledger/api/TransactionSubmitter$SubmissionResult$Success;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getBlockHeight ()J
+	public final fun getBlockHeight ()Ljava/lang/Long;
 	public final fun getTxHash ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

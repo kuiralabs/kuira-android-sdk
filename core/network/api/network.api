@@ -1,7 +1,36 @@
+public final class com/midnight/kuira/core/network/BlockfrostProjectId {
+	public static final field INSTANCE Lcom/midnight/kuira/core/network/BlockfrostProjectId;
+	public final fun resolve (Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;
+	public static synthetic fun resolve$default (Lcom/midnight/kuira/core/network/BlockfrostProjectId;Landroid/content/Context;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/network/ConnectorSubmitReceipt {
+	public static final field BLOCK_HEIGHT Ljava/lang/String;
+	public static final field INSTANCE Lcom/midnight/kuira/core/network/ConnectorSubmitReceipt;
+	public static final field STATUS Ljava/lang/String;
+	public static final field STATUS_FINALIZED Ljava/lang/String;
+	public static final field STATUS_PENDING Ljava/lang/String;
+	public static final field TX_HASH Ljava/lang/String;
+	public static final field WALLET_SDK_TX_IDENTIFIER Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/network/DeviceType {
 	public static final field INSTANCE Lcom/midnight/kuira/core/network/DeviceType;
 	public final fun getLocalhostHost ()Ljava/lang/String;
 	public final fun isEmulator ()Z
+}
+
+public final class com/midnight/kuira/core/network/IndexerCredential {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/network/IndexerCredential;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/network/IndexerCredential;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/network/IndexerCredential;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHeader ()Ljava/lang/String;
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/network/MidnightNetwork : java/lang/Enum {
@@ -26,6 +55,8 @@ public final class com/midnight/kuira/core/network/MidnightNetwork$Companion {
 public final class com/midnight/kuira/core/network/NetworkClientFactory {
 	public fun <init> ()V
 	public final fun configFor (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun configFor (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public static synthetic fun configFor$default (Lcom/midnight/kuira/core/network/NetworkClientFactory;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/network/NetworkConfig;
 }
 
 public final class com/midnight/kuira/core/network/NetworkClientFactory_Factory : dagger/internal/Factory {
@@ -37,32 +68,52 @@ public final class com/midnight/kuira/core/network/NetworkClientFactory_Factory 
 }
 
 public final class com/midnight/kuira/core/network/NetworkConfig {
+	public static final field BLOCKFROST_API_PATH Ljava/lang/String;
+	public static final field BLOCKFROST_PREPROD_HOST Ljava/lang/String;
+	public static final field BLOCKFROST_PREPROD_ID_PREFIX Ljava/lang/String;
+	public static final field BLOCKFROST_PROJECT_ID_MANIFEST_KEY Ljava/lang/String;
+	public static final field BLOCKFROST_PROJECT_ID_PARAM Ljava/lang/String;
+	public static final field BLOCKFROST_SITE Ljava/lang/String;
+	public static final field BLOCKFROST_WS_PATH Ljava/lang/String;
 	public static final field Companion Lcom/midnight/kuira/core/network/NetworkConfig$Companion;
 	public static final field INDEXER_API_PATH Ljava/lang/String;
+	public static final field INDEXER_GRAPHQL_PATH Ljava/lang/String;
+	public static final field INDEXER_WS_PATH Ljava/lang/String;
 	public static final field LOCALNET_INDEXER_PORT I
 	public static final field LOCALNET_NODE_RPC_PORT I
 	public static final field LOCALNET_PROOF_SERVER_PORT I
-	public fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public fun <init> (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/network/IndexerCredential;Ljava/lang/String;Ljava/lang/String;Z)V
 	public final fun component1 ()Lcom/midnight/kuira/core/network/MidnightNetwork;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
-	public final fun component4 ()Ljava/lang/String;
-	public final fun component5 ()Z
-	public final fun copy (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/midnight/kuira/core/network/NetworkConfig;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun component4 ()Lcom/midnight/kuira/core/network/IndexerCredential;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Z
+	public final fun copy (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/network/IndexerCredential;Ljava/lang/String;Ljava/lang/String;Z)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/network/NetworkConfig;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/network/IndexerCredential;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/midnight/kuira/core/network/NetworkConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDevelopmentMode ()Z
-	public final fun getIndexerBaseUrl ()Ljava/lang/String;
+	public final fun getIndexerCredential ()Lcom/midnight/kuira/core/network/IndexerCredential;
+	public final fun getIndexerGraphqlUrl ()Ljava/lang/String;
+	public final fun getIndexerWsUrl ()Ljava/lang/String;
 	public final fun getNetwork ()Lcom/midnight/kuira/core/network/MidnightNetwork;
 	public final fun getNodeRpcUrl ()Ljava/lang/String;
 	public final fun getProofServerUrl ()Ljava/lang/String;
 	public fun hashCode ()I
 	public final fun isLocalDevChain ()Z
+	public final fun redacted ()Lcom/midnight/kuira/core/network/NetworkConfig;
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/network/NetworkConfig$Companion {
 	public final fun forNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun forNetwork (Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public static synthetic fun forNetwork$default (Lcom/midnight/kuira/core/network/NetworkConfig$Companion;Lcom/midnight/kuira/core/network/MidnightNetwork;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/network/NetworkConfig;
+	public final fun redactProjectId (Ljava/lang/String;)Ljava/lang/String;
+	public final fun requiresBlockfrostProjectId (Lcom/midnight/kuira/core/network/MidnightNetwork;)Z
+	public final fun validateBlockfrostProjectId (Ljava/lang/String;)V
+	public final fun withCredentialInUrl (Ljava/lang/String;Lcom/midnight/kuira/core/network/IndexerCredential;)Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/network/NetworkRepository {

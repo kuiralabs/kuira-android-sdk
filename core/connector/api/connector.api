@@ -371,6 +371,21 @@ public final class com/midnight/kuira/core/connector/model/SignatureResult {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/midnight/kuira/core/connector/model/SubmissionReceipt {
+	public fun <init> (Ljava/lang/String;ZLjava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun component3 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;ZLjava/lang/Long;)Lcom/midnight/kuira/core/connector/model/SubmissionReceipt;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/connector/model/SubmissionReceipt;Ljava/lang/String;ZLjava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/connector/model/SubmissionReceipt;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()Ljava/lang/Long;
+	public final fun getFinalized ()Z
+	public final fun getTxHash ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/midnight/kuira/core/connector/model/TransferKind : java/lang/Enum {
 	public static final field SHIELDED Lcom/midnight/kuira/core/connector/model/TransferKind;
 	public static final field UNSHIELDED Lcom/midnight/kuira/core/connector/model/TransferKind;
