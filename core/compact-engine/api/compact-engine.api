@@ -276,10 +276,12 @@ public final class com/midnight/kuira/core/compact/ContractRuntime {
 	public final fun stateClone (J)J
 	public final fun stateCreate (Ljava/lang/String;)J
 	public final fun stateCreateWithNulls (Ljava/lang/String;)J
+	public final fun stateDescribe (JLjava/lang/String;)Ljava/lang/String;
 	public final fun stateFree (J)V
 	public final fun statePoolLen ()J
 	public final fun stateReadFields (J)Ljava/lang/String;
 	public final fun stateSetOperation (JLjava/lang/String;)V
+	public final fun stateTreeLookup (JLjava/lang/String;)Ljava/lang/String;
 	public final fun transientHashAligned (Ljava/lang/String;)Ljava/lang/String;
 	public final fun upgradeFromTransient (Ljava/lang/String;)Ljava/lang/String;
 	public final fun valueToBigInt (Ljava/lang/String;)Ljava/lang/String;
@@ -311,14 +313,22 @@ public final class com/midnight/kuira/core/compact/DeployExecutionResult {
 }
 
 public final class com/midnight/kuira/core/compact/DeployResult {
-	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/compact/DeployTimings;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/DeployTimings;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Lcom/midnight/kuira/core/compact/DeployTimings;
-	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/compact/DeployTimings;)Lcom/midnight/kuira/core/compact/DeployResult;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/DeployResult;Ljava/lang/String;Lcom/midnight/kuira/core/compact/DeployTimings;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/DeployResult;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public final fun component5 ()Ljava/lang/Long;
+	public final fun component6 ()Lcom/midnight/kuira/core/compact/DeployTimings;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/DeployTimings;)Lcom/midnight/kuira/core/compact/DeployResult;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/DeployResult;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/DeployTimings;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/DeployResult;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()Ljava/lang/Long;
 	public final fun getContractAddress ()Ljava/lang/String;
+	public final fun getStatus ()Lcom/midnight/kuira/core/compact/TransactionStatus;
 	public final fun getTimings ()Lcom/midnight/kuira/core/compact/DeployTimings;
+	public final fun getTxHash ()Ljava/lang/String;
+	public final fun getTxIdentifier ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -376,11 +386,11 @@ public final class com/midnight/kuira/core/compact/LocalProofProvider : com/midn
 
 public final class com/midnight/kuira/core/compact/MidnightConfig {
 	public static final field Companion Lcom/midnight/kuira/core/compact/MidnightConfig$Companion;
-	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/TransactionBalancer;Lcom/midnight/kuira/core/compact/ContractOperationListener;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;Lcom/midnight/kuira/core/network/IndexerCredential;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;Lcom/midnight/kuira/core/compact/TransactionBalancer;Lcom/midnight/kuira/core/compact/ContractOperationListener;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
 	public final fun configureUnshieldedAutoFund (ZLkotlin/jvm/functions/Function3;)V
 	public final fun getContext ()Landroid/content/Context;
-	public final fun getIndexerUrl ()Ljava/lang/String;
+	public final fun getIndexerGraphqlUrl ()Ljava/lang/String;
 	public final fun getNetworkId ()Ljava/lang/String;
 	public final fun getProvingKeyManager ()Lcom/midnight/kuira/core/compact/proving/ProvingKeyManager;
 	public final fun queryState (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -391,7 +401,8 @@ public final class com/midnight/kuira/core/compact/MidnightConfig$Builder {
 	public fun <init> (Landroid/content/Context;)V
 	public final fun blockSignals (Lkotlinx/coroutines/flow/Flow;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun build ()Lcom/midnight/kuira/core/compact/MidnightConfig;
-	public final fun indexerUrl (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
+	public final fun indexerCredential (Ljava/lang/String;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
+	public final fun indexerGraphqlUrl (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun networkId (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun operationListener (Lcom/midnight/kuira/core/compact/ContractOperationListener;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
 	public final fun transactionBalancer (Lcom/midnight/kuira/core/compact/TransactionBalancer;)Lcom/midnight/kuira/core/compact/MidnightConfig$Builder;
@@ -434,6 +445,7 @@ public final class com/midnight/kuira/core/compact/MidnightContract$ContractBuil
 	public final fun getContractJs ()Ljava/io/InputStream;
 	public final fun getInitialPrivateState ()Ljava/util/Map;
 	public final fun getName ()Ljava/lang/String;
+	public final fun merklePathWitness (Ljava/lang/String;Ljava/lang/String;)V
 	public final fun setAddress (Ljava/lang/String;)V
 	public final fun setCircuitVerifierKeys (Ljava/util/Map;)V
 	public final fun setCoinPublicKey ([B)V
@@ -579,6 +591,28 @@ public final class com/midnight/kuira/core/compact/ProvingException : java/lang/
 	public fun <init> (Ljava/lang/String;)V
 }
 
+public final class com/midnight/kuira/core/compact/SubmissionNotAcceptedException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getReason ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/compact/SubmittedTransaction {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;)Lcom/midnight/kuira/core/compact/SubmittedTransaction;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/SubmittedTransaction;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/SubmittedTransaction;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()Ljava/lang/Long;
+	public final fun getStatus ()Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public final fun getTxHash ()Ljava/lang/String;
+	public final fun getTxIdentifier ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class com/midnight/kuira/core/compact/TransactionBalancer {
 	public fun balanceAndSubmit (Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun balanceAndSubmit$default (Lcom/midnight/kuira/core/compact/TransactionBalancer;Ljava/lang/String;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -592,25 +626,29 @@ public final class com/midnight/kuira/core/compact/TransactionBalancer$DefaultIm
 }
 
 public final class com/midnight/kuira/core/compact/TransactionReceipt {
-	public fun <init> (Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
-	public final fun component2 ()Lcom/midnight/kuira/core/compact/TransactionStatus;
-	public final fun component3 ()Lcom/midnight/kuira/core/compact/PipelineTimings;
-	public final fun component4 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/TransactionReceipt;
-	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/TransactionReceipt;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/TransactionReceipt;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun component5 ()Lcom/midnight/kuira/core/compact/PipelineTimings;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;)Lcom/midnight/kuira/core/compact/TransactionReceipt;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/compact/TransactionReceipt;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/compact/TransactionStatus;Ljava/lang/Long;Lcom/midnight/kuira/core/compact/PipelineTimings;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/TransactionReceipt;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlockHeight ()Ljava/lang/Long;
 	public final fun getProvenTxHex ()Ljava/lang/String;
 	public final fun getStatus ()Lcom/midnight/kuira/core/compact/TransactionStatus;
 	public final fun getTimings ()Lcom/midnight/kuira/core/compact/PipelineTimings;
 	public final fun getTxHash ()Ljava/lang/String;
+	public final fun getTxIdentifier ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/midnight/kuira/core/compact/TransactionStatus : java/lang/Enum {
-	public static final field FAILED Lcom/midnight/kuira/core/compact/TransactionStatus;
-	public static final field SUBMITTED Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public static final field FINALIZED Lcom/midnight/kuira/core/compact/TransactionStatus;
+	public static final field PENDING Lcom/midnight/kuira/core/compact/TransactionStatus;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/TransactionStatus;
 	public static fun values ()[Lcom/midnight/kuira/core/compact/TransactionStatus;
@@ -618,6 +656,7 @@ public final class com/midnight/kuira/core/compact/TransactionStatus : java/lang
 
 public final class com/midnight/kuira/core/compact/WitnessKind : java/lang/Enum {
 	public static final field BYTES Lcom/midnight/kuira/core/compact/WitnessKind;
+	public static final field UINT Lcom/midnight/kuira/core/compact/WitnessKind;
 	public static final field VECTOR_OF_UINT8 Lcom/midnight/kuira/core/compact/WitnessKind;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/compact/WitnessKind;
@@ -629,6 +668,7 @@ public abstract interface class com/midnight/kuira/core/compact/WitnessProvider 
 }
 
 public final class com/midnight/kuira/core/compact/WitnessResult {
+	public static final field Companion Lcom/midnight/kuira/core/compact/WitnessResult$Companion;
 	public fun <init> (Ljava/lang/Object;[BLcom/midnight/kuira/core/compact/WitnessKind;)V
 	public synthetic fun <init> (Ljava/lang/Object;[BLcom/midnight/kuira/core/compact/WitnessKind;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/Object;
@@ -642,6 +682,11 @@ public final class com/midnight/kuira/core/compact/WitnessResult {
 	public final fun getPrivateState ()Ljava/lang/Object;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/compact/WitnessResult$Companion {
+	public final fun uint (Ljava/math/BigInteger;Ljava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
+	public static synthetic fun uint$default (Lcom/midnight/kuira/core/compact/WitnessResult$Companion;Ljava/math/BigInteger;Ljava/lang/Object;ILjava/lang/Object;)Lcom/midnight/kuira/core/compact/WitnessResult;
 }
 
 public final class com/midnight/kuira/core/compact/WrongLedgerFieldTypeException : java/lang/Exception {

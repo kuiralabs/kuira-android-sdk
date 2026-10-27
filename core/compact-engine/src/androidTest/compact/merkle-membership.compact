@@ -1,0 +1,19 @@
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+// The membership round trip a HistoricMerkleTree contract is for: insert a leaf, then prove
+// in zero knowledge that a leaf is in the tree, with the path supplied by a witness.
+export ledger members: HistoricMerkleTree<10, Bytes<32>>;
+
+witness memberPath(leaf: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
+
+export circuit join(leaf: Bytes<32>): [] {
+  members.insert(disclose(leaf));
+}
+
+export circuit proveMember(leaf: Bytes<32>): [] {
+  const path = memberPath(leaf);
+  assert(path.leaf == leaf, "the path is for another leaf");
+  assert(members.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))), "not a member");
+}

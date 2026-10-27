@@ -135,6 +135,18 @@ object ContractRuntime {
         return nativeContractQuery(handle, opcodesJson)
     }
 
+    /** Describe the state value at a path of array indices: its type, and an array's length, a tree's height or a cell's value. */
+    fun stateDescribe(handle: Long, requestJson: String): String? {
+        ensureLoaded()
+        return nativeStateDescribe(handle, requestJson)
+    }
+
+    /** Read the root of, or a leaf's path through, a Merkle tree held at a path in a state. */
+    fun stateTreeLookup(handle: Long, requestJson: String): String? {
+        ensureLoaded()
+        return nativeStateTreeLookup(handle, requestJson)
+    }
+
     /** Create state from a JSON structure descriptor (nested arrays of nulls). */
     fun stateCreateWithNulls(structureJson: String): Long {
         ensureLoaded()
@@ -243,6 +255,8 @@ object ContractRuntime {
     @JvmStatic private external fun nativeStatePoolLen(): Long
     @JvmStatic private external fun nativeStateClone(handle: Long): Long
     @JvmStatic private external fun nativeContractQuery(handle: Long, opcodesJson: String): String?
+    @JvmStatic private external fun nativeStateDescribe(handle: Long, requestJson: String): String?
+    @JvmStatic private external fun nativeStateTreeLookup(handle: Long, requestJson: String): String?
     @JvmStatic private external fun nativeStateReadFields(handle: Long): String?
     @JvmStatic private external fun nativeAssembleContractCallTx(paramsJson: String): String?
     @JvmStatic private external fun nativeSignProvenOffer(paramsJson: String): String?

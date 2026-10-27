@@ -4,6 +4,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.math.BigInteger
 
 /**
  * Pins the wire format of [WitnessResult.toJsArrayString] — the
@@ -47,6 +48,28 @@ class WitnessResultTest {
             kind = WitnessKind.VECTOR_OF_UINT8,
         )
         assertEquals("null|VECTOR_OF_UINT8|0,2,0,2,0", w.toJsArrayString())
+    }
+
+    @Test
+    fun `uint carries a Uint 64 value above one byte as its big-endian bytes`() {
+        // Given: a birth year, which BYTES could only express below 256
+        val w = WitnessResult.uint(BigInteger.valueOf(1990))
+
+        // Then: the UINT marker and 1990 = 0x07C6 big-endian
+        assertEquals("null|UINT|7,198", w.toJsArrayString())
+    }
+
+    @Test
+    fun `uint of zero and of the largest Uint 64 survive the round trip`() {
+        val max = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)
+
+        assertEquals("null|UINT|0", WitnessResult.uint(BigInteger.ZERO).toJsArrayString())
+        assertEquals(max, BigInteger(1, WitnessResult.uint(max).data))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `uint refuses a negative value`() {
+        WitnessResult.uint(BigInteger.valueOf(-1))
     }
 
     @Test

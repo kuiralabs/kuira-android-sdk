@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.math.BigInteger
 
 /**
  * Executes Compact smart contract circuits on Android via QuickJS + Rust FFI.
@@ -329,7 +330,7 @@ class CircuitExecutor(
             loadRuntime(this, contractJs)
 
             val cpkJs = coinPublicKey.joinToString(",") { (it.toInt() and 0xFF).toString() }
-            val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
+            val witnessEntries = buildWitnessEntriesJs(witnesses)
             // Compact's generated initialState is `initialState(context,...constructorArgs)`.
             // Append the (already JS-encoded) args after the context object; empty = no-arg.
             val constructorArgsJs = if (constructorArgs.isEmpty()) "" else ", ${constructorArgs.joinToString(", ")}"
@@ -511,6 +512,7 @@ class CircuitExecutor(
 
     private suspend fun registerWitnesses(js: QuickJs, witnesses: Map<String, WitnessProvider>) {
         for ((name, provider) in witnesses) {
+            if (provider is LedgerTreePathWitness) continue
             js.function("__witness_$name") { args: Array<Any?> ->
                 serializeWitness(provider.provide(args.getOrNull(0)))
             }
@@ -545,7 +547,7 @@ class CircuitExecutor(
         // by readManyCircuits; each runs against its own native clone of the fetched state.
         multiReadCallsJs: String? = null,
     ): String {
-        val witnessEntries = buildWitnessEntriesJs(witnesses.keys)
+        val witnessEntries = buildWitnessEntriesJs(witnesses)
 
         // initialState() below builds a throwaway state (the on-chain state is swapped in after), so
         // a constructor-args contract needs shape-valid args here just to pass its validation.
@@ -798,7 +800,15 @@ class CircuitExecutor(
             js.function("__nativeContractQuery") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
                 val opcodesJson = args[1] as String
-                ContractRuntime.contractQuery(handle, opcodesJson) ?: "{\"error\":\"null result\"}"
+                ContractRuntime.contractQuery(handle, opcodesJson) ?: NULL_NATIVE_RESULT
+            }
+            js.function("__nativeStateDescribe") { args: Array<Any?> ->
+                ContractRuntime.stateDescribe((args[0] as String).toLong(), args[1] as String)
+                    ?: NULL_NATIVE_RESULT
+            }
+            js.function("__nativeStateTreeLookup") { args: Array<Any?> ->
+                ContractRuntime.stateTreeLookup((args[0] as String).toLong(), args[1] as String)
+                    ?: NULL_NATIVE_RESULT
             }
             js.function("__nativeStateClone") { args: Array<Any?> ->
                 val handle = (args[0] as String).toLong()
@@ -864,6 +874,8 @@ class CircuitExecutor(
                 globalThis.__native_stateSetOperation = __nativeStateSetOperation;
                 globalThis.__native_contractQuery = __nativeContractQuery;
                 globalThis.__native_stateClone = __nativeStateClone;
+                globalThis.__native_stateDescribe = __nativeStateDescribe;
+                globalThis.__native_stateTreeLookup = __nativeStateTreeLookup;
                 globalThis.__native_stateCreate = __nativeStateCreate;
                 globalThis.__native_stateFree = __nativeStateFree;
             """.trimIndent())
@@ -970,8 +982,10 @@ fun interface WitnessProvider {
  *  - `BYTES` (default) → length-1 ⇒ `BigInt`, length-N ⇒ `Uint8Array`,
  *  matching scalar `Uint<…>` and `Bytes<N>` respectively
  */
-private fun buildWitnessEntriesJs(witnessNames: Collection<String>): String =
-    witnessNames.joinToString(",\n") { name ->
+internal fun buildWitnessEntriesJs(witnesses: Map<String, WitnessProvider>): String =
+    witnesses.entries.joinToString(",\n") { (name, provider) ->
+        require(JS_IDENTIFIER.matches(name)) { "a witness name must be the contract's witness identifier, got '$name'" }
+        if (provider is LedgerTreePathWitness) return@joinToString ledgerTreePathWitnessJs(name, provider.ledgerTree)
         """
         $name: function(witnessContext) {
             const resultStr = __witness_$name(
@@ -992,6 +1006,9 @@ private fun buildWitnessEntriesJs(witnessNames: Collection<String>): String =
                 // fail the runtime's type check with the
                 // "received {0:…, 1:…}" error.
                 result = values.map(function (v) { return BigInt(v); });
+            } else if (kind === 'UINT') {
+                // Uint<N> / Field — the bytes are the big-endian value.
+                result = values.reduce(function (acc, v) { return (acc << 8n) | BigInt(v); }, 0n);
             } else {
                 // BYTES (default) — Bytes<N> + scalar Uint<…>.
                 // Single-byte payloads become BigInt; multi-byte
@@ -1002,6 +1019,40 @@ private fun buildWitnessEntriesJs(witnessNames: Collection<String>): String =
         }
         """.trimIndent()
     }
+
+/**
+ * A witness answered with the membership path of its argument in one of the contract's own
+ * ledger trees, registered through [MidnightContract.Builder.merklePathWitness].
+ *
+ * It never reaches Kotlin: the path is a struct the byte-only [WitnessResult] cannot carry,
+ * and it has to be read from the contract state as the circuit sees it at that moment, so
+ * the SDK answers it inside the runtime through the contract's generated `ledger()` reader.
+ */
+internal class LedgerTreePathWitness(val ledgerTree: String) : WitnessProvider {
+    override fun provide(privateStateJson: Any?): WitnessResult =
+        throw IllegalStateException("a ledger-tree path witness is answered inside the runtime, not by provide()")
+}
+
+private const val NULL_NATIVE_RESULT = "{\"error\":\"null result\"}"
+
+private val JS_IDENTIFIER = Regex("^[A-Za-z_$][A-Za-z0-9_$]*$")
+
+private fun ledgerTreePathWitnessJs(name: String, ledgerTree: String): String {
+    require(JS_IDENTIFIER.matches(ledgerTree)) { "ledgerTree must be a ledger field name, got '$ledgerTree'" }
+    return """
+        $name: function(witnessContext, leaf) {
+            const tree = witnessContext.ledger.$ledgerTree;
+            if (!tree || typeof tree.findPathForLeaf !== 'function') {
+                throw new Error("witness $name: the contract's ledger has no exported Merkle tree named '$ledgerTree'");
+            }
+            const path = tree.findPathForLeaf(leaf);
+            if (path === undefined) {
+                throw new Error("witness $name: the leaf is not in the ledger tree '$ledgerTree'");
+            }
+            return [witnessContext.privateState, path];
+        }
+    """.trimIndent()
+}
 
 /**
  * How the witness's [WitnessResult.data] bytes should be presented to
@@ -1041,6 +1092,13 @@ enum class WitnessKind {
      * in one transaction.
      */
     VECTOR_OF_UINT8,
+
+    /**
+     * [WitnessResult.data] is an unsigned integer, big-endian, and becomes one JS `BigInt`.
+     * Matches Compact's `Uint<N>` (and `Field`) at any width — `Uint<64>` included, which
+     * [BYTES] can only express below 256. Build it with [WitnessResult.uint].
+     */
+    UINT,
 }
 
 /**
@@ -1080,6 +1138,14 @@ data class WitnessResult(
      */
     internal fun zeroize() {
         data.fill(0)
+    }
+
+    companion object {
+        /** A `Uint<N>` witness value, carried as [WitnessKind.UINT]. */
+        fun uint(value: BigInteger, privateState: Any? = null): WitnessResult {
+            require(value.signum() >= 0) { "a Uint witness cannot be negative: $value" }
+            return WitnessResult(privateState, value.toByteArray(), WitnessKind.UINT)
+        }
     }
 }
 

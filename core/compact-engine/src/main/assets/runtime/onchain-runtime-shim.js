@@ -71,6 +71,92 @@ export class StateValue {
   static decode(encoded) {
     return new StateValue(JSON.parse(encoded));
   }
+
+  // A contract's ledger() reader walks the state it is handed (state.asArray()[i]...).
+  // That state lives natively, so once a ChargedState with a native handle holds this
+  // value, reads go there rather than to this skeleton.
+  type() { return this._native().type(); }
+  asArray() { return this._native().asArray(); }
+  asCell() { return this._native().asCell(); }
+  asMap() { return this._native().asMap(); }
+  asBoundedMerkleTree() { return this._native().asBoundedMerkleTree(); }
+
+  _native() {
+    if (!this._chargedBy) {
+      throw new Error('StateValue: this value is not held by a contract state, so there is nothing to read');
+    }
+    return new NativeStateValue(this._chargedBy, []);
+  }
+}
+
+// ── NativeStateValue ──
+/**
+ * A value at a path inside a natively held contract state, read the way the official
+ * runtime's StateValue reads (asArray, asCell, asBoundedMerkleTree). It carries the path,
+ * not the value, so every read goes to the native state as it is at that moment.
+ */
+export class NativeStateValue {
+  constructor(owner, path) {
+    this._owner = owner;
+    this._path = path;
+  }
+
+  _handle() {
+    const handle = this._owner && this._owner._rustHandle;
+    if (!handle) throw new Error('NativeStateValue: the contract state has no native handle');
+    return String(handle);
+  }
+
+  _describe() {
+    if (typeof globalThis.__native_stateDescribe !== 'function') {
+      throw new Error('NativeStateValue: native FFI not available');
+    }
+    const out = JSON.parse(globalThis.__native_stateDescribe(this._handle(), JSON.stringify({ path: this._path })));
+    if (out.error) throw new Error('NativeStateValue at [' + this._path.join(',') + ']: ' + out.error);
+    return out;
+  }
+
+  type() { return this._describe().type; }
+
+  asArray() {
+    const d = this._describe();
+    if (d.type !== 'array') return undefined;
+    return Array.from({ length: d.length }, (_, i) => new NativeStateValue(this._owner, this._path.concat([i])));
+  }
+
+  asCell() {
+    const d = this._describe();
+    if (d.type !== 'cell') return undefined;
+    return alignedFromNative(d.value);
+  }
+
+  asMap() {
+    throw new Error('NativeStateValue.asMap: a Map or Set field cannot be enumerated through ledger() here; read it with a view circuit');
+  }
+
+  asBoundedMerkleTree() {
+    const d = this._describe();
+    if (d.type !== 'boundedMerkleTree') return undefined;
+    return new StateBoundedMerkleTree(d.height, this);
+  }
+
+  _treeLookup(request) {
+    if (typeof globalThis.__native_stateTreeLookup !== 'function') {
+      throw new Error('StateBoundedMerkleTree: native FFI not available');
+    }
+    request.path = this._path;
+    const out = JSON.parse(globalThis.__native_stateTreeLookup(this._handle(), JSON.stringify(request)));
+    if (out.error) throw new Error('StateBoundedMerkleTree.' + request.op + ': ' + out.error);
+    return out.result === null ? undefined : alignedFromNative(out.result);
+  }
+}
+
+// An AlignedValue as the native side serializes it, in the shape compact-runtime reads.
+function alignedFromNative(aligned) {
+  return {
+    value: (aligned.value || []).map((arr) => new Uint8Array(arr)),
+    alignment: aligned.alignment,
+  };
 }
 
 // ── ChargedState ──
@@ -80,6 +166,7 @@ export class ChargedState {
     this._state = stateValue;
     this.state = stateValue; // Public property — v0.15.0 contract code accesses .state directly
     this._rustHandle = 0;
+    if (stateValue instanceof StateValue) stateValue._chargedBy = this;
   }
 
   get() {
@@ -505,27 +592,42 @@ export class VmStack {}
 /**
  * A bounded Merkle tree ledger value.
  *
- * Only the height lives here. The tree itself is held natively — it is created by
- * `__native_stateCreateWithNulls` from the descriptor this height ends up in, and every
- * later insert goes through the VM, so there is nothing for JS to keep in step. That is
- * deliberate: a tree whose leaves were tracked in JS as well would be a second source of
+ * The tree itself is held natively — created by `__native_stateCreateWithNulls` from the
+ * descriptor this height ends up in, and mutated by the VM thereafter — so JS never keeps
+ * its own copy of the leaves: a tree tracked in both places would be a second source of
  * truth for a consensus-critical root.
  *
- * The methods the real runtime marks `@internal` (root, update, rehash, findPathForLeaf,
- * pathForLeaf, collapse) are not implemented, because generated contract code does not
- * call them — it reaches the tree through VM opcodes. They throw rather than return a
- * plausible wrong answer, which is what the previous empty stub effectively did.
+ * Built by a constructor, it is only a height. Read out of a contract state through
+ * `asBoundedMerkleTree()`, it also knows where the native tree is, and answers `root`,
+ * `findPathForLeaf` and `pathForLeaf` from it — what a witness needs to prove membership.
+ * Writing (`update`, `collapse`) stays with the VM.
  */
 export class StateBoundedMerkleTree {
-  constructor(height) {
+  constructor(height, source) {
     this.height = height;
+    this._source = source || null;
   }
 
-  root() { throw new Error('StateBoundedMerkleTree.root: the tree lives natively; read it through the VM'); }
+  _lookup(request) {
+    if (!this._source) {
+      throw new Error('StateBoundedMerkleTree.' + request.op + ': this tree is not read from a contract state');
+    }
+    return this._source._treeLookup(request);
+  }
+
+  // Every lookup rehashes natively, as the generated reader's rehash() expects.
+  rehash() {
+    if (!this._source) throw new Error('StateBoundedMerkleTree.rehash: the VM rehashes natively');
+    return this;
+  }
+
+  root() { return this._lookup({ op: 'root' }); }
+  findPathForLeaf(leaf) { return this._lookup({ op: 'findPathForLeaf', leaf: transformAlignedValue(leaf) }); }
+  pathForLeaf(index, leaf) {
+    return this._lookup({ op: 'pathForLeaf', index: Number(index), leaf: transformAlignedValue(leaf) });
+  }
+
   update() { throw new Error('StateBoundedMerkleTree.update: insert through the VM, not here'); }
-  rehash() { throw new Error('StateBoundedMerkleTree.rehash: the VM rehashes natively'); }
-  findPathForLeaf() { throw new Error('StateBoundedMerkleTree.findPathForLeaf: not available in the shim'); }
-  pathForLeaf() { throw new Error('StateBoundedMerkleTree.pathForLeaf: not available in the shim'); }
   collapse() { throw new Error('StateBoundedMerkleTree.collapse: not available in the shim'); }
 }
 export class StateMap {

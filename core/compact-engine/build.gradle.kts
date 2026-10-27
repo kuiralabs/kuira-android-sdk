@@ -53,7 +53,7 @@ val LOCALNET_PORTS = listOf(9944, 8088, 6300, 9932)
 // it belongs to — in ONE place, because two separate things read it: the deploy step below, and
 // the decision about whether a given instrumented run needs a chain at all.
 //
-// A chain-dependent test cannot exist without an entry here: the bboard `post` circuit asserts a
+// A test that needs a pre-deployed contract cannot exist without an entry here: the bboard `post` circuit asserts a
 // VACANT board, so each board-touching test needs its own freshly deployed contract. That is what
 // keeps this list and the set of chain-dependent classes in step as tests are added.
 class ChainContract(val deviceFile: String, val testClass: String, val testMethod: String)
@@ -65,7 +65,10 @@ val CHAIN_CONTRACTS = listOf(
     ChainContract("contract_address_post2.txt", "$COMPACT_TEST_PKG.MidnightContractTest", "callPost_withProgress"),
     ChainContract("contract_address_prepare.txt", "$COMPACT_TEST_PKG.MidnightContractTest", "prepare_offlineMode"),
 )
-val CHAIN_TEST_CLASSES = CHAIN_CONTRACTS.map { it.testClass }.toSet()
+// Chain-dependent classes that deploy their own contract from the device, so need the localnet
+// and the connector but nothing deployed in advance.
+val SELF_DEPLOYING_CHAIN_TEST_CLASSES = setOf("$COMPACT_TEST_PKG.MerkleMembershipOnChainTest")
+val CHAIN_TEST_CLASSES = CHAIN_CONTRACTS.map { it.testClass }.toSet() + SELF_DEPLOYING_CHAIN_TEST_CLASSES
 
 // `mn` is ledger-VERSIONED: a 0.5.x build drives ledger 8, a 0.6.x build drives ledger 9, and it
 // refuses a mismatched chain rather than mis-signing. So the CLI is configurable instead of

@@ -643,6 +643,22 @@ class MidnightContract private constructor(
             witnesses[name] = provider
         }
 
+        /**
+         * Answer a witness with the Merkle membership path of its argument in a ledger tree.
+         *
+         * For `witness enrolmentPath(leaf: Bytes<32>): MerkleTreePath<10, Bytes<32>>` over
+         * `export ledger enrolled: HistoricMerkleTree<10, Bytes<32>>`, register
+         * `merklePathWitness("enrolmentPath", ledgerTree = "enrolled")`. The path is read from
+         * the contract state the circuit runs against, the way `findPathForLeaf` reads it in
+         * the TypeScript SDK, so it is always the current one and nothing is stored on the
+         * device. A leaf that is not in the tree fails the call with that reason.
+         *
+         * @param ledgerTree the exported `HistoricMerkleTree` ledger field.
+         */
+        fun merklePathWitness(name: String, ledgerTree: String) {
+            witnesses[name] = LedgerTreePathWitness(ledgerTree)
+        }
+
         internal fun build(config: MidnightConfig): MidnightContract {
             val jsStream = requireNotNull(contractJs) { "contractJs is required" }
             // coinPublicKey is OPTIONAL — ledger reads don't use it.

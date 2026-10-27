@@ -595,6 +595,7 @@ var __compactRuntime = (() => {
     HEX_REGEX_NO_PREFIX: () => HEX_REGEX_NO_PREFIX,
     MAX_FIELD: () => MAX_FIELD,
     MaxUint8Descriptor: () => MaxUint8Descriptor,
+    NativeStateValue: () => NativeStateValue,
     QueryContext: () => QueryContext,
     QueryResults: () => QueryResults,
     ShieldedCoinInfoDescriptor: () => ShieldedCoinInfoDescriptor,
@@ -750,12 +751,89 @@ var __compactRuntime = (() => {
     static decode(encoded) {
       return new _StateValue(JSON.parse(encoded));
     }
+    type() {
+      return this._native().type();
+    }
+    asArray() {
+      return this._native().asArray();
+    }
+    asCell() {
+      return this._native().asCell();
+    }
+    asMap() {
+      return this._native().asMap();
+    }
+    asBoundedMerkleTree() {
+      return this._native().asBoundedMerkleTree();
+    }
+    _native() {
+      if (!this._chargedBy) {
+        throw new Error("StateValue: this value is not held by a contract state, so there is nothing to read");
+      }
+      return new NativeStateValue(this._chargedBy, []);
+    }
   };
+  var NativeStateValue = class _NativeStateValue {
+    constructor(owner, path) {
+      this._owner = owner;
+      this._path = path;
+    }
+    _handle() {
+      const handle = this._owner && this._owner._rustHandle;
+      if (!handle) throw new Error("NativeStateValue: the contract state has no native handle");
+      return String(handle);
+    }
+    _describe() {
+      if (typeof globalThis.__native_stateDescribe !== "function") {
+        throw new Error("NativeStateValue: native FFI not available");
+      }
+      const out = JSON.parse(globalThis.__native_stateDescribe(this._handle(), JSON.stringify({ path: this._path })));
+      if (out.error) throw new Error("NativeStateValue at [" + this._path.join(",") + "]: " + out.error);
+      return out;
+    }
+    type() {
+      return this._describe().type;
+    }
+    asArray() {
+      const d = this._describe();
+      if (d.type !== "array") return void 0;
+      return Array.from({ length: d.length }, (_, i) => new _NativeStateValue(this._owner, this._path.concat([i])));
+    }
+    asCell() {
+      const d = this._describe();
+      if (d.type !== "cell") return void 0;
+      return alignedFromNative(d.value);
+    }
+    asMap() {
+      throw new Error("NativeStateValue.asMap: a Map or Set field cannot be enumerated through ledger() here; read it with a view circuit");
+    }
+    asBoundedMerkleTree() {
+      const d = this._describe();
+      if (d.type !== "boundedMerkleTree") return void 0;
+      return new StateBoundedMerkleTree(d.height, this);
+    }
+    _treeLookup(request) {
+      if (typeof globalThis.__native_stateTreeLookup !== "function") {
+        throw new Error("StateBoundedMerkleTree: native FFI not available");
+      }
+      request.path = this._path;
+      const out = JSON.parse(globalThis.__native_stateTreeLookup(this._handle(), JSON.stringify(request)));
+      if (out.error) throw new Error("StateBoundedMerkleTree." + request.op + ": " + out.error);
+      return out.result === null ? void 0 : alignedFromNative(out.result);
+    }
+  };
+  function alignedFromNative(aligned) {
+    return {
+      value: (aligned.value || []).map((arr) => new Uint8Array(arr)),
+      alignment: aligned.alignment
+    };
+  }
   var ChargedState = class _ChargedState {
     constructor(stateValue) {
       this._state = stateValue;
       this.state = stateValue;
       this._rustHandle = 0;
+      if (stateValue instanceof StateValue) stateValue._chargedBy = this;
     }
     get() {
       return this._state;
@@ -1080,31 +1158,34 @@ var __compactRuntime = (() => {
   var VmStack = class {
   };
   var StateBoundedMerkleTree = class {
-    // Only the height lives here. The tree itself is held natively — created by
-    // __native_stateCreateWithNulls from the descriptor this height ends up in, and
-    // mutated by the VM thereafter — so there is nothing for JS to keep in step. That is
-    // deliberate: a tree tracked in JS as well would be a second source of truth for a
-    // consensus-critical root.
-    constructor(height) {
+    // The tree is held natively and mutated by the VM; JS never keeps its own copy of the
+    // leaves. Read out of a contract state through asBoundedMerkleTree(), it also knows
+    // where the native tree is and answers root / findPathForLeaf / pathForLeaf from it.
+    constructor(height, source) {
       this.height = height;
+      this._source = source || null;
     }
-    // The real runtime marks these @internal and generated contract code does not call
-    // them; it reaches the tree through VM opcodes. They throw rather than return a
-    // plausible wrong answer, which is what the previous empty stub effectively did.
+    _lookup(request) {
+      if (!this._source) {
+        throw new Error("StateBoundedMerkleTree." + request.op + ": this tree is not read from a contract state");
+      }
+      return this._source._treeLookup(request);
+    }
+    rehash() {
+      if (!this._source) throw new Error("StateBoundedMerkleTree.rehash: the VM rehashes natively");
+      return this;
+    }
     root() {
-      throw new Error("StateBoundedMerkleTree.root: the tree lives natively; read it through the VM");
+      return this._lookup({ op: "root" });
+    }
+    findPathForLeaf(leaf) {
+      return this._lookup({ op: "findPathForLeaf", leaf: transformAlignedValue(leaf) });
+    }
+    pathForLeaf(index, leaf) {
+      return this._lookup({ op: "pathForLeaf", index: Number(index), leaf: transformAlignedValue(leaf) });
     }
     update() {
       throw new Error("StateBoundedMerkleTree.update: insert through the VM, not here");
-    }
-    rehash() {
-      throw new Error("StateBoundedMerkleTree.rehash: the VM rehashes natively");
-    }
-    findPathForLeaf() {
-      throw new Error("StateBoundedMerkleTree.findPathForLeaf: not available in the shim");
-    }
-    pathForLeaf() {
-      throw new Error("StateBoundedMerkleTree.pathForLeaf: not available in the shim");
     }
     collapse() {
       throw new Error("StateBoundedMerkleTree.collapse: not available in the shim");
