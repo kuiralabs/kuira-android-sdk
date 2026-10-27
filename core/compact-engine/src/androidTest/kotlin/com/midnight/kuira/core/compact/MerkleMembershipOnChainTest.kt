@@ -92,16 +92,41 @@ class MerkleMembershipOnChainTest {
         )
     }
 
-    private suspend fun deployedMembership(): MidnightContract {
-        val deployed = membership(address = null).deploy()
-        assertEquals("deploy must finalize: $deployed", TransactionStatus.FINALIZED, deployed.status)
-        return membership(address = deployed.contractAddress)
+    @Test
+    fun aPathWitnessPointedAtAFieldThatIsNotATreeIsRefusedNamingIt(): Unit = runBlocking {
+        // Given: a deployed tree holding one leaf, and a handle whose witness names a misspelt field
+        val address = deployedAddress()
+        membership(address).call("join", LEAF_A).assertFinalized("join A")
+        val misnamed = membership(address, ledgerTree = "memberz")
+
+        // When: that handle proves the joined leaf
+        val error = try {
+            misnamed.call("proveMember", LEAF_A)
+            fail("a witness reading a field that does not exist must not produce a proof")
+            return@runBlocking
+        } catch (e: ContractCallException.CircuitExecutionFailed) {
+            e
+        }
+
+        // Then: the failure names the field, so the typo is found without reading the runtime
+        assertTrue(
+            "the failure must name the missing tree: ${error.message}",
+            error.message.orEmpty().contains("has no exported Merkle tree named 'memberz'"),
+        )
     }
 
-    private fun membership(address: String?): MidnightContract = MidnightContract.create(config) {
+    private suspend fun deployedMembership(): MidnightContract = membership(deployedAddress())
+
+    private suspend fun deployedAddress(): String {
+        val deployed = membership(address = null).deploy()
+        assertEquals("deploy must finalize: $deployed", TransactionStatus.FINALIZED, deployed.status)
+        return deployed.contractAddress
+    }
+
+    private fun membership(address: String?, ledgerTree: String = MEMBERS_TREE): MidnightContract = MidnightContract.create(config) {
         contractJs = context.assets.open(CONTRACT_ASSET)
         this.address = address
-        merklePathWitness("memberPath", ledgerTree = "members")
+        merklePathWitness("memberPath", ledgerTree = ledgerTree)
         coinPublicKey = ByteArray(32)
         circuitVerifierKeys = CIRCUITS.associateWith { circuit ->
             context.assets.open("$KEYS_ASSET_DIR/$circuit.verifier").use { it.readBytes() }
@@ -122,6 +147,7 @@ class MerkleMembershipOnChainTest {
         const val CONTRACT_ASSET = "contracts/merkle-membership-contract.js"
         const val KEYS_ASSET_DIR = "merkle-membership-keys"
         val CIRCUITS = listOf("join", "proveMember")
+        const val MEMBERS_TREE = "members"
 
         const val CONFIG_DIR = "/data/local/tmp/bboard_keys"
         val DEFAULT_INDEXER_URL = NetworkConfig.forNetwork(MidnightNetwork.UNDEPLOYED).indexerGraphqlUrl
