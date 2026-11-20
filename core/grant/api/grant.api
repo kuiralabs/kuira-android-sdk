@@ -1,0 +1,624 @@
+public final class com/midnight/kuira/core/grant/Grant {
+	public static final field Companion Lcom/midnight/kuira/core/grant/Grant$Companion;
+	public fun <init> ([BLcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GranteeKey;Lcom/midnight/kuira/core/grant/GrantClientID;Ljava/util/List;JJJ[B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAudience ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public final fun getClient ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public final fun getExpiresAt ()J
+	public final fun getGeneration ()J
+	public final fun getGrantee ()Lcom/midnight/kuira/core/grant/GranteeKey;
+	public final fun getId ()[B
+	public final fun getIssuance ()[B
+	public final fun getIssuedAt ()J
+	public final fun getPreimage ()[B
+	public final fun getRoot ()[B
+	public final fun getScope ()Ljava/util/List;
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/grant/Grant$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/grant/Grant;
+}
+
+public final class com/midnight/kuira/core/grant/GrantAudienceState {
+	public fun <init> ()V
+	public fun <init> (JJLjava/util/Map;)V
+	public synthetic fun <init> (JJLjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2 ()J
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (JJLjava/util/Map;)Lcom/midnight/kuira/core/grant/GrantAudienceState;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GrantAudienceState;JJLjava/util/Map;ILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GrantAudienceState;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getGeneration ()J
+	public final fun getRoots ()Ljava/util/Map;
+	public final fun getRotation ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantCheck {
+}
+
+public final class com/midnight/kuira/core/grant/GrantCheck$Offline : com/midnight/kuira/core/grant/GrantCheck {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantCheck$Offline;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantCheck$WithRevocations : com/midnight/kuira/core/grant/GrantCheck {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Lcom/midnight/kuira/core/grant/GrantCheck$WithRevocations;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GrantCheck$WithRevocations;JILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GrantCheck$WithRevocations;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReadAt ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantClientID {
+	public fun <init> (Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public final fun getOriginHash ()[B
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantClientID$Kind : java/lang/Enum {
+	public static final field AGENT Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public static final field ORIGIN Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public static final field OWNER Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public static final field REVERSE_DNS Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+	public static fun values ()[Lcom/midnight/kuira/core/grant/GrantClientID$Kind;
+}
+
+public final class com/midnight/kuira/core/grant/GrantCurves {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantCurves;
+	public final fun ed25519KeyIsValid ([B)Z
+	public final fun ed25519Verify ([B[B[B)Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+	public final fun k1KeyIsValid ([B)Z
+	public final fun k1Verify ([B[B[B)Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantError : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/grant/GrantError$InvalidClientID : com/midnight/kuira/core/grant/GrantError {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getValue ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantError$MalformedKey : com/midnight/kuira/core/grant/GrantError {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getDetail ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantError$NonCanonicalCoordinate : com/midnight/kuira/core/grant/GrantError {
+	public fun <init> ()V
+}
+
+public final class com/midnight/kuira/core/grant/GrantError$UnknownEnvelope : com/midnight/kuira/core/grant/GrantError {
+	public fun <init> (I)V
+	public final fun getEnvelope ()I
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantIssueRefusal : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$ClientGrantedAtAnotherAudience : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ClientGrantedAtAnotherAudience;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$ClientHasAnotherKey : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ClientHasAnotherKey;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$ExpiryNotAllowed : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ExpiryNotAllowed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$InvalidSeedLength : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Lcom/midnight/kuira/core/grant/GrantIssueRefusal$InvalidSeedLength;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GrantIssueRefusal$InvalidSeedLength;IILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GrantIssueRefusal$InvalidSeedLength;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLength ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$KeyGrantedAtAnotherAudience : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$KeyGrantedAtAnotherAudience;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$RequestReplayed : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$RequestReplayed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$ScopeNotRequested : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ScopeNotRequested;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ScopeNotRequested;Ljava/lang/String;ILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GrantIssueRefusal$ScopeNotRequested;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFeature ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssueRefusal$UnknownGrant : com/midnight/kuira/core/grant/GrantIssueRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantIssueRefusal$UnknownGrant;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssuer {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantIssuer$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/grant/GrantSeedSource;Lcom/midnight/kuira/core/grant/GrantRoster;Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Lcom/midnight/kuira/core/grant/GrantSeedSource;Lcom/midnight/kuira/core/grant/GrantRoster;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun issue (Ljava/lang/String;Ljava/util/List;JLcom/midnight/kuira/core/grant/GrantRevocationSource;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun issue$default (Lcom/midnight/kuira/core/grant/GrantIssuer;Ljava/lang/String;Ljava/util/List;JLcom/midnight/kuira/core/grant/GrantRevocationSource;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun retire (Lcom/midnight/kuira/core/grant/GrantClientID;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun review (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun revoke (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun revokeAll (Lcom/midnight/kuira/core/grant/GrantClientID;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun revokeEverything (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun rootKey (Lcom/midnight/kuira/core/grant/GrantClientID;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/GrantIssuer$Companion {
+	public final fun getWallClock ()Lkotlin/jvm/functions/Function0;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRecord {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;JJJLjava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;JJJLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()J
+	public final fun component11 ()J
+	public final fun component12 ()Ljava/lang/Long;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()J
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/util/List;
+	public final fun component9 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;JJJLjava/lang/Long;)Lcom/midnight/kuira/core/grant/GrantRecord;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GrantRecord;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;JJJLjava/lang/Long;ILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GrantRecord;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAudience ()Ljava/lang/String;
+	public final fun getClient ()Ljava/lang/String;
+	public final fun getExpiresAt ()J
+	public final fun getGeneration ()J
+	public final fun getGrantee ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getIssuedAt ()J
+	public final fun getRevokedAt ()Ljava/lang/Long;
+	public final fun getRoot ()Ljava/lang/String;
+	public final fun getRotation ()J
+	public final fun getScope ()Ljava/util/List;
+	public final fun getWire ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantRefusal : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$BadGranteeKey : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$BadGranteeKey;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$BadRootKey : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$BadRootKey;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$BadScope : com/midnight/kuira/core/grant/GrantRefusal {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$BadSignature : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$BadSignature;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$Expired : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$Expired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$FeatureNotGranted : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$FeatureNotGranted;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$FeatureUnknown : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$FeatureUnknown;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$LifetimeTooLong : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$LifetimeTooLong;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$Malformed : com/midnight/kuira/core/grant/GrantRefusal {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$NotYetValid : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$NotYetValid;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$Replayed : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$Replayed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$Retired : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$Retired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$Revoked : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$Revoked;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$StaleUse : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$StaleUse;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$TimeOutOfRange : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$TimeOutOfRange;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$UnknownArm : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$UnknownArm;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$UnknownKind : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$UnknownKind;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$UnknownTag : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$UnknownTag;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$UnknownVersion : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$UnknownVersion;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRefusal$WrongAudience : com/midnight/kuira/core/grant/GrantRefusal {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantRefusal$WrongAudience;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/midnight/kuira/core/grant/GrantReplayStore {
+	public abstract fun claim ([B[BJJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun startedAt (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRequest {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantRequest$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GranteeKey;Lcom/midnight/kuira/core/grant/GrantClientID;Ljava/util/List;J[BJJ)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAudience ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public final fun getClient ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public final fun getDigest ()[B
+	public final fun getExpiresAt ()J
+	public final fun getGrantee ()Lcom/midnight/kuira/core/grant/GranteeKey;
+	public final fun getIssuedAt ()J
+	public final fun getNonce ()[B
+	public final fun getPreimage ()[B
+	public final fun getScope ()Ljava/util/List;
+	public final fun getWantedExpiry ()J
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/grant/GrantRequest$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/grant/GrantRequest;
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantRevocation {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantRevocation$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public abstract fun getAt ()J
+	public abstract fun getPreimage ()[B
+	public abstract fun getRoot ()[B
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocation$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/grant/GrantRevocation;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocation$Retire : com/midnight/kuira/core/grant/GrantRevocation {
+	public fun <init> ([BLcom/midnight/kuira/core/grant/GrantClientID;J)V
+	public fun getAt ()J
+	public final fun getAudience ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public fun getPreimage ()[B
+	public fun getRoot ()[B
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocation$Revoke : com/midnight/kuira/core/grant/GrantRevocation {
+	public fun <init> ([B[BJ)V
+	public fun getAt ()J
+	public final fun getGrantID ()[B
+	public fun getPreimage ()[B
+	public fun getRoot ()[B
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocation$RevokeAll : com/midnight/kuira/core/grant/GrantRevocation {
+	public fun <init> ([BLcom/midnight/kuira/core/grant/GrantClientID;JJ)V
+	public fun getAt ()J
+	public final fun getAudience ()Lcom/midnight/kuira/core/grant/GrantClientID;
+	public final fun getGeneration ()J
+	public fun getPreimage ()[B
+	public fun getRoot ()[B
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocationList {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantRevocationList$Companion;
+	public fun <init> ([BLjava/util/List;J)V
+	public final fun getReadAt ()J
+	public final fun getRevocations ()Ljava/util/List;
+	public final fun getRoot ()[B
+}
+
+public final class com/midnight/kuira/core/grant/GrantRevocationList$Companion {
+	public final fun fromJson ([BLjava/lang/String;J)Lcom/midnight/kuira/core/grant/GrantRevocationList;
+}
+
+public abstract interface class com/midnight/kuira/core/grant/GrantRevocationSource {
+	public abstract fun list ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/GrantRoster {
+	public fun <init> (Ljava/io/File;)V
+	public final fun records (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun state (Lcom/midnight/kuira/core/grant/GrantClientID;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun unknown (Lcom/midnight/kuira/core/grant/GrantClientID;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class com/midnight/kuira/core/grant/GrantSeedSource {
+	public abstract fun seed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/GrantSignatureCheck : java/lang/Enum {
+	public static final field BAD_KEY Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+	public static final field BAD_SIGNATURE Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+	public static final field VALID Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+	public static fun values ()[Lcom/midnight/kuira/core/grant/GrantSignatureCheck;
+}
+
+public final class com/midnight/kuira/core/grant/GrantUse {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantUse$Companion;
+	public fun <init> ([BLjava/lang/String;[B[BJ)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()J
+	public final fun getDigest ()[B
+	public final fun getFeature ()Ljava/lang/String;
+	public final fun getGrantID ()[B
+	public final fun getNonce ()[B
+	public final fun getPreimage ()[B
+	public final fun getSubject ()[B
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/grant/GrantUse$Companion {
+	public final fun decode ([B)Lcom/midnight/kuira/core/grant/GrantUse;
+}
+
+public final class com/midnight/kuira/core/grant/GrantVerifier {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GrantVerifier;
+	public static final field SKEW J
+	public final fun grant (Ljava/lang/String;Lcom/midnight/kuira/core/grant/GrantClientID;JLcom/midnight/kuira/core/grant/GrantRevocationList;)Lcom/midnight/kuira/core/grant/VerifiedGrant;
+	public static synthetic fun grant$default (Lcom/midnight/kuira/core/grant/GrantVerifier;Ljava/lang/String;Lcom/midnight/kuira/core/grant/GrantClientID;JLcom/midnight/kuira/core/grant/GrantRevocationList;ILjava/lang/Object;)Lcom/midnight/kuira/core/grant/VerifiedGrant;
+	public final fun request (Ljava/lang/String;J)Lcom/midnight/kuira/core/grant/GrantRequest;
+	public final fun revocation (Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GrantRevocation;
+	public final fun use (Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GrantVerifier$UseMode;Lcom/midnight/kuira/core/grant/GrantRevocationList;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun use$default (Lcom/midnight/kuira/core/grant/GrantVerifier;Ljava/lang/String;Ljava/lang/String;Lcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GrantVerifier$UseMode;Lcom/midnight/kuira/core/grant/GrantRevocationList;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract class com/midnight/kuira/core/grant/GrantVerifier$UseMode {
+}
+
+public final class com/midnight/kuira/core/grant/GrantVerifier$UseMode$Live : com/midnight/kuira/core/grant/GrantVerifier$UseMode {
+	public fun <init> (Ljava/lang/String;JLcom/midnight/kuira/core/grant/GrantReplayStore;)V
+	public final fun getFeature ()Ljava/lang/String;
+	public final fun getNow ()J
+	public final fun getReplay ()Lcom/midnight/kuira/core/grant/GrantReplayStore;
+}
+
+public final class com/midnight/kuira/core/grant/GrantVerifier$UseMode$Record : com/midnight/kuira/core/grant/GrantVerifier$UseMode {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getFeature ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GrantWire {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GrantWire$Companion;
+	public fun <init> ([B[B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPreimage ()[B
+	public final fun getSignature ()[B
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
+public final class com/midnight/kuira/core/grant/GrantWire$Companion {
+	public final fun parse (Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GrantWire;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeKey {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GranteeKey$Companion;
+	public fun <init> (Lcom/midnight/kuira/core/grant/GranteeKey$Arm;[B[B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArm ()Lcom/midnight/kuira/core/grant/GranteeKey$Arm;
+	public final fun getWire ()Ljava/lang/String;
+	public final fun getX ()[B
+	public final fun getY ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/midnight/kuira/core/grant/GranteeKey$Arm {
+	public abstract fun getScheme ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeKey$Arm$K1 : com/midnight/kuira/core/grant/GranteeKey$Arm {
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Lcom/midnight/kuira/core/grant/GranteeKey$Arm$K1;
+	public static synthetic fun copy$default (Lcom/midnight/kuira/core/grant/GranteeKey$Arm$K1;IILjava/lang/Object;)Lcom/midnight/kuira/core/grant/GranteeKey$Arm$K1;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnvelope ()I
+	public fun getScheme ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeKey$Arm$R1 : com/midnight/kuira/core/grant/GranteeKey$Arm {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GranteeKey$Arm$R1;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getScheme ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeKey$Arm$V1 : com/midnight/kuira/core/grant/GranteeKey$Arm {
+	public static final field INSTANCE Lcom/midnight/kuira/core/grant/GranteeKey$Arm$V1;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getScheme ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeKey$Companion {
+	public final fun fromWire (Lcom/midnight/kuira/core/grant/GranteeKey$Arm;Ljava/lang/String;)Lcom/midnight/kuira/core/grant/GranteeKey;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeSigner {
+	public static final field Companion Lcom/midnight/kuira/core/grant/GranteeSigner$Companion;
+	public fun <init> ([B)V
+	public final fun getKey ()Lcom/midnight/kuira/core/grant/GranteeKey;
+	public final fun request (Lcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GrantClientID;Ljava/util/List;JJJ)Ljava/lang/String;
+	public static synthetic fun request$default (Lcom/midnight/kuira/core/grant/GranteeSigner;Lcom/midnight/kuira/core/grant/GrantClientID;Lcom/midnight/kuira/core/grant/GrantClientID;Ljava/util/List;JJJILjava/lang/Object;)Ljava/lang/String;
+	public final fun use (Lcom/midnight/kuira/core/grant/Grant;Ljava/lang/String;[BJ)Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/GranteeSigner$Companion {
+	public final fun generate ()Lcom/midnight/kuira/core/grant/GranteeSigner;
+}
+
+public final class com/midnight/kuira/core/grant/HttpGrantRevocationSource : com/midnight/kuira/core/grant/GrantRevocationSource {
+	public static final field Companion Lcom/midnight/kuira/core/grant/HttpGrantRevocationSource$Companion;
+	public static final field PATH_PREFIX Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun list ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/HttpGrantRevocationSource$Companion {
+}
+
+public final class com/midnight/kuira/core/grant/InMemoryGrantReplayStore : com/midnight/kuira/core/grant/GrantReplayStore {
+	public fun <init> (J)V
+	public fun claim ([B[BJJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun startedAt (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/midnight/kuira/core/grant/IssuedGrant {
+	public final fun getGrant ()Lcom/midnight/kuira/core/grant/Grant;
+	public final fun getWire ()Ljava/lang/String;
+}
+
+public final class com/midnight/kuira/core/grant/VerifiedGrant {
+	public final fun getCheck ()Lcom/midnight/kuira/core/grant/GrantCheck;
+	public final fun getGrant ()Lcom/midnight/kuira/core/grant/Grant;
+	public final fun getId ()[B
+}
+
+public final class com/midnight/kuira/core/grant/VerifiedUse {
+	public final fun getGrant ()Lcom/midnight/kuira/core/grant/VerifiedGrant;
+	public final fun getUse ()Lcom/midnight/kuira/core/grant/GrantUse;
+}
+

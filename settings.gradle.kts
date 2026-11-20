@@ -30,6 +30,7 @@ include(":core:connector")
 include(":core:designsystem")
 include(":core:auth")
 include(":core:identity")
+include(":core:grant")
 include(":core:testing")
 // The standalone wallet app (:app) and its feature:* screens were the legacy surface —
 // superseded by the SDK's own wallet UI in :sdk:dapp-ui (the published product). Removed.
